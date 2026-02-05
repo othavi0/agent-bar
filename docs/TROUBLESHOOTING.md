@@ -7,6 +7,16 @@
 pkill -USR2 waybar
 ```
 
+## Claude Code: “Unable to connect to API (ConnectionRefused)”
+- Network connectivity is usually OK, but Claude Code can get stuck with a bad session.
+- Fix:
+```bash
+# In Claude Code: /login and re-authenticate
+
+# If still broken, reset local state (will log you out)
+rm -rf ~/.claude
+```
+
 ## Codex logout still shows
 - Codex output is cached in `/tmp/codex-quota.json`
 - Logout removes it, but if it persists:
