@@ -286,6 +286,41 @@ fi
 
 # convert literal \n to real newlines for tooltip rendering
 T=${T//\\n/$'\n'}
+
+# --- Per-provider cache files (for icon-based waybar modules) ---
+ICON_DIR="$HOME/.config/waybar/icons"
+FULL_TIP_JSON=$(printf "%s" "$T" | jq -Rs .)
+
+write_provider_cache() {
+  local file="$1" pct="$2" color="$3" available="$4" icon="$5"
+  jq -n \
+    --arg pct "$pct" \
+    --arg color "$color" \
+    --argjson available "$available" \
+    --arg icon "$icon" \
+    --argjson tooltip "$FULL_TIP_JSON" \
+    '{pct:$pct, color:$color, available:$available, icon:$icon, tooltip:$tooltip}' > "$file"
+}
+
+if [ -n "$HAS_CLAUDE" ]; then
+  write_provider_cache "/tmp/waybar-llm-claude.json" "$C5_REM" "$(color_for "$C5_REM")" "true" "$ICON_DIR/claude-code-icon.png"
+else
+  write_provider_cache "/tmp/waybar-llm-claude.json" "?" "#cdd6f4" "false" ""
+fi
+
+if [ -n "$HAS_CODEX" ]; then
+  write_provider_cache "/tmp/waybar-llm-codex.json" "$X5_REM" "$(color_for "$X5_REM")" "true" "$ICON_DIR/codex-icon.png"
+else
+  write_provider_cache "/tmp/waybar-llm-codex.json" "?" "#cdd6f4" "false" ""
+fi
+
+if [ -n "$HAS_AG" ]; then
+  write_provider_cache "/tmp/waybar-llm-ag.json" "$AG_CLAUDE" "$(color_for "$AG_CLAUDE")" "true" "$ICON_DIR/antigravity-icon.png"
+else
+  write_provider_cache "/tmp/waybar-llm-ag.json" "?" "#cdd6f4" "false" ""
+fi
+
+# --- Legacy single-module output (backward compatible) ---
 TEXT_JSON=$(printf "%s" "$TEXT" | jq -Rs .)
-TIP_JSON=$(printf "%s" "$T" | jq -Rs .)
+TIP_JSON=$FULL_TIP_JSON
 echo "{\"text\": $TEXT_JSON, \"tooltip\": $TIP_JSON, \"class\": \"codexbar\"}"

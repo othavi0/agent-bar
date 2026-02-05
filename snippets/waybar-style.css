@@ -1,3 +1,35 @@
+/* === LLM Usage with Icons === */
+
+#llm-usage {
+  margin-left: 6px;
+  margin-right: 6px;
+}
+
+#image-llm-claude,
+#image-llm-codex,
+#image-llm-ag {
+  margin-left: 5px;
+  margin-right: 1px;
+}
+
+#custom-llm-claude,
+#custom-llm-codex,
+#custom-llm-ag {
+  font-weight: 500;
+  margin-right: 2px;
+}
+
+/* Hide modules when provider is unavailable (empty text) */
+#custom-llm-claude.empty,
+#custom-llm-codex.empty,
+#custom-llm-ag.empty {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* === Legacy single-module (text only) === */
+/*
 #custom-llm-usage {
   margin-left: 10px;
   margin-right: 10px;
@@ -7,4 +39,4 @@
 #custom-llm-usage span {
   padding: 0 2px;
 }
-
+*/

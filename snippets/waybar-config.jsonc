@@ -1,9 +1,75 @@
+// Add "group/llm-usage" to your modules-right (replacing "custom/llm-usage"):
+//   "modules-right": [..., "group/llm-usage", ...]
+
+// === Group: LLM Usage with Icons ===
 {
-  "custom/llm-usage": {
-    "format": "{}",
-    "exec": "$HOME/.config/waybar/scripts/waybar-llm-usage.sh",
+  "group/llm-usage": {
+    "orientation": "horizontal",
+    "modules": [
+      "image/llm-claude", "custom/llm-claude",
+      "image/llm-codex", "custom/llm-codex",
+      "image/llm-ag", "custom/llm-ag"
+    ]
+  },
+
+  "image/llm-claude": {
+    "exec": "$HOME/.config/waybar/scripts/waybar-llm-icon.sh claude",
+    "size": 14,
+    "interval": 60,
+    "on-click": "$HOME/.config/waybar/scripts/llm-usage-menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/llm-usage-menu"
+  },
+  "custom/llm-claude": {
+    "exec": "$HOME/.config/waybar/scripts/waybar-llm-pct.sh claude",
     "return-type": "json",
     "interval": 60,
-    "markup": "pango"
+    "markup": "pango",
+    "on-click": "$HOME/.config/waybar/scripts/llm-usage-menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/llm-usage-menu"
+  },
+
+  "image/llm-codex": {
+    "exec": "$HOME/.config/waybar/scripts/waybar-llm-icon.sh codex",
+    "size": 14,
+    "interval": 60,
+    "on-click": "$HOME/.config/waybar/scripts/llm-usage-menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/llm-usage-menu"
+  },
+  "custom/llm-codex": {
+    "exec": "$HOME/.config/waybar/scripts/waybar-llm-pct.sh codex",
+    "return-type": "json",
+    "interval": 60,
+    "markup": "pango",
+    "on-click": "$HOME/.config/waybar/scripts/llm-usage-menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/llm-usage-menu"
+  },
+
+  "image/llm-ag": {
+    "exec": "$HOME/.config/waybar/scripts/waybar-llm-icon.sh ag",
+    "size": 14,
+    "interval": 60,
+    "on-click": "$HOME/.config/waybar/scripts/llm-usage-menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/llm-usage-menu"
+  },
+  "custom/llm-ag": {
+    "exec": "$HOME/.config/waybar/scripts/waybar-llm-pct.sh ag",
+    "return-type": "json",
+    "interval": 60,
+    "markup": "pango",
+    "on-click": "$HOME/.config/waybar/scripts/llm-usage-menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/llm-usage-menu"
   }
 }
+
+// === Legacy single-module (text only, no icons) ===
+// {
+//   "custom/llm-usage": {
+//     "format": "{}",
+//     "exec": "$HOME/.config/waybar/scripts/waybar-llm-usage.sh",
+//     "return-type": "json",
+//     "interval": 60,
+//     "markup": "pango",
+//     "on-click": "$HOME/.config/waybar/scripts/llm-usage-menu",
+//     "on-click-right": "$HOME/.config/waybar/scripts/llm-usage-menu"
+//   }
+// }
