@@ -3,9 +3,11 @@
 import { parseArgs, showHelp } from './cli';
 import { logger } from './logger';
 import { cache } from './cache';
-import { getAllQuotas, getQuotaFor } from './providers';
-import { outputWaybar } from './formatters/waybar';
+import { loadSettings } from './settings';
+import { getAllQuotas, getQuotaFor, providers } from './providers';
+import { outputWaybar, formatForWaybar } from './formatters/waybar';
 import { outputTerminal } from './formatters/terminal';
+import { runTui } from './tui';
 import type { AllQuotas } from './providers/types';
 
 async function main() {
@@ -19,9 +21,15 @@ async function main() {
     logger.setSilent(true);
   }
 
-  // Show help
-  if (options.help) {
+  // Handle help
+  if (options.command === 'help') {
     showHelp();
+    process.exit(0);
+  }
+
+  // Handle menu
+  if (options.command === 'menu') {
+    await runTui();
     process.exit(0);
   }
 
@@ -30,6 +38,9 @@ async function main() {
     await cache.invalidate('codex-quota');
     logger.info('Cache invalidated');
   }
+
+  // Load settings
+  const settings = await loadSettings();
 
   // Fetch quotas
   let quotas: AllQuotas;
@@ -46,13 +57,26 @@ async function main() {
     };
   } else {
     quotas = await getAllQuotas();
+    
+    // Filter by settings for waybar output
+    if (options.command === 'waybar') {
+      quotas.providers = quotas.providers.filter(p => 
+        settings.waybar.providers.includes(p.provider)
+      );
+    }
   }
 
   // Output
-  if (options.terminal) {
-    outputTerminal(quotas);
-  } else {
-    outputWaybar(quotas);
+  switch (options.command) {
+    case 'terminal':
+    case 'status':
+      outputTerminal(quotas);
+      break;
+    
+    case 'waybar':
+    default:
+      outputWaybar(quotas);
+      break;
   }
 }
 

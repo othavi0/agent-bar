@@ -1,11 +1,11 @@
 {
-  "name": "llm-usage-waybar",
-  "version": "2.0.0",
-  "description": "Waybar module showing Claude, Codex, and Antigravity quotas",
+  "name": "qbar",
+  "version": "3.0.0",
+  "description": "LLM quota monitor for Waybar - Claude, Codex, Antigravity",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
-    "llm-usage": "./scripts/llm-usage"
+    "qbar": "./scripts/qbar"
   },
   "scripts": {
     "start": "bun run src/index.ts",
@@ -27,5 +27,8 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.0.0"
   }
 }

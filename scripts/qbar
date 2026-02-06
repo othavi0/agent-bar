@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# qbar - LLM quota monitor
+# Wrapper script that resolves symlinks
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+
+exec bun run "$SCRIPT_DIR/src/index.ts" "$@"

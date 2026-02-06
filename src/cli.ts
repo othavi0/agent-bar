@@ -1,48 +1,65 @@
 import { logger } from './logger';
 
 export interface CliOptions {
-  terminal: boolean;
+  command: 'waybar' | 'terminal' | 'menu' | 'status' | 'help';
   refresh: boolean;
   provider?: string;
   verbose: boolean;
-  help: boolean;
 }
 
 const HELP_TEXT = `
-llm-usage - Show LLM provider quotas
+qbar - LLM quota monitor for Waybar
 
 USAGE:
-  llm-usage [options]
+  qbar [command] [options]
+
+COMMANDS:
+  (default)         Output Waybar JSON (for waybar config)
+  menu              Interactive TUI menu
+  status            Show quotas in terminal (alias for -t)
 
 OPTIONS:
-  --terminal, -t    Output for terminal (ANSI colors) instead of Waybar JSON
+  --terminal, -t    Output for terminal (ANSI colors)
   --refresh, -r     Force refresh cache before fetching
   --provider, -p    Only show specific provider (claude, codex, antigravity)
   --verbose, -v     Enable verbose logging
   --help, -h        Show this help message
 
 EXAMPLES:
-  llm-usage                    # Waybar JSON output
-  llm-usage --terminal         # Terminal output with colors
-  llm-usage -t -p claude       # Only Claude, terminal output
-  llm-usage --refresh          # Force refresh all caches
+  qbar                     # Waybar JSON output (use in waybar config)
+  qbar menu                # Interactive configuration
+  qbar status              # Terminal output with colors
+  qbar -t -p claude        # Only Claude, terminal output
+  qbar --refresh           # Force refresh all caches
+
+CONFIG:
+  Settings stored in ~/.config/qbar/settings.json
 `.trim();
 
 export function parseArgs(args: string[]): CliOptions {
   const options: CliOptions = {
-    terminal: false,
+    command: 'waybar',
     refresh: false,
     verbose: false,
-    help: false,
   };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
     switch (arg) {
+      // Commands
+      case 'menu':
+        options.command = 'menu';
+        break;
+
+      case 'status':
+        options.command = 'status';
+        break;
+
+      // Options
       case '--terminal':
       case '-t':
-        options.terminal = true;
+        options.command = 'terminal';
         break;
 
       case '--refresh':
@@ -62,7 +79,8 @@ export function parseArgs(args: string[]): CliOptions {
 
       case '--help':
       case '-h':
-        options.help = true;
+      case 'help':
+        options.command = 'help';
         break;
 
       default:

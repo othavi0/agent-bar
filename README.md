@@ -1,16 +1,14 @@
-# llm-usage-waybar
+# qbar
 
-Waybar module showing LLM provider quota usage for Claude, Codex, and Antigravity.
-
-![Screenshot](docs/screenshot.png)
+LLM quota monitor for Waybar. Shows usage for Claude, Codex, and Antigravity.
 
 ## Features
 
-- **Multi-provider support**: Claude (Anthropic), Codex (OpenAI), Antigravity (Codeium LSP)
-- **Two output modes**: Waybar JSON (Pango markup) or Terminal (ANSI colors)
+- **Waybar integration**: JSON output with Pango markup
+- **Terminal output**: ANSI colored quota display
+- **Interactive TUI**: Configure what shows where
 - **Smart caching**: Reduces API calls with configurable TTL
-- **Color-coded**: Catppuccin Mocha palette with threshold-based colors
-- **Lightweight**: Written in TypeScript, runs on Bun
+- **Catppuccin Mocha**: Beautiful color scheme
 
 ## Requirements
 
@@ -21,58 +19,56 @@ Waybar module showing LLM provider quota usage for Claude, Codex, and Antigravit
 
 ```bash
 # Clone the repo
-git clone https://github.com/quiliao/llm-usage-waybar.git
-cd llm-usage-waybar
+git clone https://github.com/othavioquiliao/qbar.git
+cd qbar
 
 # Install dependencies
 bun install
 
-# Create symlink (optional, for global access)
-ln -s $(pwd)/scripts/llm-usage ~/.local/bin/llm-usage
+# Create symlink
+ln -s $(pwd)/scripts/qbar ~/.local/bin/qbar
 ```
 
 ## Setup
 
 ### Claude
 
-Login with the Claude CLI:
 ```bash
 claude login
 ```
-Credentials are read from `~/.claude/.credentials.json`.
+
+Credentials: `~/.claude/.credentials.json`
 
 ### Codex
 
-Login with the Codex CLI:
 ```bash
 codex auth login
 ```
-Quota data is parsed from session files in `~/.codex/sessions/`.
+
+Quota: parsed from `~/.codex/sessions/`
 
 ### Antigravity
 
-Requires the Codeium Language Server running (typically via VS Code/Cursor/Windsurf extension).
+Requires Codeium Language Server (VS Code/Cursor extension).
 
 ## Usage
 
 ```bash
 # Waybar JSON output (default)
-llm-usage
+qbar
 
 # Terminal output with colors
-llm-usage --terminal
-llm-usage -t
+qbar status
+qbar -t
+
+# Interactive menu
+qbar menu
 
 # Single provider
-llm-usage -t -p claude
-llm-usage -t -p codex
+qbar -t -p claude
 
 # Force cache refresh
-llm-usage --refresh
-llm-usage -r
-
-# Verbose logging (to stderr)
-llm-usage -v
+qbar --refresh
 ```
 
 ## Waybar Configuration
@@ -80,8 +76,8 @@ llm-usage -v
 Add to `~/.config/waybar/config`:
 
 ```jsonc
-"custom/llm-usage": {
-  "exec": "~/.local/bin/llm-usage",
+"custom/qbar": {
+  "exec": "~/.local/bin/qbar",
   "return-type": "json",
   "interval": 60,
   "tooltip": true
@@ -91,40 +87,67 @@ Add to `~/.config/waybar/config`:
 Add to `~/.config/waybar/style.css`:
 
 ```css
-#custom-llm-usage {
+#custom-qbar {
   font-family: "JetBrains Mono", monospace;
   font-size: 13px;
   padding: 0 8px;
 }
 ```
 
-## Color Thresholds
+## Interactive Menu
+
+Run `qbar menu` for an interactive TUI:
+
+```
+┌  qbar v3.0.0
+│
+◆  What would you like to do?
+│  ● List all
+│  ○ Configure Waybar
+│  ○ Configure Tooltip
+│  ○ Cancel
+└
+```
+
+- **List all**: View quotas for all logged providers
+- **Configure Waybar**: Select which providers show in the bar
+- **Configure Tooltip**: Select what appears on hover
+
+Settings are saved to `~/.config/qbar/settings.json`.
+
+## Color Thresholds (Catppuccin Mocha)
 
 | Remaining | Color   | Hex       |
 |-----------|---------|-----------|
 | ≥60%      | Green   | `#a6e3a1` |
 | ≥30%      | Yellow  | `#f9e2af` |
-| ≥10%      | Orange  | `#fab387` |
+| ≥10%      | Peach   | `#fab387` |
 | <10%      | Red     | `#f38ba8` |
 
 ## Architecture
 
 ```
 src/
-├── index.ts           # CLI entry point
+├── index.ts           # Entry point
 ├── cli.ts             # Argument parsing
-├── config.ts          # Configuration (paths, colors, thresholds)
-├── cache.ts           # File-based caching with TTL
+├── config.ts          # Paths, colors, thresholds
+├── settings.ts        # User preferences
+├── cache.ts           # File-based caching
 ├── logger.ts          # Structured logging
 ├── providers/
-│   ├── types.ts       # Shared interfaces
-│   ├── index.ts       # Provider registry
-│   ├── claude.ts      # Anthropic API
-│   ├── codex.ts       # Session file parsing
-│   └── antigravity.ts # Codeium LSP
-└── formatters/
-    ├── waybar.ts      # Pango markup output
-    └── terminal.ts    # ANSI color output
+│   ├── types.ts
+│   ├── claude.ts
+│   ├── codex.ts
+│   └── antigravity.ts
+├── formatters/
+│   ├── waybar.ts
+│   └── terminal.ts
+└── tui/
+    ├── index.ts       # Main menu
+    ├── colors.ts      # Catppuccin palette
+    ├── list-all.ts
+    ├── configure-waybar.ts
+    └── configure-tooltip.ts
 ```
 
 ## License
