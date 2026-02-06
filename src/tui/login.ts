@@ -13,11 +13,26 @@ async function runInteractive(cmd: string, args: string[] = []): Promise<number>
 
 async function commandExists(cmd: string): Promise<boolean> {
   try {
+    // Prefer Bun.which (doesn't depend on shell/which availability)
+    if (typeof Bun.which === 'function') {
+      return Bun.which(cmd) !== null;
+    }
+
     const proc = Bun.spawn(['which', cmd], { stdout: 'ignore', stderr: 'ignore' });
     return await proc.exited === 0;
   } catch {
     return false;
   }
+}
+
+function resolveAntigravityUsagePath(): string {
+  // In Waybar/uwsm environments, PATH can miss Bun's global bin.
+  // Try Bun.which first, then fallback to Bun's default global bin location.
+  const found = typeof Bun.which === 'function' ? Bun.which('antigravity-usage') : null;
+  if (found) return found;
+
+  const home = process.env.HOME ?? '';
+  return `${home}/.cache/.bun/bin/antigravity-usage`;
 }
 
 async function ensureAntigravityUsage(): Promise<boolean> {
@@ -179,27 +194,31 @@ export async function loginProviderFlow(): Promise<void> {
       const before = latestTokenMtimeMs();
 
       // Run the login flow (may open browser and exit quickly)
-      await runInteractive('antigravity-usage', ['login']);
+      const antigravityCmd = resolveAntigravityUsagePath();
+      await runInteractive(antigravityCmd, ['login']);
 
       // Wait for tokens to appear/update so the terminal doesn't close too early.
       p.log.info(colorize('Waiting for OAuth completion in your browser...', semantic.subtitle));
       const timeoutMs = 3 * 60_000;
       const start = Date.now();
 
+      let ok = false;
       while (Date.now() - start < timeoutMs) {
         const now = latestTokenMtimeMs();
         if (now > before) {
+          ok = true;
           p.log.success(colorize('Antigravity tokens detected. Login complete.', semantic.good));
           break;
         }
         await Bun.sleep(500);
       }
 
-      if (Date.now() - start >= timeoutMs) {
-        p.log.warn(colorize('Timed out waiting for tokens. If you finished login, try running qbar again.', semantic.warning));
+      if (!ok) {
+        p.log.warn(colorize('Timed out waiting for tokens. If you finished login in the browser, try again.', semantic.warning));
+        p.log.warn(colorize(`Looking in: ${accountsDir}`, semantic.muted));
       }
 
-      // Keep terminal open for a moment / let user read
+      // Keep terminal open so the user can read what happened
       p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
       await new Promise<void>((resolve) => {
         process.stdin.setRawMode?.(true);
