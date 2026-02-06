@@ -18,18 +18,18 @@ const C = {
   sapphire: '#74c7ec',
   pink: '#f5c2e7',
   sky: '#89dceb',
-  rosewater: '#f5e0dc',
-  flamingo: '#f2cdcd',
 } as const;
 
 // Box drawing - BOLD characters
 const B = {
   tl: '┏',
   bl: '┗',
+  lt: '┣',  // left tee for connecting labels
   h: '━',
   v: '┃',
   dot: '●',
   dotO: '○',
+  diamond: '◆',
 };
 
 interface WaybarOutput {
@@ -55,7 +55,9 @@ function bar(val: number | null): string {
   return s(getColorForPercent(val), '▰'.repeat(filled)) + s(C.muted, '▱'.repeat(20 - filled));
 }
 
-function eta(iso: string | null): string {
+function eta(iso: string | null, remaining: number | null): string {
+  // If full (100%), show "Full" instead of time
+  if (remaining === 100) return 'Full';
   if (!iso) return '?';
   const diff = new Date(iso).getTime() - Date.now();
   if (diff < 0) return '0m';
@@ -65,10 +67,11 @@ function eta(iso: string | null): string {
   return d > 0 ? `${d}d ${h.toString().padStart(2, '0')}h` : `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
-function resetTime(iso: string | null): string {
+function resetTime(iso: string | null, remaining: number | null): string {
+  if (remaining === 100) return ''; // Full, no reset time needed
   if (!iso) return '??:??';
   const d = new Date(iso);
-  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  return `(${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')})`;
 }
 
 function indicator(val: number | null): string {
@@ -95,17 +98,16 @@ function filterModels(models: Record<string, QuotaWindow>): Array<{name: string,
   });
 }
 
-const V = (color: string = C.sapphire) => s(color, B.v);
-
-// Section label with strong highlight
-const label = (text: string) => s(C.mauve, `◆ ${text}`, true);
+// Section label with connecting line: ┣━◆ Label
+const label = (text: string, color: string) => 
+  s(color, B.lt + B.h) + s(C.mauve, B.diamond + ' ' + text, true);
 
 /**
  * Build Claude tooltip
  */
 function buildClaudeTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
-  const v = V(C.peach);
+  const v = s(C.peach, B.v);
   
   lines.push(s(C.peach, B.tl + B.h) + ' ' + s(C.peach, 'Claude', true) + ' ' + s(C.peach, B.h.repeat(50)));
   lines.push(v);
@@ -117,31 +119,30 @@ function buildClaudeTooltip(p: ProviderQuota): string {
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(v + '  ' + label('5-hour limit'));
+      lines.push(label('5-hour limit', C.peach));
       for (const m of models) {
         const name = s(C.lavender, m.padEnd(maxLen));
         const b = bar(p.primary.remaining);
         const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
-        const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt)} (${resetTime(p.primary.resetsAt)})`);
+        const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt, p.primary.remaining)} ${resetTime(p.primary.resetsAt, p.primary.remaining)}`);
         lines.push(v + '  ' + indicator(p.primary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
       }
     }
 
     if (p.secondary) {
       lines.push(v);
-      lines.push(v + '  ' + label('Weekly limit'));
+      lines.push(label('Weekly limit', C.peach));
       const name = s(C.lavender, 'All Models'.padEnd(20));
       const b = bar(p.secondary.remaining);
       const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt)} (${resetTime(p.secondary.resetsAt)})`);
+      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt, p.secondary.remaining)} ${resetTime(p.secondary.resetsAt, p.secondary.remaining)}`);
       lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
     }
 
-    // Only show Extra Usage if enabled AND has data
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
       const { remaining, used, limit } = p.extraUsage;
       lines.push(v);
-      lines.push(v + '  ' + label('Extra Usage'));
+      lines.push(label('Extra Usage', C.peach));
       const name = s(C.lavender, 'Budget'.padEnd(20));
       const b = bar(remaining);
       const pctS = s(getColorForPercent(remaining), pct(remaining).padStart(4));
@@ -161,7 +162,7 @@ function buildClaudeTooltip(p: ProviderQuota): string {
  */
 function buildCodexTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
-  const v = V(C.green);
+  const v = s(C.green, B.v);
   
   lines.push(s(C.green, B.tl + B.h) + ' ' + s(C.green, 'Codex', true) + ' ' + s(C.green, B.h.repeat(51)));
   lines.push(v);
@@ -172,21 +173,21 @@ function buildCodexTooltip(p: ProviderQuota): string {
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(v + '  ' + label('5-hour limit'));
+      lines.push(label('5-hour limit', C.green));
       const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(maxLen));
       const b = bar(p.primary.remaining);
       const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt)} (${resetTime(p.primary.resetsAt)})`);
+      const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt, p.primary.remaining)} ${resetTime(p.primary.resetsAt, p.primary.remaining)}`);
       lines.push(v + '  ' + indicator(p.primary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
     }
 
     if (p.secondary) {
       lines.push(v);
-      lines.push(v + '  ' + label('Weekly limit'));
+      lines.push(label('Weekly limit', C.green));
       const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(20));
       const b = bar(p.secondary.remaining);
       const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt)} (${resetTime(p.secondary.resetsAt)})`);
+      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt, p.secondary.remaining)} ${resetTime(p.secondary.resetsAt, p.secondary.remaining)}`);
       lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
     }
   }
@@ -202,7 +203,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
  */
 function buildAntigravityTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
-  const v = V(C.blue);
+  const v = s(C.blue, B.v);
   
   lines.push(s(C.blue, B.tl + B.h) + ' ' + s(C.blue, 'Antigravity', true) + ' ' + s(C.blue, B.h.repeat(45)));
   lines.push(v);
@@ -215,12 +216,12 @@ function buildAntigravityTooltip(p: ProviderQuota): string {
     const models = filterModels(p.models);
     const maxLen = Math.max(...models.map(m => m.name.length), 20);
 
-    lines.push(v + '  ' + label('Available Models'));
+    lines.push(label('Available Models', C.blue));
     for (const m of models) {
       const name = s(C.lavender, m.name.padEnd(maxLen));
       const b = bar(m.remaining);
       const pctS = s(getColorForPercent(m.remaining), pct(m.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(m.resetsAt)} (${resetTime(m.resetsAt)})`);
+      const etaS = s(C.teal, `→ ${eta(m.resetsAt, m.remaining)} ${resetTime(m.resetsAt, m.remaining)}`);
       lines.push(v + '  ' + indicator(m.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
     }
   }

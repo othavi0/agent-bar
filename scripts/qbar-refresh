@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# qbar-refresh - Force refresh with spinner in floating terminal
+# Usage: qbar-refresh [provider]
+
+PROVIDER="${1:-}"
+QBAR_DIR="$(dirname "$(readlink -f "$0")")/.."
+
+cd "$QBAR_DIR" || exit 1
+
+if [[ -n "$PROVIDER" ]]; then
+  bun src/refresh.ts "$PROVIDER"
+else
+  bun src/refresh.ts
+fi
+
+# Keep terminal open briefly to show result
+sleep 1

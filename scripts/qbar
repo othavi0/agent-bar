@@ -1,29 +1,20 @@
 #!/usr/bin/env bash
-# qbar - LLM quota monitor
-# Wrapper script that resolves symlinks
+# qbar - LLM quota monitor for Waybar
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+cd "$SCRIPT_DIR/.." || exit 1
 
-SOURCE="${BASH_SOURCE[0]}"
-while [ -L "$SOURCE" ]; do
-  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
-
-# Ensure bun and bun global bins are available
-export PATH="$HOME/.cache/.bun/bin:$PATH"
-
-if ! command -v bun >/dev/null 2>&1; then
-  if command -v mise >/dev/null 2>&1 && mise which bun >/dev/null 2>&1; then
-    export PATH="$HOME/.local/share/mise/shims:$PATH"
-  elif [ -x "$HOME/.local/share/mise/shims/bun" ]; then
-    export PATH="$HOME/.local/share/mise/shims:$PATH"
-  fi
-fi
-
-if ! command -v bun >/dev/null 2>&1; then
-  echo "bun not found in PATH" >&2
-  exit 127
-fi
-
-exec bun run "$SCRIPT_DIR/src/index.ts" "$@"
+case "${1:-}" in
+  refresh)
+    shift
+    exec bun src/refresh.ts "$@"
+    ;;
+  menu)
+    exec bun src/tui.ts
+    ;;
+  status)
+    exec bun src/index.ts --command status "$@"
+    ;;
+  *)
+    exec bun src/index.ts "$@"
+    ;;
+esac
