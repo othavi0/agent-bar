@@ -1,0 +1,31 @@
+{
+  "name": "llm-usage-waybar",
+  "version": "2.0.0",
+  "description": "Waybar module showing Claude, Codex, and Antigravity quotas",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "llm-usage": "./scripts/llm-usage"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "test": "bun test",
+    "typecheck": "bun x tsc --noEmit",
+    "build": "bun build src/index.ts --outdir dist --target bun"
+  },
+  "keywords": [
+    "waybar",
+    "claude",
+    "codex",
+    "antigravity",
+    "llm",
+    "quota"
+  ],
+  "author": "Othavio",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}

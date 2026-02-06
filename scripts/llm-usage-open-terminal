@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Open a terminal WITHOUT Omarchy logo presentation.
-# Usage: llm-usage-open-terminal <command>
-
-cmd="$*"
-exec setsid uwsm-app -- xdg-terminal-exec --app-id=org.omarchy.terminal --title=LLM-Usage -e sh -lc "$cmd; pkill -USR2 waybar || true; echo; read -p 'Press Enter...' </dev/tty"

@@ -1,0 +1,9 @@
+[install]
+exact = true
+
+[run]
+# Silent by default for waybar integration
+silent = true
+
+[test]
+coverage = true
