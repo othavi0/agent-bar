@@ -2,10 +2,9 @@ import { CONFIG } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 
 // ANSI color codes (Catppuccin Mocha)
-const ANSI = {
+const C = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
-  // Catppuccin colors via 256-color mode
   green: '\x1b[38;2;166;227;161m',    // #a6e3a1
   yellow: '\x1b[38;2;249;226;175m',   // #f9e2af
   orange: '\x1b[38;2;250;179;135m',   // #fab387
@@ -21,202 +20,211 @@ const ANSI = {
   peach: '\x1b[38;2;250;179;135m',    // #fab387
 };
 
-/**
- * Get ANSI color for percentage
- */
-function getAnsiColor(pct: number | null): string {
-  if (pct === null) return ANSI.text;
-  if (pct >= CONFIG.thresholds.green) return ANSI.green;
-  if (pct >= CONFIG.thresholds.yellow) return ANSI.yellow;
-  if (pct >= CONFIG.thresholds.orange) return ANSI.orange;
-  return ANSI.red;
+// Box drawing characters
+const B = {
+  tl: '┏',
+  bl: '┗',
+  lt: '┣',
+  h: '━',
+  v: '┃',
+  dot: '●',
+  dotO: '○',
+  diamond: '◆',
+};
+
+function getColor(pct: number | null): string {
+  if (pct === null) return C.text;
+  if (pct >= CONFIG.thresholds.green) return C.green;
+  if (pct >= CONFIG.thresholds.yellow) return C.yellow;
+  if (pct >= CONFIG.thresholds.orange) return C.orange;
+  return C.red;
 }
 
-/**
- * Generate a colored progress bar for terminal
- */
-function formatBar(pct: number | null): string {
-  if (pct === null) {
-    return `${ANSI.muted}░░░░░░░░░░░░░░░░░░░░${ANSI.reset}`;
-  }
-
+function bar(pct: number | null): string {
+  if (pct === null) return `${C.muted}${'▱'.repeat(20)}${C.reset}`;
   const filled = Math.floor(pct / 5);
-  const empty = 20 - filled;
-  const color = getAnsiColor(pct);
-
-  const filledStr = '█'.repeat(filled);
-  const emptyStr = '░'.repeat(empty);
-
-  return `${color}${filledStr}${ANSI.muted}${emptyStr}${ANSI.reset}`;
+  const color = getColor(pct);
+  return `${color}${'▰'.repeat(filled)}${C.muted}${'▱'.repeat(20 - filled)}${C.reset}`;
 }
 
-/**
- * Format percentage without decimals
- */
-function formatPct(pct: number | null): string {
-  if (pct === null) return '?%';
-  return `${Math.round(pct)}%`;
+function pct(val: number | null): string {
+  if (val === null) return '?%';
+  return `${Math.round(val)}%`;
 }
 
-/**
- * Format human-readable time until reset
- * >24h = "Xd XXh", <24h = "XXh XXm"
- */
-function formatEta(isoDate: string | null): string {
-  if (!isoDate) return '?';
+function indicator(val: number | null): string {
+  if (val === null) return `${C.muted}${B.dotO}${C.reset}`;
+  const color = getColor(val);
+  return `${color}${B.dot}${C.reset}`;
+}
 
-  const now = Date.now();
-  const resetTime = new Date(isoDate).getTime();
-  const diff = resetTime - now;
-
+function eta(iso: string | null, remaining: number | null): string {
+  if (remaining === 100) return 'Full';
+  if (!iso) return '?';
+  const diff = new Date(iso).getTime() - Date.now();
   if (diff < 0) return '0m';
-
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-
-  if (days > 0) {
-    return `${days}d ${hours.toString().padStart(2, '0')}h`;
-  }
-  return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return d > 0 ? `${d}d ${h.toString().padStart(2, '0')}h` : `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
-/**
- * Format reset time as HH:MM
- */
-function formatResetTime(isoDate: string | null): string {
-  if (!isoDate) return '??:??';
-
-  const date = new Date(isoDate);
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+function resetTime(iso: string | null, remaining: number | null): string {
+  if (remaining === 100) return '';
+  if (!iso) return '(??:??)';
+  const d = new Date(iso);
+  return `(${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')})`;
 }
 
-/**
- * Timeline separator
- */
-function sep(): string {
-  return `${ANSI.sapphire}│${ANSI.reset}`;
-}
-
-/**
- * Filter out internal/test models and Gemini 2.5
- */
 function isValidModel(name: string): boolean {
-  const lowerName = name.toLowerCase();
-  const excludePatterns = [
-    /^tab_/i,
-    /^chat_/i,
-    /^test_/i,
-    /^internal_/i,
-    /preview$/i,
-    /2\.5/i,
-  ];
-  return !excludePatterns.some(p => p.test(lowerName));
+  const lower = name.toLowerCase();
+  return !/^(tab_|chat_|test_|internal_)/.test(lower) && !/preview$/i.test(name) && !/2\.5/i.test(name);
 }
 
-/**
- * Format a single quota line for terminal
- */
-function formatQuotaLine(
-  label: string,
-  window: QuotaWindow | undefined,
-  maxLabelLen: number = 14
-): string {
-  const pct = window?.remaining ?? null;
-  const bar = formatBar(pct);
-  const color = getAnsiColor(pct);
-  const eta = formatEta(window?.resetsAt ?? null);
-  const resetTime = formatResetTime(window?.resetsAt ?? null);
-  const pctStr = formatPct(pct).padStart(4);
+// Vertical bar with provider color
+const v = (color: string) => `${color}${B.v}${C.reset}`;
 
-  return `${sep()}   ${ANSI.lavender}${label.padEnd(maxLabelLen)}${ANSI.reset} ${bar} ${color}${pctStr}${ANSI.reset} ${ANSI.teal}→ ${eta.padEnd(8)} (${resetTime})${ANSI.reset}`;
+// Section label: ┣━ ◆ Label
+const label = (text: string, color: string) => 
+  `${color}${B.lt}${B.h}${C.reset} ${C.mauve}${C.bold}${B.diamond} ${text}${C.reset}`;
+
+// Model line
+function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
+  const rem = window?.remaining ?? null;
+  const reset = window?.resetsAt ?? null;
+  const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
+  const barS = bar(rem);
+  const pctS = `${getColor(rem)}${pct(rem).padStart(4)}${C.reset}`;
+  const etaS = `${C.teal}→ ${eta(reset, rem)} ${resetTime(reset, rem)}${C.reset}`;
+  return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-/**
- * Format quotas for terminal output
- */
-export function formatForTerminal(quotas: AllQuotas): string {
+function buildClaude(p: ProviderQuota): string[] {
   const lines: string[] = [];
-
-  for (const provider of quotas.providers) {
-    if (!provider.available && !provider.error) continue;
-
-    // Provider header
-    let header = provider.displayName;
-    if (provider.plan) header += ` ${ANSI.subtext}(${provider.plan})${ANSI.reset}`;
-    else if (provider.account) header += ` ${ANSI.subtext}(${provider.account})${ANSI.reset}`;
+  const vc = C.peach;
+  
+  lines.push(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Claude${C.reset} ${vc}${B.h.repeat(50)}${C.reset}`);
+  lines.push(v(vc));
+  
+  if (p.error) {
+    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
+  } else {
+    const maxLen = 20;
     
-    if (lines.length > 0) lines.push('');
-    lines.push(`${sep()} ${ANSI.mauve}${ANSI.bold}${header}${ANSI.reset}`);
-
-    // Error message if any
-    if (provider.error) {
-      lines.push(`${sep()}   ${ANSI.peach}⚠️ ${provider.error}${ANSI.reset}`);
-      continue;
-    }
-
-    // Primary/secondary windows (only for non-Antigravity providers)
-    if (provider.provider !== 'antigravity') {
-      if (provider.primary) {
-        lines.push(formatQuotaLine('5h Window', provider.primary, 20));
-      }
-
-      if (provider.secondary) {
-        lines.push(formatQuotaLine('Weekly', provider.secondary, 20));
+    if (p.primary) {
+      lines.push(label('5-hour limit', vc));
+      for (const m of ['Opus', 'Sonnet', 'Haiku']) {
+        lines.push(modelLine(m, p.primary, maxLen, vc));
       }
     }
 
-    // Extra Usage (Claude)
-    if (provider.extraUsage?.enabled) {
-      const pct = provider.extraUsage.remaining;
-      const used = provider.extraUsage.used;
-      const limit = provider.extraUsage.limit;
-      const bar = formatBar(pct);
-      const color = getAnsiColor(pct);
-      const pctStr = formatPct(pct).padStart(4);
-      const usedStr = `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`;
-      
-      lines.push(`${sep()}   ${ANSI.blue}${'Extra Usage'.padEnd(20)}${ANSI.reset} ${bar} ${color}${pctStr}${ANSI.reset} ${ANSI.subtext}${usedStr}${ANSI.reset}`);
+    if (p.secondary) {
+      lines.push(v(vc));
+      lines.push(label('Weekly limit', vc));
+      lines.push(modelLine('All Models', p.secondary, maxLen, vc));
     }
 
-    // Additional models (Antigravity) - with individual times
-    if (provider.models) {
-      const models = Object.entries(provider.models)
-        .filter(([name]) => isValidModel(name))
-        .sort(([a], [b]) => {
-          const getPriority = (name: string): number => {
-            const lower = name.toLowerCase();
-            if (lower.includes('claude')) return 0;
-            if (lower.includes('gpt')) return 1;
-            if (lower.includes('gemini')) return 2;
-            return 3;
-          };
-          const aPri = getPriority(a);
-          const bPri = getPriority(b);
-          if (aPri !== bPri) return aPri - bPri;
-          return a.localeCompare(b);
-        });
-
-      const maxLen = Math.max(...models.map(([name]) => name.length), 20);
-      
-      for (const [modelName, window] of models) {
-        lines.push(formatQuotaLine(modelName, window, maxLen));
-      }
+    if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
+      const { remaining, used, limit } = p.extraUsage;
+      lines.push(v(vc));
+      lines.push(label('Extra Usage', vc));
+      const nameS = `${C.lavender}${'Budget'.padEnd(maxLen)}${C.reset}`;
+      const barS = bar(remaining);
+      const pctS = `${getColor(remaining)}${pct(remaining).padStart(4)}${C.reset}`;
+      const usedS = `${C.teal}$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}${C.reset}`;
+      lines.push(`${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`);
     }
   }
-
-  if (lines.length === 0) {
-    return `${ANSI.muted}No providers connected${ANSI.reset}`;
-  }
-
-  return lines.join('\n');
+  
+  lines.push(v(vc));
+  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
+  
+  return lines;
 }
 
-/**
- * Output to terminal (stdout)
- */
+function buildCodex(p: ProviderQuota): string[] {
+  const lines: string[] = [];
+  const vc = C.green;
+  
+  lines.push(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Codex${C.reset} ${vc}${B.h.repeat(51)}${C.reset}`);
+  lines.push(v(vc));
+  
+  if (p.error) {
+    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
+  } else {
+    const maxLen = 20;
+    
+    if (p.primary) {
+      lines.push(label('5-hour limit', vc));
+      lines.push(modelLine('GPT-5.2 Codex', p.primary, maxLen, vc));
+    }
+
+    if (p.secondary) {
+      lines.push(v(vc));
+      lines.push(label('Weekly limit', vc));
+      lines.push(modelLine('GPT-5.2 Codex', p.secondary, maxLen, vc));
+    }
+  }
+  
+  lines.push(v(vc));
+  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
+  
+  return lines;
+}
+
+function buildAntigravity(p: ProviderQuota): string[] {
+  const lines: string[] = [];
+  const vc = C.blue;
+  
+  lines.push(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Antigravity${C.reset} ${vc}${B.h.repeat(45)}${C.reset}`);
+  lines.push(v(vc));
+  
+  if (p.error) {
+    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
+  } else if (!p.models || Object.keys(p.models).length === 0) {
+    lines.push(`${v(vc)}  ${C.muted}No models available${C.reset}`);
+  } else {
+    const models = Object.entries(p.models)
+      .filter(([name]) => isValidModel(name))
+      .sort(([a], [b]) => {
+        const pri = (n: string) => n.toLowerCase().includes('claude') ? 0 : n.toLowerCase().includes('gpt') ? 1 : n.toLowerCase().includes('gemini') ? 2 : 3;
+        return pri(a) - pri(b) || a.localeCompare(b);
+      });
+
+    const maxLen = Math.max(...models.map(([n]) => n.length), 20);
+
+    lines.push(label('Available Models', vc));
+    for (const [name, window] of models) {
+      lines.push(modelLine(name, window, maxLen, vc));
+    }
+  }
+  
+  lines.push(v(vc));
+  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
+  
+  return lines;
+}
+
+export function formatForTerminal(quotas: AllQuotas): string {
+  const sections: string[][] = [];
+
+  for (const p of quotas.providers) {
+    if (!p.available && !p.error) continue;
+    
+    switch (p.provider) {
+      case 'claude': sections.push(buildClaude(p)); break;
+      case 'codex': sections.push(buildCodex(p)); break;
+      case 'antigravity': sections.push(buildAntigravity(p)); break;
+    }
+  }
+
+  if (sections.length === 0) {
+    return `${C.muted}No providers connected${C.reset}`;
+  }
+
+  return sections.map(s => s.join('\n')).join('\n\n');
+}
+
 export function outputTerminal(quotas: AllQuotas): void {
   console.log(formatForTerminal(quotas));
 }
