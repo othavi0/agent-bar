@@ -47,8 +47,8 @@ async function refresh() {
   }
   
   // Simple wait - no stdin tricks
-  console.log('\n\x1b[2m(closing in 2s...)\x1b[0m');
-  await Bun.sleep(2000);
+  console.log('\n\x1b[2m(closing in 5s...)\x1b[0m');
+  await Bun.sleep(5000);
 }
 
 refresh();
