@@ -16,19 +16,17 @@ const C = {
   mauve: '#cba6f7',
   peach: '#fab387',
   sapphire: '#74c7ec',
-  pink: '#f5c2e7',
-  sky: '#89dceb',
+  surface: '#313244',
 } as const;
 
 // Box drawing characters
-const LINE = {
-  h: '─',      // horizontal
-  hBold: '━',  // horizontal bold
-  v: '┃',      // vertical bold  
-  tl: '╭',     // top left corner
-  tr: '╮',     // top right corner
-  bl: '╰',     // bottom left corner
-  br: '╯',     // bottom right corner
+const B = {
+  tl: '┌', tr: '┐', bl: '└', br: '┘',  // corners
+  rtl: '╭', rtr: '╮', rbl: '╰', rbr: '╯',  // rounded corners
+  h: '─', v: '│',  // lines
+  lt: '├', rt: '┤', tt: '┬', bt: '┴',  // tees
+  diamond: '◆', diamondO: '◇',  // diamonds
+  dot: '●', dotO: '○',  // dots
 };
 
 interface WaybarOutput {
@@ -36,6 +34,10 @@ interface WaybarOutput {
   tooltip: string;
   class: string;
 }
+
+// Span helper
+const s = (color: string, text: string, bold = false) => 
+  `<span foreground='${color}'${bold ? " weight='bold'" : ''}>${text}</span>`;
 
 /**
  * Format percentage without decimals
@@ -48,20 +50,20 @@ function pct(val: number | null): string {
  * Colored percentage
  */
 function pctColored(val: number | null): string {
-  return `<span foreground='${getColorForPercent(val)}'>${pct(val)}</span>`;
+  return s(getColorForPercent(val), pct(val));
 }
 
 /**
  * Progress bar (20 chars)
  */
 function bar(val: number | null): string {
-  if (val === null) return `<span foreground='${C.muted}'>${'░'.repeat(20)}</span>`;
+  if (val === null) return s(C.muted, '░'.repeat(20));
   const filled = Math.floor(val / 5);
-  return `<span foreground='${getColorForPercent(val)}'>${'▰'.repeat(filled)}</span><span foreground='${C.muted}'>${'▱'.repeat(20 - filled)}</span>`;
+  return s(getColorForPercent(val), '▰'.repeat(filled)) + s(C.muted, '▱'.repeat(20 - filled));
 }
 
 /**
- * Time until reset: >24h = "Xd XXh", <24h = "XXh XXm"
+ * Time until reset
  */
 function eta(iso: string | null): string {
   if (!iso) return '?';
@@ -86,25 +88,11 @@ function resetTime(iso: string | null): string {
  * Status indicator
  */
 function indicator(val: number | null): string {
-  if (val === null) return `<span foreground='${C.muted}'>○</span>`;
-  if (val < 10) return `<span foreground='${C.red}'>●</span>`;
-  if (val < 30) return `<span foreground='${C.orange}'>●</span>`;
-  if (val < 60) return `<span foreground='${C.yellow}'>●</span>`;
-  return `<span foreground='${C.green}'>●</span>`;
-}
-
-/**
- * Vertical bar (timeline)
- */
-const V = `<span foreground='${C.sapphire}'>${LINE.v}</span>`;
-
-/**
- * Create header with horizontal lines: ──── Name ────
- */
-function header(name: string, lineColor: string = C.sapphire, nameColor: string = C.mauve): string {
-  const line = `<span foreground='${lineColor}'>${LINE.h.repeat(5)}</span>`;
-  const nameSpan = `<span foreground='${nameColor}' weight='bold'>${name}</span>`;
-  return `${V} ${line} ${nameSpan} ${line}`;
+  if (val === null) return s(C.muted, B.dotO);
+  if (val < 10) return s(C.red, B.dot);
+  if (val < 30) return s(C.orange, B.dot);
+  if (val < 60) return s(C.yellow, B.dot);
+  return s(C.green, B.dot);
 }
 
 /**
@@ -127,130 +115,158 @@ function filterModels(models: Record<string, QuotaWindow>): Array<{name: string,
 }
 
 /**
- * Format model line
+ * Build Claude tooltip
  */
-function modelLine(name: string, val: number | null, reset: string | null, maxLen: number): string {
-  const namePad = `<span foreground='${C.lavender}'>${name.padEnd(maxLen)}</span>`;
-  const etaStr = `<span foreground='${C.teal}'>→ ${eta(reset)} (${resetTime(reset)})</span>`;
-  return `${V}   ${indicator(val)} ${namePad} ${bar(val)} ${pctColored(val).padStart(4)} ${etaStr}`;
-}
-
-/**
- * Build Claude section
- */
-function buildClaude(p: ProviderQuota): string[] {
+function buildClaudeTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
+  const v = s(C.sapphire, B.v);
+  const width = 55;
   
-  lines.push(header('Claude', C.peach, C.peach));
+  // Header
+  lines.push(s(C.sapphire, B.tl) + ' ' + s(C.peach, 'Claude', true) + ' ' + s(C.sapphire, B.h.repeat(width - 10)) + s(C.sapphire, B.rtr));
+  lines.push(v);
   
   if (p.error) {
-    lines.push(`${V}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
-    return lines;
-  }
+    lines.push(v + '  ' + s(C.peach, `⚠️ ${p.error}`));
+  } else {
+    const models = ['Opus', 'Sonnet', 'Haiku'];
+    const maxLen = 20;
+    
+    if (p.primary) {
+      lines.push(v + '  ' + s(C.subtext, '5-hour limit:'));
+      for (const m of models) {
+        const name = s(C.lavender, m.padEnd(maxLen));
+        const b = bar(p.primary.remaining);
+        const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
+        const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt)} (${resetTime(p.primary.resetsAt)})`);
+        lines.push(v + '  ' + indicator(p.primary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+      }
+    }
 
-  const maxLen = 20;
-  const models = ['Opus', 'Sonnet', 'Haiku'];
-  
-  if (p.primary) {
-    for (const m of models) {
-      lines.push(modelLine(m, p.primary.remaining, p.primary.resetsAt, maxLen));
+    if (p.secondary) {
+      lines.push(v);
+      lines.push(v + '  ' + s(C.subtext, 'Weekly limit:'));
+      const name = s(C.lavender, 'All Models'.padEnd(20));
+      const b = bar(p.secondary.remaining);
+      const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
+      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt)} (${resetTime(p.secondary.resetsAt)})`);
+      lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+    }
+
+    if (p.extraUsage?.enabled) {
+      const { remaining, used, limit } = p.extraUsage;
+      lines.push(v);
+      const name = s(C.blue, 'Extra Usage'.padEnd(20));
+      const b = bar(remaining);
+      const pctS = s(getColorForPercent(remaining), pct(remaining).padStart(4));
+      const usedS = s(C.subtext, `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`);
+      lines.push(v + '  ' + indicator(remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + usedS);
     }
   }
-
-  if (p.secondary) {
-    lines.push(`${V}`);
-    lines.push(`${V}   <span foreground='${C.subtext}'>Weekly:</span>`);
-    lines.push(modelLine('All Models', p.secondary.remaining, p.secondary.resetsAt, maxLen));
-  }
-
-  if (p.extraUsage?.enabled) {
-    const { remaining, used, limit } = p.extraUsage;
-    lines.push(`${V}`);
-    const namePad = `<span foreground='${C.blue}'>${'Extra Usage'.padEnd(maxLen)}</span>`;
-    const usedStr = `<span foreground='${C.subtext}'>$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}</span>`;
-    lines.push(`${V}   ${indicator(remaining)} ${namePad} ${bar(remaining)} ${pctColored(remaining).padStart(4)} ${usedStr}`);
-  }
-
-  return lines;
+  
+  lines.push(v);
+  lines.push(s(C.sapphire, B.bl) + s(C.sapphire, B.h.repeat(width)) + s(C.sapphire, B.rbr));
+  
+  return lines.join('\n');
 }
 
 /**
- * Build Codex section
+ * Build Codex tooltip
  */
-function buildCodex(p: ProviderQuota): string[] {
+function buildCodexTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
+  const v = s(C.sapphire, B.v);
+  const width = 55;
   
-  lines.push(header('Codex', C.green, C.green));
+  lines.push(s(C.sapphire, B.tl) + ' ' + s(C.green, 'Codex', true) + ' ' + s(C.sapphire, B.h.repeat(width - 9)) + s(C.sapphire, B.rtr));
+  lines.push(v);
   
   if (p.error) {
-    lines.push(`${V}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
-    return lines;
-  }
+    lines.push(v + '  ' + s(C.peach, `⚠️ ${p.error}`));
+  } else {
+    const maxLen = 20;
+    
+    if (p.primary) {
+      lines.push(v + '  ' + s(C.subtext, '5-hour limit:'));
+      const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(maxLen));
+      const b = bar(p.primary.remaining);
+      const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
+      const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt)} (${resetTime(p.primary.resetsAt)})`);
+      lines.push(v + '  ' + indicator(p.primary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+    }
 
-  const maxLen = 20;
+    if (p.secondary) {
+      lines.push(v);
+      lines.push(v + '  ' + s(C.subtext, 'Weekly limit:'));
+      const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(20));
+      const b = bar(p.secondary.remaining);
+      const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
+      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt)} (${resetTime(p.secondary.resetsAt)})`);
+      lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+    }
+  }
   
-  if (p.primary) {
-    lines.push(modelLine('GPT-5.2 Codex', p.primary.remaining, p.primary.resetsAt, maxLen));
-  }
-
-  if (p.secondary) {
-    lines.push(`${V}`);
-    lines.push(`${V}   <span foreground='${C.subtext}'>Weekly:</span>`);
-    lines.push(modelLine('GPT-5.2 Codex', p.secondary.remaining, p.secondary.resetsAt, maxLen));
-  }
-
-  return lines;
+  lines.push(v);
+  lines.push(s(C.sapphire, B.bl) + s(C.sapphire, B.h.repeat(width)) + s(C.sapphire, B.rbr));
+  
+  return lines.join('\n');
 }
 
 /**
- * Build Antigravity section
+ * Build Antigravity tooltip
  */
-function buildAntigravity(p: ProviderQuota): string[] {
+function buildAntigravityTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
+  const v = s(C.sapphire, B.v);
+  const width = 55;
   
-  lines.push(header('Antigravity', C.blue, C.blue));
+  lines.push(s(C.sapphire, B.tl) + ' ' + s(C.blue, 'Antigravity', true) + ' ' + s(C.sapphire, B.h.repeat(width - 15)) + s(C.sapphire, B.rtr));
+  lines.push(v);
   
   if (p.error) {
-    lines.push(`${V}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
-    return lines;
+    lines.push(v + '  ' + s(C.peach, `⚠️ ${p.error}`));
+  } else if (!p.models || Object.keys(p.models).length === 0) {
+    lines.push(v + '  ' + s(C.muted, 'No models available'));
+  } else {
+    const models = filterModels(p.models);
+    const maxLen = Math.max(...models.map(m => m.name.length), 20);
+
+    for (const m of models) {
+      const name = s(C.lavender, m.name.padEnd(maxLen));
+      const b = bar(m.remaining);
+      const pctS = s(getColorForPercent(m.remaining), pct(m.remaining).padStart(4));
+      const etaS = s(C.teal, `→ ${eta(m.resetsAt)} (${resetTime(m.resetsAt)})`);
+      lines.push(v + '  ' + indicator(m.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+    }
   }
-
-  if (!p.models || Object.keys(p.models).length === 0) {
-    lines.push(`${V}   <span foreground='${C.muted}'>No models available</span>`);
-    return lines;
-  }
-
-  const models = filterModels(p.models);
-  const maxLen = Math.max(...models.map(m => m.name.length), 20);
-
-  for (const m of models) {
-    lines.push(modelLine(m.name, m.remaining, m.resetsAt, maxLen));
-  }
-
-  return lines;
+  
+  lines.push(v);
+  lines.push(s(C.sapphire, B.bl) + s(C.sapphire, B.h.repeat(width)) + s(C.sapphire, B.rbr));
+  
+  return lines.join('\n');
 }
 
 /**
- * Build full tooltip
+ * Build full tooltip (combined)
  */
 function buildTooltip(quotas: AllQuotas): string {
-  const sections: string[][] = [];
+  const sections: string[] = [];
 
   for (const p of quotas.providers) {
     if (!p.available && !p.error) continue;
     
     switch (p.provider) {
-      case 'claude': sections.push(buildClaude(p)); break;
-      case 'codex': sections.push(buildCodex(p)); break;
-      case 'antigravity': sections.push(buildAntigravity(p)); break;
+      case 'claude': sections.push(buildClaudeTooltip(p)); break;
+      case 'codex': sections.push(buildCodexTooltip(p)); break;
+      case 'antigravity': sections.push(buildAntigravityTooltip(p)); break;
     }
   }
 
-  return sections.map(s => s.join('\n')).join(`\n${V}\n`);
+  return sections.join('\n\n');
 }
 
 /**
- * Build bar text - simple text, icons will be added via CSS
+ * Build bar text
  */
 function buildText(quotas: AllQuotas): string {
   const parts: string[] = [];
@@ -261,12 +277,12 @@ function buildText(quotas: AllQuotas): string {
     parts.push(pctColored(val));
   }
 
-  if (parts.length === 0) return `<span foreground='${C.muted}'>No Providers</span>`;
-  return parts.join(` <span foreground='${C.muted}'>│</span> `);
+  if (parts.length === 0) return s(C.muted, 'No Providers');
+  return parts.join(' ' + s(C.muted, '│') + ' ');
 }
 
 /**
- * Get CSS class based on provider states
+ * Get CSS class
  */
 function getClass(quotas: AllQuotas): string {
   const classes: string[] = ['llm-usage'];
@@ -297,7 +313,7 @@ export function outputWaybar(quotas: AllQuotas): void {
 }
 
 /**
- * Output for individual provider module (used by qbar --provider X)
+ * Output for individual provider module
  */
 export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
   const val = quota.primary?.remaining ?? null;
@@ -310,9 +326,9 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
   
   let tooltip = '';
   switch (quota.provider) {
-    case 'claude': tooltip = buildClaude(quota).join('\n'); break;
-    case 'codex': tooltip = buildCodex(quota).join('\n'); break;
-    case 'antigravity': tooltip = buildAntigravity(quota).join('\n'); break;
+    case 'claude': tooltip = buildClaudeTooltip(quota); break;
+    case 'codex': tooltip = buildCodexTooltip(quota); break;
+    case 'antigravity': tooltip = buildAntigravityTooltip(quota); break;
   }
   
   return {
