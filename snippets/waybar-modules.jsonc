@@ -1,0 +1,37 @@
+{
+  "// qbar Waybar Modules - Copy these to your waybar config.jsonc": "",
+  "// Add to modules-right: custom/qbar-claude, custom/qbar-codex, custom/qbar-antigravity": "",
+
+  "custom/qbar-claude": {
+    "exec": "$HOME/.local/bin/qbar --provider claude",
+    "return-type": "json",
+    "interval": 60,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
+  },
+
+  "custom/qbar-codex": {
+    "exec": "$HOME/.local/bin/qbar --provider codex",
+    "return-type": "json",
+    "interval": 60,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
+  },
+
+  "custom/qbar-antigravity": {
+    "exec": "$HOME/.local/bin/qbar --provider antigravity",
+    "return-type": "json",
+    "interval": 60,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
+  },
+
+  "// Or use the combined module (all providers in one)": "",
+  "custom/qbar": {
+    "exec": "$HOME/.local/bin/qbar",
+    "return-type": "json",
+    "interval": 60,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
+  }
+}

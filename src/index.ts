@@ -5,7 +5,7 @@ import { logger } from './logger';
 import { cache } from './cache';
 import { loadSettings } from './settings';
 import { getAllQuotas, getQuotaFor, providers } from './providers';
-import { outputWaybar, formatForWaybar } from './formatters/waybar';
+import { outputWaybar, formatForWaybar, formatProviderForWaybar } from './formatters/waybar';
 import { outputTerminal } from './formatters/terminal';
 import { runTui } from './tui';
 import type { AllQuotas } from './providers/types';
@@ -75,7 +75,12 @@ async function main() {
     
     case 'waybar':
     default:
-      outputWaybar(quotas);
+      // If single provider requested, use individual format for separate modules
+      if (options.provider && quotas.providers.length === 1) {
+        console.log(JSON.stringify(formatProviderForWaybar(quotas.providers[0])));
+      } else {
+        outputWaybar(quotas);
+      }
       break;
   }
 }

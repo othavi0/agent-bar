@@ -16,13 +16,19 @@ const C = {
   mauve: '#cba6f7',
   peach: '#fab387',
   sapphire: '#74c7ec',
+  pink: '#f5c2e7',
+  sky: '#89dceb',
 } as const;
 
-// Nerd Font icons (portable, no external files needed)
-const ICONS = {
-  claude: '',      // Brain
-  codex: '',       // Terminal
-  antigravity: '󰊤', // Google
+// Box drawing characters
+const LINE = {
+  h: '─',      // horizontal
+  hBold: '━',  // horizontal bold
+  v: '┃',      // vertical bold  
+  tl: '╭',     // top left corner
+  tr: '╮',     // top right corner
+  bl: '╰',     // bottom left corner
+  br: '╯',     // bottom right corner
 };
 
 interface WaybarOutput {
@@ -30,9 +36,6 @@ interface WaybarOutput {
   tooltip: string;
   class: string;
 }
-
-// Colored timeline bar
-const BAR = `<span foreground='${C.sapphire}'>│</span>`;
 
 /**
  * Format percentage without decimals
@@ -80,7 +83,7 @@ function resetTime(iso: string | null): string {
 }
 
 /**
- * Status indicator by percentage
+ * Status indicator
  */
 function indicator(val: number | null): string {
   if (val === null) return `<span foreground='${C.muted}'>○</span>`;
@@ -91,7 +94,21 @@ function indicator(val: number | null): string {
 }
 
 /**
- * Filter and merge models (remove Thinking suffix, 2.5, internal)
+ * Vertical bar (timeline)
+ */
+const V = `<span foreground='${C.sapphire}'>${LINE.v}</span>`;
+
+/**
+ * Create header with horizontal lines: ──── Name ────
+ */
+function header(name: string, lineColor: string = C.sapphire, nameColor: string = C.mauve): string {
+  const line = `<span foreground='${lineColor}'>${LINE.h.repeat(5)}</span>`;
+  const nameSpan = `<span foreground='${nameColor}' weight='bold'>${name}</span>`;
+  return `${V} ${line} ${nameSpan} ${line}`;
+}
+
+/**
+ * Filter and merge models
  */
 function filterModels(models: Record<string, QuotaWindow>): Array<{name: string, remaining: number | null, resetsAt: string | null}> {
   const map = new Map<string, {name: string, remaining: number | null, resetsAt: string | null}>();
@@ -110,12 +127,12 @@ function filterModels(models: Record<string, QuotaWindow>): Array<{name: string,
 }
 
 /**
- * Format model line with bar on left
+ * Format model line
  */
 function modelLine(name: string, val: number | null, reset: string | null, maxLen: number): string {
   const namePad = `<span foreground='${C.lavender}'>${name.padEnd(maxLen)}</span>`;
   const etaStr = `<span foreground='${C.teal}'>→ ${eta(reset)} (${resetTime(reset)})</span>`;
-  return `${BAR}   ${indicator(val)} ${namePad} ${bar(val)} ${pctColored(val).padStart(4)} ${etaStr}`;
+  return `${V}   ${indicator(val)} ${namePad} ${bar(val)} ${pctColored(val).padStart(4)} ${etaStr}`;
 }
 
 /**
@@ -123,13 +140,11 @@ function modelLine(name: string, val: number | null, reset: string | null, maxLe
  */
 function buildClaude(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const icon = `<span foreground='${C.peach}'>${ICONS.claude}</span>`;
-  const plan = p.plan ? ` <span foreground='${C.subtext}'>(${p.plan})</span>` : '';
   
-  lines.push(`${BAR} ${icon} <span foreground='${C.mauve}' weight='bold'>Claude${plan}</span>`);
+  lines.push(header('Claude', C.peach, C.peach));
   
   if (p.error) {
-    lines.push(`${BAR}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
+    lines.push(`${V}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
     return lines;
   }
 
@@ -143,17 +158,17 @@ function buildClaude(p: ProviderQuota): string[] {
   }
 
   if (p.secondary) {
-    lines.push(`${BAR}`);
-    lines.push(`${BAR}   <span foreground='${C.subtext}'>Weekly limit:</span>`);
+    lines.push(`${V}`);
+    lines.push(`${V}   <span foreground='${C.subtext}'>Weekly:</span>`);
     lines.push(modelLine('All Models', p.secondary.remaining, p.secondary.resetsAt, maxLen));
   }
 
   if (p.extraUsage?.enabled) {
     const { remaining, used, limit } = p.extraUsage;
-    lines.push(`${BAR}`);
+    lines.push(`${V}`);
     const namePad = `<span foreground='${C.blue}'>${'Extra Usage'.padEnd(maxLen)}</span>`;
     const usedStr = `<span foreground='${C.subtext}'>$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}</span>`;
-    lines.push(`${BAR}   ${indicator(remaining)} ${namePad} ${bar(remaining)} ${pctColored(remaining).padStart(4)} ${usedStr}`);
+    lines.push(`${V}   ${indicator(remaining)} ${namePad} ${bar(remaining)} ${pctColored(remaining).padStart(4)} ${usedStr}`);
   }
 
   return lines;
@@ -164,12 +179,11 @@ function buildClaude(p: ProviderQuota): string[] {
  */
 function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const icon = `<span foreground='${C.green}'>${ICONS.codex}</span>`;
   
-  lines.push(`${BAR} ${icon} <span foreground='${C.mauve}' weight='bold'>Codex</span>`);
+  lines.push(header('Codex', C.green, C.green));
   
   if (p.error) {
-    lines.push(`${BAR}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
+    lines.push(`${V}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
     return lines;
   }
 
@@ -180,8 +194,8 @@ function buildCodex(p: ProviderQuota): string[] {
   }
 
   if (p.secondary) {
-    lines.push(`${BAR}`);
-    lines.push(`${BAR}   <span foreground='${C.subtext}'>Weekly limit:</span>`);
+    lines.push(`${V}`);
+    lines.push(`${V}   <span foreground='${C.subtext}'>Weekly:</span>`);
     lines.push(modelLine('GPT-5.2 Codex', p.secondary.remaining, p.secondary.resetsAt, maxLen));
   }
 
@@ -193,18 +207,16 @@ function buildCodex(p: ProviderQuota): string[] {
  */
 function buildAntigravity(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const icon = `<span foreground='${C.blue}'>${ICONS.antigravity}</span>`;
-  const acc = p.account ? ` <span foreground='${C.subtext}'>(${p.account})</span>` : '';
   
-  lines.push(`${BAR} ${icon} <span foreground='${C.mauve}' weight='bold'>Antigravity${acc}</span>`);
+  lines.push(header('Antigravity', C.blue, C.blue));
   
   if (p.error) {
-    lines.push(`${BAR}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
+    lines.push(`${V}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
     return lines;
   }
 
   if (!p.models || Object.keys(p.models).length === 0) {
-    lines.push(`${BAR}   <span foreground='${C.muted}'>No models available</span>`);
+    lines.push(`${V}   <span foreground='${C.muted}'>No models available</span>`);
     return lines;
   }
 
@@ -234,39 +246,78 @@ function buildTooltip(quotas: AllQuotas): string {
     }
   }
 
-  // Join with empty bar line between sections
-  return sections.map(s => s.join('\n')).join(`\n${BAR}\n`);
+  return sections.map(s => s.join('\n')).join(`\n${V}\n`);
 }
 
 /**
- * Build bar text with icons
+ * Build bar text - simple text, icons will be added via CSS
  */
 function buildText(quotas: AllQuotas): string {
   const parts: string[] = [];
 
   for (const p of quotas.providers) {
     if (!p.available) continue;
-    
     const val = p.primary?.remaining ?? null;
-    let icon = '', color = C.text;
-    
-    switch (p.provider) {
-      case 'claude': icon = ICONS.claude; color = C.peach; break;
-      case 'codex': icon = ICONS.codex; color = C.green; break;
-      case 'antigravity': icon = ICONS.antigravity; color = C.blue; break;
-    }
-    
-    parts.push(`<span foreground='${color}'>${icon}</span> ${pctColored(val)}`);
+    parts.push(pctColored(val));
   }
 
-  if (parts.length === 0) return `<span foreground='${C.muted}'>⚡ No Providers</span>`;
-  return `⚡ ${parts.join(` <span foreground='${C.muted}'>│</span> `)}`;
+  if (parts.length === 0) return `<span foreground='${C.muted}'>No Providers</span>`;
+  return parts.join(` <span foreground='${C.muted}'>│</span> `);
+}
+
+/**
+ * Get CSS class based on provider states
+ */
+function getClass(quotas: AllQuotas): string {
+  const classes: string[] = ['llm-usage'];
+  
+  for (const p of quotas.providers) {
+    if (!p.available) continue;
+    const val = p.primary?.remaining ?? 100;
+    let status = 'ok';
+    if (val < 10) status = 'critical';
+    else if (val < 30) status = 'warn';
+    else if (val < 60) status = 'low';
+    classes.push(`${p.provider}-${status}`);
+  }
+  
+  return classes.join(' ');
 }
 
 export function formatForWaybar(quotas: AllQuotas): WaybarOutput {
-  return { text: buildText(quotas), tooltip: buildTooltip(quotas), class: 'llm-usage' };
+  return { 
+    text: buildText(quotas), 
+    tooltip: buildTooltip(quotas), 
+    class: getClass(quotas),
+  };
 }
 
 export function outputWaybar(quotas: AllQuotas): void {
   console.log(JSON.stringify(formatForWaybar(quotas)));
+}
+
+/**
+ * Output for individual provider module (used by qbar --provider X)
+ */
+export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
+  const val = quota.primary?.remaining ?? null;
+  let status = 'ok';
+  if (val !== null) {
+    if (val < 10) status = 'critical';
+    else if (val < 30) status = 'warn';
+    else if (val < 60) status = 'low';
+  }
+  
+  let tooltip = '';
+  switch (quota.provider) {
+    case 'claude': tooltip = buildClaude(quota).join('\n'); break;
+    case 'codex': tooltip = buildCodex(quota).join('\n'); break;
+    case 'antigravity': tooltip = buildAntigravity(quota).join('\n'); break;
+  }
+  
+  return {
+    text: pctColored(val),
+    tooltip,
+    class: `qbar-${quota.provider} ${status}`,
+  };
 }
