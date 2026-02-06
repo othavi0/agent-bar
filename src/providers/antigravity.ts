@@ -193,7 +193,14 @@ export class AntigravityProvider implements Provider {
         
         if (quota) {
           // Convert remainingFraction (0.0-1.0) to percentage (0-100)
-          const remaining = Math.round(quota.remainingFraction * 100);
+          // If remainingFraction is null/undefined, treat as 0% (exhausted)
+          // If isExhausted is true, also 0%
+          let remaining: number;
+          if (quota.isExhausted || quota.remainingFraction === null || quota.remainingFraction === undefined) {
+            remaining = 0;
+          } else {
+            remaining = Math.round(quota.remainingFraction * 100);
+          }
           
           models[label] = {
             remaining,
