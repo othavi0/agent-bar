@@ -129,7 +129,8 @@ export async function loginProviderFlow(): Promise<void> {
         [
           'Will open browser for Google OAuth.',
           '',
-          'After login, your quota will be visible.',
+          'If the CLI returns immediately after opening the browser,',
+          'qbar will keep this terminal open and wait for tokens to appear.',
         ].join('\n'),
         colorize('Antigravity Login', semantic.title)
       );
@@ -148,10 +149,67 @@ export async function loginProviderFlow(): Promise<void> {
         return;
       }
 
-      // Run the login flow
+      const { readdirSync, statSync } = await import('node:fs');
+      const { join } = await import('node:path');
+
+      const accountsDir = join(process.env.HOME ?? '', '.config', 'antigravity-usage', 'accounts');
+
+      const latestTokenMtimeMs = (): number => {
+        try {
+          const accounts = readdirSync(accountsDir, { withFileTypes: true })
+            .filter((d) => d.isDirectory())
+            .map((d) => d.name);
+
+          let latest = 0;
+          for (const acc of accounts) {
+            const tokenPath = join(accountsDir, acc, 'tokens.json');
+            try {
+              const st = statSync(tokenPath);
+              latest = Math.max(latest, st.mtimeMs);
+            } catch {
+              // ignore
+            }
+          }
+          return latest;
+        } catch {
+          return 0;
+        }
+      };
+
+      const before = latestTokenMtimeMs();
+
+      // Run the login flow (may open browser and exit quickly)
       await runInteractive('antigravity-usage', ['login']);
-      
-      p.log.success(colorize('Antigravity login complete', semantic.good));
+
+      // Wait for tokens to appear/update so the terminal doesn't close too early.
+      p.log.info(colorize('Waiting for OAuth completion in your browser...', semantic.subtitle));
+      const timeoutMs = 3 * 60_000;
+      const start = Date.now();
+
+      while (Date.now() - start < timeoutMs) {
+        const now = latestTokenMtimeMs();
+        if (now > before) {
+          p.log.success(colorize('Antigravity tokens detected. Login complete.', semantic.good));
+          break;
+        }
+        await Bun.sleep(500);
+      }
+
+      if (Date.now() - start >= timeoutMs) {
+        p.log.warn(colorize('Timed out waiting for tokens. If you finished login, try running qbar again.', semantic.warning));
+      }
+
+      // Keep terminal open for a moment / let user read
+      p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
+      await new Promise<void>((resolve) => {
+        process.stdin.setRawMode?.(true);
+        process.stdin.resume();
+        process.stdin.once('data', () => {
+          process.stdin.setRawMode?.(false);
+          resolve();
+        });
+      });
+
       break;
     }
 
