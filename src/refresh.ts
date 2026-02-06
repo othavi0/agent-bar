@@ -46,6 +46,9 @@ async function refresh() {
     console.error(error);
   }
   
+  // Signal waybar to update with new data
+  Bun.spawn(['pkill', '-SIGUSR2', 'waybar']);
+  
   // Simple wait - no stdin tricks
   console.log('\n\x1b[2m(closing in 5s...)\x1b[0m');
   await Bun.sleep(5000);

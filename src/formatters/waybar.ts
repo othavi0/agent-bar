@@ -290,6 +290,22 @@ export function outputWaybar(quotas: AllQuotas): void {
 }
 
 export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
+  // Check if disconnected (not available or has error)
+  if (!quota.available || quota.error) {
+    let tooltip = '';
+    switch (quota.provider) {
+      case 'claude': tooltip = buildClaudeTooltip(quota); break;
+      case 'codex': tooltip = buildCodexTooltip(quota); break;
+      case 'antigravity': tooltip = buildAntigravityTooltip(quota); break;
+    }
+    
+    return {
+      text: `<span foreground='${C.muted}'>󱘖</span>`,
+      tooltip,
+      class: `qbar-${quota.provider} disconnected`,
+    };
+  }
+
   const val = quota.primary?.remaining ?? null;
   let status = 'ok';
   if (val !== null) {
