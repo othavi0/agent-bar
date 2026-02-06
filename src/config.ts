@@ -2,13 +2,13 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 // XDG Base Directory paths
-const XDG_CACHE_HOME = Bun.env.XDG_CACHE_HOME || join(homedir(), '.cache');
 const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), '.config');
 
 export const CONFIG = {
   // Paths
   paths: {
-    cache: join(XDG_CACHE_HOME, 'qbar'),
+    // Cache inside waybar config folder
+    cache: join(XDG_CONFIG_HOME, 'waybar', 'qbar', 'cache'),
     config: join(XDG_CONFIG_HOME, 'qbar'),
     
     // Provider credential paths

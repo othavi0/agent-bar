@@ -23,7 +23,15 @@ const COLORS = {
   mauve: '#cba6f7',       // Provider names
   peach: '#fab387',       // Warnings
   sky: '#89dceb',         // Percentages accent
+  sapphire: '#74c7ec',    // Timeline bars
 } as const;
+
+// Nerd Font icons for providers
+const PROVIDER_ICONS: Record<string, string> = {
+  claude: '',      // Anthropic/brain icon
+  codex: '',       // Terminal/code icon  
+  antigravity: '󰊤', // Google icon
+};
 
 interface WaybarOutput {
   text: string;
@@ -35,24 +43,22 @@ interface ModelEntry {
   name: string;
   remaining: number | null;
   resetsAt: string | null;
-  limit?: string;
-  isExhausted?: boolean;
-}
-
-interface QuotaGroup {
-  label: string;
-  resetsAt: string | null;
-  eta: string;
-  models: ModelEntry[];
 }
 
 /**
- * Format percentage with color span for Pango markup
+ * Format percentage without decimals
  */
-function formatPctSpan(label: string, pct: number | null): string {
+function formatPct(pct: number | null): string {
+  if (pct === null) return '?%';
+  return `${Math.round(pct)}%`;
+}
+
+/**
+ * Format percentage with color span for Pango markup (bar text)
+ */
+function formatPctSpan(pct: number | null): string {
   const color = getColorForPercent(pct);
-  const display = pct !== null ? `${pct}%` : '?%';
-  return `<span foreground='${color}'>${label} ${display}</span>`;
+  return `<span foreground='${color}'>${formatPct(pct)}</span>`;
 }
 
 /**
@@ -67,7 +73,6 @@ function formatBar(pct: number | null): string {
   const empty = 20 - filled;
   const color = getColorForPercent(pct);
 
-  // Use dots style like the reference image
   const filledStr = '▰'.repeat(filled);
   const emptyStr = '▱'.repeat(empty);
 
@@ -76,6 +81,7 @@ function formatBar(pct: number | null): string {
 
 /**
  * Format human-readable time until reset
+ * >24h = "Xd XXh", <24h = "XXh XXm"
  */
 function formatEta(isoDate: string | null): string {
   if (!isoDate) return '?';
@@ -91,12 +97,9 @@ function formatEta(isoDate: string | null): string {
   const minutes = Math.floor((diff % 3600000) / 60000);
 
   if (days > 0) {
-    return `${days}d ${hours}h ${minutes}m`;
+    return `${days}d ${hours.toString().padStart(2, '0')}h`;
   }
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
+  return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
 }
 
 /**
@@ -124,7 +127,33 @@ function getStatusIndicator(pct: number | null): string {
 }
 
 /**
- * Format a single model line with proper alignment and colors
+ * Timeline separator (vertical bar)
+ */
+function timelineSep(): string {
+  return `<span foreground='${COLORS.sapphire}'>│</span>`;
+}
+
+/**
+ * Filter out internal/test models and Gemini 2.5
+ */
+function isValidModel(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  
+  // Exclude patterns
+  const excludePatterns = [
+    /^tab_/i,
+    /^chat_/i,
+    /^test_/i,
+    /^internal_/i,
+    /preview$/i,
+    /2\.5/i,  // Exclude Gemini 2.5 models
+  ];
+  
+  return !excludePatterns.some(p => p.test(lowerName));
+}
+
+/**
+ * Format a single model line with individual reset time
  */
 function formatModelLine(model: ModelEntry, maxNameLen: number): string {
   const indicator = getStatusIndicator(model.remaining);
@@ -132,116 +161,11 @@ function formatModelLine(model: ModelEntry, maxNameLen: number): string {
   const bar = formatBar(model.remaining);
   
   const pctColor = getColorForPercent(model.remaining);
-  const pctStr = model.remaining !== null 
-    ? `${model.remaining.toFixed(2).padStart(6)}%`
-    : '     ?%';
-  const pct = `<span foreground='${pctColor}'>${pctStr}</span>`;
-
-  return `${indicator} ${name} ${bar} ${pct}`;
-}
-
-/**
- * Filter out internal/test models
- */
-function isValidModel(name: string): boolean {
-  const excludePatterns = [
-    /^tab_/i,
-    /^chat_/i,
-    /^test_/i,
-    /^internal_/i,
-    /preview$/i,
-  ];
-  return !excludePatterns.some(p => p.test(name));
-}
-
-/**
- * Generate a descriptive group label based on models
- */
-function getGroupLabel(models: ModelEntry[]): string {
-  // Check what types of models are in this group
-  const hasClaude = models.some(m => m.name.toLowerCase().includes('claude'));
-  const hasGemini = models.some(m => m.name.toLowerCase().includes('gemini'));
-  const hasGpt = models.some(m => m.name.toLowerCase().includes('gpt'));
+  const pctStr = `<span foreground='${pctColor}'>${formatPct(model.remaining).padStart(4)}</span>`;
   
-  const parts: string[] = [];
-  if (hasClaude) parts.push('Claude');
-  if (hasGpt) parts.push('GPT-OSS');
-  if (hasGemini) parts.push('Gemini');
-  
-  if (parts.length === 0) return 'Other';
-  if (parts.length === 1) return parts[0];
-  return parts.join(' + ');
-}
+  const eta = `<span foreground='${COLORS.teal}'>→ ${formatEta(model.resetsAt)} (${formatResetTime(model.resetsAt)})</span>`;
 
-/**
- * Group models by their reset time
- */
-function groupByResetTime(models: ModelEntry[]): QuotaGroup[] {
-  // Filter out internal/test models
-  const validModels = models.filter(m => isValidModel(m.name));
-  
-  const groups = new Map<string, ModelEntry[]>();
-  
-  for (const model of validModels) {
-    const key = model.resetsAt || 'unknown';
-    if (!groups.has(key)) {
-      groups.set(key, []);
-    }
-    groups.get(key)!.push(model);
-  }
-
-  // Sort groups by reset time (soonest first), unknown last
-  const sortedKeys = [...groups.keys()].sort((a, b) => {
-    if (a === 'unknown') return 1;
-    if (b === 'unknown') return -1;
-    return new Date(a).getTime() - new Date(b).getTime();
-  });
-
-  return sortedKeys.map((key) => {
-    const groupModels = groups.get(key)!;
-    const resetsAt = key === 'unknown' ? null : key;
-    const eta = formatEta(resetsAt);
-    const resetTime = formatResetTime(resetsAt);
-    
-    // Sort models within group (Claude first, then GPT, then Gemini, then alphabetically)
-    groupModels.sort((a, b) => {
-      const aLower = a.name.toLowerCase();
-      const bLower = b.name.toLowerCase();
-      
-      // Priority: Claude > GPT > Gemini > Others
-      const getPriority = (name: string): number => {
-        if (name.includes('claude')) return 0;
-        if (name.includes('gpt')) return 1;
-        if (name.includes('gemini')) return 2;
-        return 3;
-      };
-      
-      const aPriority = getPriority(aLower);
-      const bPriority = getPriority(bLower);
-      
-      if (aPriority !== bPriority) return aPriority - bPriority;
-      return a.name.localeCompare(b.name);
-    });
-    
-    // Generate group label
-    let label: string;
-    if (resetsAt === null) {
-      label = 'Unknown Reset';
-    } else if (groupModels.length === 1) {
-      // Single model - use model name as group
-      label = groupModels[0].name;
-    } else {
-      // Multiple models - generate descriptive label
-      label = getGroupLabel(groupModels);
-    }
-
-    return {
-      label,
-      resetsAt,
-      eta: `→ ${eta} (${resetTime})`,
-      models: groupModels,
-    };
-  });
+  return `${indicator} ${name} ${bar} ${pctStr} ${eta}`;
 }
 
 /**
@@ -249,13 +173,15 @@ function groupByResetTime(models: ModelEntry[]): QuotaGroup[] {
  */
 function buildClaudeSection(provider: ProviderQuota): string[] {
   const lines: string[] = [];
+  const sep = timelineSep();
   
-  // Header
+  // Header with icon
+  const icon = `<span foreground='${COLORS.peach}'>${PROVIDER_ICONS.claude}</span>`;
   const planStr = provider.plan ? ` <span foreground='${COLORS.subtext}'>(${provider.plan})</span>` : '';
-  lines.push(`<span foreground='${COLORS.mauve}' weight='bold'>━━━ ${provider.displayName}${planStr} ━━━</span>`);
+  lines.push(`${sep} ${icon} <span foreground='${COLORS.mauve}' weight='bold'>${provider.displayName}${planStr}</span>`);
 
   if (provider.error) {
-    lines.push(`<span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
+    lines.push(`${sep}   <span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
     return lines;
   }
 
@@ -263,26 +189,26 @@ function buildClaudeSection(provider: ProviderQuota): string[] {
   if (provider.primary) {
     const pct = provider.primary.remaining;
     const indicator = getStatusIndicator(pct);
-    const name = `<span foreground='${COLORS.lavender}'>5h Window       </span>`;
+    const name = `<span foreground='${COLORS.lavender}'>5h Window</span>`;
     const bar = formatBar(pct);
     const pctColor = getColorForPercent(pct);
-    const pctStr = `<span foreground='${pctColor}'>${pct.toFixed(2).padStart(6)}%</span>`;
+    const pctStr = `<span foreground='${pctColor}'>${formatPct(pct).padStart(4)}</span>`;
     const eta = `<span foreground='${COLORS.teal}'>→ ${formatEta(provider.primary.resetsAt)} (${formatResetTime(provider.primary.resetsAt)})</span>`;
     
-    lines.push(`${indicator} ${name} ${bar} ${pctStr} ${eta}`);
+    lines.push(`${sep}   ${indicator} ${name.padEnd(40)} ${bar} ${pctStr} ${eta}`);
   }
 
   // 7-day Window
   if (provider.secondary) {
     const pct = provider.secondary.remaining;
     const indicator = getStatusIndicator(pct);
-    const name = `<span foreground='${COLORS.lavender}'>Weekly          </span>`;
+    const name = `<span foreground='${COLORS.lavender}'>Weekly</span>`;
     const bar = formatBar(pct);
     const pctColor = getColorForPercent(pct);
-    const pctStr = `<span foreground='${pctColor}'>${pct.toFixed(2).padStart(6)}%</span>`;
+    const pctStr = `<span foreground='${pctColor}'>${formatPct(pct).padStart(4)}</span>`;
     const eta = `<span foreground='${COLORS.teal}'>→ ${formatEta(provider.secondary.resetsAt)} (${formatResetTime(provider.secondary.resetsAt)})</span>`;
     
-    lines.push(`${indicator} ${name} ${bar} ${pctStr} ${eta}`);
+    lines.push(`${sep}   ${indicator} ${name.padEnd(40)} ${bar} ${pctStr} ${eta}`);
   }
 
   // Extra Usage
@@ -292,13 +218,13 @@ function buildClaudeSection(provider: ProviderQuota): string[] {
     const limit = provider.extraUsage.limit;
     
     const indicator = getStatusIndicator(pct);
-    const name = `<span foreground='${COLORS.blue}'>Extra Usage     </span>`;
+    const name = `<span foreground='${COLORS.blue}'>Extra Usage</span>`;
     const bar = formatBar(pct);
     const pctColor = getColorForPercent(pct);
-    const pctStr = `<span foreground='${pctColor}'>${pct.toFixed(2).padStart(6)}%</span>`;
+    const pctStr = `<span foreground='${pctColor}'>${formatPct(pct).padStart(4)}</span>`;
     const usedStr = `<span foreground='${COLORS.subtext}'>$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}</span>`;
     
-    lines.push(`${indicator} ${name} ${bar} ${pctStr} ${usedStr}`);
+    lines.push(`${sep}   ${indicator} ${name.padEnd(40)} ${bar} ${pctStr} ${usedStr}`);
   }
 
   return lines;
@@ -309,12 +235,14 @@ function buildClaudeSection(provider: ProviderQuota): string[] {
  */
 function buildCodexSection(provider: ProviderQuota): string[] {
   const lines: string[] = [];
+  const sep = timelineSep();
   
-  // Header
-  lines.push(`<span foreground='${COLORS.mauve}' weight='bold'>━━━ ${provider.displayName} ━━━</span>`);
+  // Header with icon
+  const icon = `<span foreground='${COLORS.green}'>${PROVIDER_ICONS.codex}</span>`;
+  lines.push(`${sep} ${icon} <span foreground='${COLORS.mauve}' weight='bold'>${provider.displayName}</span>`);
 
   if (provider.error) {
-    lines.push(`<span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
+    lines.push(`${sep}   <span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
     return lines;
   }
 
@@ -322,96 +250,87 @@ function buildCodexSection(provider: ProviderQuota): string[] {
   if (provider.primary) {
     const pct = provider.primary.remaining;
     const indicator = getStatusIndicator(pct);
-    const name = `<span foreground='${COLORS.lavender}'>5h Window       </span>`;
+    const name = `<span foreground='${COLORS.lavender}'>5h Window</span>`;
     const bar = formatBar(pct);
     const pctColor = getColorForPercent(pct);
-    const pctStr = `<span foreground='${pctColor}'>${pct.toFixed(2).padStart(6)}%</span>`;
+    const pctStr = `<span foreground='${pctColor}'>${formatPct(pct).padStart(4)}</span>`;
     const eta = `<span foreground='${COLORS.teal}'>→ ${formatEta(provider.primary.resetsAt)} (${formatResetTime(provider.primary.resetsAt)})</span>`;
     
-    lines.push(`${indicator} ${name} ${bar} ${pctStr} ${eta}`);
+    lines.push(`${sep}   ${indicator} ${name.padEnd(40)} ${bar} ${pctStr} ${eta}`);
   }
 
   // Weekly
   if (provider.secondary) {
     const pct = provider.secondary.remaining;
     const indicator = getStatusIndicator(pct);
-    const name = `<span foreground='${COLORS.lavender}'>Weekly          </span>`;
+    const name = `<span foreground='${COLORS.lavender}'>Weekly</span>`;
     const bar = formatBar(pct);
     const pctColor = getColorForPercent(pct);
-    const pctStr = `<span foreground='${pctColor}'>${pct.toFixed(2).padStart(6)}%</span>`;
+    const pctStr = `<span foreground='${pctColor}'>${formatPct(pct).padStart(4)}</span>`;
     const eta = `<span foreground='${COLORS.teal}'>→ ${formatEta(provider.secondary.resetsAt)} (${formatResetTime(provider.secondary.resetsAt)})</span>`;
     
-    lines.push(`${indicator} ${name} ${bar} ${pctStr} ${eta}`);
+    lines.push(`${sep}   ${indicator} ${name.padEnd(40)} ${bar} ${pctStr} ${eta}`);
   }
 
   return lines;
 }
 
 /**
- * Build Antigravity section with grouped models
+ * Build Antigravity section with individual model times
  */
 function buildAntigravitySection(provider: ProviderQuota): string[] {
   const lines: string[] = [];
+  const sep = timelineSep();
   
-  // Header
+  // Header with icon
+  const icon = `<span foreground='${COLORS.blue}'>${PROVIDER_ICONS.antigravity}</span>`;
   const accountStr = provider.account ? ` <span foreground='${COLORS.subtext}'>(${provider.account})</span>` : '';
-  lines.push(`<span foreground='${COLORS.mauve}' weight='bold'>━━━ ${provider.displayName}${accountStr} ━━━</span>`);
+  lines.push(`${sep} ${icon} <span foreground='${COLORS.mauve}' weight='bold'>${provider.displayName}${accountStr}</span>`);
 
   if (provider.error) {
-    lines.push(`<span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
+    lines.push(`${sep}   <span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
     return lines;
   }
 
   if (!provider.models || Object.keys(provider.models).length === 0) {
-    lines.push(`<span foreground='${COLORS.muted}'>No models available</span>`);
+    lines.push(`${sep}   <span foreground='${COLORS.muted}'>No models available</span>`);
     return lines;
   }
 
-  // Convert models to entries
-  const modelEntries: ModelEntry[] = Object.entries(provider.models).map(([name, window]) => ({
-    name,
-    remaining: window.remaining,
-    resetsAt: window.resetsAt,
-  }));
+  // Convert models to entries and filter
+  const modelEntries: ModelEntry[] = Object.entries(provider.models)
+    .filter(([name]) => isValidModel(name))
+    .map(([name, window]) => ({
+      name,
+      remaining: window.remaining,
+      resetsAt: window.resetsAt,
+    }));
 
-  // Group by reset time
-  const groups = groupByResetTime(modelEntries);
-  
-  // Find max name length for alignment
-  const maxNameLen = Math.max(...modelEntries.map(m => m.name.length), 16);
-
-  for (let i = 0; i < groups.length; i++) {
-    const group = groups[i];
+  // Sort models: Claude first, then GPT, then Gemini, then alphabetically
+  modelEntries.sort((a, b) => {
+    const aLower = a.name.toLowerCase();
+    const bLower = b.name.toLowerCase();
     
-    if (i > 0) {
-      // Separator between groups
-      lines.push('');
-    }
+    const getPriority = (name: string): number => {
+      if (name.includes('claude')) return 0;
+      if (name.includes('gpt')) return 1;
+      if (name.includes('gemini')) return 2;
+      return 3;
+    };
+    
+    const aPriority = getPriority(aLower);
+    const bPriority = getPriority(bLower);
+    
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return a.name.localeCompare(b.name);
+  });
 
-    // Group header with reset info
-    if (group.models.length > 1 || group.label.startsWith('Group')) {
-      const headerColor = COLORS.pink;
-      lines.push(`<span foreground='${headerColor}'>${group.label}</span> <span foreground='${COLORS.teal}'>${group.eta}</span>`);
-      
-      // Model lines
-      for (const model of group.models) {
-        lines.push('  ' + formatModelLine(model, maxNameLen));
-      }
-    } else {
-      // Single model - inline with reset time
-      const model = group.models[0];
-      const indicator = getStatusIndicator(model.remaining);
-      const name = `<span foreground='${COLORS.lavender}'>${model.name.padEnd(maxNameLen)}</span>`;
-      const bar = formatBar(model.remaining);
-      const pctColor = getColorForPercent(model.remaining);
-      const pctStr = model.remaining !== null 
-        ? `${model.remaining.toFixed(2).padStart(6)}%`
-        : '     ?%';
-      const pct = `<span foreground='${pctColor}'>${pctStr}</span>`;
-      const eta = `<span foreground='${COLORS.teal}'>${group.eta}</span>`;
+  // Find max name length for alignment
+  const maxNameLen = Math.max(...modelEntries.map(m => m.name.length), 20);
 
-      lines.push(`${indicator} ${name} ${bar} ${pct} ${eta}`);
-    }
+  // Add each model with individual reset time
+  for (const model of modelEntries) {
+    lines.push(`${sep}   ${formatModelLine(model, maxNameLen)}`);
   }
 
   return lines;
@@ -452,37 +371,34 @@ function buildTooltip(quotas: AllQuotas): string {
 }
 
 /**
- * Build bar text from all quotas
+ * Build bar text from all quotas with icons
  */
 function buildText(quotas: AllQuotas): string {
   const parts: string[] = [];
-  const sep = `<span foreground='${COLORS.muted}'>│</span>`;
 
   for (const provider of quotas.providers) {
     if (!provider.available) continue;
 
     const pct = provider.primary?.remaining ?? null;
-    const abbrev = getAbbrev(provider.provider);
-    parts.push(formatPctSpan(abbrev, pct));
+    const icon = PROVIDER_ICONS[provider.provider] || '';
+    const pctSpan = formatPctSpan(pct);
+    
+    // Icon colored by provider
+    let iconColor = COLORS.text;
+    if (provider.provider === 'claude') iconColor = COLORS.peach;
+    if (provider.provider === 'codex') iconColor = COLORS.green;
+    if (provider.provider === 'antigravity') iconColor = COLORS.blue;
+    
+    const iconSpan = `<span foreground='${iconColor}'>${icon}</span>`;
+    parts.push(`${iconSpan} ${pctSpan}`);
   }
 
   if (parts.length === 0) {
     return `<span foreground='${COLORS.muted}'>⚡ No Providers</span>`;
   }
 
+  const sep = `<span foreground='${COLORS.muted}'>│</span>`;
   return `⚡ ${parts.join(` ${sep} `)}`;
-}
-
-/**
- * Get short abbreviation for provider
- */
-function getAbbrev(providerId: string): string {
-  switch (providerId) {
-    case 'claude': return 'Cld';
-    case 'codex': return 'Cdx';
-    case 'antigravity': return 'AG';
-    default: return providerId.slice(0, 3);
-  }
 }
 
 /**
