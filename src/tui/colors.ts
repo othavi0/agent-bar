@@ -66,8 +66,9 @@ export function getQuotaColor(percent: number | null): string {
   return semantic.critical;
 }
 
-export function colorize(text: string, color: string): string {
-  return `${color}${text}${catppuccin.reset}`;
+export function colorize(text: string, color: string, isBold: boolean = false): string {
+  const boldPrefix = isBold ? catppuccin.bold : '';
+  return `${boldPrefix}${color}${text}${catppuccin.reset}`;
 }
 
 export function bold(text: string): string {

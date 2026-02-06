@@ -3,101 +3,179 @@ import { getAllQuotas } from '../providers';
 import { catppuccin, semantic, getQuotaColor, colorize, bold } from './colors';
 import type { ProviderQuota, QuotaWindow } from '../providers/types';
 
-function formatBar(pct: number | null, width: number = 20): string {
-  if (pct === null) {
-    return colorize('░'.repeat(width), semantic.muted);
-  }
+// Box drawing characters
+const B = {
+  tl: '┏',
+  bl: '┗',
+  lt: '┣',
+  h: '━',
+  v: '┃',
+  dot: '●',
+  dotO: '○',
+  diamond: '◆',
+};
 
-  const filled = Math.floor((pct / 100) * width);
-  const empty = width - filled;
+function bar(pct: number | null): string {
+  if (pct === null) return colorize('▱'.repeat(20), semantic.muted);
+  const filled = Math.floor(pct / 5);
   const color = getQuotaColor(pct);
-
-  return colorize('█'.repeat(filled), color) + colorize('░'.repeat(empty), semantic.muted);
+  return colorize('▰'.repeat(filled), color) + colorize('▱'.repeat(20 - filled), semantic.muted);
 }
 
-function formatEta(isoDate: string | null): string {
-  if (!isoDate) return '?';
+function indicator(val: number | null): string {
+  if (val === null) return colorize(B.dotO, semantic.muted);
+  return colorize(B.dot, getQuotaColor(val));
+}
 
-  const now = Date.now();
-  const resetTime = new Date(isoDate).getTime();
-  const diff = resetTime - now;
+function pct(val: number | null): string {
+  if (val === null) return '?%';
+  return `${Math.round(val)}%`;
+}
 
+function eta(iso: string | null, remaining: number | null): string {
+  if (remaining === 100) return 'Full';
+  if (!iso) return '?';
+  const diff = new Date(iso).getTime() - Date.now();
   if (diff < 0) return '0m';
-
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-
-  if (days > 0) {
-    return `${days}d ${hours.toString().padStart(2, '0')}h`;
-  }
-  return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return d > 0 ? `${d}d ${h.toString().padStart(2, '0')}h` : `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
-function formatQuotaLine(label: string, window: QuotaWindow | undefined): string {
-  const pct = window?.remaining ?? null;
-  const bar = formatBar(pct);
-  const pctStr = pct !== null 
-    ? colorize(`${pct.toString().padStart(3)}%`, getQuotaColor(pct))
-    : colorize('  ?%', semantic.muted);
-  const eta = window?.resetsAt 
-    ? colorize(`⏱ ${formatEta(window.resetsAt)}`, semantic.subtitle)
-    : '';
-
-  return `  ${colorize(label.padEnd(16), semantic.subtitle)} ${bar} ${pctStr}  ${eta}`;
+function resetTime(iso: string | null, remaining: number | null): string {
+  if (remaining === 100) return '';
+  if (!iso) return '(??:??)';
+  const d = new Date(iso);
+  return `(${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')})`;
 }
 
-function formatProvider(provider: ProviderQuota): string[] {
+function isValidModel(name: string): boolean {
+  const lower = name.toLowerCase();
+  return !/^(tab_|chat_|test_|internal_)/.test(lower) && !/preview$/i.test(name) && !/2\.5/i.test(name);
+}
+
+// Vertical bar
+const v = (color: string) => colorize(B.v, color);
+
+// Section label: ┣━ ◆ Label
+const label = (text: string, providerColor: string) => 
+  colorize(B.lt + B.h, providerColor) + ' ' + colorize(B.diamond + ' ' + text, catppuccin.mauve, true);
+
+// Model line
+function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
+  const rem = window?.remaining ?? null;
+  const reset = window?.resetsAt ?? null;
+  const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
+  const barS = bar(rem);
+  const pctS = colorize(pct(rem).padStart(4), getQuotaColor(rem));
+  const etaS = colorize(`→ ${eta(reset, rem)} ${resetTime(reset, rem)}`, catppuccin.teal);
+  return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
+}
+
+function buildClaude(p: ProviderQuota): string[] {
   const lines: string[] = [];
-
-  // Header with color
-  const headerInfo = provider.plan 
-    ? `(${provider.plan})`
-    : provider.account 
-      ? `(${provider.account})`
-      : '';
+  const vc = catppuccin.peach;
   
-  lines.push('');
-  lines.push(colorize(bold(`  ━━━ ${provider.displayName} ${headerInfo} ━━━`), semantic.title));
+  lines.push(colorize(B.tl + B.h, vc) + ' ' + colorize('Claude', vc, true) + ' ' + colorize(B.h.repeat(50), vc));
+  lines.push(v(vc));
+  
+  if (p.error) {
+    lines.push(`${v(vc)}  ${colorize('⚠️ ' + p.error, catppuccin.red)}`);
+  } else {
+    const maxLen = 20;
+    
+    if (p.primary) {
+      lines.push(label('5-hour limit', vc));
+      for (const m of ['Opus', 'Sonnet', 'Haiku']) {
+        lines.push(modelLine(m, p.primary, maxLen, vc));
+      }
+    }
 
-  if (!provider.available) {
-    lines.push(colorize(`  Not logged in`, semantic.muted));
-    return lines;
-  }
+    if (p.secondary) {
+      lines.push(v(vc));
+      lines.push(label('Weekly limit', vc));
+      lines.push(modelLine('All Models', p.secondary, maxLen, vc));
+    }
 
-  if (provider.error) {
-    lines.push(colorize(`  ⚠ ${provider.error}`, semantic.danger));
-    return lines;
-  }
-
-  // Primary window (5h)
-  if (provider.primary) {
-    lines.push(formatQuotaLine('5h Window', provider.primary));
-  }
-
-  // Secondary window (Weekly)
-  if (provider.secondary) {
-    lines.push(formatQuotaLine('Weekly', provider.secondary));
-  }
-
-  // Extra Usage (Claude Pro feature)
-  if (provider.extraUsage?.enabled) {
-    const pct = provider.extraUsage.remaining;
-    const bar = formatBar(pct);
-    const pctStr = colorize(`${pct.toString().padStart(3)}%`, getQuotaColor(pct));
-    const usedStr = colorize(`$${(provider.extraUsage.used / 100).toFixed(2)} used`, semantic.subtitle);
-    lines.push(`  ${colorize('Extra Usage'.padEnd(16), semantic.subtitle)} ${bar} ${pctStr}  ${usedStr}`);
-  }
-
-  // Additional models (Antigravity)
-  if (provider.models) {
-    for (const [modelName, window] of Object.entries(provider.models)) {
-      // Skip if already shown as primary
-      if (provider.primary && modelName.toLowerCase().includes('claude')) continue;
-      lines.push(formatQuotaLine(modelName, window));
+    if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
+      const { remaining, used, limit } = p.extraUsage;
+      lines.push(v(vc));
+      lines.push(label('Extra Usage', vc));
+      const nameS = colorize('Budget'.padEnd(maxLen), catppuccin.lavender);
+      const barS = bar(remaining);
+      const pctS = colorize(pct(remaining).padStart(4), getQuotaColor(remaining));
+      const usedS = colorize(`$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`, catppuccin.teal);
+      lines.push(`${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`);
     }
   }
+  
+  lines.push(v(vc));
+  lines.push(colorize(B.bl + B.h.repeat(55), vc));
+  
+  return lines;
+}
 
+function buildCodex(p: ProviderQuota): string[] {
+  const lines: string[] = [];
+  const vc = catppuccin.green;
+  
+  lines.push(colorize(B.tl + B.h, vc) + ' ' + colorize('Codex', vc, true) + ' ' + colorize(B.h.repeat(51), vc));
+  lines.push(v(vc));
+  
+  if (p.error) {
+    lines.push(`${v(vc)}  ${colorize('⚠️ ' + p.error, catppuccin.red)}`);
+  } else {
+    const maxLen = 20;
+    
+    if (p.primary) {
+      lines.push(label('5-hour limit', vc));
+      lines.push(modelLine('GPT-5.2 Codex', p.primary, maxLen, vc));
+    }
+
+    if (p.secondary) {
+      lines.push(v(vc));
+      lines.push(label('Weekly limit', vc));
+      lines.push(modelLine('GPT-5.2 Codex', p.secondary, maxLen, vc));
+    }
+  }
+  
+  lines.push(v(vc));
+  lines.push(colorize(B.bl + B.h.repeat(55), vc));
+  
+  return lines;
+}
+
+function buildAntigravity(p: ProviderQuota): string[] {
+  const lines: string[] = [];
+  const vc = catppuccin.blue;
+  
+  lines.push(colorize(B.tl + B.h, vc) + ' ' + colorize('Antigravity', vc, true) + ' ' + colorize(B.h.repeat(45), vc));
+  lines.push(v(vc));
+  
+  if (p.error) {
+    lines.push(`${v(vc)}  ${colorize('⚠️ ' + p.error, catppuccin.red)}`);
+  } else if (!p.models || Object.keys(p.models).length === 0) {
+    lines.push(`${v(vc)}  ${colorize('No models available', semantic.muted)}`);
+  } else {
+    const models = Object.entries(p.models)
+      .filter(([name]) => isValidModel(name))
+      .sort(([a], [b]) => {
+        const pri = (n: string) => n.toLowerCase().includes('claude') ? 0 : n.toLowerCase().includes('gpt') ? 1 : n.toLowerCase().includes('gemini') ? 2 : 3;
+        return pri(a) - pri(b) || a.localeCompare(b);
+      });
+
+    const maxLen = Math.max(...models.map(([n]) => n.length), 20);
+
+    lines.push(label('Available Models', vc));
+    for (const [name, window] of models) {
+      lines.push(modelLine(name, window, maxLen, vc));
+    }
+  }
+  
+  lines.push(v(vc));
+  lines.push(colorize(B.bl + B.h.repeat(55), vc));
+  
   return lines;
 }
 
@@ -110,27 +188,30 @@ export async function showListAll(): Promise<void> {
   s.stop(colorize('Quotas loaded', semantic.good));
 
   // Build output
-  const lines: string[] = [];
+  const sections: string[][] = [];
   
   for (const provider of quotas.providers) {
-    lines.push(...formatProvider(provider));
+    if (!provider.available && !provider.error) continue;
+    
+    switch (provider.provider) {
+      case 'claude': sections.push(buildClaude(provider)); break;
+      case 'codex': sections.push(buildCodex(provider)); break;
+      case 'antigravity': sections.push(buildAntigravity(provider)); break;
+    }
   }
 
-  // Print with nice formatting
+  // Print
   console.log('');
-  console.log(colorize(bold('  Current Quotas'), semantic.accent));
-  console.log(colorize('  ─────────────────────────────────────────────────', semantic.muted));
-  
-  for (const line of lines) {
-    console.log(line);
+  for (const section of sections) {
+    for (const line of section) {
+      console.log(line);
+    }
+    console.log('');
   }
 
-  console.log('');
-  console.log(colorize('  ─────────────────────────────────────────────────', semantic.muted));
-  console.log('');
-  console.log(colorize('  Press Enter to continue...', semantic.subtitle));
+  console.log(colorize('Press Enter to continue...', semantic.subtitle));
 
-  // Wait for enter (simple readline)
+  // Wait for enter
   await new Promise<void>((resolve) => {
     process.stdin.setRawMode?.(true);
     process.stdin.resume();
