@@ -1,29 +1,29 @@
 import { CONFIG, getColorForPercent } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 
-// Catppuccin Mocha extended palette
-const COLORS = {
-  // Status colors (threshold-based)
+// Catppuccin Mocha palette
+const C = {
   green: '#a6e3a1',
   yellow: '#f9e2af',
   orange: '#fab387',
   red: '#f38ba8',
-  
-  // UI colors
   text: '#cdd6f4',
   subtext: '#bac2de',
   muted: '#6c7086',
-  surface: '#45475a',
-  
-  // Accent colors
   lavender: '#b4befe',
   teal: '#94e2d5',
-  pink: '#f5c2e7',
   blue: '#89b4fa',
   mauve: '#cba6f7',
   peach: '#fab387',
   sapphire: '#74c7ec',
 } as const;
+
+// Nerd Font icons (portable, no external files needed)
+const ICONS = {
+  claude: '',      // Brain
+  codex: '',       // Terminal
+  antigravity: '󰊤', // Google
+};
 
 interface WaybarOutput {
   text: string;
@@ -31,312 +31,242 @@ interface WaybarOutput {
   class: string;
 }
 
-interface ModelEntry {
-  name: string;
-  remaining: number | null;
-  resetsAt: string | null;
-}
+// Colored timeline bar
+const BAR = `<span foreground='${C.sapphire}'>│</span>`;
 
 /**
  * Format percentage without decimals
  */
-function formatPct(pct: number | null): string {
-  if (pct === null) return '?%';
-  return `${Math.round(pct)}%`;
+function pct(val: number | null): string {
+  return val === null ? '?%' : `${Math.round(val)}%`;
 }
 
 /**
- * Format percentage with color span
+ * Colored percentage
  */
-function formatPctSpan(pct: number | null): string {
-  const color = getColorForPercent(pct);
-  return `<span foreground='${color}'>${formatPct(pct)}</span>`;
+function pctColored(val: number | null): string {
+  return `<span foreground='${getColorForPercent(val)}'>${pct(val)}</span>`;
 }
 
 /**
- * Generate a 20-character progress bar
+ * Progress bar (20 chars)
  */
-function formatBar(pct: number | null): string {
-  if (pct === null) {
-    return `<span foreground='${COLORS.muted}'>░░░░░░░░░░░░░░░░░░░░</span>`;
-  }
-
-  const filled = Math.floor(pct / 5);
-  const empty = 20 - filled;
-  const color = getColorForPercent(pct);
-
-  return `<span foreground='${color}'>${'▰'.repeat(filled)}</span><span foreground='${COLORS.muted}'>${'▱'.repeat(empty)}</span>`;
+function bar(val: number | null): string {
+  if (val === null) return `<span foreground='${C.muted}'>${'░'.repeat(20)}</span>`;
+  const filled = Math.floor(val / 5);
+  return `<span foreground='${getColorForPercent(val)}'>${'▰'.repeat(filled)}</span><span foreground='${C.muted}'>${'▱'.repeat(20 - filled)}</span>`;
 }
 
 /**
- * Format time until reset: >24h = "Xd XXh", <24h = "XXh XXm"
+ * Time until reset: >24h = "Xd XXh", <24h = "XXh XXm"
  */
-function formatEta(isoDate: string | null): string {
-  if (!isoDate) return '?';
-
-  const diff = new Date(isoDate).getTime() - Date.now();
+function eta(iso: string | null): string {
+  if (!iso) return '?';
+  const diff = new Date(iso).getTime() - Date.now();
   if (diff < 0) return '0m';
-
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-
-  if (days > 0) return `${days}d ${hours.toString().padStart(2, '0')}h`;
-  return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return d > 0 ? `${d}d ${h.toString().padStart(2, '0')}h` : `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
 /**
- * Format reset time as HH:MM
+ * Reset time as HH:MM
  */
-function formatResetTime(isoDate: string | null): string {
-  if (!isoDate) return '??:??';
-  const d = new Date(isoDate);
+function resetTime(iso: string | null): string {
+  if (!iso) return '??:??';
+  const d = new Date(iso);
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
 /**
  * Status indicator by percentage
  */
-function getStatusIndicator(pct: number | null): string {
-  if (pct === null) return `<span foreground='${COLORS.muted}'>○</span>`;
-  if (pct < 10) return `<span foreground='${COLORS.red}'>●</span>`;
-  if (pct < 30) return `<span foreground='${COLORS.orange}'>●</span>`;
-  if (pct < 60) return `<span foreground='${COLORS.yellow}'>●</span>`;
-  return `<span foreground='${COLORS.green}'>●</span>`;
+function indicator(val: number | null): string {
+  if (val === null) return `<span foreground='${C.muted}'>○</span>`;
+  if (val < 10) return `<span foreground='${C.red}'>●</span>`;
+  if (val < 30) return `<span foreground='${C.orange}'>●</span>`;
+  if (val < 60) return `<span foreground='${C.yellow}'>●</span>`;
+  return `<span foreground='${C.green}'>●</span>`;
 }
 
 /**
- * Timeline separator
+ * Filter and merge models (remove Thinking suffix, 2.5, internal)
  */
-const SEP = `<span foreground='#74c7ec'>│</span>`;
-
-/**
- * Filter models: exclude internal, 2.5, and merge Thinking variants
- */
-function filterAndMergeModels(models: Record<string, QuotaWindow>): ModelEntry[] {
-  const validModels = new Map<string, ModelEntry>();
+function filterModels(models: Record<string, QuotaWindow>): Array<{name: string, remaining: number | null, resetsAt: string | null}> {
+  const map = new Map<string, {name: string, remaining: number | null, resetsAt: string | null}>();
   
-  for (const [name, window] of Object.entries(models)) {
-    const lowerName = name.toLowerCase();
-    
-    // Skip internal/test models
-    if (/^(tab_|chat_|test_|internal_)/.test(lowerName) || /preview$/i.test(name)) continue;
-    // Skip 2.5 models
-    if (/2\.5/i.test(name)) continue;
-    
-    // Remove "(Thinking)" suffix for grouping
-    const baseName = name.replace(/\s*\(Thinking\)/i, '');
-    
-    // Keep the one with lower remaining (more used) or first seen
-    if (!validModels.has(baseName)) {
-      validModels.set(baseName, {
-        name: baseName,
-        remaining: window.remaining,
-        resetsAt: window.resetsAt,
-      });
-    }
+  for (const [name, w] of Object.entries(models)) {
+    const lower = name.toLowerCase();
+    if (/^(tab_|chat_|test_|internal_)/.test(lower) || /preview$/i.test(name) || /2\.5/i.test(name)) continue;
+    const base = name.replace(/\s*\(Thinking\)/i, '');
+    if (!map.has(base)) map.set(base, { name: base, remaining: w.remaining, resetsAt: w.resetsAt });
   }
   
-  // Sort: Claude > GPT > Gemini > Others
-  return [...validModels.values()].sort((a, b) => {
-    const getPriority = (n: string) => {
-      const l = n.toLowerCase();
-      if (l.includes('claude')) return 0;
-      if (l.includes('gpt')) return 1;
-      if (l.includes('gemini')) return 2;
-      return 3;
-    };
-    const diff = getPriority(a.name) - getPriority(b.name);
-    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+  return [...map.values()].sort((a, b) => {
+    const pri = (n: string) => n.toLowerCase().includes('claude') ? 0 : n.toLowerCase().includes('gpt') ? 1 : n.toLowerCase().includes('gemini') ? 2 : 3;
+    return pri(a.name) - pri(b.name) || a.name.localeCompare(b.name);
   });
 }
 
 /**
- * Format a model line
+ * Format model line with bar on left
  */
-function formatModelLine(name: string, pct: number | null, resetsAt: string | null, maxLen: number): string {
-  const indicator = getStatusIndicator(pct);
-  const nameSpan = `<span foreground='${COLORS.lavender}'>${name.padEnd(maxLen)}</span>`;
-  const bar = formatBar(pct);
-  const pctSpan = `<span foreground='${getColorForPercent(pct)}'>${formatPct(pct).padStart(4)}</span>`;
-  const eta = `<span foreground='${COLORS.teal}'>→ ${formatEta(resetsAt)} (${formatResetTime(resetsAt)})</span>`;
-  
-  return `${SEP}   ${indicator} ${nameSpan} ${bar} ${pctSpan} ${eta}`;
+function modelLine(name: string, val: number | null, reset: string | null, maxLen: number): string {
+  const namePad = `<span foreground='${C.lavender}'>${name.padEnd(maxLen)}</span>`;
+  const etaStr = `<span foreground='${C.teal}'>→ ${eta(reset)} (${resetTime(reset)})</span>`;
+  return `${BAR}   ${indicator(val)} ${namePad} ${bar(val)} ${pctColored(val).padStart(4)} ${etaStr}`;
 }
 
 /**
- * Build Claude section - show models with shared 5h time
+ * Build Claude section
  */
-function buildClaudeSection(provider: ProviderQuota): string[] {
+function buildClaude(p: ProviderQuota): string[] {
   const lines: string[] = [];
+  const icon = `<span foreground='${C.peach}'>${ICONS.claude}</span>`;
+  const plan = p.plan ? ` <span foreground='${C.subtext}'>(${p.plan})</span>` : '';
   
-  // Header
-  const planStr = provider.plan ? ` <span foreground='${COLORS.subtext}'>(${provider.plan})</span>` : '';
-  lines.push(`${SEP} <span foreground='${COLORS.mauve}' weight='bold'>Claude${planStr}</span>`);
-
-  if (provider.error) {
-    lines.push(`${SEP}   <span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
+  lines.push(`${BAR} ${icon} <span foreground='${C.mauve}' weight='bold'>Claude${plan}</span>`);
+  
+  if (p.error) {
+    lines.push(`${BAR}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
     return lines;
   }
 
-  // Models available on Claude Pro
-  const claudeModels = ['Opus', 'Sonnet', 'Haiku'];
   const maxLen = 20;
+  const models = ['Opus', 'Sonnet', 'Haiku'];
   
-  if (provider.primary) {
-    for (const model of claudeModels) {
-      lines.push(formatModelLine(model, provider.primary.remaining, provider.primary.resetsAt, maxLen));
+  if (p.primary) {
+    for (const m of models) {
+      lines.push(modelLine(m, p.primary.remaining, p.primary.resetsAt, maxLen));
     }
   }
 
-  // Weekly window
-  if (provider.secondary) {
-    lines.push(`${SEP}`);
-    lines.push(`${SEP}   <span foreground='${COLORS.subtext}'>Weekly limit:</span>`);
-    const pct = provider.secondary.remaining;
-    lines.push(`${SEP}   ${getStatusIndicator(pct)} <span foreground='${COLORS.lavender}'>${'All Models'.padEnd(maxLen)}</span> ${formatBar(pct)} <span foreground='${getColorForPercent(pct)}'>${formatPct(pct).padStart(4)}</span> <span foreground='${COLORS.teal}'>→ ${formatEta(provider.secondary.resetsAt)} (${formatResetTime(provider.secondary.resetsAt)})</span>`);
+  if (p.secondary) {
+    lines.push(`${BAR}`);
+    lines.push(`${BAR}   <span foreground='${C.subtext}'>Weekly limit:</span>`);
+    lines.push(modelLine('All Models', p.secondary.remaining, p.secondary.resetsAt, maxLen));
   }
 
-  // Extra Usage
-  if (provider.extraUsage?.enabled) {
-    const pct = provider.extraUsage.remaining;
-    const used = provider.extraUsage.used;
-    const limit = provider.extraUsage.limit;
-    lines.push(`${SEP}`);
-    lines.push(`${SEP}   ${getStatusIndicator(pct)} <span foreground='${COLORS.blue}'>${'Extra Usage'.padEnd(maxLen)}</span> ${formatBar(pct)} <span foreground='${getColorForPercent(pct)}'>${formatPct(pct).padStart(4)}</span> <span foreground='${COLORS.subtext}'>$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}</span>`);
+  if (p.extraUsage?.enabled) {
+    const { remaining, used, limit } = p.extraUsage;
+    lines.push(`${BAR}`);
+    const namePad = `<span foreground='${C.blue}'>${'Extra Usage'.padEnd(maxLen)}</span>`;
+    const usedStr = `<span foreground='${C.subtext}'>$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}</span>`;
+    lines.push(`${BAR}   ${indicator(remaining)} ${namePad} ${bar(remaining)} ${pctColored(remaining).padStart(4)} ${usedStr}`);
   }
 
   return lines;
 }
 
 /**
- * Build Codex section - show model with 5h time
+ * Build Codex section
  */
-function buildCodexSection(provider: ProviderQuota): string[] {
+function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
+  const icon = `<span foreground='${C.green}'>${ICONS.codex}</span>`;
   
-  lines.push(`${SEP} <span foreground='${COLORS.mauve}' weight='bold'>Codex</span>`);
-
-  if (provider.error) {
-    lines.push(`${SEP}   <span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
+  lines.push(`${BAR} ${icon} <span foreground='${C.mauve}' weight='bold'>Codex</span>`);
+  
+  if (p.error) {
+    lines.push(`${BAR}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
     return lines;
   }
 
   const maxLen = 20;
-
-  // 5h Window as GPT-5.2 Codex
-  if (provider.primary) {
-    lines.push(formatModelLine('GPT-5.2 Codex', provider.primary.remaining, provider.primary.resetsAt, maxLen));
+  
+  if (p.primary) {
+    lines.push(modelLine('GPT-5.2 Codex', p.primary.remaining, p.primary.resetsAt, maxLen));
   }
 
-  // Weekly
-  if (provider.secondary) {
-    lines.push(`${SEP}`);
-    lines.push(`${SEP}   <span foreground='${COLORS.subtext}'>Weekly limit:</span>`);
-    const pct = provider.secondary.remaining;
-    lines.push(`${SEP}   ${getStatusIndicator(pct)} <span foreground='${COLORS.lavender}'>${'GPT-5.2 Codex'.padEnd(maxLen)}</span> ${formatBar(pct)} <span foreground='${getColorForPercent(pct)}'>${formatPct(pct).padStart(4)}</span> <span foreground='${COLORS.teal}'>→ ${formatEta(provider.secondary.resetsAt)} (${formatResetTime(provider.secondary.resetsAt)})</span>`);
+  if (p.secondary) {
+    lines.push(`${BAR}`);
+    lines.push(`${BAR}   <span foreground='${C.subtext}'>Weekly limit:</span>`);
+    lines.push(modelLine('GPT-5.2 Codex', p.secondary.remaining, p.secondary.resetsAt, maxLen));
   }
 
   return lines;
 }
 
 /**
- * Build Antigravity section - models merged (no Thinking suffix)
+ * Build Antigravity section
  */
-function buildAntigravitySection(provider: ProviderQuota): string[] {
+function buildAntigravity(p: ProviderQuota): string[] {
   const lines: string[] = [];
+  const icon = `<span foreground='${C.blue}'>${ICONS.antigravity}</span>`;
+  const acc = p.account ? ` <span foreground='${C.subtext}'>(${p.account})</span>` : '';
   
-  const accountStr = provider.account ? ` <span foreground='${COLORS.subtext}'>(${provider.account})</span>` : '';
-  lines.push(`${SEP} <span foreground='${COLORS.mauve}' weight='bold'>Antigravity${accountStr}</span>`);
-
-  if (provider.error) {
-    lines.push(`${SEP}   <span foreground='${COLORS.peach}'>⚠️ ${provider.error}</span>`);
+  lines.push(`${BAR} ${icon} <span foreground='${C.mauve}' weight='bold'>Antigravity${acc}</span>`);
+  
+  if (p.error) {
+    lines.push(`${BAR}   <span foreground='${C.peach}'>⚠️ ${p.error}</span>`);
     return lines;
   }
 
-  if (!provider.models || Object.keys(provider.models).length === 0) {
-    lines.push(`${SEP}   <span foreground='${COLORS.muted}'>No models available</span>`);
+  if (!p.models || Object.keys(p.models).length === 0) {
+    lines.push(`${BAR}   <span foreground='${C.muted}'>No models available</span>`);
     return lines;
   }
 
-  const models = filterAndMergeModels(provider.models);
+  const models = filterModels(p.models);
   const maxLen = Math.max(...models.map(m => m.name.length), 20);
 
-  for (const model of models) {
-    lines.push(formatModelLine(model.name, model.remaining, model.resetsAt, maxLen));
+  for (const m of models) {
+    lines.push(modelLine(m.name, m.remaining, m.resetsAt, maxLen));
   }
 
   return lines;
 }
 
 /**
- * Build tooltip
+ * Build full tooltip
  */
 function buildTooltip(quotas: AllQuotas): string {
   const sections: string[][] = [];
 
-  for (const provider of quotas.providers) {
-    if (!provider.available && !provider.error) continue;
-
-    let section: string[];
-    switch (provider.provider) {
-      case 'claude': section = buildClaudeSection(provider); break;
-      case 'codex': section = buildCodexSection(provider); break;
-      case 'antigravity': section = buildAntigravitySection(provider); break;
-      default: continue;
+  for (const p of quotas.providers) {
+    if (!p.available && !p.error) continue;
+    
+    switch (p.provider) {
+      case 'claude': sections.push(buildClaude(p)); break;
+      case 'codex': sections.push(buildCodex(p)); break;
+      case 'antigravity': sections.push(buildAntigravity(p)); break;
     }
-
-    if (section.length > 0) sections.push(section);
   }
 
-  return sections.map(s => s.join('\n')).join('\n\n');
+  // Join with empty bar line between sections
+  return sections.map(s => s.join('\n')).join(`\n${BAR}\n`);
 }
 
 /**
- * Build bar text - using provider abbreviations (icons need CSS)
+ * Build bar text with icons
  */
 function buildText(quotas: AllQuotas): string {
   const parts: string[] = [];
 
-  for (const provider of quotas.providers) {
-    if (!provider.available) continue;
-
-    const pct = provider.primary?.remaining ?? null;
+  for (const p of quotas.providers) {
+    if (!p.available) continue;
     
-    // Short names for bar
-    let label = '';
-    let iconColor = COLORS.text;
-    switch (provider.provider) {
-      case 'claude': label = 'Cld'; iconColor = COLORS.peach; break;
-      case 'codex': label = 'Cdx'; iconColor = COLORS.green; break;
-      case 'antigravity': label = 'AG'; iconColor = COLORS.blue; break;
-      default: label = provider.provider.slice(0, 3);
+    const val = p.primary?.remaining ?? null;
+    let icon = '', color = C.text;
+    
+    switch (p.provider) {
+      case 'claude': icon = ICONS.claude; color = C.peach; break;
+      case 'codex': icon = ICONS.codex; color = C.green; break;
+      case 'antigravity': icon = ICONS.antigravity; color = C.blue; break;
     }
     
-    parts.push(`<span foreground='${iconColor}'>${label}</span> ${formatPctSpan(pct)}`);
+    parts.push(`<span foreground='${color}'>${icon}</span> ${pctColored(val)}`);
   }
 
-  if (parts.length === 0) {
-    return `<span foreground='${COLORS.muted}'>⚡ No Providers</span>`;
-  }
-
-  return `⚡ ${parts.join(` <span foreground='${COLORS.muted}'>│</span> `)}`;
+  if (parts.length === 0) return `<span foreground='${C.muted}'>⚡ No Providers</span>`;
+  return `⚡ ${parts.join(` <span foreground='${C.muted}'>│</span> `)}`;
 }
 
-/**
- * Format for Waybar
- */
 export function formatForWaybar(quotas: AllQuotas): WaybarOutput {
-  return {
-    text: buildText(quotas),
-    tooltip: buildTooltip(quotas),
-    class: 'llm-usage',
-  };
+  return { text: buildText(quotas), tooltip: buildTooltip(quotas), class: 'llm-usage' };
 }
 
-/**
- * Output Waybar JSON
- */
 export function outputWaybar(quotas: AllQuotas): void {
   console.log(JSON.stringify(formatForWaybar(quotas)));
 }
