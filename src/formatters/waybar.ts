@@ -98,9 +98,9 @@ function filterModels(models: Record<string, QuotaWindow>): Array<{name: string,
   });
 }
 
-// Section label with connecting line: ┣━◆ Label
+// Section label with connecting line: ┣━ ◆ Label
 const label = (text: string, color: string) => 
-  s(color, B.lt + B.h) + s(C.mauve, B.diamond + ' ' + text, true);
+  s(color, B.lt + B.h) + ' ' + s(C.mauve, B.diamond + ' ' + text, true);
 
 /**
  * Build Claude tooltip
