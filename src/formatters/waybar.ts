@@ -16,15 +16,18 @@ const C = {
   mauve: '#cba6f7',
   peach: '#fab387',
   sapphire: '#74c7ec',
+  pink: '#f5c2e7',
+  sky: '#89dceb',
+  rosewater: '#f5e0dc',
+  flamingo: '#f2cdcd',
 } as const;
 
 // Box drawing - BOLD characters
 const B = {
-  tl: '┏',   // top left (bold)
-  bl: '┗',   // bottom left (bold)
-  h: '━',    // horizontal (bold)
-  v: '┃',    // vertical (bold)
-  lt: '┣',   // left tee (bold)
+  tl: '┏',
+  bl: '┗',
+  h: '━',
+  v: '┃',
   dot: '●',
   dotO: '○',
 };
@@ -35,7 +38,6 @@ interface WaybarOutput {
   class: string;
 }
 
-// Span helper
 const s = (color: string, text: string, bold = false) => 
   `<span foreground='${color}'${bold ? " weight='bold'" : ''}>${text}</span>`;
 
@@ -93,8 +95,10 @@ function filterModels(models: Record<string, QuotaWindow>): Array<{name: string,
   });
 }
 
-// Vertical bar
 const V = (color: string = C.sapphire) => s(color, B.v);
+
+// Section label with strong highlight
+const label = (text: string) => s(C.mauve, `◆ ${text}`, true);
 
 /**
  * Build Claude tooltip
@@ -103,7 +107,6 @@ function buildClaudeTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
   const v = V(C.peach);
   
-  // Header - open ended (no right corner)
   lines.push(s(C.peach, B.tl + B.h) + ' ' + s(C.peach, 'Claude', true) + ' ' + s(C.peach, B.h.repeat(50)));
   lines.push(v);
   
@@ -114,7 +117,7 @@ function buildClaudeTooltip(p: ProviderQuota): string {
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(v + '  ' + s(C.subtext, '5-hour limit'));
+      lines.push(v + '  ' + label('5-hour limit'));
       for (const m of models) {
         const name = s(C.lavender, m.padEnd(maxLen));
         const b = bar(p.primary.remaining);
@@ -126,7 +129,7 @@ function buildClaudeTooltip(p: ProviderQuota): string {
 
     if (p.secondary) {
       lines.push(v);
-      lines.push(v + '  ' + s(C.subtext, 'Weekly limit'));
+      lines.push(v + '  ' + label('Weekly limit'));
       const name = s(C.lavender, 'All Models'.padEnd(20));
       const b = bar(p.secondary.remaining);
       const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
@@ -134,13 +137,15 @@ function buildClaudeTooltip(p: ProviderQuota): string {
       lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
     }
 
-    if (p.extraUsage?.enabled) {
+    // Only show Extra Usage if enabled AND has data
+    if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
       const { remaining, used, limit } = p.extraUsage;
       lines.push(v);
-      const name = s(C.blue, 'Extra Usage'.padEnd(20));
+      lines.push(v + '  ' + label('Extra Usage'));
+      const name = s(C.lavender, 'Budget'.padEnd(20));
       const b = bar(remaining);
       const pctS = s(getColorForPercent(remaining), pct(remaining).padStart(4));
-      const usedS = s(C.subtext, `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`);
+      const usedS = s(C.teal, `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`);
       lines.push(v + '  ' + indicator(remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + usedS);
     }
   }
@@ -167,7 +172,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(v + '  ' + s(C.subtext, '5-hour limit'));
+      lines.push(v + '  ' + label('5-hour limit'));
       const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(maxLen));
       const b = bar(p.primary.remaining);
       const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
@@ -177,7 +182,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
 
     if (p.secondary) {
       lines.push(v);
-      lines.push(v + '  ' + s(C.subtext, 'Weekly limit'));
+      lines.push(v + '  ' + label('Weekly limit'));
       const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(20));
       const b = bar(p.secondary.remaining);
       const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
@@ -210,6 +215,7 @@ function buildAntigravityTooltip(p: ProviderQuota): string {
     const models = filterModels(p.models);
     const maxLen = Math.max(...models.map(m => m.name.length), 20);
 
+    lines.push(v + '  ' + label('Available Models'));
     for (const m of models) {
       const name = s(C.lavender, m.name.padEnd(maxLen));
       const b = bar(m.remaining);
