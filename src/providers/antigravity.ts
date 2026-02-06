@@ -3,44 +3,118 @@ import { logger } from '../logger';
 import { cache } from '../cache';
 import type { Provider, ProviderQuota, QuotaWindow } from './types';
 
-interface AntigravityJsonModel {
-  label: string;
-  modelId: string;
-  remainingPercentage: number;  // 0.0 - 1.0
-  isExhausted: boolean;
-  resetTime?: string;
-  timeUntilResetMs?: number;
+// Token storage (from antigravity-usage or qbar's own OAuth)
+interface TokenData {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  email: string;
+  projectId?: string;
 }
 
-interface AntigravityJsonOutput {
-  email: string;
-  method: string;
-  timestamp: string;
-  models: AntigravityJsonModel[];
+interface AntigravityConfig {
+  version: string;
+  activeAccount: string;
+  preferences?: { cacheTTL?: number };
+}
+
+// API response types
+interface QuotaInfo {
+  remainingFraction: number;  // 0.0 - 1.0
+  resetTime?: string;
+  isExhausted?: boolean;
+}
+
+interface ModelInfo {
+  displayName?: string;
+  model?: string;
+  quotaInfo?: QuotaInfo;
+  modelProvider?: string;
+}
+
+interface FetchAvailableModelsResponse {
+  models?: Record<string, ModelInfo>;
+  defaultAgentModelId?: string;
+}
+
+// Model ID to friendly label mapping
+const MODEL_LABELS: Record<string, string> = {
+  'claude-opus-4-5': 'Claude Opus 4.5',
+  'claude-opus-4-5-thinking': 'Claude Opus 4.5 (Thinking)',
+  'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+  'claude-sonnet-4-5-thinking': 'Claude Sonnet 4.5 (Thinking)',
+  'gemini-2.5-flash': 'Gemini 2.5 Flash',
+  'gemini-2.5-flash-thinking': 'Gemini 2.5 Flash (Thinking)',
+  'gemini-2.5-pro': 'Gemini 2.5 Pro',
+  'gemini-3-flash': 'Gemini 3 Flash',
+  'gemini-3-pro-high': 'Gemini 3 Pro (High)',
+  'gemini-3-pro-low': 'Gemini 3 Pro (Low)',
+  'gemini-3-pro-image': 'Gemini 3 Pro Image',
+  'gpt-oss-120b-medium': 'GPT-OSS 120B (Medium)',
+};
+
+function getModelLabel(modelId: string, displayName?: string): string {
+  // Prefer the API's displayName, fallback to our mapping
+  return displayName || MODEL_LABELS[modelId] || modelId;
 }
 
 export class AntigravityProvider implements Provider {
   readonly id = 'antigravity';
   readonly name = 'Antigravity';
 
-  async isAvailable(): Promise<boolean> {
-    // Check if antigravity-usage is installed
-    try {
-      const proc = Bun.spawn(['which', 'antigravity-usage'], { stdout: 'ignore', stderr: 'ignore' });
-      if (await proc.exited !== 0) return false;
+  private antigravityUsagePath = `${process.env.HOME}/.config/antigravity-usage`;
+  private qbarAuthPath = `${CONFIG.paths.config}/auth.json`;
 
-      // Check if logged in (has accounts)
-      const result = Bun.spawnSync(['antigravity-usage', 'accounts', 'list'], {
-        stdout: 'pipe',
-        stderr: 'ignore',
-      });
-      
-      const output = result.stdout.toString();
-      // If has accounts, output will contain email addresses
-      return output.includes('@') || output.includes('gmail.com');
-    } catch {
-      return false;
+  async isAvailable(): Promise<boolean> {
+    const tokens = await this.getTokens();
+    return tokens !== null;
+  }
+
+  /**
+   * Try to get tokens from antigravity-usage or qbar's own auth
+   */
+  private async getTokens(): Promise<TokenData | null> {
+    // 1. Try antigravity-usage tokens first
+    try {
+      const configFile = Bun.file(`${this.antigravityUsagePath}/config.json`);
+      if (await configFile.exists()) {
+        const config: AntigravityConfig = await configFile.json();
+        if (config.activeAccount) {
+          const tokenFile = Bun.file(
+            `${this.antigravityUsagePath}/accounts/${config.activeAccount}/tokens.json`
+          );
+          if (await tokenFile.exists()) {
+            const tokens: TokenData = await tokenFile.json();
+            // Check if expired
+            if (tokens.expiresAt > Date.now()) {
+              return tokens;
+            }
+            // If expired, we'd need to refresh - fall through to check qbar auth
+            logger.debug('antigravity-usage tokens expired');
+          }
+        }
+      }
+    } catch (error) {
+      logger.debug('Failed to read antigravity-usage tokens', { error });
     }
+
+    // 2. Try qbar's own auth
+    try {
+      const file = Bun.file(this.qbarAuthPath);
+      if (await file.exists()) {
+        const auth = await file.json();
+        if (auth.antigravity?.accessToken) {
+          if (auth.antigravity.expiresAt > Date.now()) {
+            return auth.antigravity;
+          }
+          logger.debug('qbar antigravity tokens expired');
+        }
+      }
+    } catch (error) {
+      logger.debug('Failed to read qbar auth', { error });
+    }
+
+    return null;
   }
 
   async getQuota(): Promise<ProviderQuota> {
@@ -50,98 +124,104 @@ export class AntigravityProvider implements Provider {
       available: false,
     };
 
-    // Check if antigravity-usage is installed
-    try {
-      const whichProc = Bun.spawn(['which', 'antigravity-usage'], { stdout: 'ignore', stderr: 'ignore' });
-      if (await whichProc.exited !== 0) {
-        return { ...base, error: 'Not logged in - use qbar menu → Provider login' };
-      }
-    } catch {
+    const tokens = await this.getTokens();
+    if (!tokens) {
       return { ...base, error: 'Not logged in - use qbar menu → Provider login' };
     }
 
     // Use cache
-    const cacheKey = 'antigravity-quota';
-    
+    const cacheKey = `antigravity-quota-${tokens.email}`;
+
     try {
       return await cache.getOrFetch<ProviderQuota>(
         cacheKey,
-        async () => await this.fetchQuotaFromCLI(base),
+        async () => await this.fetchQuotaFromAPI(base, tokens),
         CONFIG.cache.ttlMs
       );
     } catch (error) {
       logger.error('Antigravity quota fetch error', { error });
-      return { ...base, error: 'Failed to fetch quota' };
+      return { ...base, account: tokens.email, error: 'Failed to fetch quota' };
     }
   }
 
-  private async fetchQuotaFromCLI(base: ProviderQuota): Promise<ProviderQuota> {
+  private async fetchQuotaFromAPI(base: ProviderQuota, tokens: TokenData): Promise<ProviderQuota> {
     try {
-      const result = Bun.spawnSync(['antigravity-usage', '--json'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        timeout: CONFIG.api.timeoutMs,
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), CONFIG.api.timeoutMs);
 
-      if (result.exitCode !== 0) {
-        const stderr = result.stderr.toString();
-        logger.debug('antigravity-usage failed', { exitCode: result.exitCode, stderr });
-        
-        if (stderr.includes('No accounts') || stderr.includes('login')) {
-          return { ...base, error: 'Not logged in - use qbar menu → Provider login' };
+      // Build request body - include project if available
+      const body: Record<string, string> = {};
+      if (tokens.projectId) {
+        body.project = tokens.projectId;
+      }
+
+      const response = await fetch(
+        'https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${tokens.accessToken}`,
+            'User-Agent': 'antigravity',
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
         }
-        return { ...base, error: 'Failed to fetch quota' };
+      );
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          return { ...base, account: tokens.email, error: 'Token expired - please login again' };
+        }
+        throw new Error(`API error: ${response.status}`);
       }
 
-      const output = result.stdout.toString().trim();
+      const data: FetchAvailableModelsResponse = await response.json();
       
-      // Parse JSON output
-      let data: AntigravityJsonOutput;
-      try {
-        data = JSON.parse(output);
-      } catch {
-        logger.debug('Failed to parse antigravity-usage JSON', { output });
-        return { ...base, error: 'Invalid response from antigravity-usage' };
+      if (!data.models || Object.keys(data.models).length === 0) {
+        return { ...base, account: tokens.email, error: 'No model quotas available' };
       }
 
-      // Extract models
+      // Convert models to our format
       const models: Record<string, QuotaWindow> = {};
       
-      for (const model of data.models || []) {
-        // Use the label from antigravity-usage directly (already pretty)
-        const label = model.label;
+      for (const [modelId, info] of Object.entries(data.models)) {
+        const label = getModelLabel(modelId, info.displayName);
+        const quota = info.quotaInfo;
         
-        // Convert 0.0-1.0 to 0-100 percentage
-        const remaining = Math.round(model.remainingPercentage * 100);
-
-        models[label] = {
-          remaining,
-          resetsAt: model.resetTime || null,
-        };
+        if (quota) {
+          // Convert remainingFraction (0.0-1.0) to percentage (0-100)
+          const remaining = Math.round(quota.remainingFraction * 100);
+          
+          models[label] = {
+            remaining,
+            resetsAt: quota.resetTime || null,
+          };
+        }
       }
 
-      // Find primary model (prefer Claude Opus Thinking)
-      const primaryKey = Object.keys(models).find(k => k.includes('Claude Opus Thinking'))
+      // Find primary (prefer Claude Opus Thinking)
+      const primaryKey = Object.keys(models).find(k => k.includes('Claude Opus') && k.includes('Thinking'))
         || Object.keys(models).find(k => k.includes('Claude'))
         || Object.keys(models).find(k => k.includes('Gemini 3 Pro'))
         || Object.keys(models)[0];
 
-      const primary = primaryKey ? models[primaryKey] : undefined;
-
-      if (Object.keys(models).length === 0) {
-        return { ...base, account: data.email, error: 'No model quotas available' };
-      }
-
       return {
         ...base,
         available: true,
-        account: data.email,
-        primary,
+        account: tokens.email,
+        primary: primaryKey ? models[primaryKey] : undefined,
         models,
       };
     } catch (error) {
-      logger.error('antigravity-usage execution error', { error });
-      return { ...base, error: 'Failed to fetch quota' };
+      if (error instanceof Error && error.name === 'AbortError') {
+        logger.warn('Antigravity API timeout');
+        return { ...base, account: tokens.email, error: 'Request timeout' };
+      }
+      logger.error('Antigravity API error', { error });
+      return { ...base, account: tokens.email, error: 'Failed to fetch quota' };
     }
   }
 }
