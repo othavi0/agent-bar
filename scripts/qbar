@@ -10,4 +10,18 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 
+# Ensure bun is available (Waybar/Omarchy env sometimes misses mise shims)
+if ! command -v bun >/dev/null 2>&1; then
+  if command -v mise >/dev/null 2>&1 && mise which bun >/dev/null 2>&1; then
+    export PATH="$HOME/.local/share/mise/shims:$PATH"
+  elif [ -x "$HOME/.local/share/mise/shims/bun" ]; then
+    export PATH="$HOME/.local/share/mise/shims:$PATH"
+  fi
+fi
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "bun not found in PATH" >&2
+  exit 127
+fi
+
 exec bun run "$SCRIPT_DIR/src/index.ts" "$@"

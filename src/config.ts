@@ -8,8 +8,8 @@ const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), '.config');
 export const CONFIG = {
   // Paths
   paths: {
-    cache: join(XDG_CACHE_HOME, 'llm-usage'),
-    config: join(XDG_CONFIG_HOME, 'llm-usage'),
+    cache: join(XDG_CACHE_HOME, 'qbar'),
+    config: join(XDG_CONFIG_HOME, 'qbar'),
     
     // Provider credential paths
     claude: {

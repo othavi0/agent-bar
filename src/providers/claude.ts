@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import { logger } from '../logger';
+import { cache } from '../cache';
 import type { Provider, ProviderQuota, QuotaWindow } from './types';
 
 interface ClaudeCredentials {
@@ -70,27 +71,33 @@ export class ClaudeProvider implements Provider {
 
     const plan = creds.claudeAiOauth?.subscriptionType || 'unknown';
 
-    // Fetch usage
+    // Fetch usage (cached)
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), CONFIG.api.timeoutMs);
+      const usage = await cache.getOrFetch<ClaudeUsageResponse>(
+        'claude-usage',
+        async () => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), CONFIG.api.timeoutMs);
 
-      const response = await fetch(CONFIG.api.claude.usageUrl, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'anthropic-beta': CONFIG.api.claude.betaHeader,
+          const response = await fetch(CONFIG.api.claude.usageUrl, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'anthropic-beta': CONFIG.api.claude.betaHeader,
+            },
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeout);
+
+          if (!response.ok) {
+            // keep non-200 out of cache
+            throw new Error(`Claude API error: ${response.status}`);
+          }
+
+          return await response.json();
         },
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        logger.warn('Claude API error', { status: response.status });
-        return { ...base, plan, error: `API error: ${response.status}` };
-      }
-
-      const usage: ClaudeUsageResponse = await response.json();
+        CONFIG.cache.ttlMs
+      );
 
       // Check for token expiration
       if (usage.error?.error_code === 'token_expired') {
@@ -128,6 +135,11 @@ export class ClaudeProvider implements Provider {
       if (error instanceof Error && error.name === 'AbortError') {
         logger.warn('Claude API timeout');
         return { ...base, plan, error: 'Request timeout' };
+      }
+      // cache.getOrFetch throws for non-200; map to a clean message
+      if (error instanceof Error && error.message.startsWith('Claude API error:')) {
+        logger.warn('Claude API error', { message: error.message });
+        return { ...base, plan, error: error.message };
       }
       logger.error('Claude API fetch error', { error });
       return { ...base, plan, error: 'Failed to fetch usage' };
