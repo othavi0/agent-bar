@@ -26,8 +26,8 @@ export const CONFIG = {
 
   // Cache settings
   cache: {
-    ttlMs: 60_000,           // 1 minute default TTL
-    codexTtlMs: 120_000,     // 2 minutes for Codex (requires ping)
+    ttlMs: 300_000,          // 5 minutes default TTL (hover won't trigger refresh)
+    codexTtlMs: 300_000,     // 5 minutes for Codex
     lockTimeoutMs: 5_000,    // Lock timeout
   },
 

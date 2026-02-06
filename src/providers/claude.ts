@@ -19,6 +19,12 @@ interface ClaudeUsageResponse {
     utilization: number;
     resets_at?: string;
   };
+  extra_usage?: {
+    is_enabled: boolean;
+    monthly_limit: number;
+    used_credits: number;
+    utilization: number;
+  };
   error?: {
     error_code: string;
     message: string;
@@ -107,6 +113,7 @@ export class ClaudeProvider implements Provider {
       // Parse quota windows
       let primary: QuotaWindow | undefined;
       let secondary: QuotaWindow | undefined;
+      let extraUsage: { enabled: boolean; remaining: number; limit: number; used: number } | undefined;
 
       if (usage.five_hour) {
         const used = Math.round(usage.five_hour.utilization);
@@ -124,12 +131,24 @@ export class ClaudeProvider implements Provider {
         };
       }
 
+      // Parse Extra Usage (new field)
+      if (usage.extra_usage?.is_enabled) {
+        const utilization = usage.extra_usage.utilization;
+        extraUsage = {
+          enabled: true,
+          remaining: Math.round(100 - utilization),
+          limit: usage.extra_usage.monthly_limit,
+          used: Math.round(usage.extra_usage.used_credits),
+        };
+      }
+
       return {
         ...base,
         available: true,
         plan,
         primary,
         secondary,
+        extraUsage,
       };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

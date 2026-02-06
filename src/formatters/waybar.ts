@@ -126,6 +126,14 @@ function buildTooltip(quotas: AllQuotas): string {
       lines.push(formatQuotaLine('Weekly', provider.secondary, true));
     }
 
+    // Extra Usage (Claude Pro feature)
+    if (provider.extraUsage?.enabled) {
+      const pct = provider.extraUsage.remaining;
+      const bar = formatBar(pct);
+      const usedStr = `$${(provider.extraUsage.used / 100).toFixed(2)} used`;
+      lines.push(`${'Extra Usage'.padEnd(14)} ${bar} ${pct.toString().padStart(3)}% - ${usedStr}`);
+    }
+
     // Additional models (Antigravity)
     if (provider.models) {
       for (const [modelName, window] of Object.entries(provider.models)) {

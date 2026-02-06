@@ -30,6 +30,13 @@ export interface ProviderQuota {
   secondary?: QuotaWindow;
   /** Additional quota windows (for providers with multiple models) */
   models?: Record<string, QuotaWindow>;
+  /** Extra Usage (Claude Pro feature) */
+  extraUsage?: {
+    enabled: boolean;
+    remaining: number;
+    limit: number;
+    used: number;
+  };
 }
 
 /**

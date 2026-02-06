@@ -44,13 +44,13 @@ function formatQuotaLine(label: string, window: QuotaWindow | undefined): string
     ? colorize(`⏱ ${formatEta(window.resetsAt)}`, semantic.subtitle)
     : '';
 
-  return `  ${label.padEnd(16)} ${bar} ${pctStr}  ${eta}`;
+  return `  ${colorize(label.padEnd(16), semantic.subtitle)} ${bar} ${pctStr}  ${eta}`;
 }
 
 function formatProvider(provider: ProviderQuota): string[] {
   const lines: string[] = [];
 
-  // Header
+  // Header with color
   const headerInfo = provider.plan 
     ? `(${provider.plan})`
     : provider.account 
@@ -58,7 +58,7 @@ function formatProvider(provider: ProviderQuota): string[] {
       : '';
   
   lines.push('');
-  lines.push(colorize(`  ━━━ ${provider.displayName} ${headerInfo} ━━━`, semantic.title));
+  lines.push(colorize(bold(`  ━━━ ${provider.displayName} ${headerInfo} ━━━`), semantic.title));
 
   if (!provider.available) {
     lines.push(colorize(`  Not logged in`, semantic.muted));
@@ -70,14 +70,23 @@ function formatProvider(provider: ProviderQuota): string[] {
     return lines;
   }
 
-  // Primary window
+  // Primary window (5h)
   if (provider.primary) {
     lines.push(formatQuotaLine('5h Window', provider.primary));
   }
 
-  // Secondary window
+  // Secondary window (Weekly)
   if (provider.secondary) {
     lines.push(formatQuotaLine('Weekly', provider.secondary));
+  }
+
+  // Extra Usage (Claude Pro feature)
+  if (provider.extraUsage?.enabled) {
+    const pct = provider.extraUsage.remaining;
+    const bar = formatBar(pct);
+    const pctStr = colorize(`${pct.toString().padStart(3)}%`, getQuotaColor(pct));
+    const usedStr = colorize(`$${(provider.extraUsage.used / 100).toFixed(2)} used`, semantic.subtitle);
+    lines.push(`  ${colorize('Extra Usage'.padEnd(16), semantic.subtitle)} ${bar} ${pctStr}  ${usedStr}`);
   }
 
   // Additional models (Antigravity)
@@ -94,11 +103,11 @@ function formatProvider(provider: ProviderQuota): string[] {
 
 export async function showListAll(): Promise<void> {
   const s = p.spinner();
-  s.start('Loading quotas...');
+  s.start(colorize('Loading quotas...', semantic.subtitle));
 
   const quotas = await getAllQuotas();
   
-  s.stop('Quotas loaded');
+  s.stop(colorize('Quotas loaded', semantic.good));
 
   // Build output
   const lines: string[] = [];
@@ -119,10 +128,15 @@ export async function showListAll(): Promise<void> {
   console.log('');
   console.log(colorize('  ─────────────────────────────────────────────────', semantic.muted));
   console.log('');
+  console.log(colorize('  Press Enter to continue...', semantic.subtitle));
 
-  await p.text({
-    message: colorize('Press Enter to continue...', semantic.subtitle),
-    placeholder: '',
-    validate: () => undefined,
+  // Wait for enter (simple readline)
+  await new Promise<void>((resolve) => {
+    process.stdin.setRawMode?.(true);
+    process.stdin.resume();
+    process.stdin.once('data', () => {
+      process.stdin.setRawMode?.(false);
+      resolve();
+    });
   });
 }
