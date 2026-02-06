@@ -3,6 +3,8 @@ import { join } from 'path';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { cache } from '../cache';
+import { getAntigravityAccount, updateAntigravityToken, type AntigravityAccount } from '../auth/storage';
+import { refreshAccessToken } from '../auth/antigravity-oauth';
 import type { Provider, ProviderQuota, QuotaWindow } from './types';
 
 const BASE_URL = 'https://cloudcode-pa.googleapis.com';
@@ -51,6 +53,11 @@ export class AntigravityProvider implements Provider {
   private authProfilesPath = join(homedir(), '.openclaw', 'agents', 'main', 'agent', 'auth-profiles.json');
 
   async isAvailable(): Promise<boolean> {
+    // Check qbar's own storage first
+    const qbarAccount = await getAntigravityAccount();
+    if (qbarAccount) return true;
+
+    // Fallback to OpenClaw profiles
     const profile = await this.getActiveProfile();
     return profile !== null;
   }
@@ -95,9 +102,16 @@ export class AntigravityProvider implements Provider {
       available: false,
     };
 
+    // Check qbar's own storage first
+    const qbarAccount = await getAntigravityAccount();
+    if (qbarAccount) {
+      return await this.getQuotaFromQbarAccount(qbarAccount, base);
+    }
+
+    // Fallback to OpenClaw profiles
     const profile = await this.getActiveProfile();
     if (!profile) {
-      return { ...base, error: 'No Antigravity account in OpenClaw' };
+      return { ...base, error: 'Not logged in - use qbar menu → Provider login' };
     }
 
     // Use cache to avoid hitting API too often
@@ -113,6 +127,50 @@ export class AntigravityProvider implements Provider {
     } catch (error) {
       logger.error('Antigravity quota fetch error', { error });
       return { ...base, account: profile.email, error: 'Failed to fetch quota' };
+    }
+  }
+
+  private async getQuotaFromQbarAccount(account: AntigravityAccount, base: ProviderQuota): Promise<ProviderQuota> {
+    // Check if token needs refresh
+    let accessToken = account.accessToken;
+    const now = Date.now();
+    
+    if (account.expiresAt < now + 300_000) {
+      // Token expired or expiring soon, try to refresh
+      try {
+        const refreshed = await refreshAccessToken(account.refreshToken);
+        accessToken = refreshed.accessToken;
+        
+        // Update stored token
+        await updateAntigravityToken(account.email, refreshed.accessToken, refreshed.expiresAt);
+        logger.debug('Antigravity: refreshed token');
+      } catch (error) {
+        logger.warn('Antigravity: failed to refresh token', { error });
+        return { ...base, account: account.email, error: 'Token expired - please login again' };
+      }
+    }
+
+    // Create a profile-like object to reuse fetchQuotaFromAPI
+    const profile: AuthProfile = {
+      type: 'oauth',
+      provider: 'google-antigravity',
+      access: accessToken,
+      refresh: account.refreshToken,
+      expires: account.expiresAt,
+      email: account.email,
+    };
+
+    // Use cache
+    const cacheKey = `antigravity-${account.email}`;
+    try {
+      return await cache.getOrFetch<ProviderQuota>(
+        cacheKey,
+        async () => await this.fetchQuotaFromAPI(profile, base),
+        CONFIG.cache.ttlMs
+      );
+    } catch (error) {
+      logger.error('Antigravity quota fetch error', { error });
+      return { ...base, account: account.email, error: 'Failed to fetch quota' };
     }
   }
 

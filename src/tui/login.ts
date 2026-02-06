@@ -1,6 +1,8 @@
 import * as p from '@clack/prompts';
 import { providers } from '../providers';
 import { catppuccin, semantic, colorize } from './colors';
+import { runAntigravityOAuth } from '../auth/antigravity-oauth';
+import { addAntigravityAccount } from '../auth/storage';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -11,14 +13,33 @@ async function runInteractive(cmd: string, args: string[] = []): Promise<number>
   return await proc.exited;
 }
 
+async function openBrowser(url: string): Promise<void> {
+  // Try common browser openers
+  const openers = ['xdg-open', 'open', 'start'];
+  
+  for (const opener of openers) {
+    try {
+      const proc = Bun.spawn([opener, url], {
+        stdout: 'ignore',
+        stderr: 'ignore',
+      });
+      const code = await proc.exited;
+      if (code === 0) return;
+    } catch {
+      continue;
+    }
+  }
+  
+  throw new Error('Could not open browser');
+}
+
 export async function loginProviderFlow(): Promise<void> {
   // Box with tips (OpenClaw-style)
   p.note(
     [
-      'This does NOT modify Waybar config.',
-      'It only helps you log in at the provider CLI.',
+      'This helps you log in to provider CLIs.',
       '',
-      colorize('Space', semantic.accent) + ' to select  ' + colorize('Enter', semantic.accent) + ' to confirm  ' + colorize('q', semantic.accent) + ' to go back',
+      colorize('Space', semantic.highlight) + ' to select  ' + colorize('Enter', semantic.highlight) + ' to confirm  ' + colorize('q', semantic.highlight) + ' to go back',
     ].join('\n'),
     colorize('Provider Login', semantic.title)
   );
@@ -89,21 +110,40 @@ export async function loginProviderFlow(): Promise<void> {
     case 'antigravity': {
       p.note(
         [
-          'Antigravity uses Google OAuth via OpenClaw.',
+          'Will open browser for Google OAuth.',
           '',
-          'Will run: ' + colorize('openclaw models auth login google-antigravity', semantic.accent),
+          'After login, you\'ll be redirected back',
+          'and the token will be saved locally.',
         ].join('\n'),
         colorize('Antigravity Login', semantic.title)
       );
       
       const cont = await p.confirm({
-        message: 'Launch OpenClaw auth?',
+        message: 'Open browser for Google OAuth?',
         initialValue: true,
       });
       
       if (p.isCancel(cont) || !cont) return;
-      
-      await runInteractive('openclaw', ['models', 'auth', 'login', 'google-antigravity']);
+
+      const spinner = p.spinner();
+      spinner.start('Waiting for OAuth callback...');
+
+      try {
+        const result = await runAntigravityOAuth(openBrowser);
+        
+        // Save to qbar's own storage
+        await addAntigravityAccount({
+          email: result.email,
+          name: result.name,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          expiresAt: result.expiresAt,
+        });
+
+        spinner.stop(colorize(`Logged in as ${result.email}`, semantic.good));
+      } catch (error) {
+        spinner.stop(colorize(`OAuth failed: ${error instanceof Error ? error.message : 'Unknown error'}`, semantic.danger));
+      }
       break;
     }
 
