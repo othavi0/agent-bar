@@ -47,14 +47,15 @@ export const catppuccin = {
 
 // Semantic colors for quota display
 export const semantic = {
-  good: catppuccin.green,      // >= 60%
+  good: catppuccin.green,       // >= 60%
   warning: catppuccin.yellow,   // >= 30%
   danger: catppuccin.peach,     // >= 10%
   critical: catppuccin.red,     // < 10%
   muted: catppuccin.overlay0,
-  accent: catppuccin.mauve,
-  title: catppuccin.lavender,
+  accent: catppuccin.mauve,     // Main accent (purple)
+  title: catppuccin.lavender,   // Titles (lighter purple)
   subtitle: catppuccin.subtext0,
+  highlight: catppuccin.sky,    // Highlights (cyan)
 };
 
 export function getQuotaColor(percent: number | null): string {

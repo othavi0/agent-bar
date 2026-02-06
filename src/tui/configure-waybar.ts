@@ -15,18 +15,26 @@ export async function configureWaybar(): Promise<boolean> {
     }))
   );
 
-  const options = availableProviders.map((p) => ({
-    value: p.id,
-    label: p.available ? p.name : colorize(`${p.name} (not logged in)`, semantic.muted),
-    hint: p.available ? undefined : 'credentials not found',
+  const options = availableProviders.map((prov) => ({
+    value: prov.id,
+    label: prov.available 
+      ? colorize(prov.name, catppuccin.green)
+      : colorize(prov.name, catppuccin.text) + colorize(' (not logged in)', semantic.muted),
+    hint: prov.available ? undefined : 'credentials not found',
   }));
 
-  console.log('');
-  console.log(colorize('  Tip: Space to toggle, Enter to confirm, q to go back', semantic.subtitle));
-  console.log('');
+  // Tips box
+  p.note(
+    [
+      colorize('Space', semantic.highlight) + ' toggle  ' +
+      colorize('Enter', semantic.highlight) + ' confirm  ' +
+      colorize('q', semantic.highlight) + ' back',
+    ].join('\n'),
+    colorize('Waybar Display', semantic.title)
+  );
 
   const result = await p.multiselect({
-    message: 'Select providers to show in Waybar',
+    message: colorize('Select providers to show in Waybar', semantic.title),
     options,
     initialValues: settings.waybar.providers.filter(id => 
       availableProviders.some(p => p.id === id)
@@ -41,6 +49,6 @@ export async function configureWaybar(): Promise<boolean> {
   settings.waybar.providers = result as string[];
   await saveSettings(settings);
 
-  p.log.success('Waybar configuration saved');
+  p.log.success(colorize('Waybar configuration saved', semantic.good));
   return true;
 }

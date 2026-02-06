@@ -1,6 +1,6 @@
 import * as p from '@clack/prompts';
 import { providers } from '../providers';
-import { semantic, colorize } from './colors';
+import { catppuccin, semantic, colorize } from './colors';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -12,27 +12,35 @@ async function runInteractive(cmd: string, args: string[] = []): Promise<number>
 }
 
 export async function loginProviderFlow(): Promise<void> {
-  console.log('');
-  console.log(colorize('  Tip: This does NOT modify Waybar config — it only helps you log in at the provider CLI.', semantic.subtitle));
-  console.log(colorize('  Tip: Press q to go back.', semantic.subtitle));
-  console.log('');
+  // Box with tips (OpenClaw-style)
+  p.note(
+    [
+      'This does NOT modify Waybar config.',
+      'It only helps you log in at the provider CLI.',
+      '',
+      colorize('Space', semantic.accent) + ' to select  ' + colorize('Enter', semantic.accent) + ' to confirm  ' + colorize('q', semantic.accent) + ' to go back',
+    ].join('\n'),
+    colorize('Provider Login', semantic.title)
+  );
 
   const options = await Promise.all(
     providers.map(async (prov) => {
       const available = await prov.isAvailable();
       return {
         value: prov.id,
-        label: available ? prov.name : `${prov.name} (not logged in)`,
+        label: available 
+          ? colorize(prov.name, catppuccin.green) 
+          : colorize(`${prov.name}`, catppuccin.text) + colorize(' (not logged in)', semantic.muted),
         hint: available ? 'already logged in' : 'run login flow',
       };
     })
   );
 
   const choice = await p.select({
-    message: 'Choose provider to log in',
+    message: colorize('Choose provider', semantic.title),
     options: [
       ...options,
-      { value: 'back' as const, label: 'Back' },
+      { value: 'back' as const, label: colorize('Back', semantic.muted) },
     ],
   });
 
@@ -41,36 +49,70 @@ export async function loginProviderFlow(): Promise<void> {
   // Provider-specific flows
   switch (choice) {
     case 'claude': {
-      p.log.info('Claude login: open the Claude CLI, then type /login inside it.');
-      await p.text({ message: 'Press Enter to launch `claude`...', validate: () => undefined });
+      p.note(
+        [
+          '1. Confirm the folder (trust prompt)',
+          '2. Type ' + colorize('/login', semantic.accent),
+          '3. Choose your login method',
+        ].join('\n'),
+        colorize('Claude Login Steps', semantic.title)
+      );
+      
+      const cont = await p.confirm({
+        message: 'Launch Claude CLI?',
+        initialValue: true,
+      });
+      
+      if (p.isCancel(cont) || !cont) return;
+      
       await runInteractive('claude');
       break;
     }
 
     case 'codex': {
-      p.log.info('Codex login: will run `codex auth login` (OAuth flow).');
-      await p.text({ message: 'Press Enter to launch `codex auth login`...', validate: () => undefined });
+      p.note(
+        'Will run ' + colorize('codex auth login', semantic.accent) + ' (OAuth flow)',
+        colorize('Codex Login', semantic.title)
+      );
+      
+      const cont = await p.confirm({
+        message: 'Launch Codex auth?',
+        initialValue: true,
+      });
+      
+      if (p.isCancel(cont) || !cont) return;
+      
       await runInteractive('codex', ['auth', 'login']);
       break;
     }
 
     case 'antigravity': {
-      p.log.info('Antigravity is extension-managed (Codeium).');
-      p.log.info('If quotas are not detected, ensure the Codeium language server is running.');
-      await p.text({ message: 'Press Enter to go back...', validate: () => undefined });
+      p.note(
+        [
+          'Antigravity is extension-managed (Codeium).',
+          '',
+          'If quotas are not detected, ensure the',
+          'Codeium language server is running.',
+        ].join('\n'),
+        colorize('Antigravity Info', semantic.title)
+      );
+      
+      await p.confirm({
+        message: 'Got it',
+        initialValue: true,
+      });
       break;
     }
 
     default: {
-      p.log.warn(`No login flow implemented for: ${String(choice)}`);
-      await p.text({ message: 'Press Enter to go back...', validate: () => undefined });
+      p.log.warn(`No login flow for: ${String(choice)}`);
       break;
     }
   }
 
   // Refresh Waybar after login attempt (best effort)
   try {
-    await runInteractive('pkill', ['-USR2', 'waybar']);
+    Bun.spawn(['pkill', '-USR2', 'waybar']);
   } catch {
     // ignore
   }

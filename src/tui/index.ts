@@ -15,6 +15,16 @@ export async function runTui(): Promise<void> {
   // Timeline-style intro (OpenClaw-like)
   p.intro(colorize(`qbar ${colorize(`v${VERSION}`, semantic.subtitle)}`, semantic.accent));
 
+  // Tips box (doesn't break the timeline)
+  p.note(
+    [
+      colorize('↑↓', semantic.highlight) + ' navigate  ' +
+      colorize('Enter', semantic.highlight) + ' select  ' +
+      colorize('q', semantic.highlight) + ' quit',
+    ].join('\n'),
+    colorize('Controls', semantic.title)
+  );
+
   let running = true;
 
   while (running) {
@@ -24,22 +34,22 @@ export async function runTui(): Promise<void> {
         { 
           value: 'list' as const, 
           label: colorize('List all', catppuccin.text),
-          hint: 'view quotas for all providers',
+          hint: colorize('view quotas for all providers', semantic.muted),
         },
         { 
           value: 'waybar' as const, 
           label: colorize('Configure Waybar', catppuccin.text),
-          hint: 'select providers for the bar',
+          hint: colorize('select providers for the bar', semantic.muted),
         },
         { 
           value: 'tooltip' as const, 
           label: colorize('Configure Tooltip', catppuccin.text),
-          hint: 'select what shows on hover',
+          hint: colorize('select what shows on hover', semantic.muted),
         },
         {
           value: 'login' as const,
           label: colorize('Provider login', catppuccin.text),
-          hint: 'launch provider CLI login flows',
+          hint: colorize('launch provider CLI login flows', semantic.muted),
         },
       ],
     });
