@@ -300,7 +300,7 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
     }
     
     return {
-      text: `<span foreground='${C.muted}'>󱘖</span>`,
+      text: `<span foreground='${C.red}'>󱘖</span>`,
       tooltip,
       class: `qbar-${quota.provider} disconnected`,
     };
