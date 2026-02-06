@@ -1,16 +1,31 @@
 #!/usr/bin/env bash
+# qbar - LLM quota monitor for Waybar
+# 
+# Commands:
+#   (none)     - Output JSON for Waybar module
+#   menu       - Open interactive TUI
+#   refresh    - Force refresh with spinner (for right-click)
+#   status     - Terminal output
+
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR/.." || exit 1
 
 case "${1:-}" in
+  menu)
+    # Interactive TUI with @clack/prompts
+    exec bun src/menu.ts
+    ;;
   refresh)
+    # Force refresh with ora spinner
     shift
     exec bun src/refresh.ts "$@"
     ;;
-  menu|status)
-    exec bun src/index.ts --command status
+  status)
+    # Terminal output
+    exec bun src/index.ts --command terminal
     ;;
   *)
+    # Default: Waybar JSON output
     exec bun src/index.ts "$@"
     ;;
 esac
