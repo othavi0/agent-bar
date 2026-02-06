@@ -3,11 +3,11 @@ import { catppuccin, semantic, colorize, bold } from './colors';
 import { showListAll } from './list-all';
 import { configureWaybar } from './configure-waybar';
 import { configureTooltip } from './configure-tooltip';
-import { getSettingsPath } from '../settings';
+import { loginProviderFlow } from './login';
 
 const VERSION = '3.0.0';
 
-type MenuAction = 'list' | 'waybar' | 'tooltip' | 'cancel';
+type MenuAction = 'list' | 'waybar' | 'tooltip' | 'login' | 'cancel';
 
 async function showMainMenu(): Promise<MenuAction | symbol> {
   console.log('');
@@ -31,6 +31,11 @@ async function showMainMenu(): Promise<MenuAction | symbol> {
         value: 'tooltip' as const, 
         label: 'Configure Tooltip',
         hint: 'select what shows on hover',
+      },
+      {
+        value: 'login' as const,
+        label: 'Provider login',
+        hint: 'launch provider CLI login flows',
       },
       { 
         value: 'cancel' as const, 
@@ -68,6 +73,10 @@ export async function runTui(): Promise<void> {
 
       case 'tooltip':
         await configureTooltip();
+        break;
+
+      case 'login':
+        await loginProviderFlow();
         break;
     }
   }
