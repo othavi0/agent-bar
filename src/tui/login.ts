@@ -1,8 +1,6 @@
 import * as p from '@clack/prompts';
 import { providers } from '../providers';
 import { catppuccin, semantic, colorize } from './colors';
-import { runAntigravityOAuth } from '../auth/antigravity-oauth';
-import { addAntigravityAccount } from '../auth/storage';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -13,24 +11,43 @@ async function runInteractive(cmd: string, args: string[] = []): Promise<number>
   return await proc.exited;
 }
 
-async function openBrowser(url: string): Promise<void> {
-  // Try common browser openers
-  const openers = ['xdg-open', 'open', 'start'];
-  
-  for (const opener of openers) {
-    try {
-      const proc = Bun.spawn([opener, url], {
-        stdout: 'ignore',
-        stderr: 'ignore',
-      });
-      const code = await proc.exited;
-      if (code === 0) return;
-    } catch {
-      continue;
-    }
+async function commandExists(cmd: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(['which', cmd], { stdout: 'ignore', stderr: 'ignore' });
+    return await proc.exited === 0;
+  } catch {
+    return false;
   }
+}
+
+async function ensureAntigravityUsage(): Promise<boolean> {
+  // Check if already installed
+  if (await commandExists('antigravity-usage')) {
+    return true;
+  }
+
+  // Install silently with bun
+  const spinner = p.spinner();
+  spinner.start('Installing dependencies...');
   
-  throw new Error('Could not open browser');
+  try {
+    const proc = Bun.spawn(['bun', 'add', '-g', 'antigravity-usage'], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const code = await proc.exited;
+    
+    if (code === 0) {
+      spinner.stop(colorize('Dependencies ready', semantic.good));
+      return true;
+    } else {
+      spinner.stop(colorize('Failed to install dependencies', semantic.danger));
+      return false;
+    }
+  } catch (error) {
+    spinner.stop(colorize('Failed to install dependencies', semantic.danger));
+    return false;
+  }
 }
 
 export async function loginProviderFlow(): Promise<void> {
@@ -112,8 +129,7 @@ export async function loginProviderFlow(): Promise<void> {
         [
           'Will open browser for Google OAuth.',
           '',
-          'After login, you\'ll be redirected back',
-          'and the token will be saved locally.',
+          'After login, your quota will be visible.',
         ].join('\n'),
         colorize('Antigravity Login', semantic.title)
       );
@@ -125,25 +141,17 @@ export async function loginProviderFlow(): Promise<void> {
       
       if (p.isCancel(cont) || !cont) return;
 
-      const spinner = p.spinner();
-      spinner.start('Waiting for OAuth callback...');
-
-      try {
-        const result = await runAntigravityOAuth(openBrowser);
-        
-        // Save to qbar's own storage
-        await addAntigravityAccount({
-          email: result.email,
-          name: result.name,
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-          expiresAt: result.expiresAt,
-        });
-
-        spinner.stop(colorize(`Logged in as ${result.email}`, semantic.good));
-      } catch (error) {
-        spinner.stop(colorize(`OAuth failed: ${error instanceof Error ? error.message : 'Unknown error'}`, semantic.danger));
+      // Ensure antigravity-usage is installed
+      const installed = await ensureAntigravityUsage();
+      if (!installed) {
+        p.log.error('Could not setup Antigravity login. Please try again.');
+        return;
       }
+
+      // Run the login flow
+      await runInteractive('antigravity-usage', ['login']);
+      
+      p.log.success(colorize('Antigravity login complete', semantic.good));
       break;
     }
 

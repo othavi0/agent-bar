@@ -10,7 +10,9 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 
-# Ensure bun is available (Waybar/Omarchy env sometimes misses mise shims)
+# Ensure bun and bun global bins are available
+export PATH="$HOME/.cache/.bun/bin:$PATH"
+
 if ! command -v bun >/dev/null 2>&1; then
   if command -v mise >/dev/null 2>&1 && mise which bun >/dev/null 2>&1; then
     export PATH="$HOME/.local/share/mise/shims:$PATH"
