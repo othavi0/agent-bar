@@ -83,15 +83,14 @@ export class Cache {
    */
   async invalidate(key: string): Promise<void> {
     const path = this.getPath(key);
-    const file = Bun.file(path);
-
-    if (await file.exists()) {
-      try {
-        await Bun.write(path, '{}'); // Overwrite with empty
-        logger.debug('Cache invalidated', { key });
-      } catch (error) {
-        logger.warn('Cache invalidate error', { key, error });
-      }
+    
+    try {
+      const { unlinkSync } = await import('node:fs');
+      unlinkSync(path);
+      logger.debug('Cache invalidated', { key });
+    } catch (error) {
+      // File doesn't exist or can't delete - that's fine
+      logger.debug('Cache invalidate (no file)', { key });
     }
   }
 
