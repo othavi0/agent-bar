@@ -89,18 +89,21 @@ export async function loginProviderFlow(): Promise<void> {
     case 'antigravity': {
       p.note(
         [
-          'Antigravity is extension-managed (Codeium).',
+          'Antigravity uses Google OAuth via OpenClaw.',
           '',
-          'If quotas are not detected, ensure the',
-          'Codeium language server is running.',
+          'Will run: ' + colorize('openclaw models auth login google-antigravity', semantic.accent),
         ].join('\n'),
-        colorize('Antigravity Info', semantic.title)
+        colorize('Antigravity Login', semantic.title)
       );
       
-      await p.confirm({
-        message: 'Got it',
+      const cont = await p.confirm({
+        message: 'Launch OpenClaw auth?',
         initialValue: true,
       });
+      
+      if (p.isCancel(cont) || !cont) return;
+      
+      await runInteractive('openclaw', ['models', 'auth', 'login', 'google-antigravity']);
       break;
     }
 
