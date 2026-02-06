@@ -2,10 +2,11 @@
 # qbar - LLM quota monitor for Waybar
 # 
 # Commands:
-#   (none)     - Output JSON for Waybar module
-#   menu       - Open interactive TUI
-#   refresh    - Force refresh with spinner (for right-click)
-#   status     - Terminal output
+#   (none)          - Output JSON for Waybar module
+#   menu            - Open interactive TUI
+#   refresh         - Force refresh with terminal spinner
+#   refresh-waybar  - Force refresh with waybar spinner animation
+#   status          - Terminal output
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR/.." || exit 1
@@ -16,9 +17,14 @@ case "${1:-}" in
     exec bun src/menu.ts
     ;;
   refresh)
-    # Force refresh with ora spinner
+    # Force refresh with ora spinner (terminal)
     shift
     exec bun src/refresh.ts "$@"
+    ;;
+  refresh-waybar)
+    # Force refresh with waybar animation (no terminal)
+    shift
+    exec bun src/refresh-waybar.ts "$@"
     ;;
   status)
     # Terminal output

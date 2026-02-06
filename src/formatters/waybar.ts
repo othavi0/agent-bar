@@ -1,5 +1,14 @@
 import { CONFIG, getColorForPercent } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
+import { existsSync } from 'node:fs';
+
+/**
+ * Check if provider is currently loading (refresh in progress)
+ */
+function isLoading(provider: string): boolean {
+  const loadingFile = `${CONFIG.paths.cache}/.loading-${provider}`;
+  return existsSync(loadingFile);
+}
 
 // Catppuccin Mocha palette
 const C = {
@@ -290,6 +299,15 @@ export function outputWaybar(quotas: AllQuotas): void {
 }
 
 export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
+  // Check if loading (refresh in progress)
+  if (isLoading(quota.provider)) {
+    return {
+      text: `<span foreground='${C.sky}'>◠</span>`,
+      tooltip: `<span foreground='${C.sky}'>Refreshing ${quota.displayName}...</span>`,
+      class: `qbar-${quota.provider} loading`,
+    };
+  }
+
   const val = quota.primary?.remaining ?? null;
   let status = 'ok';
   if (val !== null) {
