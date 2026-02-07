@@ -1,154 +1,221 @@
 # qbar
 
-LLM quota monitor for Waybar. Shows usage for Claude, Codex, and Antigravity.
+qbar is a tiny quota/usage monitor for **Waybar**.
 
-## Features
+It shows your remaining usage for:
+- **Claude** (Anthropic)
+- **Codex** (OpenAI Codex CLI)
+- **Antigravity** (Google Antigravity / Codeium-backed quotas via `antigravity-usage`)
 
-- **Waybar integration**: JSON output with Pango markup
-- **Terminal output**: ANSI colored quota display
-- **Interactive TUI**: Configure what shows where
-- **Smart caching**: Reduces API calls with configurable TTL
-- **Catppuccin Mocha**: Beautiful color scheme
+I built it to feel good in the bar and in the terminal: clean output, fast cache, Catppuccin Mocha colors.
 
-## Requirements
+---
 
-- [Bun](https://bun.sh) runtime
-- Provider credentials (see Setup)
+## What you get
 
-## Installation
+- **Waybar JSON output** (with tooltips)
+- **Right-click refresh** (opens a small terminal with a spinner)
+- **A TUI menu** to view everything + run logins
+- **File cache** (default 5 min) so hover doesn’t slam APIs
+
+---
+
+## Requirements (with commands)
+
+### 1) Bun
 
 ```bash
-# Clone the repo
-git clone https://github.com/othavioquiliao/qbar.git
-cd qbar
+curl -fsSL https://bun.sh/install | bash
+# restart your shell (or source ~/.bashrc / ~/.zshrc)
 
-# Install dependencies
-bun install
-
-# Create symlink
-ln -s $(pwd)/scripts/qbar ~/.local/bin/qbar
+bun --version
 ```
 
-## Setup
+### 2) Waybar
 
-### Claude
-
+On Arch (Omarchy):
 ```bash
+sudo pacman -S waybar
+```
+
+### 3) Provider CLIs
+
+#### Claude
+Install + login:
+```bash
+# Install Claude CLI (pick one)
+# If you already have it, skip.
+
 claude login
 ```
 
-Credentials: `~/.claude/.credentials.json`
+qbar reads credentials from:
+- `~/.claude/.credentials.json`
 
-### Codex
-
+#### Codex
+Install + login:
 ```bash
+# If you already have Codex CLI, skip.
+
 codex auth login
 ```
 
-Quota: parsed from `~/.codex/sessions/`
+qbar reads:
+- auth: `~/.codex/auth.json`
+- sessions: `~/.codex/sessions/` (it parses rate limits from your most recent session)
 
-### Antigravity
+#### Antigravity
+qbar uses the **`antigravity-usage`** CLI (it stores tokens locally, qbar just reads them).
 
-Requires Codeium Language Server (VS Code/Cursor extension).
+Install + login:
+```bash
+bun add -g antigravity-usage
+
+antigravity-usage login
+```
+
+qbar reads tokens from:
+- `~/.config/antigravity-usage/accounts/*/tokens.json`
+
+---
+
+## Install qbar
+
+```bash
+git clone https://github.com/othavioquiliao/qbar.git
+cd qbar
+
+bun install
+
+# put the command on your PATH
+ln -sf "$(pwd)/scripts/qbar" ~/.local/bin/qbar
+
+qbar --help || true
+```
+
+---
+
+## Waybar setup (recommended: 3 modules with icons)
+
+This is the setup you’re using now: separate modules per provider so each can have its own PNG icon + tooltip.
+
+### 1) Copy icons
+
+```bash
+mkdir -p ~/.config/waybar/qbar
+cp -r ./icons ~/.config/waybar/qbar/
+```
+
+### 2) Add the terminal helper (recommended)
+
+Omarchy has its own helpers, but to make this repo self-contained we ship one.
+
+```bash
+mkdir -p ~/.config/waybar/scripts
+cp ./scripts/qbar-open-terminal ~/.config/waybar/scripts/
+chmod +x ~/.config/waybar/scripts/qbar-open-terminal
+```
+
+### 3) Add modules to Waybar config
+
+Open `~/.config/waybar/config.jsonc` and:
+
+1) Add to `modules-right`:
+```jsonc
+"custom/qbar-claude",
+"custom/qbar-codex",
+"custom/qbar-antigravity"
+```
+
+2) Add module definitions (copy/paste):
+
+```jsonc
+"custom/qbar-claude": {
+  "exec": "$HOME/.local/bin/qbar --provider claude",
+  "return-type": "json",
+  "interval": 60,
+  "tooltip": true,
+  "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh claude"
+},
+
+"custom/qbar-codex": {
+  "exec": "$HOME/.local/bin/qbar --provider codex",
+  "return-type": "json",
+  "interval": 60,
+  "tooltip": true,
+  "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh codex"
+},
+
+"custom/qbar-antigravity": {
+  "exec": "$HOME/.local/bin/qbar --provider antigravity",
+  "return-type": "json",
+  "interval": 60,
+  "tooltip": true,
+  "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh antigravity"
+}
+```
+
+### 4) Add CSS
+
+Append to `~/.config/waybar/style.css`:
+
+```css
+/* qbar icons (expects ~/.config/waybar/qbar/icons/*) */
+#custom-qbar-claude,
+#custom-qbar-codex,
+#custom-qbar-antigravity {
+  padding-left: 22px;
+  padding-right: 6px;
+  background-size: 16px 16px;
+  background-repeat: no-repeat;
+  background-position: 4px center;
+}
+
+#custom-qbar-claude { background-image: url("qbar/icons/claude-code-icon.png"); }
+#custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
+#custom-qbar-antigravity { background-image: url("qbar/icons/antigravity-icon.png"); }
+
+/* status colors */
+#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok { color: #a6e3a1; }
+#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low { color: #f9e2af; }
+#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn { color: #fab387; }
+#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical { color: #f38ba8; }
+```
+
+Reload Waybar:
+```bash
+pkill -USR2 waybar
+```
+
+---
 
 ## Usage
 
+### Terminal
 ```bash
-# Waybar JSON output (default)
-qbar
-
-# Terminal output with colors
 qbar status
-qbar -t
+qbar status --provider claude
+```
 
-# Interactive menu
+### TUI
+```bash
 qbar menu
-
-# Single provider
-qbar -t -p claude
-
-# Force cache refresh
-qbar --refresh
 ```
 
-## Waybar Configuration
+### Refresh
+Right-click a provider module in the bar.
 
-Add to `~/.config/waybar/config`:
+---
 
-```jsonc
-"custom/qbar": {
-  "exec": "~/.local/bin/qbar",
-  "return-type": "json",
-  "interval": 60,
-  "tooltip": true
-}
-```
+## Notes / gotchas (the honest version)
 
-Add to `~/.config/waybar/style.css`:
+- **Antigravity refresh**: quotas are cached per account email. `qbar refresh antigravity` now deletes *all* `antigravity-quota-*.json` cache entries so it actually refreshes.
+- **Waybar CSS is fragile**: one invalid CSS property can stop Waybar from starting. If Waybar dies after a change, check the logs first.
 
-```css
-#custom-qbar {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 13px;
-  padding: 0 8px;
-}
-```
-
-## Interactive Menu
-
-Run `qbar menu` for an interactive TUI:
-
-```
-┌  qbar v3.0.0
-│
-◆  What would you like to do?
-│  ● List all
-│  ○ Configure Waybar
-│  ○ Configure Tooltip
-│  ○ Cancel
-└
-```
-
-- **List all**: View quotas for all logged providers
-- **Configure Waybar**: Select which providers show in the bar
-- **Configure Tooltip**: Select what appears on hover
-
-Settings are saved to `~/.config/qbar/settings.json`.
-
-## Color Thresholds (Catppuccin Mocha)
-
-| Remaining | Color   | Hex       |
-|-----------|---------|-----------|
-| ≥60%      | Green   | `#a6e3a1` |
-| ≥30%      | Yellow  | `#f9e2af` |
-| ≥10%      | Peach   | `#fab387` |
-| <10%      | Red     | `#f38ba8` |
-
-## Architecture
-
-```
-src/
-├── index.ts           # Entry point
-├── cli.ts             # Argument parsing
-├── config.ts          # Paths, colors, thresholds
-├── settings.ts        # User preferences
-├── cache.ts           # File-based caching
-├── logger.ts          # Structured logging
-├── providers/
-│   ├── types.ts
-│   ├── claude.ts
-│   ├── codex.ts
-│   └── antigravity.ts
-├── formatters/
-│   ├── waybar.ts
-│   └── terminal.ts
-└── tui/
-    ├── index.ts       # Main menu
-    ├── colors.ts      # Catppuccin palette
-    ├── list-all.ts
-    ├── configure-waybar.ts
-    └── configure-tooltip.ts
-```
+---
 
 ## License
 

@@ -1,92 +1,27 @@
-/* qbar Waybar Styles - Copy to your waybar style.css */
-/* Icons use relative path from waybar config folder */
-/* Copy the icons folder to ~/.config/waybar/qbar/icons/ */
+/* qbar Waybar Styles (copy into ~/.config/waybar/style.css)
+   Icons are loaded relative to ~/.config/waybar
 
-/* ==========================================================================
-   qbar Provider Modules with PNG Icons
-   ========================================================================== */
+   Setup:
+     mkdir -p ~/.config/waybar/qbar
+     cp -r ./icons ~/.config/waybar/qbar/
+*/
 
-/* Claude Module */
-#custom-qbar-claude {
-  padding-left: 22px;
-  padding-right: 6px;
-  background-image: url("qbar/icons/claude-code-icon.png");
-  background-size: 16px 16px;
-  background-repeat: no-repeat;
-  background-position: 4px center;
-}
-
-/* Codex Module */
-#custom-qbar-codex {
-  padding-left: 22px;
-  padding-right: 6px;
-  background-image: url("qbar/icons/codex-icon.png");
-  background-size: 16px 16px;
-  background-repeat: no-repeat;
-  background-position: 4px center;
-}
-
-/* Antigravity Module */
+#custom-qbar-claude,
+#custom-qbar-codex,
 #custom-qbar-antigravity {
   padding-left: 22px;
   padding-right: 6px;
-  background-image: url("qbar/icons/antigravity-icon.png");
   background-size: 16px 16px;
   background-repeat: no-repeat;
   background-position: 4px center;
 }
 
-/* ==========================================================================
-   Status Colors (based on quota percentage)
-   ========================================================================== */
+#custom-qbar-claude { background-image: url("qbar/icons/claude-code-icon.png"); }
+#custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
+#custom-qbar-antigravity { background-image: url("qbar/icons/antigravity-icon.png"); }
 
-/* OK status (60%+) */
-#custom-qbar-claude.ok,
-#custom-qbar-codex.ok,
-#custom-qbar-antigravity.ok {
-  color: #a6e3a1; /* Catppuccin green */
-}
-
-/* Low status (30-60%) */
-#custom-qbar-claude.low,
-#custom-qbar-codex.low,
-#custom-qbar-antigravity.low {
-  color: #f9e2af; /* Catppuccin yellow */
-}
-
-/* Warning status (10-30%) */
-#custom-qbar-claude.warn,
-#custom-qbar-codex.warn,
-#custom-qbar-antigravity.warn {
-  color: #fab387; /* Catppuccin orange */
-}
-
-/* Critical status (<10%) */
-#custom-qbar-claude.critical,
-#custom-qbar-codex.critical,
-#custom-qbar-antigravity.critical {
-  color: #f38ba8; /* Catppuccin red */
-}
-
-/* ==========================================================================
-   Combined qbar Module (if using single module)
-   ========================================================================== */
-
-#custom-qbar {
-  padding: 0 8px;
-}
-
-/* Catppuccin Mocha theme colors for reference:
-   --ctp-green:    #a6e3a1
-   --ctp-yellow:   #f9e2af
-   --ctp-orange:   #fab387
-   --ctp-red:      #f38ba8
-   --ctp-blue:     #89b4fa
-   --ctp-lavender: #b4befe
-   --ctp-mauve:    #cba6f7
-   --ctp-teal:     #94e2d5
-   --ctp-sapphire: #74c7ec
-   --ctp-text:     #cdd6f4
-   --ctp-subtext:  #bac2de
-   --ctp-muted:    #6c7086
-*/
+/* status colors */
+#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok { color: #a6e3a1; }
+#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low { color: #f9e2af; }
+#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn { color: #fab387; }
+#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical { color: #f38ba8; }

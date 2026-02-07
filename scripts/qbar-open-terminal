@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# qbar-open-terminal <command...>
+#
+# Goal: open a floating-ish terminal for qbar actions (menu/refresh).
+#
+# Omarchy/Hyprland users usually want a floating window; generic Waybar users
+# still get a working terminal launch.
+#
+# Usage:
+#   qbar-open-terminal qbar menu
+#   qbar-open-terminal qbar refresh claude
+
+if [ "$#" -lt 1 ]; then
+  echo "Usage: qbar-open-terminal <command...>" >&2
+  exit 2
+fi
+
+cmd="$*"
+
+# 1) Omarchy/uwsm path (best UX on Omarchy)
+if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
+  exec setsid uwsm-app -- xdg-terminal-exec \
+    --app-id=org.omarchy.terminal \
+    --title=Qbar \
+    -e bash -lc "$cmd"
+fi
+
+# 2) Generic fallbacks (works on most distros)
+if command -v xdg-terminal-exec >/dev/null 2>&1; then
+  exec setsid xdg-terminal-exec --title=Qbar -e bash -lc "$cmd"
+fi
+
+if command -v alacritty >/dev/null 2>&1; then
+  exec setsid alacritty --title Qbar -e bash -lc "$cmd"
+fi
+
+if command -v kitty >/dev/null 2>&1; then
+  exec setsid kitty --title Qbar bash -lc "$cmd"
+fi
+
+if command -v foot >/dev/null 2>&1; then
+  exec setsid foot -T Qbar bash -lc "$cmd"
+fi
+
+if command -v wezterm >/dev/null 2>&1; then
+  exec setsid wezterm start --always-new-process --class Qbar bash -lc "$cmd"
+fi
+
+echo "No supported terminal launcher found (xdg-terminal-exec/alacritty/kitty/foot/wezterm)." >&2
+exit 1

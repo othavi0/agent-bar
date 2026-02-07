@@ -1,13 +1,14 @@
 {
-  "// qbar Waybar Modules - Copy these to your waybar config.jsonc": "",
-  "// Add to modules-right: custom/qbar-claude, custom/qbar-codex, custom/qbar-antigravity": "",
+  "//": "qbar modules (copy into your waybar config.jsonc)",
+  "//2": "Add custom/qbar-claude, custom/qbar-codex, custom/qbar-antigravity to modules-right",
 
   "custom/qbar-claude": {
     "exec": "$HOME/.local/bin/qbar --provider claude",
     "return-type": "json",
     "interval": 60,
     "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh claude"
   },
 
   "custom/qbar-codex": {
@@ -15,7 +16,8 @@
     "return-type": "json",
     "interval": 60,
     "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh codex"
   },
 
   "custom/qbar-antigravity": {
@@ -23,15 +25,7 @@
     "return-type": "json",
     "interval": 60,
     "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
-  },
-
-  "// Or use the combined module (all providers in one)": "",
-  "custom/qbar": {
-    "exec": "$HOME/.local/bin/qbar",
-    "return-type": "json",
-    "interval": 60,
-    "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu"
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh antigravity"
   }
 }

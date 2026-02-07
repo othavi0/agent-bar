@@ -1,14 +1,35 @@
-// Add "custom/llm-usage" to your modules-right:
-//   "modules-right": [..., "custom/llm-usage", ...]
+// qbar Waybar modules (recommended: per-provider modules)
+//
+// 1) Add to modules-right:
+//    "custom/qbar-claude", "custom/qbar-codex", "custom/qbar-antigravity"
+//
+// 2) Add the modules below.
 
 {
-  "custom/llm-usage": {
-    "format": "{}",
-    "exec": "$HOME/Work/llm-usage-waybar/scripts/llm-usage",
+  "custom/qbar-claude": {
+    "exec": "$HOME/.local/bin/qbar --provider claude",
     "return-type": "json",
     "interval": 60,
-    "markup": "pango",
-    "on-click": "$HOME/Work/llm-usage-waybar/scripts/llm-usage --terminal | less -R",
-    "on-click-right": "$HOME/Work/llm-usage-waybar/scripts/llm-usage --refresh"
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh claude"
+  },
+
+  "custom/qbar-codex": {
+    "exec": "$HOME/.local/bin/qbar --provider codex",
+    "return-type": "json",
+    "interval": 60,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh codex"
+  },
+
+  "custom/qbar-antigravity": {
+    "exec": "$HOME/.local/bin/qbar --provider antigravity",
+    "return-type": "json",
+    "interval": 60,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh antigravity"
   }
 }
