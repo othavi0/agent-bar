@@ -1,146 +1,92 @@
 # qbar
 
-LLM quota monitor for Waybar. Displays remaining usage for Claude, Codex, and Antigravity.
+Monitor de quota de LLMs para Waybar.
 
-> **Note:** Designed for Omarchy (Arch + yay). May work on other Waybar setups.
+Mostra o uso restante de **Claude**, **Codex** e **Antigravity** direto na sua barra.
 
-## Features
-
-- Waybar integration with tooltips and status colors
-- Interactive TUI menu
-- Smart right-click: refresh when connected, login when disconnected
-- File-based cache (2 min TTL)
-- Catppuccin Mocha color scheme
-
-## Requirements
-
-- [Bun](https://bun.sh)
-- [Waybar](https://github.com/Alexays/Waybar)
-- [yay](https://github.com/Jguer/yay) (for auto-installing provider CLIs)
-
-## Installation
+## Instalação
 
 ```bash
+# Clona o repositório
 git clone https://github.com/othavioquiliao/qbar.git
 cd qbar
+
+# Instala as dependências do projeto
 bun install
-ln -sf "$(pwd)/scripts/qbar" ~/.local/bin/qbar
+
+# Configura tudo automaticamente (copia ícones, edita waybar config/css, cria symlink)
+bun src/setup.ts
 ```
 
-## Provider Setup
+Pronto. Os módulos aparecem na Waybar.
 
-qbar auto-installs CLIs via `yay` when you run the login flow. Just use `qbar menu` → Provider login.
+## Uso
 
-| Provider | Package | Credentials |
-|----------|---------|-------------|
-| Claude | `aur/claude-code` | `~/.claude/.credentials.json` |
-| Codex | `aur/openai-codex-bin` | `~/.codex/auth.json` |
-| Antigravity | `bun -g antigravity-usage` | `~/.config/antigravity-usage/accounts/*/tokens.json` |
+| Ação | Descrição |
+|------|-----------|
+| **Hover** | Mostra tooltip com detalhes de quota |
+| **Click esquerdo** | Abre menu interativo |
+| **Click direito** | Refresh (ou login se desconectado) |
 
-## Waybar Configuration
-
-### 1. Copy assets
+### Comandos
 
 ```bash
-mkdir -p ~/.config/waybar/qbar
-cp -r ./icons ~/.config/waybar/qbar/
-cp ./scripts/qbar-open-terminal ~/.config/waybar/scripts/
-chmod +x ~/.config/waybar/scripts/qbar-open-terminal
+qbar              # Output JSON para Waybar
+qbar status       # Mostra quotas no terminal
+qbar menu         # Menu interativo
+qbar setup        # (Re)configura Waybar automaticamente
 ```
 
-### 2. Add modules to config
+## Login dos Providers
 
-In `~/.config/waybar/config.jsonc`, add to `modules-right`:
+Use `qbar menu` → **Provider login**. O qbar instala as CLIs automaticamente via `yay`:
 
-```jsonc
-"custom/qbar-claude",
-"custom/qbar-codex",
-"custom/qbar-antigravity"
-```
+| Provider | O que faz |
+|----------|-----------|
+| Claude | Usa sua conta do Claude.ai (claude-code CLI) |
+| Codex | Usa sua conta do OpenAI Codex (codex CLI) |
+| Antigravity | Usa Google OAuth (antigravity-usage) |
 
-Then add the module definitions:
+## Cores
 
-```jsonc
-"custom/qbar-claude": {
-  "exec": "$HOME/.local/bin/qbar --provider claude",
-  "return-type": "json",
-  "interval": 120,
-  "tooltip": true,
-  "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right claude"
-},
+| Quota restante | Cor |
+|----------------|-----|
+| ≥60% | 🟢 Verde |
+| ≥30% | 🟡 Amarelo |
+| ≥10% | 🟠 Laranja |
+| <10% | 🔴 Vermelho |
 
-"custom/qbar-codex": {
-  "exec": "$HOME/.local/bin/qbar --provider codex",
-  "return-type": "json",
-  "interval": 120,
-  "tooltip": true,
-  "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right codex"
-},
+## Troubleshooting
 
-"custom/qbar-antigravity": {
-  "exec": "$HOME/.local/bin/qbar --provider antigravity",
-  "return-type": "json",
-  "interval": 120,
-  "tooltip": true,
-  "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right antigravity"
-}
-```
-
-### 3. Add CSS styles
-
-Append to `~/.config/waybar/style.css`:
-
-```css
-#custom-qbar-claude,
-#custom-qbar-codex,
-#custom-qbar-antigravity {
-  padding-left: 22px;
-  padding-right: 6px;
-  background-size: 16px 16px;
-  background-repeat: no-repeat;
-  background-position: 4px center;
-}
-
-#custom-qbar-claude { background-image: url("qbar/icons/claude-code-icon.png"); }
-#custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
-#custom-qbar-antigravity { background-image: url("qbar/icons/antigravity-icon.png"); }
-
-#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok { color: #a6e3a1; }
-#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low { color: #f9e2af; }
-#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn { color: #fab387; }
-#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical { color: #f38ba8; }
-```
-
-### 4. Reload Waybar
-
+**Waybar não inicia após setup?**
 ```bash
-pkill -USR2 waybar
+# Restaura backup (criado automaticamente)
+ls ~/.config/waybar/*.qbar-backup-*
+cp ~/.config/waybar/config.jsonc.qbar-backup-XXXXX ~/.config/waybar/config.jsonc
 ```
 
-## Usage
+**Provider mostra ícone de desconectado (󱘖)?**
+- Click direito no módulo para iniciar o login
 
-| Command | Description |
-|---------|-------------|
-| `qbar` | JSON output for Waybar |
-| `qbar status` | Terminal output with colors |
-| `qbar menu` | Interactive TUI |
-| `qbar --provider <name>` | Single provider output |
+**Refresh não atualiza valor?**
+- O cache dura 2 minutos. Click direito força refresh imediato.
 
-**Waybar interactions:**
-- Left-click → TUI menu
-- Right-click → Refresh (or login if disconnected)
+## Arquitetura
 
-## Color Thresholds
+```
+~/.config/waybar/
+├── config.jsonc          # Módulos qbar-claude, qbar-codex, qbar-antigravity
+├── style.css             # Estilos e cores dos módulos
+├── qbar/icons/           # Ícones PNG dos providers
+└── scripts/
+    └── qbar-open-terminal  # Helper para abrir terminal flutuante
 
-| Remaining | Color | Hex |
-|-----------|-------|-----|
-| ≥60% | Green | `#a6e3a1` |
-| ≥30% | Yellow | `#f9e2af` |
-| ≥10% | Orange | `#fab387` |
-| <10% | Red | `#f38ba8` |
+~/.config/qbar/
+└── settings.json         # Preferências do usuário
+
+~/.config/waybar/qbar/cache/
+└── *.json                # Cache de quotas (TTL 2min)
+```
 
 ## License
 

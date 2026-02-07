@@ -16,6 +16,10 @@ case "${1:-}" in
     # Interactive TUI with @clack/prompts
     exec bun src/menu.ts
     ;;
+  setup)
+    # Automated Waybar configuration
+    exec bun src/setup.ts
+    ;;
   refresh)
     # Force refresh with ora spinner (terminal)
     shift
