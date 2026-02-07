@@ -11,7 +11,6 @@ export interface CliOptions {
 const C = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
-  dim: '\x1b[2m',
   green: '\x1b[38;2;166;227;161m',
   yellow: '\x1b[38;2;249;226;175m',
   blue: '\x1b[38;2;137;180;250m',
@@ -24,89 +23,86 @@ const C = {
   lavender: '\x1b[38;2;180;190;254m',
 };
 
+// Box drawing (bold)
 const B = {
-  v: '│',
-  tl: '┌',
-  bl: '└',
-  h: '─',
+  tl: '┏',
+  bl: '┗',
+  lt: '┣',
+  h: '━',
+  v: '┃',
+  diamond: '◆',
+  dot: '●',
 };
 
-function line(content: string): string {
-  return `${C.muted}${B.v}${C.reset}  ${content}`;
+const vc = C.mauve; // main color for help
+
+const v = () => `${vc}${B.v}${C.reset}`;
+const label = (text: string) => `${vc}${B.lt}${B.h}${C.reset} ${C.mauve}${C.bold}${B.diamond} ${text}${C.reset}`;
+
+function cmdLine(name: string, desc: string): string {
+  return `${v()}  ${C.green}${B.dot}${C.reset} ${C.lavender}${name.padEnd(16)}${C.reset} ${C.subtext}${desc}${C.reset}`;
 }
 
-function header(title: string): string {
-  return `${C.muted}${B.tl}${B.h}${C.reset} ${C.mauve}${C.bold}${title}${C.reset}`;
+function optLine(flags: string, desc: string): string {
+  return `${v()}  ${C.yellow}${B.dot}${C.reset} ${C.lavender}${flags.padEnd(16)}${C.reset} ${C.subtext}${desc}${C.reset}`;
 }
 
-function footer(): string {
-  return `${C.muted}${B.bl}${B.h}${B.h}${B.h}${C.reset}`;
+function exLine(cmd: string, desc: string): string {
+  return `${v()}  ${C.teal}${B.dot}${C.reset} ${C.teal}${cmd.padEnd(22)}${C.reset} ${C.muted}${desc}${C.reset}`;
 }
 
-function cmd(name: string, desc: string): string {
-  return line(`${C.green}${name.padEnd(18)}${C.reset} ${C.subtext}${desc}${C.reset}`);
-}
-
-function opt(flags: string, desc: string): string {
-  return line(`${C.yellow}${flags.padEnd(18)}${C.reset} ${C.subtext}${desc}${C.reset}`);
-}
-
-function ex(command: string, desc: string): string {
-  return line(`${C.teal}${command.padEnd(26)}${C.reset} ${C.muted}${desc}${C.reset}`);
+function infoLine(key: string, val: string): string {
+  return `${v()}  ${C.peach}${B.dot}${C.reset} ${C.peach}${key.padEnd(10)}${C.reset} ${C.muted}${val}${C.reset}`;
 }
 
 export function showHelp(): void {
   const version = '3.0.0';
+  const w = 55;
   
   console.log();
-  console.log(`${C.mauve}${C.bold}  qbar${C.reset} ${C.muted}v${version}${C.reset}`);
-  console.log(`${C.subtext}  Monitor de quota de LLMs para Waybar${C.reset}`);
-  console.log();
+  console.log(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}qbar${C.reset} ${C.muted}v${version}${C.reset} ${vc}${B.h.repeat(w - 12)}${C.reset}`);
+  console.log(v());
   
   // Commands
-  console.log(header('Comandos'));
-  console.log(cmd('menu', 'Menu interativo (TUI)'));
-  console.log(cmd('status', 'Mostra quotas no terminal'));
-  console.log(cmd('setup', 'Configura Waybar automaticamente'));
-  console.log(cmd('update', 'Atualiza qbar para última versão'));
-  console.log(cmd('uninstall', 'Remove qbar do sistema'));
-  console.log(footer());
-  console.log();
+  console.log(label('Comandos'));
+  console.log(cmdLine('menu', 'Menu interativo (TUI)'));
+  console.log(cmdLine('status', 'Mostra quotas no terminal'));
+  console.log(cmdLine('setup', 'Configura Waybar automaticamente'));
+  console.log(cmdLine('update', 'Atualiza qbar para última versão'));
+  console.log(cmdLine('uninstall', 'Remove qbar do sistema'));
+  console.log(v());
   
   // Options
-  console.log(header('Opções'));
-  console.log(opt('-t, --terminal', 'Saída para terminal (cores ANSI)'));
-  console.log(opt('-p, --provider', 'Apenas um provider (claude|codex|antigravity)'));
-  console.log(opt('-r, --refresh', 'Força refresh do cache'));
-  console.log(opt('-v, --verbose', 'Log detalhado'));
-  console.log(opt('-h, --help', 'Mostra esta ajuda'));
-  console.log(footer());
-  console.log();
+  console.log(label('Opções'));
+  console.log(optLine('-t, --terminal', 'Saída para terminal'));
+  console.log(optLine('-p, --provider', 'claude | codex | antigravity'));
+  console.log(optLine('-r, --refresh', 'Força refresh do cache'));
+  console.log(optLine('-h, --help', 'Mostra esta ajuda'));
+  console.log(v());
   
   // Examples
-  console.log(header('Exemplos'));
-  console.log(ex('qbar', 'JSON para Waybar'));
-  console.log(ex('qbar menu', 'Abre menu interativo'));
-  console.log(ex('qbar status', 'Quotas no terminal'));
-  console.log(ex('qbar -t -p claude', 'Só Claude, no terminal'));
-  console.log(ex('qbar --refresh', 'Refresh forçado'));
-  console.log(footer());
-  console.log();
+  console.log(label('Exemplos'));
+  console.log(exLine('qbar', 'JSON para Waybar'));
+  console.log(exLine('qbar menu', 'Abre menu interativo'));
+  console.log(exLine('qbar status', 'Quotas coloridas'));
+  console.log(exLine('qbar -t -p claude', 'Só Claude'));
+  console.log(v());
   
   // Waybar
-  console.log(header('Waybar'));
-  console.log(line(`${C.lavender}Click esquerdo${C.reset}  ${C.muted}→${C.reset}  ${C.subtext}Menu interativo${C.reset}`));
-  console.log(line(`${C.lavender}Click direito${C.reset}   ${C.muted}→${C.reset}  ${C.subtext}Refresh / Login${C.reset}`));
-  console.log(line(`${C.lavender}Hover${C.reset}           ${C.muted}→${C.reset}  ${C.subtext}Tooltip com detalhes${C.reset}`));
-  console.log(footer());
-  console.log();
+  console.log(label('Waybar'));
+  console.log(`${v()}  ${C.lavender}Click esquerdo${C.reset}  ${C.muted}→${C.reset} ${C.subtext}Menu interativo${C.reset}`);
+  console.log(`${v()}  ${C.lavender}Click direito${C.reset}   ${C.muted}→${C.reset} ${C.subtext}Refresh / Login${C.reset}`);
+  console.log(`${v()}  ${C.lavender}Hover${C.reset}           ${C.muted}→${C.reset} ${C.subtext}Tooltip detalhado${C.reset}`);
+  console.log(v());
   
   // Paths
-  console.log(header('Arquivos'));
-  console.log(line(`${C.peach}Config${C.reset}   ${C.muted}~/.config/qbar/settings.json${C.reset}`));
-  console.log(line(`${C.peach}Cache${C.reset}    ${C.muted}~/.config/waybar/qbar/cache/${C.reset}`));
-  console.log(line(`${C.peach}Icons${C.reset}    ${C.muted}~/.config/waybar/qbar/icons/${C.reset}`));
-  console.log(footer());
+  console.log(label('Arquivos'));
+  console.log(infoLine('Config', '~/.config/qbar/'));
+  console.log(infoLine('Cache', '~/.config/waybar/qbar/cache/'));
+  console.log(infoLine('Icons', '~/.config/waybar/qbar/icons/'));
+  console.log(v());
+  
+  console.log(`${vc}${B.bl}${B.h.repeat(w)}${C.reset}`);
   console.log();
 }
 
@@ -121,42 +117,33 @@ export function parseArgs(args: string[]): CliOptions {
     const arg = args[i];
 
     switch (arg) {
-      // Commands
       case 'menu':
         options.command = 'menu';
         break;
-
       case 'status':
         options.command = 'status';
         break;
-
-      // Options
       case '--terminal':
       case '-t':
         options.command = 'terminal';
         break;
-
       case '--refresh':
       case '-r':
         options.refresh = true;
         break;
-
       case '--provider':
       case '-p':
         options.provider = args[++i];
         break;
-
       case '--verbose':
       case '-v':
         options.verbose = true;
         break;
-
       case '--help':
       case '-h':
       case 'help':
         options.command = 'help';
         break;
-
       default:
         if (arg.startsWith('-')) {
           logger.warn(`Unknown option: ${arg}`);
