@@ -34,69 +34,76 @@ const B = {
   dot: '●',
 };
 
-const vc = C.mauve; // main color for help
-
+const vc = C.mauve;
 const v = () => `${vc}${B.v}${C.reset}`;
 const label = (text: string) => `${vc}${B.lt}${B.h}${C.reset} ${C.mauve}${C.bold}${B.diamond} ${text}${C.reset}`;
 
+// Alignment columns
+const COL1 = 22; // command/option column
+const COL2 = 35; // description starts here
+
 function cmdLine(name: string, desc: string): string {
-  return `${v()}  ${C.green}${B.dot}${C.reset} ${C.lavender}${name.padEnd(16)}${C.reset} ${C.subtext}${desc}${C.reset}`;
+  return `${v()}  ${C.green}${B.dot}${C.reset} ${C.lavender}${name.padEnd(COL1)}${C.reset}${C.subtext}${desc}${C.reset}`;
 }
 
 function optLine(flags: string, desc: string): string {
-  return `${v()}  ${C.yellow}${B.dot}${C.reset} ${C.lavender}${flags.padEnd(16)}${C.reset} ${C.subtext}${desc}${C.reset}`;
+  return `${v()}  ${C.yellow}${B.dot}${C.reset} ${C.lavender}${flags.padEnd(COL1)}${C.reset}${C.subtext}${desc}${C.reset}`;
 }
 
 function exLine(cmd: string, desc: string): string {
-  return `${v()}  ${C.teal}${B.dot}${C.reset} ${C.teal}${cmd.padEnd(22)}${C.reset} ${C.muted}${desc}${C.reset}`;
+  return `${v()}  ${C.teal}${B.dot}${C.reset} ${C.teal}${cmd.padEnd(COL1)}${C.reset}${C.muted}${desc}${C.reset}`;
 }
 
 function infoLine(key: string, val: string): string {
-  return `${v()}  ${C.peach}${B.dot}${C.reset} ${C.peach}${key.padEnd(10)}${C.reset} ${C.muted}${val}${C.reset}`;
+  return `${v()}  ${C.peach}${B.dot}${C.reset} ${C.peach}${key.padEnd(COL1)}${C.reset}${C.muted}${val}${C.reset}`;
+}
+
+function wbLine(action: string, desc: string): string {
+  return `${v()}  ${C.lavender}${action.padEnd(COL1)}${C.reset}${C.muted}→${C.reset} ${C.subtext}${desc}${C.reset}`;
 }
 
 export function showHelp(): void {
   const version = '3.0.0';
-  const w = 55;
+  const w = 58;
   
   console.log();
   console.log(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}qbar${C.reset} ${C.muted}v${version}${C.reset} ${vc}${B.h.repeat(w - 12)}${C.reset}`);
   console.log(v());
   
   // Commands
-  console.log(label('Comandos'));
-  console.log(cmdLine('menu', 'Menu interativo (TUI)'));
-  console.log(cmdLine('status', 'Mostra quotas no terminal'));
-  console.log(cmdLine('setup', 'Configura Waybar automaticamente'));
-  console.log(cmdLine('update', 'Atualiza qbar para última versão'));
-  console.log(cmdLine('uninstall', 'Remove qbar do sistema'));
+  console.log(label('Commands'));
+  console.log(cmdLine('menu', 'Interactive TUI menu'));
+  console.log(cmdLine('status', 'Show quotas in terminal'));
+  console.log(cmdLine('setup', 'Configure Waybar automatically'));
+  console.log(cmdLine('update', 'Update qbar to latest version'));
+  console.log(cmdLine('uninstall', 'Remove qbar from system'));
   console.log(v());
   
   // Options
-  console.log(label('Opções'));
-  console.log(optLine('-t, --terminal', 'Saída para terminal'));
+  console.log(label('Options'));
+  console.log(optLine('-t, --terminal', 'Terminal output (ANSI colors)'));
   console.log(optLine('-p, --provider', 'claude | codex | antigravity'));
-  console.log(optLine('-r, --refresh', 'Força refresh do cache'));
-  console.log(optLine('-h, --help', 'Mostra esta ajuda'));
+  console.log(optLine('-r, --refresh', 'Force cache refresh'));
+  console.log(optLine('-h, --help', 'Show this help'));
   console.log(v());
   
   // Examples
-  console.log(label('Exemplos'));
-  console.log(exLine('qbar', 'JSON para Waybar'));
-  console.log(exLine('qbar menu', 'Abre menu interativo'));
-  console.log(exLine('qbar status', 'Quotas coloridas'));
-  console.log(exLine('qbar -t -p claude', 'Só Claude'));
+  console.log(label('Examples'));
+  console.log(exLine('qbar', 'JSON output for Waybar'));
+  console.log(exLine('qbar menu', 'Open interactive menu'));
+  console.log(exLine('qbar status', 'Colored quota display'));
+  console.log(exLine('qbar -t -p claude', 'Claude only'));
   console.log(v());
   
   // Waybar
   console.log(label('Waybar'));
-  console.log(`${v()}  ${C.lavender}Click esquerdo${C.reset}  ${C.muted}→${C.reset} ${C.subtext}Menu interativo${C.reset}`);
-  console.log(`${v()}  ${C.lavender}Click direito${C.reset}   ${C.muted}→${C.reset} ${C.subtext}Refresh / Login${C.reset}`);
-  console.log(`${v()}  ${C.lavender}Hover${C.reset}           ${C.muted}→${C.reset} ${C.subtext}Tooltip detalhado${C.reset}`);
+  console.log(wbLine('Left click', 'Interactive menu'));
+  console.log(wbLine('Right click', 'Refresh / Login'));
+  console.log(wbLine('Hover', 'Detailed tooltip'));
   console.log(v());
   
   // Paths
-  console.log(label('Arquivos'));
+  console.log(label('Files'));
   console.log(infoLine('Config', '~/.config/qbar/'));
   console.log(infoLine('Cache', '~/.config/waybar/qbar/cache/'));
   console.log(infoLine('Icons', '~/.config/waybar/qbar/icons/'));

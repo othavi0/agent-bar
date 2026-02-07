@@ -1,91 +1,93 @@
 # qbar
 
-Monitor de quota de LLMs para Waybar.
+LLM quota monitor for Waybar.
 
-Mostra o uso restante de **Claude**, **Codex** e **Antigravity** direto na sua barra.
+Shows remaining usage for **Claude**, **Codex** and **Antigravity** in your bar.
 
-## Instalação
+## Installation
 
 ```bash
-# Clona o repositório
+# Clone the repository
 git clone https://github.com/othavioquiliao/qbar.git
 cd qbar
 
-# Instala as dependências do projeto
+# Install dependencies
 bun install
 
-# Configura tudo automaticamente (copia ícones, edita waybar config/css, cria symlink)
+# Configure everything automatically (copies icons, edits waybar config/css, creates symlink)
 bun src/setup.ts
 ```
 
-Pronto. Os módulos aparecem na Waybar.
+Done. The modules appear in Waybar.
 
-## Uso
+## Usage
 
-| Ação | Descrição |
-|------|-----------|
-| **Hover** | Mostra tooltip com detalhes de quota |
-| **Click esquerdo** | Abre menu interativo |
-| **Click direito** | Refresh (ou login se desconectado) |
+| Action | Description |
+|--------|-------------|
+| **Hover** | Shows tooltip with quota details |
+| **Left click** | Opens interactive menu |
+| **Right click** | Refresh (or login if disconnected) |
 
-### Comandos
+### Commands
 
 ```bash
-qbar              # Output JSON para Waybar
-qbar status       # Mostra quotas no terminal
-qbar menu         # Menu interativo
-qbar setup        # (Re)configura Waybar automaticamente
+qbar              # JSON output for Waybar
+qbar status       # Show quotas in terminal
+qbar menu         # Interactive menu
+qbar setup        # (Re)configure Waybar automatically
+qbar update       # Update qbar to latest version
+qbar uninstall    # Remove qbar from system
 ```
 
-## Login dos Providers
+## Provider Login
 
-Use `qbar menu` → **Provider login**. O qbar instala as CLIs automaticamente via `yay`:
+Use `qbar menu` → **Provider login**. qbar installs CLIs automatically via `yay`:
 
-| Provider | O que faz |
-|----------|-----------|
-| Claude | Usa sua conta do Claude.ai (claude-code CLI) |
-| Codex | Usa sua conta do OpenAI Codex (codex CLI) |
-| Antigravity | Usa Google OAuth (antigravity-usage) |
+| Provider | Description |
+|----------|-------------|
+| Claude | Uses your Claude.ai account (claude-code CLI) |
+| Codex | Uses your OpenAI Codex account (codex CLI) |
+| Antigravity | Uses Google OAuth (antigravity-usage) |
 
-## Cores
+## Colors
 
-| Quota restante | Cor |
-|----------------|-----|
-| ≥60% | 🟢 Verde |
-| ≥30% | 🟡 Amarelo |
-| ≥10% | 🟠 Laranja |
-| <10% | 🔴 Vermelho |
+| Remaining | Color |
+|-----------|-------|
+| ≥60% | 🟢 Green |
+| ≥30% | 🟡 Yellow |
+| ≥10% | 🟠 Orange |
+| <10% | 🔴 Red |
 
 ## Troubleshooting
 
-**Waybar não inicia após setup?**
+**Waybar doesn't start after setup?**
 ```bash
-# Restaura backup (criado automaticamente)
+# Restore backup (created automatically)
 ls ~/.config/waybar/*.qbar-backup-*
 cp ~/.config/waybar/config.jsonc.qbar-backup-XXXXX ~/.config/waybar/config.jsonc
 ```
 
-**Provider mostra ícone de desconectado (󱘖)?**
-- Click direito no módulo para iniciar o login
+**Provider shows disconnected icon (󱘖)?**
+- Right-click the module to start login
 
-**Refresh não atualiza valor?**
-- O cache dura 2 minutos. Click direito força refresh imediato.
+**Refresh doesn't update value?**
+- Cache lasts 2 minutes. Right-click forces immediate refresh.
 
-## Arquitetura
+## Architecture
 
 ```
 ~/.config/waybar/
-├── config.jsonc          # Módulos qbar-claude, qbar-codex, qbar-antigravity
-├── style.css             # Estilos e cores dos módulos
-├── qbar/icons/           # Ícones PNG dos providers
+├── config.jsonc              # qbar-claude, qbar-codex, qbar-antigravity modules
+├── style.css                 # Module styles and colors
+├── qbar/icons/               # Provider PNG icons
 └── scripts/
-    └── qbar-open-terminal  # Helper para abrir terminal flutuante
+    └── qbar-open-terminal    # Helper for floating terminal
 
 ~/.config/qbar/
-└── settings.json         # Preferências do usuário
+└── settings.json             # User preferences
 
 ~/.config/waybar/qbar/cache/
-└── *.json                # Cache de quotas (TTL 2min)
+└── *.json                    # Quota cache (2min TTL)
 ```
 
 ## License
