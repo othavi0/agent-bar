@@ -75,6 +75,12 @@ async function main() {
     
     case 'waybar':
     default:
+      // If running in interactive terminal without explicit command, show help
+      if (process.stdout.isTTY && args.length === 0) {
+        showHelp();
+        break;
+      }
+      
       // If single provider requested, use individual format for separate modules
       if (options.provider && quotas.providers.length === 1) {
         console.log(JSON.stringify(formatProviderForWaybar(quotas.providers[0])));
