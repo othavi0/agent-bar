@@ -2,6 +2,8 @@
 
 qbar is a tiny quota/usage monitor for **Waybar**.
 
+**Status:** Omarchy-first (Arch + yay). It will probably work on other Waybar setups, but I’m optimizing for Omarchy.
+
 It shows your remaining usage for:
 - **Claude** (Anthropic)
 - **Codex** (OpenAI Codex CLI)
