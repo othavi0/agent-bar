@@ -61,7 +61,10 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       );
 
       const ok = await ensureClaudeCli();
-      if (!ok) return;
+      if (!ok) {
+        await waitEnter();
+        return;
+      }
 
       await runInteractive('claude');
       await waitEnter();
@@ -75,7 +78,10 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       );
 
       const ok = await ensureCodexCli();
-      if (!ok) return;
+      if (!ok) {
+        await waitEnter();
+        return;
+      }
 
       await runInteractive('codex', ['auth', 'login']);
       await waitEnter();
@@ -92,7 +98,10 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       );
 
       const ok = await ensureAntigravityUsage();
-      if (!ok) return;
+      if (!ok) {
+        await waitEnter();
+        return;
+      }
 
       const { readdirSync, statSync } = await import('node:fs');
       const { join } = await import('node:path');

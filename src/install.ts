@@ -7,10 +7,26 @@ import { colorize, semantic } from './tui/colors';
  */
 
 export async function hasCmd(cmd: string): Promise<boolean> {
+  // Check via Bun.which first
   if (typeof Bun.which === 'function') {
-    return Bun.which(cmd) !== null;
+    if (Bun.which(cmd) !== null) return true;
   }
 
+  // Fallback: check common locations for bun global packages
+  const { existsSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const home = process.env.HOME ?? '';
+  
+  const bunGlobalPaths = [
+    join(home, '.cache', '.bun', 'bin', cmd),
+    join(home, '.bun', 'bin', cmd),
+  ];
+  
+  for (const p of bunGlobalPaths) {
+    if (existsSync(p)) return true;
+  }
+
+  // Fallback: which command
   try {
     const proc = Bun.spawn(['which', cmd], { stdout: 'ignore', stderr: 'ignore' });
     return await proc.exited === 0;
