@@ -43,12 +43,14 @@ async function ensureAntigravityUsage(): Promise<boolean> {
 
 async function ensureClaudeCli(): Promise<boolean> {
   // Omarchy-only: force AUR latest
-  return await ensureYayPackage('aur/claude-code', 'aur/claude-code');
+  // binName='claude' because the package is claude-code but binary is claude
+  return await ensureYayPackage('aur/claude-code', 'aur/claude-code', 'claude');
 }
 
 async function ensureCodexCli(): Promise<boolean> {
   // Omarchy-only: force AUR latest
-  return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin');
+  // binName='codex' because the package is openai-codex-bin but binary is codex
+  return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin', 'codex');
 }
 
 export async function loginProviderFlow(): Promise<void> {

@@ -50,7 +50,13 @@ export async function ensureYay(): Promise<boolean> {
   return false;
 }
 
-export async function ensureYayPackage(pkg: string, label?: string): Promise<boolean> {
+export async function ensureYayPackage(pkg: string, label?: string, binName?: string): Promise<boolean> {
+  // Check if binary already exists (skip yay entirely if so)
+  const bin = binName ?? pkg.replace(/^aur\//, '').replace(/-bin$/, '');
+  if (await hasCmd(bin)) {
+    return true; // Already installed, no need to run yay
+  }
+
   const ok = await ensureYay();
   if (!ok) return false;
 
