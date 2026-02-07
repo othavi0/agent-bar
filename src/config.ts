@@ -26,9 +26,10 @@ export const CONFIG = {
 
   // Cache settings
   cache: {
-    ttlMs: 300_000,          // 5 minutes default TTL (hover won't trigger refresh)
-    codexTtlMs: 300_000,     // 5 minutes for Codex
-    lockTimeoutMs: 5_000,    // Lock timeout
+    ttlMs: 300_000,              // 5 minutes default TTL
+    codexTtlMs: 300_000,         // 5 minutes for Codex
+    antigravityTtlMs: 900_000,   // 15 minutes for Antigravity (API is slower)
+    lockTimeoutMs: 5_000,        // Lock timeout
   },
 
   // API settings

@@ -21,10 +21,10 @@ case "${1:-}" in
     shift
     exec bun src/refresh.ts "$@"
     ;;
-  refresh-waybar)
-    # Force refresh with waybar animation (no terminal)
+  action-right)
+    # Waybar right-click: login if disconnected, else refresh
     shift
-    exec bun src/refresh-waybar.ts "$@"
+    exec bun src/action-right.ts "$@"
     ;;
   status)
     # Terminal output

@@ -136,7 +136,7 @@ Open `~/.config/waybar/config.jsonc` and:
   "interval": 60,
   "tooltip": true,
   "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh claude"
+  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right claude"
 },
 
 "custom/qbar-codex": {
@@ -145,7 +145,7 @@ Open `~/.config/waybar/config.jsonc` and:
   "interval": 60,
   "tooltip": true,
   "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh codex"
+  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right codex"
 },
 
 "custom/qbar-antigravity": {
@@ -154,7 +154,7 @@ Open `~/.config/waybar/config.jsonc` and:
   "interval": 60,
   "tooltip": true,
   "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar refresh antigravity"
+  "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right antigravity"
 }
 ```
 
@@ -205,8 +205,10 @@ qbar status --provider claude
 qbar menu
 ```
 
-### Refresh
-Right-click a provider module in the bar.
+### Refresh / Login (right-click)
+Right-click a provider module in the bar:
+- If it’s connected: refresh
+- If it’s disconnected: start the provider login flow
 
 ---
 

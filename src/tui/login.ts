@@ -1,6 +1,7 @@
 import * as p from '@clack/prompts';
 import { providers } from '../providers';
 import { catppuccin, semantic, colorize } from './colors';
+import { ensureBunGlobalPackage, ensureYayPackage } from '../install';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -36,33 +37,18 @@ function resolveAntigravityUsagePath(): string {
 }
 
 async function ensureAntigravityUsage(): Promise<boolean> {
-  // Check if already installed
-  if (await commandExists('antigravity-usage')) {
-    return true;
-  }
+  // antigravity-usage is distributed as a JS CLI, easiest is bun global.
+  return await ensureBunGlobalPackage('antigravity-usage', 'antigravity-usage');
+}
 
-  // Install silently with bun
-  const spinner = p.spinner();
-  spinner.start('Installing dependencies...');
-  
-  try {
-    const proc = Bun.spawn(['bun', 'add', '-g', 'antigravity-usage'], {
-      stdout: 'ignore',
-      stderr: 'ignore',
-    });
-    const code = await proc.exited;
-    
-    if (code === 0) {
-      spinner.stop(colorize('Dependencies ready', semantic.good));
-      return true;
-    } else {
-      spinner.stop(colorize('Failed to install dependencies', semantic.danger));
-      return false;
-    }
-  } catch (error) {
-    spinner.stop(colorize('Failed to install dependencies', semantic.danger));
-    return false;
-  }
+async function ensureClaudeCli(): Promise<boolean> {
+  // Omarchy package: omarchy/claude-code
+  return await ensureYayPackage('claude-code', 'claude-code');
+}
+
+async function ensureCodexCli(): Promise<boolean> {
+  // Prefer Omarchy/AUR auto-updated binary
+  return await ensureYayPackage('openai-codex-bin', 'openai-codex (codex)');
 }
 
 export async function loginProviderFlow(): Promise<void> {
@@ -118,6 +104,9 @@ export async function loginProviderFlow(): Promise<void> {
       
       if (p.isCancel(cont) || !cont) return;
       
+      const ok = await ensureClaudeCli();
+      if (!ok) return;
+
       await runInteractive('claude');
       break;
     }
@@ -135,6 +124,9 @@ export async function loginProviderFlow(): Promise<void> {
       
       if (p.isCancel(cont) || !cont) return;
       
+      const ok = await ensureCodexCli();
+      if (!ok) return;
+
       await runInteractive('codex', ['auth', 'login']);
       break;
     }

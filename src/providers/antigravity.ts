@@ -136,7 +136,7 @@ export class AntigravityProvider implements Provider {
       return await cache.getOrFetch<ProviderQuota>(
         cacheKey,
         async () => await this.fetchQuotaFromAPI(base, tokens),
-        CONFIG.cache.ttlMs
+        CONFIG.cache.antigravityTtlMs
       );
     } catch (error) {
       logger.error('Antigravity quota fetch error', { error });
