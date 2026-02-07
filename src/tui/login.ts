@@ -42,13 +42,13 @@ async function ensureAntigravityUsage(): Promise<boolean> {
 }
 
 async function ensureClaudeCli(): Promise<boolean> {
-  // Omarchy package: omarchy/claude-code
-  return await ensureYayPackage('claude-code', 'claude-code');
+  // Omarchy-only: force AUR latest
+  return await ensureYayPackage('aur/claude-code', 'aur/claude-code');
 }
 
 async function ensureCodexCli(): Promise<boolean> {
-  // Prefer Omarchy/AUR auto-updated binary
-  return await ensureYayPackage('openai-codex-bin', 'openai-codex (codex)');
+  // Omarchy-only: force AUR latest
+  return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin');
 }
 
 export async function loginProviderFlow(): Promise<void> {

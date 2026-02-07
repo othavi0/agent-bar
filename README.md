@@ -135,7 +135,7 @@ Open `~/.config/waybar/config.jsonc` and:
 "custom/qbar-claude": {
   "exec": "$HOME/.local/bin/qbar --provider claude",
   "return-type": "json",
-  "interval": 60,
+  "interval": 300,
   "tooltip": true,
   "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
   "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right claude"
@@ -144,7 +144,7 @@ Open `~/.config/waybar/config.jsonc` and:
 "custom/qbar-codex": {
   "exec": "$HOME/.local/bin/qbar --provider codex",
   "return-type": "json",
-  "interval": 60,
+  "interval": 300,
   "tooltip": true,
   "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
   "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right codex"
@@ -153,7 +153,7 @@ Open `~/.config/waybar/config.jsonc` and:
 "custom/qbar-antigravity": {
   "exec": "$HOME/.local/bin/qbar --provider antigravity",
   "return-type": "json",
-  "interval": 60,
+  "interval": 300,
   "tooltip": true,
   "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
   "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right antigravity"

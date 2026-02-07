@@ -23,11 +23,11 @@ async function ensureAntigravityUsage(): Promise<boolean> {
 }
 
 async function ensureClaudeCli(): Promise<boolean> {
-  return await ensureYayPackage('claude-code', 'claude-code');
+  return await ensureYayPackage('aur/claude-code', 'aur/claude-code');
 }
 
 async function ensureCodexCli(): Promise<boolean> {
-  return await ensureYayPackage('openai-codex-bin', 'openai-codex (codex)');
+  return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin');
 }
 
 async function waitEnter(): Promise<void> {
