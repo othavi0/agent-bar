@@ -262,7 +262,7 @@ function buildText(quotas: AllQuotas): string {
 }
 
 function getClass(quotas: AllQuotas): string {
-  const classes: string[] = ['llm-usage'];
+  const classes: string[] = ['qbar'];
   
   for (const p of quotas.providers) {
     if (!p.available) continue;
