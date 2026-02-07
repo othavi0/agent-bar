@@ -24,6 +24,10 @@ case "${1:-}" in
     # Remove all qbar files from system
     exec bun src/uninstall.ts
     ;;
+  update)
+    # Update qbar to latest version
+    exec bun src/update.ts
+    ;;
   refresh)
     # Force refresh with ora spinner (terminal)
     shift
