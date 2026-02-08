@@ -438,8 +438,39 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
     case 'amp': tooltip = buildAmpTooltip(quota); break;
   }
   
+  // For antigravity: show per-family percentages (Claude, Gemini, GPT, etc.)
+  let text = pctColored(val);
+  if (quota.provider === 'antigravity' && quota.models) {
+    const models = filterModels(quota.models);
+    if (models.length > 0) {
+      // Group by family, take lowest % per family
+      const families = new Map<string, number>();
+      for (const m of models) {
+        const lower = m.name.toLowerCase();
+        const family = lower.includes('claude') ? 'Claude'
+          : lower.includes('gemini') ? 'Gemini'
+          : lower.includes('gpt') ? 'GPT'
+          : m.name.split(' ')[0]; // fallback: first word
+        const prev = families.get(family) ?? 100;
+        families.set(family, Math.min(prev, m.remaining ?? 0));
+      }
+
+      const sep = s(C.muted, '│');
+      text = [...families.entries()]
+        .map(([, pctVal]) => s(getColorForPercent(pctVal), pct(pctVal)))
+        .join(sep);
+
+      // Status based on worst family
+      const worst = Math.min(...families.values());
+      if (worst < 10) status = 'critical';
+      else if (worst < 30) status = 'warn';
+      else if (worst < 60) status = 'low';
+      else status = 'ok';
+    }
+  }
+
   return {
-    text: pctColored(val),
+    text,
     tooltip,
     class: `qbar-${quota.provider} ${status}`,
   };
