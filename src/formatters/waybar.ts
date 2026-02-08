@@ -279,25 +279,51 @@ function buildAntigravityTooltip(p: ProviderQuota): string {
 function buildAmpTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
   const v = s(C.mauve, B.v);
+  const m = p.meta ?? {};
+  const W = 40; // box width
 
-  lines.push(s(C.mauve, B.tl + B.h) + ' ' + s(C.mauve, 'Amp', true) + ' ' + s(C.mauve, B.h.repeat(53)));
+  lines.push(s(C.mauve, B.tl + B.h) + ' ' + s(C.mauve, 'Amp', true) + ' ' + s(C.mauve, B.h.repeat(W)));
   lines.push(v);
 
   if (p.error) {
     lines.push(v + '  ' + s(C.red, `⚠️ ${p.error}`));
-  } else if (p.models && Object.keys(p.models).length > 0) {
-    const maxLen = Math.max(...Object.keys(p.models).map(n => n.length), 20);
+  } else {
+    // --- Free Tier ---
+    const free = p.models?.['Free Tier'];
+    if (free) {
+      lines.push(label('Free Tier', C.mauve));
+      const b = bar(free.remaining);
+      const pctS = s(getColorForPercent(free.remaining), pct(free.remaining).padStart(4));
+      lines.push(v + '  ' + indicator(free.remaining) + ' ' + b + ' ' + pctS);
 
-    lines.push(label('Usage', C.mauve));
-    for (const [name, window] of Object.entries(p.models)) {
-      const nameS = s(C.lavender, name.padEnd(maxLen));
-      const b = bar(window.remaining);
-      const pctS = s(getColorForPercent(window.remaining), pct(window.remaining).padStart(4));
-      lines.push(v + '  ' + indicator(window.remaining) + ' ' + nameS + ' ' + b + ' ' + pctS);
-      if (window.resetsAt && window.remaining !== 100) {
-        const indent = ' '.repeat(maxLen + 4);
-        lines.push(v + '  ' + indent + s(C.teal, `→ full ${eta(window.resetsAt, window.remaining)} ${resetTime(window.resetsAt, window.remaining)}`));
+      // Dollar amounts
+      const dollarLine = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
+      if (dollarLine) {
+        lines.push(v + '    ' + s(C.text, dollarLine));
       }
+
+      // Replenish rate + bonus on same line
+      const details: string[] = [];
+      if (m.replenishRate) details.push('↻ ' + m.replenishRate);
+      if (m.bonus) details.push('⚡ ' + m.bonus);
+      if (details.length > 0) {
+        lines.push(v + '    ' + s(C.teal, details.join('  ')));
+      }
+
+      // ETA to full
+      if (free.resetsAt && free.remaining !== 100) {
+        lines.push(v + '    ' + s(C.teal, `→ full ${eta(free.resetsAt, free.remaining)} ${resetTime(free.resetsAt, free.remaining)}`));
+      }
+    }
+
+    // --- Credits ---
+    const credits = p.models?.['Credits'];
+    if (credits) {
+      lines.push(v);
+      lines.push(label('Credits', C.mauve));
+      const balance = m.creditsBalance ?? '$0';
+      const color = credits.remaining > 0 ? C.green : C.muted;
+      lines.push(v + '  ' + indicator(credits.remaining) + ' ' + s(color, balance));
     }
   }
 
@@ -307,7 +333,7 @@ function buildAmpTooltip(p: ProviderQuota): string {
   }
 
   lines.push(v);
-  lines.push(s(C.mauve, B.bl + B.h.repeat(55)));
+  lines.push(s(C.mauve, B.bl + B.h.repeat(W + 2)));
 
   return lines.join('\n');
 }

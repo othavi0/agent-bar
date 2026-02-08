@@ -246,24 +246,60 @@ function buildAntigravity(p: ProviderQuota): string[] {
 function buildAmp(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = C.mauve;
+  const m = p.meta ?? {};
 
   lines.push(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Amp${C.reset} ${vc}${B.h.repeat(53)}${C.reset}`);
   lines.push(v(vc));
 
   if (p.error) {
     lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
-  } else if (!p.models || Object.keys(p.models).length === 0) {
-    lines.push(`${v(vc)}  ${C.muted}No usage data${C.reset}`);
   } else {
-    const entries = Object.entries(p.models);
-    const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
+    // Free Tier
+    const free = p.models?.['Free Tier'];
+    if (free) {
+      lines.push(label('Free Tier', vc));
+      const barS = bar(free.remaining);
+      const pctS = `${getColor(free.remaining)}${pct(free.remaining).padStart(4)}${C.reset}`;
+      lines.push(`${v(vc)}  ${indicator(free.remaining)} ${barS} ${pctS}`);
 
-    lines.push(label('Usage', vc));
-    for (const [name, window] of entries) {
-      const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
-      const barS = bar(window.remaining);
-      const pctS = `${getColor(window.remaining)}${pct(window.remaining).padStart(4)}${C.reset}`;
-      lines.push(`${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`);
+      const dollarLine = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
+      if (dollarLine) {
+        lines.push(`${v(vc)}    ${C.text}${dollarLine}${C.reset}`);
+      }
+
+      const details: string[] = [];
+      if (m.replenishRate) details.push(`↻ ${m.replenishRate}`);
+      if (m.bonus) details.push(`⚡ ${m.bonus}`);
+      if (details.length > 0) {
+        lines.push(`${v(vc)}    ${C.teal}${details.join('  ')}${C.reset}`);
+      }
+
+      if (free.resetsAt && free.remaining !== 100) {
+        lines.push(`${v(vc)}    ${C.teal}→ full ${eta(free.resetsAt, free.remaining)} ${resetTime(free.resetsAt, free.remaining)}${C.reset}`);
+      }
+    }
+
+    // Credits
+    const credits = p.models?.['Credits'];
+    if (credits) {
+      lines.push(v(vc));
+      lines.push(label('Credits', vc));
+      const balance = m.creditsBalance ?? '$0';
+      const color = credits.remaining > 0 ? C.green : C.muted;
+      lines.push(`${v(vc)}  ${indicator(credits.remaining)} ${color}${balance}${C.reset}`);
+    }
+
+    // Fallback for unknown models
+    if (!free && !credits && p.models && Object.keys(p.models).length > 0) {
+      const entries = Object.entries(p.models);
+      const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
+      lines.push(label('Usage', vc));
+      for (const [name, window] of entries) {
+        const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
+        const barS = bar(window.remaining);
+        const pctS = `${getColor(window.remaining)}${pct(window.remaining).padStart(4)}${C.reset}`;
+        lines.push(`${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`);
+      }
     }
   }
 

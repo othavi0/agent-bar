@@ -46,9 +46,29 @@ export async function configureWaybar(): Promise<boolean> {
     return false;
   }
 
-  settings.waybar.providers = result as string[];
+  const selected = result as string[];
+  const added = selected.filter(id => !settings.waybar.providers.includes(id));
+  const removed = settings.waybar.providers.filter(id => !selected.includes(id));
+
+  settings.waybar.providers = selected;
   await saveSettings(settings);
 
-  p.log.success(colorize('Waybar configuration saved', semantic.good));
+  // Show what changed
+  if (added.length > 0) {
+    p.log.success(colorize(`Added: ${added.join(', ')}`, semantic.good));
+  }
+  if (removed.length > 0) {
+    p.log.info(colorize(`Removed: ${removed.join(', ')}`, semantic.muted));
+  }
+
+  // Reload waybar so changes are visible immediately
+  try {
+    const { execSync } = await import('node:child_process');
+    execSync('killall -SIGUSR2 waybar', { stdio: 'ignore' });
+    p.log.success(colorize('Waybar reloaded ✓', semantic.good));
+  } catch {
+    p.log.warn(colorize('Could not reload waybar automatically', semantic.warning));
+  }
+
   return true;
 }

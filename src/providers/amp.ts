@@ -122,6 +122,7 @@ export class AmpProvider implements Provider {
       }
 
       const models: Record<string, QuotaWindow> = {};
+      const meta: Record<string, string> = {};
 
       if (freeMatch) {
         const remaining = parseFloat(freeMatch[1]);
@@ -132,7 +133,6 @@ export class AmpProvider implements Provider {
         let fullAt: string | null = null;
         if (replenishMatch && remaining < total) {
           const ratePerHour = parseFloat(replenishMatch[1]);
-          // With bonus, effective rate is doubled
           const effectiveRate = bonusMatch ? ratePerHour * (1 + parseInt(bonusMatch[1]) / 100) : ratePerHour;
           const deficit = total - remaining;
           const hoursToFull = deficit / effectiveRate;
@@ -140,15 +140,17 @@ export class AmpProvider implements Provider {
           fullAt = new Date(Date.now() + msToFull).toISOString();
         }
         
-        let label = `Free $${remaining}/$${total}`;
-        if (replenishRate) label += ` (${replenishRate})`;
-        if (bonus) label += ` ${bonus}`;
-        models[label] = { remaining: pct, resetsAt: fullAt };
+        models['Free Tier'] = { remaining: pct, resetsAt: fullAt };
+        meta['freeRemaining'] = `$${remaining}`;
+        meta['freeTotal'] = `$${total}`;
+        if (replenishRate) meta['replenishRate'] = replenishRate;
+        if (bonus) meta['bonus'] = bonus;
       }
 
       if (creditsMatch) {
         const balance = parseFloat(creditsMatch[1]);
-        models[`Credits $${balance}`] = { remaining: balance > 0 ? 100 : 0, resetsAt: null };
+        models['Credits'] = { remaining: balance > 0 ? 100 : 0, resetsAt: null };
+        meta['creditsBalance'] = `$${balance}`;
       }
 
       return {
@@ -158,6 +160,7 @@ export class AmpProvider implements Provider {
         primary,
         extraUsage,
         models,
+        meta,
       };
     } catch (error) {
       logger.error('Amp usage parse error', { error });

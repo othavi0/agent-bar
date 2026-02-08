@@ -39,6 +39,8 @@ export interface ProviderQuota {
     limit: number;
     used: number;
   };
+  /** Arbitrary key-value metadata for provider-specific display */
+  meta?: Record<string, string>;
 }
 
 /**

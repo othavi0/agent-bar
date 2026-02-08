@@ -3,13 +3,13 @@
  *
  * Used by Waybar right-click.
  * - If provider is disconnected/expired: start login flow.
- * - Else: refresh that provider and show result.
+ * - Else: refresh that provider and show full status in terminal.
  */
 
 import * as p from '@clack/prompts';
-import { getProvider } from './providers';
+import { getProvider, getQuotaFor } from './providers';
 import { loadSettings, saveSettings } from './settings';
-import { getQuotaFor } from './providers';
+import { outputTerminal } from './formatters/terminal';
 import { colorize, semantic } from './tui/colors';
 
 async function activateProvider(providerId: string): Promise<void> {
@@ -67,19 +67,17 @@ export async function handleActionRight(providerId: string): Promise<void> {
     return;
   }
 
-  // Otherwise: refresh and show status
+  // Otherwise: refresh and show full terminal output
   p.intro(colorize(`Refreshing ${provider.name}...`, semantic.accent));
 
-  const fresh = await provider.getQuota();
-
-  if (fresh.error) {
-    p.log.error(colorize(`⚠️ ${fresh.error}`, semantic.danger));
-  } else if (fresh.primary) {
-    const pct = fresh.primary.remaining ?? 0;
-    const color = pct >= 60 ? semantic.good : pct >= 30 ? semantic.warning : semantic.danger;
-    p.log.success(colorize(`${provider.name}: ${pct}% remaining`, color));
+  const fresh = await getQuotaFor(providerId);
+  if (fresh) {
+    outputTerminal({
+      providers: [fresh],
+      fetchedAt: new Date().toISOString(),
+    });
   } else {
-    p.log.success(colorize(`${provider.name}: refreshed`, semantic.good));
+    p.log.error(colorize(`Failed to fetch ${provider.name} quota`, semantic.danger));
   }
 
   await waitEnter();
