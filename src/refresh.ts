@@ -62,10 +62,24 @@ async function refresh() {
   
   // Signal waybar to update with new data
   Bun.spawn(['pkill', '-SIGUSR2', 'waybar']);
-  
-  // Simple wait - no stdin tricks
-  console.log('\n\x1b[2m(closing in 5s...)\x1b[0m');
-  await Bun.sleep(5000);
+
+  // Auto-close after showing results
+  console.log('\n\x1b[2m(closing in 3s or press Enter...)\x1b[0m');
+  await Promise.race([
+    Bun.sleep(3000),
+    new Promise<void>((resolve) => {
+      try {
+        const { createInterface } = require('node:readline');
+        const rl = createInterface({ input: process.stdin });
+        rl.once('line', () => {
+          rl.close();
+          resolve();
+        });
+      } catch {
+        // ignore if stdin unavailable
+      }
+    }),
+  ]);
 }
 
 refresh();
