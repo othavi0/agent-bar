@@ -33,6 +33,13 @@ async function main() {
     process.exit(0);
   }
 
+  // Handle action-right (waybar right-click)
+  if (options.command === 'action-right') {
+    const { handleActionRight } = await import('./action-right');
+    await handleActionRight(options.provider ?? '');
+    process.exit(0);
+  }
+
   // Handle cache refresh
   if (options.refresh) {
     await cache.invalidate('codex-quota');
@@ -46,6 +53,12 @@ async function main() {
   let quotas: AllQuotas;
 
   if (options.provider) {
+    // If provider is disabled in waybar settings, output empty (hidden module)
+    if (!settings.waybar.providers.includes(options.provider)) {
+      console.log(JSON.stringify({ text: '', tooltip: '', class: 'qbar-hidden' }));
+      process.exit(0);
+    }
+
     const quota = await getQuotaFor(options.provider);
     if (!quota) {
       logger.error(`Unknown provider: ${options.provider}`);

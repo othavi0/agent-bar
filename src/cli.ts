@@ -1,7 +1,7 @@
 import { logger } from './logger';
 
 export interface CliOptions {
-  command: 'waybar' | 'terminal' | 'menu' | 'status' | 'help';
+  command: 'waybar' | 'terminal' | 'menu' | 'status' | 'help' | 'action-right';
   refresh: boolean;
   provider?: string;
   verbose: boolean;
@@ -106,6 +106,10 @@ export function parseArgs(args: string[]): CliOptions {
         break;
       case 'status':
         options.command = 'status';
+        break;
+      case 'action-right':
+        options.command = 'action-right';
+        options.provider = args[++i];
         break;
       case '--terminal':
       case '-t':

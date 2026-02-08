@@ -293,8 +293,11 @@ function buildAmpTooltip(p: ProviderQuota): string {
       const nameS = s(C.lavender, name.padEnd(maxLen));
       const b = bar(window.remaining);
       const pctS = s(getColorForPercent(window.remaining), pct(window.remaining).padStart(4));
-      const etaS = window.resetsAt ? ' ' + s(C.teal, `→ full ${eta(window.resetsAt, window.remaining)} ${resetTime(window.resetsAt, window.remaining)}`) : '';
-      lines.push(v + '  ' + indicator(window.remaining) + ' ' + nameS + ' ' + b + ' ' + pctS + etaS);
+      lines.push(v + '  ' + indicator(window.remaining) + ' ' + nameS + ' ' + b + ' ' + pctS);
+      if (window.resetsAt && window.remaining !== 100) {
+        const indent = ' '.repeat(maxLen + 4);
+        lines.push(v + '  ' + indent + s(C.teal, `→ full ${eta(window.resetsAt, window.remaining)} ${resetTime(window.resetsAt, window.remaining)}`));
+      }
     }
   }
 

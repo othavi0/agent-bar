@@ -1,31 +1,16 @@
-#!/usr/bin/env bun
-
 /**
  * qbar action-right <provider>
  *
  * Used by Waybar right-click.
- * - If provider is disconnected: start login flow.
- * - Else: refresh that provider.
+ * - If provider is disconnected/expired: start login flow.
+ * - Else: refresh that provider and show result.
  */
 
+import * as p from '@clack/prompts';
 import { getProvider } from './providers';
 import { loadSettings, saveSettings } from './settings';
-
-const providerId = process.argv[2];
-
-if (!providerId) {
-  console.error('Usage: qbar action-right <provider>');
-  process.exit(1);
-}
-
-const provider = getProvider(providerId);
-if (!provider) {
-  console.error(`Unknown provider: ${providerId}`);
-  process.exit(1);
-}
-
-// help TS understand provider is defined after the guard
-const prov = provider;
+import { getQuotaFor } from './providers';
+import { colorize, semantic } from './tui/colors';
 
 async function activateProvider(providerId: string): Promise<void> {
   const settings = await loadSettings();
@@ -36,8 +21,32 @@ async function activateProvider(providerId: string): Promise<void> {
   await saveSettings(settings);
 }
 
-async function main() {
-  const available = await prov.isAvailable();
+async function waitEnter(): Promise<void> {
+  const { createInterface } = await import('node:readline');
+  p.log.info(colorize('Press Enter to close...', semantic.subtitle));
+  return new Promise<void>((resolve) => {
+    const rl = createInterface({ input: process.stdin });
+    rl.once('line', () => {
+      rl.close();
+      resolve();
+    });
+  });
+}
+
+export async function handleActionRight(providerId: string): Promise<void> {
+  if (!providerId) {
+    console.error('Usage: qbar action-right <provider>');
+    process.exit(1);
+  }
+
+  const provider = getProvider(providerId);
+  if (!provider) {
+    console.error(`Unknown provider: ${providerId}`);
+    await waitEnter();
+    return;
+  }
+
+  const available = await provider.isAvailable();
 
   // If not available: go straight to login.
   if (!available) {
@@ -48,7 +57,7 @@ async function main() {
   }
 
   // If available, check if provider is effectively disconnected (expired token, etc.)
-  const quota = await prov.getQuota();
+  const quota = await provider.getQuota();
   const looksDisconnected = !!quota.error && /expired|not logged in|login again|please login/i.test(quota.error);
 
   if (looksDisconnected) {
@@ -58,16 +67,20 @@ async function main() {
     return;
   }
 
-  // Otherwise: refresh
-  const proc = Bun.spawn(['bun', 'src/refresh.ts', providerId], {
-    stdin: 'inherit',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  await proc.exited;
-}
+  // Otherwise: refresh and show status
+  p.intro(colorize(`Refreshing ${provider.name}...`, semantic.accent));
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+  const fresh = await provider.getQuota();
+
+  if (fresh.error) {
+    p.log.error(colorize(`⚠️ ${fresh.error}`, semantic.danger));
+  } else if (fresh.primary) {
+    const pct = fresh.primary.remaining ?? 0;
+    const color = pct >= 60 ? semantic.good : pct >= 30 ? semantic.warning : semantic.danger;
+    p.log.success(colorize(`${provider.name}: ${pct}% remaining`, color));
+  } else {
+    p.log.success(colorize(`${provider.name}: refreshed`, semantic.good));
+  }
+
+  await waitEnter();
+}
