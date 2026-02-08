@@ -282,6 +282,11 @@ function buildAmpTooltip(p: ProviderQuota): string {
   const m = p.meta ?? {};
   const W = 40; // box width
 
+  // Thin tree connectors
+  const tee = s(C.muted, '├─');   // branch
+  const end = s(C.muted, '└─');   // last branch
+  const vt  = s(C.muted, '│');    // thin vertical (continuation)
+
   lines.push(s(C.mauve, B.tl + B.h) + ' ' + s(C.mauve, 'Amp', true) + ' ' + s(C.mauve, B.h.repeat(W)));
   lines.push(v);
 
@@ -291,28 +296,31 @@ function buildAmpTooltip(p: ProviderQuota): string {
     // --- Free Tier ---
     const free = p.models?.['Free Tier'];
     if (free) {
-      lines.push(label('Free Tier', C.mauve));
       const b = bar(free.remaining);
       const pctS = s(getColorForPercent(free.remaining), pct(free.remaining).padStart(4));
+      lines.push(label('Free Tier', C.mauve));
       lines.push(v + '  ' + indicator(free.remaining) + ' ' + b + ' ' + pctS);
 
-      // Dollar amounts
-      const dollarLine = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
-      if (dollarLine) {
-        lines.push(v + '    ' + s(C.text, dollarLine));
-      }
+      // Build sub-details as tree branches
+      const subs: string[] = [];
 
-      // Replenish rate + bonus on same line
-      const details: string[] = [];
-      if (m.replenishRate) details.push('↻ ' + m.replenishRate);
-      if (m.bonus) details.push('⚡ ' + m.bonus);
-      if (details.length > 0) {
-        lines.push(v + '    ' + s(C.teal, details.join('  ')));
-      }
+      // Dollar + rate on one line
+      const dollarParts: string[] = [];
+      if (m.replenishRate) dollarParts.push(s(C.teal, m.replenishRate));
+      const dollars = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
+      if (dollars) dollarParts.push(s(C.text, `( ${dollars} )`));
+      if (m.bonus) dollarParts.push(s(C.teal, m.bonus));
+      if (dollarParts.length > 0) subs.push(dollarParts.join('  '));
 
       // ETA to full
       if (free.resetsAt && free.remaining !== 100) {
-        lines.push(v + '    ' + s(C.teal, `→ full ${eta(free.resetsAt, free.remaining)} ${resetTime(free.resetsAt, free.remaining)}`));
+        subs.push(s(C.teal, `Full in ${eta(free.resetsAt, free.remaining)}  ${resetTime(free.resetsAt, free.remaining)}`));
+      }
+
+      // Render tree branches
+      for (let i = 0; i < subs.length; i++) {
+        const connector = i === subs.length - 1 ? end : tee;
+        lines.push(v + '  ' + connector + ' ' + subs[i]);
       }
     }
 
@@ -320,9 +328,9 @@ function buildAmpTooltip(p: ProviderQuota): string {
     const credits = p.models?.['Credits'];
     if (credits) {
       lines.push(v);
-      lines.push(label('Credits', C.mauve));
       const balance = m.creditsBalance ?? '$0';
       const color = credits.remaining > 0 ? C.green : C.muted;
+      lines.push(label('Credits', C.mauve));
       lines.push(v + '  ' + indicator(credits.remaining) + ' ' + s(color, balance));
     }
   }

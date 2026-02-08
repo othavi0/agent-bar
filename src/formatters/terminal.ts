@@ -254,6 +254,10 @@ function buildAmp(p: ProviderQuota): string[] {
   if (p.error) {
     lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
   } else {
+    // Thin tree connectors
+    const tee = `${C.muted}├─${C.reset}`;
+    const end = `${C.muted}└─${C.reset}`;
+
     // Free Tier
     const free = p.models?.['Free Tier'];
     if (free) {
@@ -262,20 +266,23 @@ function buildAmp(p: ProviderQuota): string[] {
       const pctS = `${getColor(free.remaining)}${pct(free.remaining).padStart(4)}${C.reset}`;
       lines.push(`${v(vc)}  ${indicator(free.remaining)} ${barS} ${pctS}`);
 
-      const dollarLine = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
-      if (dollarLine) {
-        lines.push(`${v(vc)}    ${C.text}${dollarLine}${C.reset}`);
-      }
+      // Build sub-details
+      const subs: string[] = [];
 
-      const details: string[] = [];
-      if (m.replenishRate) details.push(`↻ ${m.replenishRate}`);
-      if (m.bonus) details.push(`⚡ ${m.bonus}`);
-      if (details.length > 0) {
-        lines.push(`${v(vc)}    ${C.teal}${details.join('  ')}${C.reset}`);
-      }
+      const dollarParts: string[] = [];
+      if (m.replenishRate) dollarParts.push(`${C.teal}${m.replenishRate}${C.reset}`);
+      const dollars = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
+      if (dollars) dollarParts.push(`${C.text}( ${dollars} )${C.reset}`);
+      if (m.bonus) dollarParts.push(`${C.teal}${m.bonus}${C.reset}`);
+      if (dollarParts.length > 0) subs.push(dollarParts.join('  '));
 
       if (free.resetsAt && free.remaining !== 100) {
-        lines.push(`${v(vc)}    ${C.teal}→ full ${eta(free.resetsAt, free.remaining)} ${resetTime(free.resetsAt, free.remaining)}${C.reset}`);
+        subs.push(`${C.teal}Full in ${eta(free.resetsAt, free.remaining)}  ${resetTime(free.resetsAt, free.remaining)}${C.reset}`);
+      }
+
+      for (let i = 0; i < subs.length; i++) {
+        const conn = i === subs.length - 1 ? end : tee;
+        lines.push(`${v(vc)}  ${conn} ${subs[i]}`);
       }
     }
 
