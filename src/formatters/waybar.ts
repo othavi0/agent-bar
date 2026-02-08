@@ -472,17 +472,23 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
     case 'amp': tooltip = buildAmpTooltip(quota); break;
   }
   
-  // For antigravity: show per-tier percentages (grouped by shared reset time)
+  // For antigravity: show Claude tier + Flash tier in bar text
   let text = pctColored(val);
   if (quota.provider === 'antigravity' && quota.models) {
     const tiers = buildAntigravityTiers(quota.models);
-    if (tiers.length > 0) {
-      text = tiers
+    // Only show tiers containing Claude or Flash models
+    const shown = tiers.filter(t =>
+      t.models.some(n => /claude|gpt/i.test(n)) ||
+      t.models.some(n => /flash/i.test(n))
+    );
+    const display = shown.length > 0 ? shown : tiers.slice(0, 2);
+    if (display.length > 0) {
+      text = display
         .map(t => s(getColorForPercent(t.worst), pct(t.worst)))
         .join(' ' + s(C.muted, '-') + ' ');
 
-      // Status based on worst tier
-      const worst = Math.min(...tiers.map(t => t.worst));
+      // Status based on worst displayed tier
+      const worst = Math.min(...display.map(t => t.worst));
       if (worst < 10) status = 'critical';
       else if (worst < 30) status = 'warn';
       else if (worst < 60) status = 'low';
