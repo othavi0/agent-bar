@@ -118,20 +118,18 @@ function buildClaude(p: ProviderQuota): string[] {
       }
     }
 
-    if (p.secondary) {
-      if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
-        lines.push(v(vc));
-        lines.push(label('Weekly limit', vc));
-        const entries = Object.entries(p.weeklyModels);
-        const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
-        for (const [name, window] of entries) {
-          lines.push(modelLine(name, window, maxLenWeekly, vc));
-        }
-      } else {
-        lines.push(v(vc));
-        lines.push(label('Weekly limit', vc));
-        lines.push(modelLine('All Models', p.secondary, maxLen, vc));
+    if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
+      lines.push(v(vc));
+      lines.push(label('Weekly limit', vc));
+      const entries = Object.entries(p.weeklyModels);
+      const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
+      for (const [name, window] of entries) {
+        lines.push(modelLine(name, window, maxLenWeekly, vc));
       }
+    } else if (p.secondary) {
+      lines.push(v(vc));
+      lines.push(label('Weekly limit', vc));
+      lines.push(modelLine('All Models', p.secondary, maxLen, vc));
     }
 
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
@@ -227,6 +225,41 @@ function buildAntigravity(p: ProviderQuota): string[] {
   return lines;
 }
 
+function buildAmp(p: ProviderQuota): string[] {
+  const lines: string[] = [];
+  const vc = C.mauve;
+
+  lines.push(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Amp${C.reset} ${vc}${B.h.repeat(53)}${C.reset}`);
+  lines.push(v(vc));
+
+  if (p.error) {
+    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
+  } else if (!p.models || Object.keys(p.models).length === 0) {
+    lines.push(`${v(vc)}  ${C.muted}No usage data${C.reset}`);
+  } else {
+    const entries = Object.entries(p.models);
+    const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
+
+    lines.push(label('Usage', vc));
+    for (const [name, window] of entries) {
+      const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
+      const barS = bar(window.remaining);
+      const pctS = `${getColor(window.remaining)}${pct(window.remaining).padStart(4)}${C.reset}`;
+      lines.push(`${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`);
+    }
+  }
+
+  if (p.account) {
+    lines.push(v(vc));
+    lines.push(`${v(vc)}  ${C.muted}Account: ${p.account}${C.reset}`);
+  }
+
+  lines.push(v(vc));
+  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
+
+  return lines;
+}
+
 export function formatForTerminal(quotas: AllQuotas): string {
   const sections: string[][] = [];
 
@@ -237,6 +270,7 @@ export function formatForTerminal(quotas: AllQuotas): string {
       case 'claude': sections.push(buildClaude(p)); break;
       case 'codex': sections.push(buildCodex(p)); break;
       case 'antigravity': sections.push(buildAntigravity(p)); break;
+      case 'amp': sections.push(buildAmp(p)); break;
     }
   }
 

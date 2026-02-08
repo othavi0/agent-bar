@@ -48,13 +48,22 @@ const MODULES_CONFIG = `
     "tooltip": true,
     "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
     "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right antigravity"
+  },
+  "custom/qbar-amp": {
+    "exec": "$HOME/.local/bin/qbar --provider amp",
+    "return-type": "json",
+    "interval": 120,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right amp"
   }`;
 
 const CSS_STYLES = `
 /* qbar - LLM quota monitor */
 #custom-qbar-claude,
 #custom-qbar-codex,
-#custom-qbar-antigravity {
+#custom-qbar-antigravity,
+#custom-qbar-amp {
   padding-left: 22px;
   padding-right: 6px;
   background-size: 16px 16px;
@@ -65,15 +74,17 @@ const CSS_STYLES = `
 #custom-qbar-claude { background-image: url("qbar/icons/claude-code-icon.png"); }
 #custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
 #custom-qbar-antigravity { background-image: url("qbar/icons/antigravity-icon.png"); }
+#custom-qbar-amp { background-image: url("qbar/icons/amp-icon.png"); }
 
-#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok { color: #a6e3a1; }
-#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low { color: #f9e2af; }
-#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn { color: #fab387; }
-#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical { color: #f38ba8; }
+#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok, #custom-qbar-amp.ok { color: #a6e3a1; }
+#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low, #custom-qbar-amp.low { color: #f9e2af; }
+#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn, #custom-qbar-amp.warn { color: #fab387; }
+#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical, #custom-qbar-amp.critical { color: #f38ba8; }
 
 #custom-qbar-claude.disconnected,
 #custom-qbar-codex.disconnected,
-#custom-qbar-antigravity.disconnected {
+#custom-qbar-antigravity.disconnected,
+#custom-qbar-amp.disconnected {
   color: #f38ba8;
   padding-left: 30px;
   font-size: 14px;
@@ -157,9 +168,9 @@ async function updateWaybarConfig(): Promise<boolean> {
     const modulesRightMatch = content.match(/"modules-right"\s*:\s*\[([^\]]*)\]/);
     if (modulesRightMatch) {
       const existingModules = modulesRightMatch[1];
-      const newModules = existingModules.trimEnd() + 
+      const newModules = existingModules.trimEnd() +
         (existingModules.trim().endsWith(',') ? '' : ',') +
-        '\n    "custom/qbar-claude",\n    "custom/qbar-codex",\n    "custom/qbar-antigravity"';
+        '\n    "custom/qbar-claude",\n    "custom/qbar-codex",\n    "custom/qbar-antigravity",\n    "custom/qbar-amp"';
       content = content.replace(modulesRightMatch[0], `"modules-right": [${newModules}]`);
     } else {
       spinner.stop(colorize('Could not find modules-right in config', semantic.danger));

@@ -1,6 +1,6 @@
 {
   "//": "qbar modules (copy into your waybar config.jsonc)",
-  "//2": "Add custom/qbar-claude, custom/qbar-codex, custom/qbar-antigravity to modules-right",
+  "//2": "Add custom/qbar-claude, custom/qbar-codex, custom/qbar-antigravity, custom/qbar-amp to modules-right",
 
   "custom/qbar-claude": {
     "exec": "$HOME/.local/bin/qbar --provider claude",
@@ -27,5 +27,14 @@
     "tooltip": true,
     "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
     "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right antigravity"
+  },
+
+  "custom/qbar-amp": {
+    "exec": "$HOME/.local/bin/qbar --provider amp",
+    "return-type": "json",
+    "interval": 120,
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right amp"
   }
 }

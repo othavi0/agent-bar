@@ -53,6 +53,30 @@ async function ensureCodexCli(): Promise<boolean> {
   return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin', 'codex');
 }
 
+function findAmpBin(): string | null {
+  if (typeof Bun.which === 'function') {
+    const found = Bun.which('amp');
+    if (found) return found;
+  }
+
+  const home = process.env.HOME ?? '';
+  const paths = [
+    `${home}/.cache/.bun/bin/amp`,
+    `${home}/.bun/bin/amp`,
+  ];
+
+  const { existsSync } = require('node:fs');
+  for (const p of paths) {
+    if (existsSync(p)) return p;
+  }
+
+  return null;
+}
+
+async function ensureAmpCli(): Promise<boolean> {
+  return await ensureBunGlobalPackage('@anthropic-ai/amp', 'amp');
+}
+
 export async function loginProviderFlow(): Promise<void> {
   // Box with tips (OpenClaw-style)
   p.note(
@@ -223,6 +247,29 @@ export async function loginProviderFlow(): Promise<void> {
         });
       });
 
+      break;
+    }
+
+    case 'amp': {
+      p.note(
+        'Will open Amp login in browser.',
+        colorize('Amp Login', semantic.title)
+      );
+
+      const cont = await p.confirm({
+        message: 'Launch Amp login?',
+        initialValue: true,
+      });
+
+      if (p.isCancel(cont) || !cont) return;
+
+      const ampBin = findAmpBin();
+      if (!ampBin) {
+        const ok = await ensureAmpCli();
+        if (!ok) return;
+      }
+
+      await runInteractive(ampBin || 'amp', ['login']);
       break;
     }
 

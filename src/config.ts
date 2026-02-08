@@ -22,6 +22,11 @@ export const CONFIG = {
     antigravity: {
       accounts: join(XDG_CONFIG_HOME, 'antigravity-usage', 'accounts'),
     },
+    amp: {
+      bin: join(homedir(), '.cache', '.bun', 'bin', 'amp'),
+      settings: join(XDG_CONFIG_HOME, 'amp', 'settings.json'),
+      threads: join(homedir(), '.local', 'share', 'amp', 'threads'),
+    },
   },
 
   // Cache settings

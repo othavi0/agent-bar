@@ -18,6 +18,26 @@ function resolveAntigravityUsagePath(): string {
   return `${home}/.cache/.bun/bin/antigravity-usage`;
 }
 
+function findAmpBin(): string | null {
+  if (typeof Bun.which === 'function') {
+    const found = Bun.which('amp');
+    if (found) return found;
+  }
+
+  const home = process.env.HOME ?? '';
+  const paths = [
+    `${home}/.cache/.bun/bin/amp`,
+    `${home}/.bun/bin/amp`,
+  ];
+
+  const { existsSync } = require('node:fs');
+  for (const p of paths) {
+    if (existsSync(p)) return p;
+  }
+
+  return null;
+}
+
 async function ensureAntigravityUsage(): Promise<boolean> {
   return await ensureBunGlobalPackage('antigravity-usage', 'antigravity-usage');
 }
@@ -28,6 +48,10 @@ async function ensureClaudeCli(): Promise<boolean> {
 
 async function ensureCodexCli(): Promise<boolean> {
   return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin', 'codex');
+}
+
+async function ensureAmpCli(): Promise<boolean> {
+  return await ensureBunGlobalPackage('@anthropic-ai/amp', 'amp');
 }
 
 async function waitEnter(): Promise<void> {
@@ -155,6 +179,26 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
         p.log.warn(colorize(`Looking in: ${accountsDir}`, semantic.muted));
       }
 
+      await waitEnter();
+      return;
+    }
+
+    case 'amp': {
+      p.note(
+        'Will open Amp login in browser.',
+        colorize('Amp Login', semantic.title)
+      );
+
+      const ampBin = findAmpBin();
+      if (!ampBin) {
+        const ok = await ensureAmpCli();
+        if (!ok) {
+          await waitEnter();
+          return;
+        }
+      }
+
+      await runInteractive(ampBin || 'amp', ['login']);
       await waitEnter();
       return;
     }

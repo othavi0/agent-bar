@@ -92,7 +92,15 @@ function buildClaude(p: ProviderQuota): string[] {
       }
     }
 
-    if (p.secondary) {
+    if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
+      lines.push(v(vc));
+      lines.push(label('Weekly limit', vc));
+      const entries = Object.entries(p.weeklyModels);
+      const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
+      for (const [name, window] of entries) {
+        lines.push(modelLine(name, window, maxLenWeekly, vc));
+      }
+    } else if (p.secondary) {
       lines.push(v(vc));
       lines.push(label('Weekly limit', vc));
       lines.push(modelLine('All Models', p.secondary, maxLen, vc));
@@ -138,11 +146,58 @@ function buildCodex(p: ProviderQuota): string[] {
       lines.push(label('Weekly limit', vc));
       lines.push(modelLine('GPT-5.2 Codex', p.secondary, maxLen, vc));
     }
+
+    if (p.extraUsage?.enabled) {
+      lines.push(v(vc));
+      lines.push(label('Credits', vc));
+      const nameS = colorize('Balance'.padEnd(maxLen), catppuccin.lavender);
+      const barS = bar(p.extraUsage.remaining);
+      const pctS = colorize(pct(p.extraUsage.remaining).padStart(4), getQuotaColor(p.extraUsage.remaining));
+      const infoS = p.extraUsage.limit === -1
+        ? colorize('Unlimited', catppuccin.teal)
+        : colorize('Balance', catppuccin.teal);
+      lines.push(`${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`);
+    }
   }
   
   lines.push(v(vc));
   lines.push(colorize(B.bl + B.h.repeat(55), vc));
   
+  return lines;
+}
+
+function buildAmp(p: ProviderQuota): string[] {
+  const lines: string[] = [];
+  const vc = catppuccin.mauve;
+
+  lines.push(colorize(B.tl + B.h, vc) + ' ' + colorize('Amp', vc, true) + ' ' + colorize(B.h.repeat(53), vc));
+  lines.push(v(vc));
+
+  if (p.error) {
+    lines.push(`${v(vc)}  ${colorize('⚠️ ' + p.error, catppuccin.red)}`);
+  } else if (!p.models || Object.keys(p.models).length === 0) {
+    lines.push(`${v(vc)}  ${colorize('No usage data', semantic.muted)}`);
+  } else {
+    const entries = Object.entries(p.models);
+    const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
+
+    lines.push(label('Usage', vc));
+    for (const [name, window] of entries) {
+      const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
+      const barS = bar(window.remaining);
+      const pctS = colorize(pct(window.remaining).padStart(4), getQuotaColor(window.remaining));
+      lines.push(`${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`);
+    }
+  }
+
+  if (p.account) {
+    lines.push(v(vc));
+    lines.push(`${v(vc)}  ${colorize(`Account: ${p.account}`, semantic.muted)}`);
+  }
+
+  lines.push(v(vc));
+  lines.push(colorize(B.bl + B.h.repeat(55), vc));
+
   return lines;
 }
 
@@ -197,6 +252,7 @@ export async function showListAll(): Promise<void> {
       case 'claude': sections.push(buildClaude(provider)); break;
       case 'codex': sections.push(buildCodex(provider)); break;
       case 'antigravity': sections.push(buildAntigravity(provider)); break;
+      case 'amp': sections.push(buildAmp(provider)); break;
     }
   }
 
