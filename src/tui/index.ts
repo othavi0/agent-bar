@@ -2,12 +2,11 @@ import * as p from '@clack/prompts';
 import { catppuccin, semantic, colorize } from './colors';
 import { showListAll } from './list-all';
 import { configureWaybar } from './configure-waybar';
-import { configureTooltip } from './configure-tooltip';
 import { loginProviderFlow } from './login';
 
 const VERSION = '3.0.0';
 
-type MenuAction = 'list' | 'waybar' | 'tooltip' | 'login';
+type MenuAction = 'list' | 'waybar' | 'login';
 
 export async function runTui(): Promise<void> {
   console.clear();
@@ -41,11 +40,6 @@ export async function runTui(): Promise<void> {
           label: colorize('Configure Waybar', catppuccin.text),
           hint: colorize('select providers for the bar', semantic.muted),
         },
-        { 
-          value: 'tooltip' as const, 
-          label: colorize('Configure Tooltip', catppuccin.text),
-          hint: colorize('select what shows on hover', semantic.muted),
-        },
         {
           value: 'login' as const,
           label: colorize('Provider login', catppuccin.text),
@@ -72,10 +66,6 @@ export async function runTui(): Promise<void> {
 
       case 'waybar':
         await configureWaybar();
-        break;
-
-      case 'tooltip':
-        await configureTooltip();
         break;
 
       case 'login':
