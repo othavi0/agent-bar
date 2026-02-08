@@ -1,20 +1,39 @@
 import * as p from '@clack/prompts';
 import { loadSettings, saveSettings } from '../settings';
-import { getProvider } from '../providers';
+import { providers, getProvider } from '../providers';
 import { catppuccin, semantic, colorize } from './colors';
 
 export async function configureModels(): Promise<boolean> {
   const settings = await loadSettings();
 
-  // Providers that support model-level quotas
-  const modelProviders = ['antigravity'];
+  // Discover which providers have models by checking their current quota
+  const spinner = p.spinner();
+  spinner.start('Checking providers for model data...');
+  
+  const providerOptions: Array<{id: string, name: string, modelCount: number}> = [];
+  for (const prov of providers) {
+    try {
+      const quota = await prov.getQuota();
+      if (quota.models && Object.keys(quota.models).length > 0) {
+        providerOptions.push({ id: prov.id, name: prov.name, modelCount: Object.keys(quota.models).length });
+      }
+    } catch { /* skip */ }
+  }
+  
+  spinner.stop(colorize(`${providerOptions.length} provider(s) with models`, semantic.good));
+  
+  if (providerOptions.length === 0) {
+    p.log.warn(colorize('No providers with model-level data found', semantic.warning));
+    return false;
+  }
 
   const providerChoice = await p.select({
     message: colorize('Select provider to configure models', semantic.title),
     options: [
-      ...modelProviders.map(id => ({
-        value: id,
-        label: colorize(id.charAt(0).toUpperCase() + id.slice(1), catppuccin.text),
+      ...providerOptions.map(opt => ({
+        value: opt.id,
+        label: colorize(opt.name, catppuccin.text),
+        hint: colorize(`${opt.modelCount} models`, semantic.muted),
       })),
       { value: 'back' as const, label: colorize('Back', semantic.muted) },
     ],
@@ -26,11 +45,7 @@ export async function configureModels(): Promise<boolean> {
   const provider = getProvider(providerId);
   if (!provider) return false;
 
-  const spinner = p.spinner();
-  spinner.start('Fetching available models...');
-
   const quota = await provider.getQuota();
-  spinner.stop(colorize('Models loaded', semantic.good));
 
   if (!quota.models || Object.keys(quota.models).length === 0) {
     p.log.warn(colorize('No models available for this provider', semantic.warning));

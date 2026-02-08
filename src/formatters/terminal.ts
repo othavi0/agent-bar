@@ -119,23 +119,25 @@ function buildClaude(p: ProviderQuota): string[] {
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(label('5-hour limit', vc));
-      for (const m of ['Opus', 'Sonnet', 'Haiku']) {
-        lines.push(modelLine(m, p.primary, maxLen, vc));
-      }
+      lines.push(label('5-hour limit (shared)', vc));
+      lines.push(modelLine('All Models', p.primary, maxLen, vc));
     }
 
+    // Per-model weekly quotas (when API provides them)
     if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
       lines.push(v(vc));
-      lines.push(label('Weekly limit', vc));
+      lines.push(label('Weekly per model', vc));
       const entries = Object.entries(p.weeklyModels);
       const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
       for (const [name, window] of entries) {
         lines.push(modelLine(name, window, maxLenWeekly, vc));
       }
-    } else if (p.secondary) {
+    }
+    
+    // Generic weekly (shared)
+    if (p.secondary) {
       lines.push(v(vc));
-      lines.push(label('Weekly limit', vc));
+      lines.push(label('Weekly limit (shared)', vc));
       lines.push(modelLine('All Models', p.secondary, maxLen, vc));
     }
 

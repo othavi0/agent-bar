@@ -122,36 +122,37 @@ function buildClaudeTooltip(p: ProviderQuota): string {
   if (p.error) {
     lines.push(v + '  ' + s(C.red, `⚠️ ${p.error}`));
   } else {
-    const models = ['Opus', 'Sonnet', 'Haiku'];
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(label('5-hour limit', C.peach));
-      for (const m of models) {
-        const name = s(C.lavender, m.padEnd(maxLen));
-        const b = bar(p.primary.remaining);
-        const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
-        const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt, p.primary.remaining)} ${resetTime(p.primary.resetsAt, p.primary.remaining)}`);
-        lines.push(v + '  ' + indicator(p.primary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
-      }
+      lines.push(label('5-hour limit (shared)', C.peach));
+      const name = s(C.lavender, 'All Models'.padEnd(maxLen));
+      const b = bar(p.primary.remaining);
+      const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
+      const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt, p.primary.remaining)} ${resetTime(p.primary.resetsAt, p.primary.remaining)}`);
+      lines.push(v + '  ' + indicator(p.primary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
     }
 
+    // Per-model weekly quotas (when API provides them)
     if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
       lines.push(v);
-      lines.push(label('Weekly limit', C.peach));
+      lines.push(label('Weekly per model', C.peach));
       const entries = Object.entries(p.weeklyModels);
-      const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
+      const wMaxLen = Math.max(...entries.map(([name]) => name.length), 20);
 
       for (const [name, window] of entries) {
-        const nameS = s(C.lavender, name.padEnd(maxLen));
+        const nameS = s(C.lavender, name.padEnd(wMaxLen));
         const b = bar(window.remaining);
         const pctS = s(getColorForPercent(window.remaining), pct(window.remaining).padStart(4));
         const etaS = s(C.teal, `→ ${eta(window.resetsAt, window.remaining)} ${resetTime(window.resetsAt, window.remaining)}`);
         lines.push(v + '  ' + indicator(window.remaining) + ' ' + nameS + ' ' + b + ' ' + pctS + ' ' + etaS);
       }
-    } else if (p.secondary) {
+    }
+    
+    // Generic weekly (shared)
+    if (p.secondary) {
       lines.push(v);
-      lines.push(label('Weekly limit', C.peach));
+      lines.push(label('Weekly limit (shared)', C.peach));
       const name = s(C.lavender, 'All Models'.padEnd(20));
       const b = bar(p.secondary.remaining);
       const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
