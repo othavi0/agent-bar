@@ -6,7 +6,7 @@ import type { Provider, ProviderQuota, QuotaWindow } from './types';
 // Token storage (from antigravity-usage or qbar's own OAuth)
 interface TokenData {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
   expiresAt: number;
   email: string;
   projectId?: string;
@@ -61,9 +61,67 @@ function getModelLabel(modelId: string, displayName?: string): string {
 export class AntigravityProvider implements Provider {
   readonly id = 'antigravity';
   readonly name = 'Antigravity';
+  private readonly GOOGLE_CLIENT_ID = '590579400786-a7rn11flab8l5b7maoq7hg0akn06aoc7.apps.googleusercontent.com';
 
   private antigravityUsagePath = `${process.env.HOME}/.config/antigravity-usage`;
   private qbarAuthPath = `${CONFIG.paths.config}/auth.json`;
+
+  private async refreshAccessToken(tokens: TokenData, source: 'antigravity-usage' | 'qbar'): Promise<TokenData | null> {
+    if (!tokens.refreshToken) return null;
+
+    try {
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: this.GOOGLE_CLIENT_ID,
+          grant_type: 'refresh_token',
+          refresh_token: tokens.refreshToken,
+        }),
+      });
+
+      if (!response.ok) {
+        logger.debug('Token refresh failed', { status: response.status });
+        return null;
+      }
+
+      const data: any = await response.json();
+      const refreshed: TokenData = {
+        ...tokens,
+        accessToken: data.access_token,
+        expiresAt: Date.now() + (data.expires_in * 1000),
+      };
+
+      if (data.refresh_token) {
+        refreshed.refreshToken = data.refresh_token;
+      }
+
+      await this.saveTokens(refreshed, source);
+      return refreshed;
+    } catch (error) {
+      logger.debug('Token refresh error', { error });
+      return null;
+    }
+  }
+
+  private async saveTokens(tokens: TokenData, source: 'antigravity-usage' | 'qbar'): Promise<void> {
+    try {
+      if (source === 'antigravity-usage') {
+        const configFile = Bun.file(`${this.antigravityUsagePath}/config.json`);
+        const config: AntigravityConfig = await configFile.json();
+        const tokenPath = `${this.antigravityUsagePath}/accounts/${config.activeAccount}/tokens.json`;
+        await Bun.write(tokenPath, JSON.stringify(tokens, null, 2));
+      } else {
+        const file = Bun.file(this.qbarAuthPath);
+        let auth: any = {};
+        if (await file.exists()) auth = await file.json();
+        auth.antigravity = tokens;
+        await Bun.write(this.qbarAuthPath, JSON.stringify(auth, null, 2));
+      }
+    } catch (error) {
+      logger.debug('Failed to save refreshed tokens', { error });
+    }
+  }
 
   async isAvailable(): Promise<boolean> {
     const tokens = await this.getTokens();
@@ -89,8 +147,9 @@ export class AntigravityProvider implements Provider {
             if (tokens.expiresAt > Date.now()) {
               return tokens;
             }
-            // If expired, we'd need to refresh - fall through to check qbar auth
-            logger.debug('antigravity-usage tokens expired');
+            logger.debug('antigravity-usage tokens expired, attempting refresh');
+            const refreshed = await this.refreshAccessToken(tokens, 'antigravity-usage');
+            if (refreshed) return refreshed;
           }
         }
       }
@@ -107,7 +166,9 @@ export class AntigravityProvider implements Provider {
           if (auth.antigravity.expiresAt > Date.now()) {
             return auth.antigravity;
           }
-          logger.debug('qbar antigravity tokens expired');
+          logger.debug('qbar antigravity tokens expired, attempting refresh');
+          const refreshed = await this.refreshAccessToken(auth.antigravity, 'qbar');
+          if (refreshed) return refreshed;
         }
       }
     } catch (error) {
