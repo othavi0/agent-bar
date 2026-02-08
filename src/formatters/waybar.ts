@@ -105,6 +105,40 @@ function applyModelFilter(models: Array<{name: string, remaining: number | null,
   return models.filter(m => allowed.includes(m.name) || allowed.includes(m.name.replace(/\s*\(Thinking\)/i, '')));
 }
 
+/**
+ * Group antigravity models into tiers by shared reset time.
+ * Models that reset together share the same quota pool.
+ * Returns sorted by worst-first (most critical tier shown first).
+ */
+interface Tier { label: string; worst: number; models: string[]; resetsAt: string | null; }
+function buildAntigravityTiers(models: Record<string, QuotaWindow>): Tier[] {
+  const filtered = filterModels(models);
+  // Group by resetsAt timestamp
+  const groups = new Map<string, { names: string[]; worsts: number[]; resetsAt: string | null }>();
+  for (const m of filtered) {
+    const key = m.resetsAt ?? 'none';
+    if (!groups.has(key)) groups.set(key, { names: [], worsts: [], resetsAt: m.resetsAt });
+    const g = groups.get(key)!;
+    g.names.push(m.name);
+    g.worsts.push(m.remaining ?? 0);
+  }
+
+  const tiers: Tier[] = [];
+  for (const [, g] of groups) {
+    // Build a label from the dominant family
+    const families = new Set(g.names.map(n => {
+      const l = n.toLowerCase();
+      if (l.includes('claude') || l.includes('gpt')) return 'Claude';
+      return n.replace(/\s*\(.*?\)/g, '').trim();
+    }));
+    const label = [...families].join(' + ');
+    tiers.push({ label, worst: Math.min(...g.worsts), models: g.names, resetsAt: g.resetsAt });
+  }
+
+  // Sort: worst first (most critical), then alphabetically
+  return tiers.sort((a, b) => a.worst - b.worst || a.label.localeCompare(b.label));
+}
+
 // Section label with connecting line: ┣━ ◆ Label
 const label = (text: string, color: string) => 
   s(color, B.lt + B.h) + ' ' + s(C.mauve, B.diamond + ' ' + text, true);
@@ -438,30 +472,17 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
     case 'amp': tooltip = buildAmpTooltip(quota); break;
   }
   
-  // For antigravity: show per-family percentages (Claude, Gemini, GPT, etc.)
+  // For antigravity: show per-tier percentages (grouped by shared reset time)
   let text = pctColored(val);
   if (quota.provider === 'antigravity' && quota.models) {
-    const models = filterModels(quota.models);
-    if (models.length > 0) {
-      // Group by family, take lowest % per family
-      const families = new Map<string, number>();
-      for (const m of models) {
-        const lower = m.name.toLowerCase();
-        const family = lower.includes('claude') ? 'Claude'
-          : lower.includes('gemini') ? 'Gemini'
-          : lower.includes('gpt') ? 'GPT'
-          : m.name.split(' ')[0]; // fallback: first word
-        const prev = families.get(family) ?? 100;
-        families.set(family, Math.min(prev, m.remaining ?? 0));
-      }
+    const tiers = buildAntigravityTiers(quota.models);
+    if (tiers.length > 0) {
+      text = tiers
+        .map(t => s(getColorForPercent(t.worst), pct(t.worst)))
+        .join(' ' + s(C.muted, '-') + ' ');
 
-      const sep = s(C.muted, '│');
-      text = [...families.entries()]
-        .map(([, pctVal]) => s(getColorForPercent(pctVal), pct(pctVal)))
-        .join(sep);
-
-      // Status based on worst family
-      const worst = Math.min(...families.values());
+      // Status based on worst tier
+      const worst = Math.min(...tiers.map(t => t.worst));
       if (worst < 10) status = 'critical';
       else if (worst < 30) status = 'warn';
       else if (worst < 60) status = 'low';
