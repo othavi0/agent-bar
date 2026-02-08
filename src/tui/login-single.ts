@@ -31,12 +31,12 @@ async function ensureCodexCli(): Promise<boolean> {
 }
 
 async function waitEnter(): Promise<void> {
+  const { createInterface } = await import('node:readline');
   p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
-  await new Promise<void>((resolve) => {
-    process.stdin.setRawMode?.(true);
-    process.stdin.resume();
-    process.stdin.once('data', () => {
-      process.stdin.setRawMode?.(false);
+  return new Promise<void>((resolve) => {
+    const rl = createInterface({ input: process.stdin });
+    rl.once('line', () => {
+      rl.close();
       resolve();
     });
   });
