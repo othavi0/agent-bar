@@ -12,24 +12,26 @@ export interface Settings {
     showPercentage: boolean;
   };
   tooltip: {
-    providers: string[];
+    // Keep for backward compat, but simplify
     showWeekly: boolean;
     showResetTime: boolean;
     showProgressBar: boolean;
   };
+  /** Per-provider model visibility. Key = provider id, value = array of model names to show. Empty array = show all. */
+  models?: Record<string, string[]>;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   waybar: {
-    providers: ['claude', 'codex', 'antigravity'],
+    providers: ['claude', 'codex', 'antigravity', 'amp'],
     showPercentage: true,
   },
   tooltip: {
-    providers: ['claude', 'codex', 'antigravity'],
     showWeekly: true,
     showResetTime: true,
     showProgressBar: true,
   },
+  models: {},
 };
 
 export async function loadSettings(): Promise<Settings> {
@@ -44,6 +46,24 @@ export async function loadSettings(): Promise<Settings> {
     return {
       waybar: { ...DEFAULT_SETTINGS.waybar, ...data.waybar },
       tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data.tooltip },
+      models: { ...DEFAULT_SETTINGS.models, ...data.models },
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+export function loadSettingsSync(): Settings {
+  try {
+    const { existsSync, readFileSync } = require('node:fs');
+    if (!existsSync(SETTINGS_FILE)) {
+      return { ...DEFAULT_SETTINGS };
+    }
+    const data = JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8'));
+    return {
+      waybar: { ...DEFAULT_SETTINGS.waybar, ...data.waybar },
+      tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data.tooltip },
+      models: { ...DEFAULT_SETTINGS.models, ...data.models },
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

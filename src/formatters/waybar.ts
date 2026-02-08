@@ -1,4 +1,5 @@
 import { CONFIG, getColorForPercent } from '../config';
+import { loadSettingsSync } from '../settings';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 
 // Catppuccin Mocha palette
@@ -96,6 +97,12 @@ function filterModels(models: Record<string, QuotaWindow>): Array<{name: string,
     const pri = (n: string) => n.toLowerCase().includes('claude') ? 0 : n.toLowerCase().includes('gpt') ? 1 : n.toLowerCase().includes('gemini') ? 2 : 3;
     return pri(a.name) - pri(b.name) || a.name.localeCompare(b.name);
   });
+}
+
+function applyModelFilter(models: Array<{name: string, remaining: number | null, resetsAt: string | null}>,
+  allowed?: string[]): Array<{name: string, remaining: number | null, resetsAt: string | null}> {
+  if (!allowed || allowed.length === 0) return models;
+  return models.filter(m => allowed.includes(m.name) || allowed.includes(m.name.replace(/\s*\(Thinking\)/i, '')));
 }
 
 // Section label with connecting line: ┣━ ◆ Label
@@ -229,6 +236,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
 function buildAntigravityTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
   const v = s(C.blue, B.v);
+  const settings = loadSettingsSync();
   
   lines.push(s(C.blue, B.tl + B.h) + ' ' + s(C.blue, 'Antigravity', true) + ' ' + s(C.blue, B.h.repeat(45)));
   lines.push(v);
@@ -238,16 +246,23 @@ function buildAntigravityTooltip(p: ProviderQuota): string {
   } else if (!p.models || Object.keys(p.models).length === 0) {
     lines.push(v + '  ' + s(C.muted, 'No models available'));
   } else {
-    const models = filterModels(p.models);
-    const maxLen = Math.max(...models.map(m => m.name.length), 20);
+    let models = filterModels(p.models);
+    models = applyModelFilter(models, settings.models?.[p.provider]);
 
-    lines.push(label('Available Models', C.blue));
-    for (const m of models) {
-      const name = s(C.lavender, m.name.padEnd(maxLen));
-      const b = bar(m.remaining);
-      const pctS = s(getColorForPercent(m.remaining), pct(m.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(m.resetsAt, m.remaining)} ${resetTime(m.resetsAt, m.remaining)}`);
-      lines.push(v + '  ' + indicator(m.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+    if (models.length === 0) {
+      lines.push(label('Available Models', C.blue));
+      lines.push(v + '  ' + s(C.muted, 'No models selected'));
+    } else {
+      const maxLen = Math.max(...models.map(m => m.name.length), 20);
+
+      lines.push(label('Available Models', C.blue));
+      for (const m of models) {
+        const name = s(C.lavender, m.name.padEnd(maxLen));
+        const b = bar(m.remaining);
+        const pctS = s(getColorForPercent(m.remaining), pct(m.remaining).padStart(4));
+        const etaS = s(C.teal, `→ ${eta(m.resetsAt, m.remaining)} ${resetTime(m.resetsAt, m.remaining)}`);
+        lines.push(v + '  ' + indicator(m.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+      }
     }
   }
   

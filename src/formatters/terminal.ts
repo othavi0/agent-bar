@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { loadSettingsSync } from '../settings';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 
 // ANSI color codes (Catppuccin Mocha)
@@ -79,6 +80,12 @@ function resetTime(iso: string | null, remaining: number | null): string {
 function isValidModel(name: string): boolean {
   const lower = name.toLowerCase();
   return !/^(tab_|chat_|test_|internal_)/.test(lower) && !/preview$/i.test(name) && !/2\.5/i.test(name);
+}
+
+function applyModelFilter(models: Array<{name: string, remaining: number, resetsAt: string | null}>,
+  allowed?: string[]): Array<{name: string, remaining: number, resetsAt: string | null}> {
+  if (!allowed || allowed.length === 0) return models;
+  return models.filter(m => allowed.includes(m.name) || allowed.includes(m.name.replace(/\s*\(Thinking\)/i, '')));
 }
 
 // Vertical bar with provider color
@@ -195,6 +202,7 @@ function buildCodex(p: ProviderQuota): string[] {
 function buildAntigravity(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = C.blue;
+  const settings = loadSettingsSync();
   
   lines.push(`${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Antigravity${C.reset} ${vc}${B.h.repeat(45)}${C.reset}`);
   lines.push(v(vc));
@@ -204,18 +212,26 @@ function buildAntigravity(p: ProviderQuota): string[] {
   } else if (!p.models || Object.keys(p.models).length === 0) {
     lines.push(`${v(vc)}  ${C.muted}No models available${C.reset}`);
   } else {
-    const models = Object.entries(p.models)
+    let models = Object.entries(p.models)
       .filter(([name]) => isValidModel(name))
       .sort(([a], [b]) => {
         const pri = (n: string) => n.toLowerCase().includes('claude') ? 0 : n.toLowerCase().includes('gpt') ? 1 : n.toLowerCase().includes('gemini') ? 2 : 3;
         return pri(a) - pri(b) || a.localeCompare(b);
-      });
+      })
+      .map(([name, window]) => ({ name, remaining: window.remaining ?? 0, resetsAt: window.resetsAt }));
 
-    const maxLen = Math.max(...models.map(([n]) => n.length), 20);
+    models = applyModelFilter(models, settings.models?.[p.provider]);
 
-    lines.push(label('Available Models', vc));
-    for (const [name, window] of models) {
-      lines.push(modelLine(name, window, maxLen, vc));
+    if (models.length === 0) {
+      lines.push(label('Available Models', vc));
+      lines.push(`${v(vc)}  ${C.muted}No models selected${C.reset}`);
+    } else {
+      const maxLen = Math.max(...models.map(({ name }) => name.length), 20);
+
+      lines.push(label('Available Models', vc));
+      for (const model of models) {
+        lines.push(modelLine(model.name, { remaining: model.remaining, resetsAt: model.resetsAt }, maxLen, vc));
+      }
     }
   }
   

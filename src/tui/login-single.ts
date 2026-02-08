@@ -61,10 +61,6 @@ async function activateProvider(providerId: string): Promise<void> {
   if (!settings.waybar.providers.includes(providerId)) {
     settings.waybar.providers.push(providerId);
   }
-  if (!settings.tooltip.providers.includes(providerId)) {
-    settings.tooltip.providers.push(providerId);
-  }
-
   await saveSettings(settings);
 }
 

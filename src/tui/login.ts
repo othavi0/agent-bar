@@ -84,10 +84,6 @@ async function activateProvider(providerId: string): Promise<void> {
   if (!settings.waybar.providers.includes(providerId)) {
     settings.waybar.providers.push(providerId);
   }
-  if (!settings.tooltip.providers.includes(providerId)) {
-    settings.tooltip.providers.push(providerId);
-  }
-
   await saveSettings(settings);
 }
 
@@ -261,12 +257,12 @@ export async function loginProviderFlow(): Promise<void> {
       }
 
       // Keep terminal open so the user can read what happened
+      const { createInterface } = await import('node:readline');
       p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
       await new Promise<void>((resolve) => {
-        process.stdin.setRawMode?.(true);
-        process.stdin.resume();
-        process.stdin.once('data', () => {
-          process.stdin.setRawMode?.(false);
+        const rl = createInterface({ input: process.stdin });
+        rl.once('line', () => {
+          rl.close();
           resolve();
         });
       });
