@@ -39,6 +39,25 @@ qbar update       # Update qbar to latest version
 qbar uninstall    # Remove qbar from system
 ```
 
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `-t, --terminal` | Terminal output (ANSI colors) |
+| `-p, --provider` | Filter: `claude`, `codex`, or `antigravity` |
+| `-r, --refresh` | Force cache refresh |
+| `-h, --help` | Show help |
+
+### Examples
+
+```bash
+qbar                    # JSON output for Waybar
+qbar menu               # Open interactive menu
+qbar status             # Colored quota display
+qbar -t -p claude       # Claude only (terminal)
+qbar -r                 # Force refresh all providers
+```
+
 ## Provider Login
 
 Use `qbar menu` → **Provider login**. qbar installs CLIs automatically via `yay`:

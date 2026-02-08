@@ -79,34 +79,11 @@ export function showHelp(): void {
   console.log(cmdLine('uninstall', 'Remove qbar from system'));
   console.log(v());
   
-  // Options
-  console.log(label('Options'));
-  console.log(optLine('-t, --terminal', 'Terminal output (ANSI colors)'));
-  console.log(optLine('-p, --provider', 'claude | codex | antigravity'));
-  console.log(optLine('-r, --refresh', 'Force cache refresh'));
-  console.log(optLine('-h, --help', 'Show this help'));
-  console.log(v());
-  
-  // Examples
-  console.log(label('Examples'));
-  console.log(exLine('qbar', 'JSON output for Waybar'));
-  console.log(exLine('qbar menu', 'Open interactive menu'));
-  console.log(exLine('qbar status', 'Colored quota display'));
-  console.log(exLine('qbar -t -p claude', 'Claude only'));
-  console.log(v());
-  
   // Waybar
   console.log(label('Waybar'));
   console.log(wbLine('Left click', 'Interactive menu'));
   console.log(wbLine('Right click', 'Refresh / Login'));
   console.log(wbLine('Hover', 'Detailed tooltip'));
-  console.log(v());
-  
-  // Paths
-  console.log(label('Files'));
-  console.log(infoLine('Config', '~/.config/qbar/'));
-  console.log(infoLine('Cache', '~/.config/waybar/qbar/cache/'));
-  console.log(infoLine('Icons', '~/.config/waybar/qbar/icons/'));
   console.log(v());
   
   console.log(`${vc}${B.bl}${B.h.repeat(w)}${C.reset}`);
