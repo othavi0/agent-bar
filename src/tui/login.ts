@@ -78,6 +78,18 @@ async function ensureAmpCli(): Promise<boolean> {
   return await ensureBunGlobalPackage('@anthropic-ai/amp', 'amp');
 }
 
+async function waitEnter(): Promise<void> {
+  const { createInterface } = await import('node:readline');
+  p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
+  await new Promise<void>((resolve) => {
+    const rl = createInterface({ input: process.stdin });
+    rl.once('line', () => {
+      rl.close();
+      resolve();
+    });
+  });
+}
+
 async function activateProvider(providerId: string): Promise<void> {
   const settings = await loadSettings();
 
@@ -257,15 +269,7 @@ export async function loginProviderFlow(): Promise<void> {
       }
 
       // Keep terminal open so the user can read what happened
-      const { createInterface } = await import('node:readline');
-      p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
-      await new Promise<void>((resolve) => {
-        const rl = createInterface({ input: process.stdin });
-        rl.once('line', () => {
-          rl.close();
-          resolve();
-        });
-      });
+      await waitEnter();
 
       break;
     }
