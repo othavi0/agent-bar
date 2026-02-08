@@ -130,13 +130,28 @@ function buildClaudeTooltip(p: ProviderQuota): string {
     }
 
     if (p.secondary) {
-      lines.push(v);
-      lines.push(label('Weekly limit', C.peach));
-      const name = s(C.lavender, 'All Models'.padEnd(20));
-      const b = bar(p.secondary.remaining);
-      const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt, p.secondary.remaining)} ${resetTime(p.secondary.resetsAt, p.secondary.remaining)}`);
-      lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+      if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
+        lines.push(v);
+        lines.push(label('Weekly limit', C.peach));
+        const entries = Object.entries(p.weeklyModels);
+        const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
+
+        for (const [name, window] of entries) {
+          const nameS = s(C.lavender, name.padEnd(maxLen));
+          const b = bar(window.remaining);
+          const pctS = s(getColorForPercent(window.remaining), pct(window.remaining).padStart(4));
+          const etaS = s(C.teal, `→ ${eta(window.resetsAt, window.remaining)} ${resetTime(window.resetsAt, window.remaining)}`);
+          lines.push(v + '  ' + indicator(window.remaining) + ' ' + nameS + ' ' + b + ' ' + pctS + ' ' + etaS);
+        }
+      } else {
+        lines.push(v);
+        lines.push(label('Weekly limit', C.peach));
+        const name = s(C.lavender, 'All Models'.padEnd(20));
+        const b = bar(p.secondary.remaining);
+        const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
+        const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt, p.secondary.remaining)} ${resetTime(p.secondary.resetsAt, p.secondary.remaining)}`);
+        lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+      }
     }
 
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
@@ -189,6 +204,18 @@ function buildCodexTooltip(p: ProviderQuota): string {
       const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
       const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt, p.secondary.remaining)} ${resetTime(p.secondary.resetsAt, p.secondary.remaining)}`);
       lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+    }
+
+    if (p.extraUsage?.enabled) {
+      lines.push(v);
+      lines.push(label('Credits', C.green));
+      const name = s(C.lavender, 'Balance'.padEnd(20));
+      const b = bar(p.extraUsage.remaining);
+      const pctS = s(getColorForPercent(p.extraUsage.remaining), pct(p.extraUsage.remaining).padStart(4));
+      const limitS = p.extraUsage.limit === -1
+        ? s(C.teal, 'Unlimited')
+        : s(C.teal, 'Balance');
+      lines.push(v + '  ' + indicator(p.extraUsage.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + limitS);
     }
   }
   

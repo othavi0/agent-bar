@@ -19,6 +19,18 @@ interface ClaudeUsageResponse {
     utilization: number;
     resets_at?: string;
   };
+  seven_day_opus?: {
+    utilization: number;
+    resets_at?: string;
+  } | null;
+  seven_day_sonnet?: {
+    utilization: number;
+    resets_at?: string;
+  } | null;
+  seven_day_cowork?: {
+    utilization: number;
+    resets_at?: string;
+  } | null;
   extra_usage?: {
     is_enabled: boolean;
     monthly_limit: number;
@@ -113,6 +125,7 @@ export class ClaudeProvider implements Provider {
       // Parse quota windows
       let primary: QuotaWindow | undefined;
       let secondary: QuotaWindow | undefined;
+      const weeklyModels: Record<string, QuotaWindow> = {};
       let extraUsage: { enabled: boolean; remaining: number; limit: number; used: number } | undefined;
 
       if (usage.five_hour) {
@@ -128,6 +141,30 @@ export class ClaudeProvider implements Provider {
         secondary = {
           remaining: 100 - used,
           resetsAt: usage.seven_day.resets_at || null,
+        };
+      }
+
+      if (usage.seven_day_opus) {
+        const used = Math.round(usage.seven_day_opus.utilization);
+        weeklyModels['Opus'] = {
+          remaining: 100 - used,
+          resetsAt: usage.seven_day_opus.resets_at || null,
+        };
+      }
+
+      if (usage.seven_day_sonnet) {
+        const used = Math.round(usage.seven_day_sonnet.utilization);
+        weeklyModels['Sonnet'] = {
+          remaining: 100 - used,
+          resetsAt: usage.seven_day_sonnet.resets_at || null,
+        };
+      }
+
+      if (usage.seven_day_cowork) {
+        const used = Math.round(usage.seven_day_cowork.utilization);
+        weeklyModels['Cowork'] = {
+          remaining: 100 - used,
+          resetsAt: usage.seven_day_cowork.resets_at || null,
         };
       }
 
@@ -148,6 +185,7 @@ export class ClaudeProvider implements Provider {
         plan,
         primary,
         secondary,
+        weeklyModels: Object.keys(weeklyModels).length > 0 ? weeklyModels : undefined,
         extraUsage,
       };
     } catch (error) {

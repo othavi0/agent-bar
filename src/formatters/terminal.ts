@@ -119,9 +119,19 @@ function buildClaude(p: ProviderQuota): string[] {
     }
 
     if (p.secondary) {
-      lines.push(v(vc));
-      lines.push(label('Weekly limit', vc));
-      lines.push(modelLine('All Models', p.secondary, maxLen, vc));
+      if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
+        lines.push(v(vc));
+        lines.push(label('Weekly limit', vc));
+        const entries = Object.entries(p.weeklyModels);
+        const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
+        for (const [name, window] of entries) {
+          lines.push(modelLine(name, window, maxLenWeekly, vc));
+        }
+      } else {
+        lines.push(v(vc));
+        lines.push(label('Weekly limit', vc));
+        lines.push(modelLine('All Models', p.secondary, maxLen, vc));
+      }
     }
 
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
@@ -163,6 +173,18 @@ function buildCodex(p: ProviderQuota): string[] {
       lines.push(v(vc));
       lines.push(label('Weekly limit', vc));
       lines.push(modelLine('GPT-5.2 Codex', p.secondary, maxLen, vc));
+    }
+
+    if (p.extraUsage?.enabled) {
+      lines.push(v(vc));
+      lines.push(label('Credits', vc));
+      const nameS = `${C.lavender}${'Balance'.padEnd(maxLen)}${C.reset}`;
+      const barS = bar(p.extraUsage.remaining);
+      const pctS = `${getColor(p.extraUsage.remaining)}${pct(p.extraUsage.remaining).padStart(4)}${C.reset}`;
+      const infoS = p.extraUsage.limit === -1
+        ? `${C.teal}Unlimited${C.reset}`
+        : `${C.teal}Balance${C.reset}`;
+      lines.push(`${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`);
     }
   }
   

@@ -15,6 +15,12 @@ interface CodexRateLimits {
     window_minutes: number;
     resets_at: number;
   };
+  credits?: {
+    has_credits: boolean;
+    unlimited: boolean;
+    balance: string;
+  };
+  plan_type?: string | null;
 }
 
 interface CodexSessionEvent {
@@ -147,11 +153,23 @@ export class CodexProvider implements Provider {
       resetsAt: this.unixToIso(limits.secondary.resets_at),
     };
 
+    let codexCredits: ProviderQuota['extraUsage'] | undefined;
+    if (limits.credits?.has_credits || parseFloat(limits.credits?.balance || '0') > 0) {
+      const balance = parseFloat(limits.credits!.balance);
+      codexCredits = {
+        enabled: true,
+        remaining: limits.credits!.unlimited ? 100 : Math.min(100, Math.round(balance)),
+        limit: limits.credits!.unlimited ? -1 : 0,
+        used: 0,
+      };
+    }
+
     return {
       ...base,
       available: true,
       primary,
       secondary,
+      extraUsage: codexCredits,
     };
   }
 }

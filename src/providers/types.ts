@@ -28,6 +28,8 @@ export interface ProviderQuota {
   primary?: QuotaWindow;
   /** Secondary quota window (usually weekly/7d) */
   secondary?: QuotaWindow;
+  /** Per-model weekly quotas (Claude Pro feature) */
+  weeklyModels?: Record<string, QuotaWindow>;
   /** Additional quota windows (for providers with multiple models) */
   models?: Record<string, QuotaWindow>;
   /** Extra Usage (Claude Pro feature) */
