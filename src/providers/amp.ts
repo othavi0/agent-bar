@@ -78,23 +78,33 @@ export class AmpProvider implements Provider {
       }
 
       const freeMatch = stdout.match(/Amp Free:\s*\$([0-9.]+)\/\$([0-9.]+)\s*remaining/);
+      const replenishMatch = stdout.match(/replenishes \+\$([0-9.]+)\/hour/);
+      const replenishRate = replenishMatch ? `+$${replenishMatch[1]}/hr` : null;
+      const bonusMatch = stdout.match(/\+(\d+)%\s*bonus\s*for\s*(\d+)\s*more\s*days/);
+      const bonus = bonusMatch ? `+${bonusMatch[1]}% (${bonusMatch[2]}d)` : null;
+
       let primary: QuotaWindow | undefined;
 
       if (freeMatch) {
         const remaining = parseFloat(freeMatch[1]);
         const total = parseFloat(freeMatch[2]);
         const pct = total > 0 ? Math.round((remaining / total) * 100) : 0;
+        
+        // Calculate ETA to 100%
+        let fullAt: string | null = null;
+        if (replenishMatch && remaining < total) {
+          const ratePerHour = parseFloat(replenishMatch[1]);
+          const effectiveRate = bonusMatch ? ratePerHour * (1 + parseInt(bonusMatch[1]) / 100) : ratePerHour;
+          const deficit = total - remaining;
+          const hoursToFull = deficit / effectiveRate;
+          fullAt = new Date(Date.now() + hoursToFull * 3600_000).toISOString();
+        }
+        
         primary = {
           remaining: pct,
-          resetsAt: null,
+          resetsAt: fullAt,
         };
       }
-
-      const replenishMatch = stdout.match(/replenishes \+\$([0-9.]+)\/hour/);
-      const replenishRate = replenishMatch ? `+$${replenishMatch[1]}/hr` : null;
-
-      const bonusMatch = stdout.match(/\+(\d+)%\s*bonus\s*for\s*(\d+)\s*more\s*days/);
-      const bonus = bonusMatch ? `+${bonusMatch[1]}% (${bonusMatch[2]}d)` : null;
 
       const creditsMatch = stdout.match(/Individual credits:\s*\$([0-9.]+)\s*remaining/);
       let extraUsage: ProviderQuota['extraUsage'] | undefined;
@@ -117,10 +127,23 @@ export class AmpProvider implements Provider {
         const remaining = parseFloat(freeMatch[1]);
         const total = parseFloat(freeMatch[2]);
         const pct = total > 0 ? Math.round((remaining / total) * 100) : 0;
+        
+        // Calculate ETA to 100% based on replenish rate
+        let fullAt: string | null = null;
+        if (replenishMatch && remaining < total) {
+          const ratePerHour = parseFloat(replenishMatch[1]);
+          // With bonus, effective rate is doubled
+          const effectiveRate = bonusMatch ? ratePerHour * (1 + parseInt(bonusMatch[1]) / 100) : ratePerHour;
+          const deficit = total - remaining;
+          const hoursToFull = deficit / effectiveRate;
+          const msToFull = hoursToFull * 3600_000;
+          fullAt = new Date(Date.now() + msToFull).toISOString();
+        }
+        
         let label = `Free $${remaining}/$${total}`;
         if (replenishRate) label += ` (${replenishRate})`;
         if (bonus) label += ` ${bonus}`;
-        models[label] = { remaining: pct, resetsAt: null };
+        models[label] = { remaining: pct, resetsAt: fullAt };
       }
 
       if (creditsMatch) {

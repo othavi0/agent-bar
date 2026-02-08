@@ -100,11 +100,13 @@ async function cleanWaybarConfig(): Promise<void> {
     content = content.replace(/"custom\/qbar-claude"\s*,?\s*/g, '');
     content = content.replace(/"custom\/qbar-codex"\s*,?\s*/g, '');
     content = content.replace(/"custom\/qbar-antigravity"\s*,?\s*/g, '');
+    content = content.replace(/"custom\/qbar-amp"\s*,?\s*/g, '');
 
     // Remove module definitions (multi-line)
     content = content.replace(/,?\s*"custom\/qbar-claude"\s*:\s*\{[^}]*\}/gs, '');
     content = content.replace(/,?\s*"custom\/qbar-codex"\s*:\s*\{[^}]*\}/gs, '');
     content = content.replace(/,?\s*"custom\/qbar-antigravity"\s*:\s*\{[^}]*\}/gs, '');
+    content = content.replace(/,?\s*"custom\/qbar-amp"\s*:\s*\{[^}]*\}/gs, '');
 
     // Clean up trailing commas before ]
     content = content.replace(/,(\s*\])/g, '$1');
@@ -133,11 +135,9 @@ async function cleanWaybarStyles(): Promise<void> {
     let content = readFileSync(WAYBAR_STYLE_FILE, 'utf-8');
     const original = content;
 
-    // Remove qbar CSS block (from comment to last qbar rule)
-    content = content.replace(/\/\* qbar - LLM quota monitor \*\/[\s\S]*?#custom-qbar-antigravity\.disconnected\s*\{[^}]*\}\s*/g, '');
-    
-    // Also try without the comment header
-    content = content.replace(/#custom-qbar-claude[\s\S]*?#custom-qbar-antigravity\.disconnected\s*\{[^}]*\}\s*/g, '');
+    // Remove qbar CSS blocks (all variations)
+    content = content.replace(/\/\* qbar.*?\*\/[\s\S]*?#custom-qbar-(?:antigravity|amp)\.disconnected\s*\{[^}]*\}\s*/g, '');
+    content = content.replace(/#custom-qbar-claude[\s\S]*?#custom-qbar-(?:antigravity|amp)\.disconnected\s*\{[^}]*\}\s*/g, '');
 
     if (content !== original) {
       writeFileSync(WAYBAR_STYLE_FILE, content);
