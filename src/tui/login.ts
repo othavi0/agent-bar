@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import { providers } from '../providers';
 import { catppuccin, semantic, colorize } from './colors';
 import { ensureBunGlobalPackage, ensureYayPackage } from '../install';
+import { loadSettings, saveSettings } from '../settings';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -77,6 +78,19 @@ async function ensureAmpCli(): Promise<boolean> {
   return await ensureBunGlobalPackage('@anthropic-ai/amp', 'amp');
 }
 
+async function activateProvider(providerId: string): Promise<void> {
+  const settings = await loadSettings();
+
+  if (!settings.waybar.providers.includes(providerId)) {
+    settings.waybar.providers.push(providerId);
+  }
+  if (!settings.tooltip.providers.includes(providerId)) {
+    settings.tooltip.providers.push(providerId);
+  }
+
+  await saveSettings(settings);
+}
+
 export async function loginProviderFlow(): Promise<void> {
   // Box with tips (OpenClaw-style)
   p.note(
@@ -133,7 +147,10 @@ export async function loginProviderFlow(): Promise<void> {
       const ok = await ensureClaudeCli();
       if (!ok) return;
 
-      await runInteractive('claude');
+      const code = await runInteractive('claude');
+      if (code === 0) {
+        await activateProvider('claude');
+      }
       break;
     }
 
@@ -153,7 +170,10 @@ export async function loginProviderFlow(): Promise<void> {
       const ok = await ensureCodexCli();
       if (!ok) return;
 
-      await runInteractive('codex', ['auth', 'login']);
+      const code = await runInteractive('codex', ['auth', 'login']);
+      if (code === 0) {
+        await activateProvider('codex');
+      }
       break;
     }
 
@@ -236,6 +256,10 @@ export async function loginProviderFlow(): Promise<void> {
         p.log.warn(colorize(`Looking in: ${accountsDir}`, semantic.muted));
       }
 
+      if (ok) {
+        await activateProvider('antigravity');
+      }
+
       // Keep terminal open so the user can read what happened
       p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
       await new Promise<void>((resolve) => {
@@ -269,7 +293,10 @@ export async function loginProviderFlow(): Promise<void> {
         if (!ok) return;
       }
 
-      await runInteractive(ampBin || 'amp', ['login']);
+      const code = await runInteractive(ampBin || 'amp', ['login']);
+      if (code === 0) {
+        await activateProvider('amp');
+      }
       break;
     }
 

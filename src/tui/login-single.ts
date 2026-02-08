@@ -1,6 +1,7 @@
 import * as p from '@clack/prompts';
 import { colorize, semantic, catppuccin } from './colors';
 import { ensureBunGlobalPackage, ensureYayPackage, hasCmd } from '../install';
+import { loadSettings, saveSettings } from '../settings';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -54,6 +55,19 @@ async function ensureAmpCli(): Promise<boolean> {
   return await ensureBunGlobalPackage('@anthropic-ai/amp', 'amp');
 }
 
+async function activateProvider(providerId: string): Promise<void> {
+  const settings = await loadSettings();
+
+  if (!settings.waybar.providers.includes(providerId)) {
+    settings.waybar.providers.push(providerId);
+  }
+  if (!settings.tooltip.providers.includes(providerId)) {
+    settings.tooltip.providers.push(providerId);
+  }
+
+  await saveSettings(settings);
+}
+
 async function waitEnter(): Promise<void> {
   const { createInterface } = await import('node:readline');
   p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
@@ -90,7 +104,10 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
         return;
       }
 
-      await runInteractive('claude');
+      const code = await runInteractive('claude');
+      if (code === 0) {
+        await activateProvider('claude');
+      }
       await waitEnter();
       return;
     }
@@ -107,7 +124,10 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
         return;
       }
 
-      await runInteractive('codex', ['auth', 'login']);
+      const code = await runInteractive('codex', ['auth', 'login']);
+      if (code === 0) {
+        await activateProvider('codex');
+      }
       await waitEnter();
       return;
     }
@@ -179,6 +199,10 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
         p.log.warn(colorize(`Looking in: ${accountsDir}`, semantic.muted));
       }
 
+      if (okTokens) {
+        await activateProvider('antigravity');
+      }
+
       await waitEnter();
       return;
     }
@@ -198,7 +222,10 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
         }
       }
 
-      await runInteractive(ampBin || 'amp', ['login']);
+      const code = await runInteractive(ampBin || 'amp', ['login']);
+      if (code === 0) {
+        await activateProvider('amp');
+      }
       await waitEnter();
       return;
     }

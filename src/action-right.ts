@@ -9,6 +9,7 @@
  */
 
 import { getProvider } from './providers';
+import { loadSettings, saveSettings } from './settings';
 
 const providerId = process.argv[2];
 
@@ -26,6 +27,19 @@ if (!provider) {
 // help TS understand provider is defined after the guard
 const prov = provider;
 
+async function activateProvider(providerId: string): Promise<void> {
+  const settings = await loadSettings();
+
+  if (!settings.waybar.providers.includes(providerId)) {
+    settings.waybar.providers.push(providerId);
+  }
+  if (!settings.tooltip.providers.includes(providerId)) {
+    settings.tooltip.providers.push(providerId);
+  }
+
+  await saveSettings(settings);
+}
+
 async function main() {
   const available = await prov.isAvailable();
 
@@ -33,6 +47,7 @@ async function main() {
   if (!available) {
     const { loginSingleProvider } = await import('./tui/login-single');
     await loginSingleProvider(providerId);
+    await activateProvider(providerId);
     return;
   }
 
@@ -43,6 +58,7 @@ async function main() {
   if (looksDisconnected) {
     const { loginSingleProvider } = await import('./tui/login-single');
     await loginSingleProvider(providerId);
+    await activateProvider(providerId);
     return;
   }
 
