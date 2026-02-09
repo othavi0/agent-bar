@@ -1,8 +1,6 @@
-# qbar
+# qbar - Omarchy LLM Monitor on Waybar!
 
-LLM quota monitor for Waybar.
-
-Shows remaining usage for **Claude**, **Codex** and **Antigravity** in your bar.
+Shows remaining usage for **Claude**, **Codex**, **Amp** and **Antigravity** in your bar.
 
 ## Installation
 
