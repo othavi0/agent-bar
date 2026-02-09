@@ -10,7 +10,7 @@ interface CodexRateLimits {
     window_minutes: number;
     resets_at: number;
   };
-  secondary: {
+  secondary?: {
     used_percent: number;
     window_minutes: number;
     resets_at: number;
@@ -21,6 +21,13 @@ interface CodexRateLimits {
     balance: string;
   };
   plan_type?: string | null;
+}
+
+interface CodexAppServerRateLimits {
+  primary?: { usedPercent: number; windowDurationMins?: number | null; resetsAt?: number | null } | null;
+  secondary?: { usedPercent: number; windowDurationMins?: number | null; resetsAt?: number | null } | null;
+  credits?: { hasCredits: boolean; unlimited: boolean; balance?: string | null } | null;
+  planType?: string | null;
 }
 
 interface CodexSessionEvent {
@@ -106,8 +113,117 @@ export class CodexProvider implements Provider {
     return null;
   }
 
-  private unixToIso(timestamp: number): string {
+  private unixToIso(timestamp: number): string | null {
+    if (!timestamp || timestamp <= 0) return null;
     return new Date(timestamp * 1000).toISOString();
+  }
+
+  private normalizeAppServerRateLimits(raw: CodexAppServerRateLimits): CodexRateLimits | null {
+    if (!raw.primary) return null;
+
+    // app-server uses usedPercent (0-100 consumed). Keep our internal shape consistent.
+    const credits = raw.credits
+      ? {
+          has_credits: raw.credits.hasCredits,
+          unlimited: raw.credits.unlimited,
+          balance: raw.credits.balance ?? '0',
+        }
+      : undefined;
+
+    const primary = {
+      used_percent: raw.primary.usedPercent,
+      window_minutes: (raw.primary.windowDurationMins ?? 300) as number,
+      resets_at: (raw.primary.resetsAt ?? 0) as number,
+    };
+
+    const secondary = raw.secondary
+      ? {
+          used_percent: raw.secondary.usedPercent,
+          window_minutes: (raw.secondary.windowDurationMins ?? 10080) as number,
+          resets_at: (raw.secondary.resetsAt ?? 0) as number,
+        }
+      : undefined;
+
+    return {
+      primary,
+      secondary,
+      credits,
+      plan_type: raw.planType ?? null,
+    };
+  }
+
+  private async fetchRateLimitsViaAppServer(timeoutMs: number = 4000): Promise<CodexRateLimits | null> {
+    // Codex app-server exposes a stable JSON-RPC-ish protocol over stdio.
+    // We only need account/rateLimits/read.
+    const { spawn } = await import('node:child_process');
+    const { createInterface } = await import('node:readline');
+
+    return await new Promise<CodexRateLimits | null>((resolve) => {
+      // Ignore stderr to avoid backpressure if Codex writes logs there.
+      const proc = spawn('codex', ['app-server'], {
+        stdio: ['pipe', 'pipe', 'ignore'],
+      });
+
+      const rl = createInterface({ input: proc.stdout });
+
+      let finished = false;
+      const cleanup = (result: CodexRateLimits | null) => {
+        if (finished) return;
+        finished = true;
+        try { rl.close(); } catch {}
+        try { proc.kill(); } catch {}
+        resolve(result);
+      };
+
+      const timer = setTimeout(() => cleanup(null), timeoutMs);
+
+      const send = (msg: unknown) => {
+        try {
+          proc.stdin.write(JSON.stringify(msg) + '\n');
+        } catch {
+          // ignore
+        }
+      };
+
+      proc.on('error', () => {
+        clearTimeout(timer);
+        cleanup(null);
+      });
+
+      proc.on('exit', () => {
+        clearTimeout(timer);
+        cleanup(null);
+      });
+
+      rl.on('line', (line: string) => {
+        try {
+          const msg = JSON.parse(line) as any;
+          if (msg?.id === 0 && msg?.result) {
+            // init ack
+            send({ method: 'initialized', params: {} });
+            send({ method: 'account/rateLimits/read', id: 1, params: {} });
+            return;
+          }
+
+          if (msg?.id === 1 && msg?.result?.rateLimits) {
+            clearTimeout(timer);
+            const normalized = this.normalizeAppServerRateLimits(msg.result.rateLimits as CodexAppServerRateLimits);
+            cleanup(normalized);
+          }
+        } catch {
+          // ignore non-json
+        }
+      });
+
+      // Kick off handshake.
+      send({
+        method: 'initialize',
+        id: 0,
+        params: {
+          clientInfo: { name: 'qbar', title: 'qbar', version: '3.0.0' },
+        },
+      });
+    });
   }
 
   async getQuota(): Promise<ProviderQuota> {
@@ -127,15 +243,20 @@ export class CodexProvider implements Provider {
     let limits = cached;
 
     if (!limits) {
-      // Find and parse latest session file
-      const sessionFile = await this.findLatestSessionFile();
-      if (!sessionFile) {
-        return { ...base, error: 'No session data found' };
-      }
+      // Prefer the official app-server endpoint (stable, structured, does not depend on session JSONL).
+      limits = await this.fetchRateLimitsViaAppServer();
 
-      limits = await this.extractRateLimits(sessionFile);
+      // Fallback: try to parse the latest session file (legacy behavior).
       if (!limits) {
-        return { ...base, error: 'No rate limit data in session' };
+        const sessionFile = await this.findLatestSessionFile();
+        if (!sessionFile) {
+          return { ...base, error: 'No session data found' };
+        }
+
+        limits = await this.extractRateLimits(sessionFile);
+        if (!limits) {
+          return { ...base, error: 'No rate limit data found (app-server + session log)' };
+        }
       }
 
       // Cache the result
@@ -146,12 +267,16 @@ export class CodexProvider implements Provider {
     const primary: QuotaWindow = {
       remaining: 100 - Math.round(limits.primary.used_percent),
       resetsAt: this.unixToIso(limits.primary.resets_at),
+      windowMinutes: limits.primary.window_minutes ?? null,
     };
 
-    const secondary: QuotaWindow = {
-      remaining: 100 - Math.round(limits.secondary.used_percent),
-      resetsAt: this.unixToIso(limits.secondary.resets_at),
-    };
+    const secondary: QuotaWindow | undefined = limits.secondary
+      ? {
+          remaining: 100 - Math.round(limits.secondary.used_percent),
+          resetsAt: this.unixToIso(limits.secondary.resets_at),
+          windowMinutes: limits.secondary.window_minutes ?? null,
+        }
+      : undefined;
 
     let codexCredits: ProviderQuota['extraUsage'] | undefined;
     if (limits.credits?.has_credits || parseFloat(limits.credits?.balance || '0') > 0) {
@@ -168,7 +293,7 @@ export class CodexProvider implements Provider {
       ...base,
       available: true,
       primary,
-      secondary,
+      ...(secondary ? { secondary } : {}),
       extraUsage: codexCredits,
     };
   }

@@ -143,6 +143,14 @@ function buildAntigravityTiers(models: Record<string, QuotaWindow>): Tier[] {
 const label = (text: string, color: string) => 
   s(color, B.lt + B.h) + ' ' + s(C.mauve, B.diamond + ' ' + text, true);
 
+function windowLabel(minutes: number | null | undefined, fallback: string): string {
+  if (!minutes || minutes <= 0) return fallback;
+  const day = 60 * 24;
+  if (minutes % day === 0) return `${minutes / day}-day limit`;
+  if (minutes % 60 === 0) return `${minutes / 60}-hour limit`;
+  return `${minutes}-minute limit`;
+}
+
 /**
  * Build Claude tooltip
  */
@@ -228,7 +236,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(label('5-hour limit', C.green));
+      lines.push(label(windowLabel(p.primary.windowMinutes, 'Primary limit'), C.green));
       const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(maxLen));
       const b = bar(p.primary.remaining);
       const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
@@ -238,7 +246,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
 
     if (p.secondary) {
       lines.push(v);
-      lines.push(label('Weekly limit', C.green));
+      lines.push(label(windowLabel(p.secondary.windowMinutes, 'Secondary limit'), C.green));
       const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(20));
       const b = bar(p.secondary.remaining);
       const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));

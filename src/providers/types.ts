@@ -6,6 +6,8 @@ export interface QuotaWindow {
   remaining: number;
   /** ISO timestamp when quota resets */
   resetsAt: string | null;
+  /** Window length in minutes (if provided by provider) */
+  windowMinutes?: number | null;
 }
 
 /**

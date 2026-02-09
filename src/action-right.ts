@@ -8,18 +8,8 @@
 
 import * as p from '@clack/prompts';
 import { getProvider, getQuotaFor } from './providers';
-import { loadSettings, saveSettings } from './settings';
 import { outputTerminal } from './formatters/terminal';
 import { colorize, semantic } from './tui/colors';
-
-async function activateProvider(providerId: string): Promise<void> {
-  const settings = await loadSettings();
-
-  if (!settings.waybar.providers.includes(providerId)) {
-    settings.waybar.providers.push(providerId);
-  }
-  await saveSettings(settings);
-}
 
 async function waitEnter(): Promise<void> {
   const { createInterface } = await import('node:readline');
@@ -52,23 +42,36 @@ export async function handleActionRight(providerId: string): Promise<void> {
   if (!available) {
     const { loginSingleProvider } = await import('./tui/login-single');
     await loginSingleProvider(providerId);
-    await activateProvider(providerId);
     return;
   }
 
   // If available, check if provider is effectively disconnected (expired token, etc.)
   const quota = await provider.getQuota();
-  const looksDisconnected = !!quota.error && /expired|not logged in|login again|please login/i.test(quota.error);
+  const baseDisconnect = /expired|not logged in|login again|please login/i;
+  const codexDisconnect = /no session data|no rate limit data|auth|token/i;
+  const looksDisconnected = !!quota.error && (
+    baseDisconnect.test(quota.error) ||
+    (providerId === 'codex' && codexDisconnect.test(quota.error))
+  );
 
   if (looksDisconnected) {
     const { loginSingleProvider } = await import('./tui/login-single');
     await loginSingleProvider(providerId);
-    await activateProvider(providerId);
     return;
   }
 
   // Otherwise: refresh and show full terminal output
   p.intro(colorize(`Refreshing ${provider.name}...`, semantic.accent));
+
+  // Force refresh on right-click (ignore TTL cache).
+  try {
+    const { cache } = await import('./cache');
+    if (providerId === 'codex') await cache.invalidate('codex-quota');
+    if (providerId === 'claude') await cache.invalidate('claude-usage');
+    // Antigravity cache keys are per-account; we don't nuke them here to avoid heavy I/O.
+  } catch {
+    // ignore
+  }
 
   const fresh = await getQuotaFor(providerId);
   if (fresh) {

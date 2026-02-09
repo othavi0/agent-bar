@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import { colorize, semantic, catppuccin } from './colors';
 import { ensureBunGlobalPackage, ensureYayPackage, hasCmd } from '../install';
 import { loadSettings, saveSettings } from '../settings';
+import { CONFIG } from '../config';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -146,7 +147,7 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       const { readdirSync, statSync } = await import('node:fs');
       const { join } = await import('node:path');
 
-      const accountsDir = join(process.env.HOME ?? '', '.config', 'antigravity-usage', 'accounts');
+      const accountsDir = CONFIG.paths.antigravity.accounts;
 
       const latestTokenMtimeMs = (): number => {
         try {

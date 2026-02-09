@@ -95,6 +95,14 @@ const v = (color: string) => `${color}${B.v}${C.reset}`;
 const label = (text: string, color: string) => 
   `${color}${B.lt}${B.h}${C.reset} ${C.mauve}${C.bold}${B.diamond} ${text}${C.reset}`;
 
+function windowLabel(minutes: number | null | undefined, fallback: string): string {
+  if (!minutes || minutes <= 0) return fallback;
+  const day = 60 * 24;
+  if (minutes % day === 0) return `${minutes / day}-day limit`;
+  if (minutes % 60 === 0) return `${minutes / 60}-hour limit`;
+  return `${minutes}-minute limit`;
+}
+
 // Model line
 function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
   const rem = window?.remaining ?? null;
@@ -172,13 +180,13 @@ function buildCodex(p: ProviderQuota): string[] {
     const maxLen = 20;
     
     if (p.primary) {
-      lines.push(label('5-hour limit', vc));
+      lines.push(label(windowLabel(p.primary.windowMinutes, 'Primary limit'), vc));
       lines.push(modelLine('GPT-5.2 Codex', p.primary, maxLen, vc));
     }
 
     if (p.secondary) {
       lines.push(v(vc));
-      lines.push(label('Weekly limit', vc));
+      lines.push(label(windowLabel(p.secondary.windowMinutes, 'Secondary limit'), vc));
       lines.push(modelLine('GPT-5.2 Codex', p.secondary, maxLen, vc));
     }
 

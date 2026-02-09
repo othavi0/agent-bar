@@ -3,6 +3,7 @@ import { providers } from '../providers';
 import { catppuccin, semantic, colorize } from './colors';
 import { ensureBunGlobalPackage, ensureYayPackage } from '../install';
 import { loadSettings, saveSettings } from '../settings';
+import { CONFIG } from '../config';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -213,7 +214,7 @@ export async function loginProviderFlow(): Promise<void> {
       const { readdirSync, statSync } = await import('node:fs');
       const { join } = await import('node:path');
 
-      const accountsDir = join(process.env.HOME ?? '', '.config', 'antigravity-usage', 'accounts');
+      const accountsDir = CONFIG.paths.antigravity.accounts;
 
       const latestTokenMtimeMs = (): number => {
         try {
