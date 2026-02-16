@@ -1,10 +1,10 @@
-import { mkdir } from 'fs/promises';
-import { join } from 'path';
-import { homedir } from 'os';
+import { mkdir } from "fs/promises";
+import { join } from "path";
+import { homedir } from "os";
 
-const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-const SETTINGS_DIR = join(XDG_CONFIG_HOME, 'qbar');
-const SETTINGS_FILE = join(SETTINGS_DIR, 'settings.json');
+const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+const SETTINGS_DIR = join(XDG_CONFIG_HOME, "qbar");
+const SETTINGS_FILE = join(SETTINGS_DIR, "settings.json");
 
 export interface Settings {
   waybar: {
@@ -23,7 +23,7 @@ export interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   waybar: {
-    providers: ['claude', 'codex', 'antigravity', 'amp'],
+    providers: ["claude", "codex", "antigravity", "amp"],
     showPercentage: true,
   },
   tooltip: {
@@ -36,8 +36,8 @@ const DEFAULT_SETTINGS: Settings = {
 
 export async function loadSettings(): Promise<Settings> {
   const file = Bun.file(SETTINGS_FILE);
-  
-  if (!await file.exists()) {
+
+  if (!(await file.exists())) {
     return { ...DEFAULT_SETTINGS };
   }
 
@@ -55,11 +55,11 @@ export async function loadSettings(): Promise<Settings> {
 
 export function loadSettingsSync(): Settings {
   try {
-    const { existsSync, readFileSync } = require('node:fs');
+    const { existsSync, readFileSync } = require("node:fs");
     if (!existsSync(SETTINGS_FILE)) {
       return { ...DEFAULT_SETTINGS };
     }
-    const data = JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8'));
+    const data = JSON.parse(readFileSync(SETTINGS_FILE, "utf-8"));
     return {
       waybar: { ...DEFAULT_SETTINGS.waybar, ...data.waybar },
       tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data.tooltip },
