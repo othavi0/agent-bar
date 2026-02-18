@@ -1,6 +1,6 @@
 import { mkdir } from "fs/promises";
-import { join } from "path";
 import { homedir } from "os";
+import { join } from "path";
 
 const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 const SETTINGS_DIR = join(XDG_CONFIG_HOME, "qbar");
@@ -10,6 +10,8 @@ export interface Settings {
   waybar: {
     providers: string[];
     showPercentage: boolean;
+    separators: "pipe" | "dot" | "subtle" | "none";
+    providerOrder: string[];
   };
   tooltip: {
     // Keep for backward compat, but simplify
@@ -25,6 +27,8 @@ const DEFAULT_SETTINGS: Settings = {
   waybar: {
     providers: ["claude", "codex", "antigravity", "amp"],
     showPercentage: true,
+    separators: "pipe",
+    providerOrder: ["claude", "codex", "antigravity", "amp"],
   },
   tooltip: {
     showWeekly: true,
