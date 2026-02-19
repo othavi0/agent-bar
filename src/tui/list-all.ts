@@ -1,7 +1,8 @@
 import * as p from '@clack/prompts';
 import { getAllQuotas } from '../providers';
+import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { catppuccin, semantic, getQuotaColor, colorize, bold } from './colors';
-import type { ProviderQuota, QuotaWindow } from '../providers/types';
+import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
 
 // Box drawing characters
 const B = {
@@ -55,6 +56,97 @@ function isValidModel(name: string): boolean {
   return !/^(tab_|chat_|test_|internal_)/.test(lower) && !/preview$/i.test(name) && !/2\.5/i.test(name);
 }
 
+function classifyWindow(minutes: number | null | undefined): 'fiveHour' | 'sevenDay' | 'other' {
+  if (!minutes || minutes <= 0) return 'other';
+  if (Math.abs(minutes - 300) <= 90) return 'fiveHour';
+  if (Math.abs(minutes - 10080) <= 1440) return 'sevenDay';
+  return 'other';
+}
+
+function normalizePlanLabel(p: ProviderQuota): string {
+  if (p.plan?.trim()) return p.plan;
+  const raw = p.planType?.trim();
+  if (!raw) return 'Unknown';
+
+  const key = raw.toLowerCase();
+  const map: Record<string, string> = {
+    free: 'Free',
+    go: 'Go',
+    plus: 'Plus',
+    pro: 'Pro',
+    business: 'Business',
+    team: 'Business',
+    enterprise: 'Enterprise',
+    edu: 'Edu',
+    education: 'Edu',
+    apikey: 'API Key',
+    api_key: 'API Key',
+  };
+  return map[key] ?? raw;
+}
+
+function codexModelsFromQuota(p: ProviderQuota): Array<{ name: string; windows: ModelWindows; severity: number }> {
+  const models: Record<string, ModelWindows> = {};
+
+  if (p.modelsDetailed) {
+    for (const [name, windows] of Object.entries(p.modelsDetailed)) {
+      models[name] = windows;
+    }
+  }
+
+  if (p.models) {
+    for (const [name, window] of Object.entries(p.models)) {
+      if (!models[name]) models[name] = {};
+      const kind = classifyWindow(window.windowMinutes);
+      if (kind === 'fiveHour' && !models[name].fiveHour) models[name].fiveHour = window;
+      else if (kind === 'sevenDay' && !models[name].sevenDay) models[name].sevenDay = window;
+      else {
+        if (!models[name].other) models[name].other = [];
+        models[name].other!.push(window);
+      }
+    }
+  }
+
+  if (Object.keys(models).length === 0 && (p.primary || p.secondary)) {
+    const fallback: ModelWindows = {};
+    for (const window of [p.primary, p.secondary]) {
+      if (!window) continue;
+      const kind = classifyWindow(window.windowMinutes);
+      if (kind === 'fiveHour' && !fallback.fiveHour) fallback.fiveHour = window;
+      else if (kind === 'sevenDay' && !fallback.sevenDay) fallback.sevenDay = window;
+      else {
+        if (!fallback.other) fallback.other = [];
+        fallback.other.push(window);
+      }
+    }
+    models['Codex'] = fallback;
+  }
+
+  return Object.entries(models)
+    .map(([name, windows]) => {
+      const values = [
+        windows.fiveHour?.remaining,
+        windows.sevenDay?.remaining,
+        ...(windows.other?.map((w) => w.remaining) ?? []),
+      ].filter((v): v is number => v !== undefined && v !== null);
+
+      return {
+        name,
+        windows,
+        severity: values.length > 0 ? Math.min(...values) : 101,
+      };
+    })
+    .sort((a, b) => a.severity - b.severity || a.name.localeCompare(b.name));
+}
+
+function applyCodexModelFilter(
+  models: Array<{ name: string; windows: ModelWindows; severity: number }>,
+  allowed?: string[]
+): Array<{ name: string; windows: ModelWindows; severity: number }> {
+  if (!allowed || allowed.length === 0) return models;
+  return models.filter((m) => allowed.includes(m.name));
+}
+
 // Vertical bar
 const v = (color: string) => colorize(B.v, color);
 
@@ -70,6 +162,17 @@ function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number
   const barS = bar(rem);
   const pctS = colorize(pct(rem).padStart(4), getQuotaColor(rem));
   const etaS = colorize(`→ ${eta(reset, rem)} ${resetTime(reset, rem)}`, catppuccin.teal);
+  return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
+}
+
+function codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
+  const rem = window?.remaining ?? null;
+  const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
+  const barS = bar(rem);
+  const pctS = colorize(pct(rem).padStart(4), getQuotaColor(rem));
+  const etaS = window?.resetsAt
+    ? colorize(`→ ${eta(window.resetsAt, rem)} ${resetTime(window.resetsAt, rem)}`, catppuccin.teal)
+    : colorize('→ N/A', catppuccin.teal);
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
@@ -127,6 +230,9 @@ function buildClaude(p: ProviderQuota): string[] {
 function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = catppuccin.green;
+  const settings = loadSettingsSync();
+  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? 'both';
+  const planLabel = normalizePlanLabel(p);
   
   lines.push(colorize(B.tl + B.h, vc) + ' ' + colorize('Codex', vc, true) + ' ' + colorize(B.h.repeat(51), vc));
   lines.push(v(vc));
@@ -135,16 +241,33 @@ function buildCodex(p: ProviderQuota): string[] {
     lines.push(`${v(vc)}  ${colorize('⚠️ ' + p.error, catppuccin.red)}`);
   } else {
     const maxLen = 20;
-    
-    if (p.primary) {
-      lines.push(label('5-hour limit', vc));
-      lines.push(modelLine('GPT-5.2 Codex', p.primary, maxLen, vc));
-    }
+    lines.push(`${v(vc)}  ${colorize(`Plan: ${planLabel}`, semantic.muted)}`);
 
-    if (p.secondary) {
+    let models = codexModelsFromQuota(p);
+    models = applyCodexModelFilter(models, settings.models?.[p.provider]);
+
+    if (models.length === 0) {
       lines.push(v(vc));
-      lines.push(label('Weekly limit', vc));
-      lines.push(modelLine('GPT-5.2 Codex', p.secondary, maxLen, vc));
+      lines.push(label('Available Models', vc));
+      lines.push(`${v(vc)}  ${colorize('No models selected', semantic.muted)}`);
+    } else {
+      const modelLen = Math.max(...models.map((m) => m.name.length), maxLen);
+
+      if (policy !== 'seven_day') {
+        lines.push(v(vc));
+        lines.push(label('5-hour limit', vc));
+        for (const model of models) {
+          lines.push(codexModelLine(model.name, model.windows.fiveHour, modelLen, vc));
+        }
+      }
+
+      if (policy !== 'five_hour') {
+        lines.push(v(vc));
+        lines.push(label('7-day limit', vc));
+        for (const model of models) {
+          lines.push(codexModelLine(model.name, model.windows.sevenDay, modelLen, vc));
+        }
+      }
     }
 
     if (p.extraUsage?.enabled) {

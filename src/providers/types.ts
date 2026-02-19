@@ -11,6 +11,16 @@ export interface QuotaWindow {
 }
 
 /**
+ * Canonical window buckets per model/provider limit.
+ * Missing windows should be interpreted as unavailable and rendered as N/A.
+ */
+export interface ModelWindows {
+  fiveHour?: QuotaWindow;
+  sevenDay?: QuotaWindow;
+  other?: QuotaWindow[];
+}
+
+/**
  * Full quota data from a provider
  */
 export interface ProviderQuota {
@@ -24,6 +34,8 @@ export interface ProviderQuota {
   account?: string;
   /** Subscription plan (if applicable) */
   plan?: string;
+  /** Raw provider-specific plan identifier (if applicable) */
+  planType?: string;
   /** Error message if fetch failed */
   error?: string;
   /** Primary quota window (usually daily/5h) */
@@ -34,6 +46,8 @@ export interface ProviderQuota {
   weeklyModels?: Record<string, QuotaWindow>;
   /** Additional quota windows (for providers with multiple models) */
   models?: Record<string, QuotaWindow>;
+  /** Multi-window model data (5h/7d/other) */
+  modelsDetailed?: Record<string, ModelWindows>;
   /** Extra Usage (Claude Pro feature) */
   extraUsage?: {
     enabled: boolean;

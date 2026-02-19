@@ -6,6 +6,8 @@ const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 const SETTINGS_DIR = join(XDG_CONFIG_HOME, "qbar");
 const SETTINGS_FILE = join(SETTINGS_DIR, "settings.json");
 
+export type WindowPolicy = "both" | "five_hour" | "seven_day";
+
 export interface Settings {
   waybar: {
     providers: string[];
@@ -21,6 +23,8 @@ export interface Settings {
   };
   /** Per-provider model visibility. Key = provider id, value = array of model names to show. Empty array = show all. */
   models?: Record<string, string[]>;
+  /** Per-provider window visibility policy. */
+  windowPolicy?: Record<string, WindowPolicy>;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +40,9 @@ const DEFAULT_SETTINGS: Settings = {
     showProgressBar: true,
   },
   models: {},
+  windowPolicy: {
+    codex: "both",
+  },
 };
 
 export async function loadSettings(): Promise<Settings> {
@@ -51,6 +58,7 @@ export async function loadSettings(): Promise<Settings> {
       waybar: { ...DEFAULT_SETTINGS.waybar, ...data.waybar },
       tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data.tooltip },
       models: { ...DEFAULT_SETTINGS.models, ...data.models },
+      windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data.windowPolicy },
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -68,6 +76,7 @@ export function loadSettingsSync(): Settings {
       waybar: { ...DEFAULT_SETTINGS.waybar, ...data.waybar },
       tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data.tooltip },
       models: { ...DEFAULT_SETTINGS.models, ...data.models },
+      windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data.windowPolicy },
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

@@ -1,6 +1,6 @@
 import { CONFIG, getColorForPercent } from '../config';
-import { loadSettingsSync } from '../settings';
-import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
+import { loadSettingsSync, type WindowPolicy } from '../settings';
+import type { AllQuotas, ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
 
 // Catppuccin Mocha palette
 const C = {
@@ -103,6 +103,113 @@ function applyModelFilter(models: Array<{name: string, remaining: number | null,
   allowed?: string[]): Array<{name: string, remaining: number | null, resetsAt: string | null}> {
   if (!allowed || allowed.length === 0) return models;
   return models.filter(m => allowed.includes(m.name) || allowed.includes(m.name.replace(/\s*\(Thinking\)/i, '')));
+}
+
+function classifyWindow(minutes: number | null | undefined): 'fiveHour' | 'sevenDay' | 'other' {
+  if (!minutes || minutes <= 0) return 'other';
+  if (Math.abs(minutes - 300) <= 90) return 'fiveHour';
+  if (Math.abs(minutes - 10080) <= 1440) return 'sevenDay';
+  return 'other';
+}
+
+function normalizePlanLabel(p: ProviderQuota): string {
+  if (p.plan?.trim()) return p.plan;
+  const raw = p.planType?.trim();
+  if (!raw) return 'Unknown';
+
+  const key = raw.toLowerCase();
+  const map: Record<string, string> = {
+    free: 'Free',
+    go: 'Go',
+    plus: 'Plus',
+    pro: 'Pro',
+    business: 'Business',
+    team: 'Business',
+    enterprise: 'Enterprise',
+    edu: 'Edu',
+    education: 'Edu',
+    apikey: 'API Key',
+    api_key: 'API Key',
+  };
+  return map[key] ?? raw;
+}
+
+function codexModelsFromQuota(p: ProviderQuota): Array<{ name: string; windows: ModelWindows; severity: number }> {
+  const models: Record<string, ModelWindows> = {};
+
+  if (p.modelsDetailed) {
+    for (const [name, windows] of Object.entries(p.modelsDetailed)) {
+      models[name] = windows;
+    }
+  }
+
+  if (p.models) {
+    for (const [name, window] of Object.entries(p.models)) {
+      if (!models[name]) models[name] = {};
+      const kind = classifyWindow(window.windowMinutes);
+      if (kind === 'fiveHour' && !models[name].fiveHour) models[name].fiveHour = window;
+      else if (kind === 'sevenDay' && !models[name].sevenDay) models[name].sevenDay = window;
+      else {
+        if (!models[name].other) models[name].other = [];
+        models[name].other!.push(window);
+      }
+    }
+  }
+
+  if (Object.keys(models).length === 0 && (p.primary || p.secondary)) {
+    const fallback: ModelWindows = {};
+    for (const window of [p.primary, p.secondary]) {
+      if (!window) continue;
+      const kind = classifyWindow(window.windowMinutes);
+      if (kind === 'fiveHour' && !fallback.fiveHour) fallback.fiveHour = window;
+      else if (kind === 'sevenDay' && !fallback.sevenDay) fallback.sevenDay = window;
+      else {
+        if (!fallback.other) fallback.other = [];
+        fallback.other.push(window);
+      }
+    }
+    models['Codex'] = fallback;
+  }
+
+  return Object.entries(models)
+    .map(([name, windows]) => {
+      const values = [
+        windows.fiveHour?.remaining,
+        windows.sevenDay?.remaining,
+        ...(windows.other?.map((w) => w.remaining) ?? []),
+      ].filter((v): v is number => v !== undefined && v !== null);
+
+      return {
+        name,
+        windows,
+        severity: values.length > 0 ? Math.min(...values) : 101,
+      };
+    })
+    .sort((a, b) => a.severity - b.severity || a.name.localeCompare(b.name));
+}
+
+function applyCodexModelFilter(
+  models: Array<{ name: string; windows: ModelWindows; severity: number }>,
+  allowed?: string[]
+): Array<{ name: string; windows: ModelWindows; severity: number }> {
+  if (!allowed || allowed.length === 0) return models;
+  return models.filter((m) => allowed.includes(m.name));
+}
+
+function codexModelLine(
+  name: string,
+  window: QuotaWindow | undefined,
+  maxLen: number,
+  v: string
+): string {
+  const rem = window?.remaining ?? null;
+  const nameS = s(C.lavender, name.padEnd(maxLen));
+  const b = bar(rem);
+  const pctS = s(getColorForPercent(rem), pct(rem).padStart(4));
+  const etaS = window?.resetsAt
+    ? s(C.teal, `→ ${eta(window.resetsAt, rem)} ${resetTime(window.resetsAt, rem)}`)
+    : s(C.teal, '→ N/A');
+  return v + '  ' + indicator(rem) + ' ' + nameS + ' ' + b + ' ' + pctS + ' ' + etaS;
 }
 
 /**
@@ -226,6 +333,9 @@ function buildClaudeTooltip(p: ProviderQuota): string {
 function buildCodexTooltip(p: ProviderQuota): string {
   const lines: string[] = [];
   const v = s(C.green, B.v);
+  const settings = loadSettingsSync();
+  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? 'both';
+  const planLabel = normalizePlanLabel(p);
   
   lines.push(s(C.green, B.tl + B.h) + ' ' + s(C.green, 'Codex', true) + ' ' + s(C.green, B.h.repeat(51)));
   lines.push(v);
@@ -233,25 +343,33 @@ function buildCodexTooltip(p: ProviderQuota): string {
   if (p.error) {
     lines.push(v + '  ' + s(C.red, `⚠️ ${p.error}`));
   } else {
-    const maxLen = 20;
-    
-    if (p.primary) {
-      lines.push(label(windowLabel(p.primary.windowMinutes, 'Primary limit'), C.green));
-      const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(maxLen));
-      const b = bar(p.primary.remaining);
-      const pctS = s(getColorForPercent(p.primary.remaining), pct(p.primary.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(p.primary.resetsAt, p.primary.remaining)} ${resetTime(p.primary.resetsAt, p.primary.remaining)}`);
-      lines.push(v + '  ' + indicator(p.primary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
-    }
+    lines.push(v + '  ' + s(C.subtext, `Plan: ${planLabel}`));
 
-    if (p.secondary) {
+    let models = codexModelsFromQuota(p);
+    models = applyCodexModelFilter(models, settings.models?.[p.provider]);
+
+    if (models.length === 0) {
       lines.push(v);
-      lines.push(label(windowLabel(p.secondary.windowMinutes, 'Secondary limit'), C.green));
-      const name = s(C.lavender, 'GPT-5.2 Codex'.padEnd(20));
-      const b = bar(p.secondary.remaining);
-      const pctS = s(getColorForPercent(p.secondary.remaining), pct(p.secondary.remaining).padStart(4));
-      const etaS = s(C.teal, `→ ${eta(p.secondary.resetsAt, p.secondary.remaining)} ${resetTime(p.secondary.resetsAt, p.secondary.remaining)}`);
-      lines.push(v + '  ' + indicator(p.secondary.remaining) + ' ' + name + ' ' + b + ' ' + pctS + ' ' + etaS);
+      lines.push(label('Available Models', C.green));
+      lines.push(v + '  ' + s(C.muted, 'No models selected'));
+    } else {
+      const maxLen = Math.max(...models.map((m) => m.name.length), 20);
+
+      if (policy !== 'seven_day') {
+        lines.push(v);
+        lines.push(label('5-hour limit', C.green));
+        for (const model of models) {
+          lines.push(codexModelLine(model.name, model.windows.fiveHour, maxLen, v));
+        }
+      }
+
+      if (policy !== 'five_hour') {
+        lines.push(v);
+        lines.push(label('7-day limit', C.green));
+        for (const model of models) {
+          lines.push(codexModelLine(model.name, model.windows.sevenDay, maxLen, v));
+        }
+      }
     }
 
     if (p.extraUsage?.enabled) {
