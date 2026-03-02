@@ -75,7 +75,14 @@ const CSS_COLORS = {
   surface0: "#313244",
 };
 
-type SeparatorStyle = "pipe" | "dot" | "subtle" | "none";
+type SeparatorStyle =
+  | "pill"
+  | "underline"
+  | "gap"
+  | "pipe"
+  | "dot"
+  | "subtle"
+  | "none";
 
 function generateCSS(
   separatorStyle: SeparatorStyle = "pipe",
@@ -109,7 +116,35 @@ function generateCSS(
 `;
 
   // Separator styles
-  if (separatorStyle !== "none") {
+  if (separatorStyle === "pill") {
+    css += `
+/* Separator: pill */
+${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
+  background-color: ${CSS_COLORS.surface0};
+  border-radius: 6px;
+  margin: 2px 4px;
+  padding: 0 10px 0 28px;
+}
+`;
+  } else if (separatorStyle === "underline") {
+    css += `
+/* Separator: underline */
+${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
+  border-bottom: 2px solid ${CSS_COLORS.muted};
+  padding: 0 6px 2px 24px;
+  margin: 0 4px;
+}
+`;
+  } else if (separatorStyle === "gap") {
+    css += `
+/* Separator: gap */
+${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
+  margin: 0 8px;
+  padding: 0 4px 0 22px;
+}
+`;
+  } else if (separatorStyle !== "none") {
+    // Legacy borders
     const borderStyles: Record<string, { border: string; outer: string }> = {
       pipe: {
         border: `1px solid ${CSS_COLORS.muted}`,
@@ -148,14 +183,16 @@ ${innerModules.map((p) => `#custom-qbar-${p}`).join(",\n")} {
 
   // Status colors with subtle neon glow for warnings
   css += `
-#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok, #custom-qbar-amp.ok { color: ${CSS_COLORS.green}; }
-#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low, #custom-qbar-amp.low { color: ${CSS_COLORS.yellow}; }
+#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok, #custom-qbar-amp.ok { color: ${CSS_COLORS.green}; border-bottom-color: ${CSS_COLORS.green}; }
+#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low, #custom-qbar-amp.low { color: ${CSS_COLORS.yellow}; border-bottom-color: ${CSS_COLORS.yellow}; }
 #custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn, #custom-qbar-amp.warn {
   color: ${CSS_COLORS.orange};
+  border-bottom-color: ${CSS_COLORS.orange};
   text-shadow: 0 0 3px rgba(250, 179, 135, 0.4);
 }
 #custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical, #custom-qbar-amp.critical {
   color: ${CSS_COLORS.red};
+  border-bottom-color: ${CSS_COLORS.red};
   text-shadow: 0 0 5px rgba(243, 139, 168, 0.6);
   font-weight: bold;
 }

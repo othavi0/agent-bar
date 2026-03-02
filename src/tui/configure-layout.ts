@@ -3,10 +3,25 @@ import { loadSettings, saveSettings } from "../settings";
 import { catppuccin, colorize, semantic } from "./colors";
 
 const SEPARATOR_STYLES = [
-  { value: "pipe" as const, label: "Pipe", preview: "│ 0% │ 100% │ 65% │" },
-  { value: "dot" as const, label: "Dotted", preview: "┊ 0% ┊ 100% ┊ 65% ┊" },
-  { value: "subtle" as const, label: "Subtle", preview: "  0%   100%   65%  " },
-  { value: "none" as const, label: "None", preview: "0%  100%  65%" },
+  { value: "pill" as const, label: "Pill", preview: "[ 100% ] [ 65% ]" },
+  {
+    value: "underline" as const,
+    label: "Underline",
+    preview: " 100%   65%\n ────   ───",
+  },
+  { value: "gap" as const, label: "Gap (Minimal)", preview: " 100%     65% " },
+  { value: "pipe" as const, label: "Pipe (Legacy)", preview: "│ 100% │ 65% │" },
+  {
+    value: "dot" as const,
+    label: "Dotted (Legacy)",
+    preview: "┊ 100% ┊ 65% ┊",
+  },
+  {
+    value: "subtle" as const,
+    label: "Subtle (Legacy)",
+    preview: "  100%   65%  ",
+  },
+  { value: "none" as const, label: "None", preview: "100%  65%" },
 ];
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -51,22 +66,47 @@ async function applyCSS(
 
   let content = readFileSync(styleFile, "utf-8");
 
-  // Remove existing separator rules
+  // Remove ALL existing separator rules (pill, underline, gap, outer borders, inter-module borders)
   content = content.replace(
-    /\/\* Separator: outer borders \*\/[\s\S]*?(?=\n\/\*|\n#custom-qbar-claude\.ok|\n$)/m,
-    "",
-  );
-  content = content.replace(
-    /\/\* Separator: inter-module borders \*\/[\s\S]*?\}\s*/m,
+    /\/\* Separator: (?:pill|underline|gap|outer borders|inter-module borders) \*\/[\s\S]*?(?=\n\/\*|\n#custom-qbar-claude\.ok|\n$)/gm,
     "",
   );
 
-  // Remove any previously added separator-specific padding overrides
+  // Remove any previously added separator-specific padding/border overrides
   content = content.replace(/#custom-qbar-\w+ \{ border-left:.*?\}\n?/g, "");
   content = content.replace(/#custom-qbar-\w+ \{ border-right:.*?\}\n?/g, "");
 
   // Add new separator rules before the status color rules
-  if (separatorStyle !== "none") {
+  let separatorCSS = "";
+  if (separatorStyle === "pill") {
+    separatorCSS = `
+/* Separator: pill */
+${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
+  background-color: ${surface0};
+  border-radius: 6px;
+  margin: 2px 4px;
+  padding: 0 10px 0 28px;
+}
+`;
+  } else if (separatorStyle === "underline") {
+    separatorCSS = `
+/* Separator: underline */
+${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
+  border-bottom: 2px solid ${muted};
+  padding: 0 6px 2px 24px;
+  margin: 0 4px;
+}
+`;
+  } else if (separatorStyle === "gap") {
+    separatorCSS = `
+/* Separator: gap */
+${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
+  margin: 0 8px;
+  padding: 0 4px 0 22px;
+}
+`;
+  } else if (separatorStyle !== "none") {
+    // Legacy classic borders
     const styles: Record<string, { border: string; outer: string }> = {
       pipe: { border: `1px solid ${muted}`, outer: `1px solid ${muted}` },
       dot: { border: `2px dashed ${muted}`, outer: `2px dashed ${muted}` },
@@ -78,7 +118,7 @@ async function applyCSS(
 
     const style = styles[separatorStyle] ?? styles.pipe;
 
-    const separatorCSS = `
+    separatorCSS = `
 /* Separator: outer borders */
 #custom-qbar-${first} { border-left: ${style.outer}; margin-left: 4px; padding-left: 26px; }
 #custom-qbar-${last} { border-right: ${style.outer}; margin-right: 4px; }
@@ -91,7 +131,9 @@ ${providers
   border-left: ${style.border};
 }
 `;
+  }
 
+  if (separatorCSS) {
     // Insert before status colors
     const insertPoint = content.indexOf("#custom-qbar-claude.ok");
     if (insertPoint !== -1) {

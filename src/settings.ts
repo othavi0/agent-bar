@@ -12,7 +12,14 @@ export interface Settings {
   waybar: {
     providers: string[];
     showPercentage: boolean;
-    separators: "pipe" | "dot" | "subtle" | "none";
+    separators:
+      | "pill"
+      | "underline"
+      | "gap"
+      | "pipe"
+      | "dot"
+      | "subtle"
+      | "none";
     providerOrder: string[];
   };
   tooltip: {
