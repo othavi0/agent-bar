@@ -14,11 +14,20 @@ export async function runTui(): Promise<void> {
   console.clear();
 
   // Timeline-style intro (OpenClaw-like)
+  // ASCII Art Header
+  const asciiArt = `
+       __
+  ____/ /_  ____ ______
+ / __  / __ \\/ __ \`/ ___/
+/ /_/ / /_/ / /_/ / /
+\\__,_/_.___/\\__,_/_/
+`;
+
+  // Intro with Art
   p.intro(
-    colorize(
-      `qbar ${colorize(`v${VERSION}`, semantic.subtitle)}`,
-      semantic.accent,
-    ),
+    colorize(asciiArt, semantic.accent) +
+      "\\n" +
+      colorize(`      v${VERSION}`, semantic.subtitle),
   );
 
   // Tips box (doesn't break the timeline)

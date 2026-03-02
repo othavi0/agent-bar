@@ -146,12 +146,19 @@ ${innerModules.map((p) => `#custom-qbar-${p}`).join(",\n")} {
     }
   }
 
-  // Status colors
+  // Status colors with subtle neon glow for warnings
   css += `
 #custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok, #custom-qbar-amp.ok { color: ${CSS_COLORS.green}; }
 #custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low, #custom-qbar-amp.low { color: ${CSS_COLORS.yellow}; }
-#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn, #custom-qbar-amp.warn { color: ${CSS_COLORS.orange}; }
-#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical, #custom-qbar-amp.critical { color: ${CSS_COLORS.red}; }
+#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn, #custom-qbar-amp.warn {
+  color: ${CSS_COLORS.orange};
+  text-shadow: 0 0 3px rgba(250, 179, 135, 0.4);
+}
+#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical, #custom-qbar-amp.critical {
+  color: ${CSS_COLORS.red};
+  text-shadow: 0 0 5px rgba(243, 139, 168, 0.6);
+  font-weight: bold;
+}
 
 #custom-qbar-claude.disconnected,
 #custom-qbar-codex.disconnected,
