@@ -68,7 +68,6 @@ export async function handleActionRight(providerId: string): Promise<void> {
     const { cache } = await import('./cache');
     if (providerId === 'codex') await cache.invalidate('codex-quota');
     if (providerId === 'claude') await cache.invalidate('claude-usage');
-    // Antigravity cache keys are per-account; we don't nuke them here to avoid heavy I/O.
   } catch {
     // ignore
   }

@@ -10,27 +10,115 @@ const VERSION = "3.0.0";
 
 type MenuAction = "list" | "waybar" | "models" | "layout" | "login";
 
+// Block-style logo inspired by Omarchy branding
+const LOGO_LINES = [
+  "         █████    ████   █████  ",
+  "  ████   ██  ██  ██  ██  ██  ██ ",
+  " ██  ██  █████   ██  ██  █████  ",
+  " ██  ██  ██  ██  ██████  ██  ██ ",
+  "  █████  █████   ██  ██  ██  ██ ",
+  "     ██                         ",
+];
+
+// Catppuccin gradient: mauve → lavender → blue → sapphire → teal
+const GRADIENT: number[][] = [
+  [203, 166, 247],
+  [180, 190, 254],
+  [137, 180, 250],
+  [116, 199, 236],
+  [148, 226, 213],
+];
+
+function gradientColor(t: number): string {
+  const seg = t * (GRADIENT.length - 1);
+  const i = Math.min(Math.floor(seg), GRADIENT.length - 2);
+  const f = seg - i;
+  const r = Math.round(GRADIENT[i][0] + (GRADIENT[i + 1][0] - GRADIENT[i][0]) * f);
+  const g = Math.round(GRADIENT[i][1] + (GRADIENT[i + 1][1] - GRADIENT[i][1]) * f);
+  const b = Math.round(GRADIENT[i][2] + (GRADIENT[i + 1][2] - GRADIENT[i][2]) * f);
+  return `\x1b[38;2;${r};${g};${b}m`;
+}
+
+function colorLogo(): string {
+  const maxLen = Math.max(...LOGO_LINES.map((l) => l.length));
+  return LOGO_LINES.map((line) => {
+    const chars = [...line];
+    return (
+      chars
+        .map((ch, idx) => {
+          if (!ch.trim()) return ch;
+          return gradientColor(idx / maxLen) + ch;
+        })
+        .join("") + catppuccin.reset
+    );
+  }).join("\n");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function animateLogo(): Promise<void> {
+  const maxLen = Math.max(...LOGO_LINES.map((l) => l.length));
+  const height = LOGO_LINES.length;
+
+  // Hide cursor
+  process.stdout.write("\x1b[?25l");
+
+  // Reserve lines
+  for (let i = 0; i < height; i++) process.stdout.write("\n");
+
+  // Reveal column by column in chunks
+  const step = 2;
+  for (let col = 0; col <= maxLen; col += step) {
+    // Move cursor up to first logo line
+    process.stdout.write(`\x1b[${height}A`);
+
+    for (let row = 0; row < height; row++) {
+      const line = LOGO_LINES[row];
+      let out = "\r";
+      for (let c = 0; c < col && c < line.length; c++) {
+        const ch = line[c];
+        if (!ch.trim()) {
+          out += ch;
+        } else {
+          out += gradientColor(c / maxLen) + ch;
+        }
+      }
+      out += catppuccin.reset + "\x1b[K\n";
+      process.stdout.write(out);
+    }
+
+    await sleep(12);
+  }
+
+  // Final full render
+  process.stdout.write(`\x1b[${height}A`);
+  for (const line of LOGO_LINES) {
+    let out = "\r";
+    for (let c = 0; c < line.length; c++) {
+      const ch = line[c];
+      if (!ch.trim()) {
+        out += ch;
+      } else {
+        out += gradientColor(c / maxLen) + ch;
+      }
+    }
+    process.stdout.write(out + catppuccin.reset + "\x1b[K\n");
+  }
+
+  // Show cursor
+  process.stdout.write("\x1b[?25h");
+}
+
 export async function runTui(): Promise<void> {
   console.clear();
 
-  // Timeline-style intro (OpenClaw-like)
-  // ASCII Art Header
-  const asciiArt = `
-       __
-  ____/ /_  ____ ______
- / __  / __ \\/ __ \`/ ___/
-/ /_/ / /_/ / /_/ / /
-\\__,_/_.___/\\__,_/_/
-`;
+  await animateLogo();
+  console.log();
 
-  // Intro with Art
-  p.intro(
-    colorize(asciiArt, semantic.accent) +
-      "\\n" +
-      colorize(`      v${VERSION}`, semantic.subtitle),
-  );
+  p.intro(colorize(`  v${VERSION}`, semantic.subtitle));
 
-  // Tips box (doesn't break the timeline)
   p.note(
     [
       colorize("↑↓", semantic.highlight) +
@@ -77,7 +165,6 @@ export async function runTui(): Promise<void> {
       ],
     });
 
-    // q or Ctrl+C exits
     if (p.isCancel(result)) {
       running = false;
       continue;
@@ -85,7 +172,6 @@ export async function runTui(): Promise<void> {
 
     const action = result as MenuAction;
 
-    // Log the step (timeline-style)
     p.log.step(colorize(`→ ${action}`, semantic.accent));
 
     switch (action) {
@@ -114,8 +200,8 @@ export async function runTui(): Promise<void> {
   p.outro(colorize("Goodbye!", semantic.muted));
 }
 
-// Handle keyboard interrupt gracefully
 process.on("SIGINT", () => {
+  process.stdout.write("\x1b[?25h");
   console.log("");
   p.outro(colorize("Cancelled", semantic.muted));
   process.exit(0);

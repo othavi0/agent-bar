@@ -1,10 +1,18 @@
 import { getColorForPercent } from "../config";
 import type {
   AllQuotas,
-  ModelWindows,
   ProviderQuota,
   QuotaWindow,
 } from "../providers/types";
+import {
+  formatPercent,
+  formatEta,
+  formatResetTime,
+  classifyWindow,
+  normalizePlanLabel,
+  codexModelsFromQuota,
+  applyCodexModelFilter,
+} from "./shared";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
 
 // Catppuccin Mocha palette
@@ -47,12 +55,8 @@ interface WaybarOutput {
 const s = (color: string, text: string, bold = false) =>
   `<span foreground='${color}'${bold ? " weight='bold'" : ""}>${text}</span>`;
 
-function pct(val: number | null): string {
-  return val === null ? "?%" : `${Math.round(val)}%`;
-}
-
 function pctColored(val: number | null): string {
-  return s(getColorForPercent(val), pct(val));
+  return s(getColorForPercent(val), formatPercent(val));
 }
 
 function bar(val: number | null): string {
@@ -64,185 +68,12 @@ function bar(val: number | null): string {
   );
 }
 
-function eta(iso: string | null, remaining: number | null): string {
-  // If full (100%), show "Full" instead of time
-  if (remaining === 100) return "Full";
-  if (!iso) return "?";
-  const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return "0m";
-  const d = Math.floor(diff / 86400000);
-  const h = Math.floor((diff % 86400000) / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  return d > 0
-    ? `${d}d ${h.toString().padStart(2, "0")}h`
-    : `${h}h ${m.toString().padStart(2, "0")}m`;
-}
-
-function resetTime(iso: string | null, remaining: number | null): string {
-  if (remaining === 100) return ""; // Full, no reset time needed
-  if (!iso) return "??:??";
-  const d = new Date(iso);
-  return `(${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")})`;
-}
-
 function indicator(val: number | null): string {
   if (val === null) return s(C.muted, B.dotO);
   if (val < 10) return s(C.red, B.dot);
   if (val < 30) return s(C.orange, B.dot);
   if (val < 60) return s(C.yellow, B.dot);
   return s(C.green, B.dot);
-}
-
-function filterModels(
-  models: Record<string, QuotaWindow>,
-): Array<{ name: string; remaining: number | null; resetsAt: string | null }> {
-  const map = new Map<
-    string,
-    { name: string; remaining: number | null; resetsAt: string | null }
-  >();
-
-  for (const [name, w] of Object.entries(models)) {
-    const lower = name.toLowerCase();
-    if (
-      /^(tab_|chat_|test_|internal_)/.test(lower) ||
-      /preview$/i.test(name) ||
-      /2\.5/i.test(name)
-    )
-      continue;
-    const base = name.replace(/\s*\(Thinking\)/i, "");
-    if (!map.has(base))
-      map.set(base, {
-        name: base,
-        remaining: w.remaining,
-        resetsAt: w.resetsAt,
-      });
-  }
-
-  return [...map.values()].sort((a, b) => {
-    const pri = (n: string) =>
-      n.toLowerCase().includes("claude")
-        ? 0
-        : n.toLowerCase().includes("gpt")
-          ? 1
-          : n.toLowerCase().includes("gemini")
-            ? 2
-            : 3;
-    return pri(a.name) - pri(b.name) || a.name.localeCompare(b.name);
-  });
-}
-
-function applyModelFilter(
-  models: Array<{
-    name: string;
-    remaining: number | null;
-    resetsAt: string | null;
-  }>,
-  allowed?: string[],
-): Array<{ name: string; remaining: number | null; resetsAt: string | null }> {
-  if (!allowed || allowed.length === 0) return models;
-  return models.filter(
-    (m) =>
-      allowed.includes(m.name) ||
-      allowed.includes(m.name.replace(/\s*\(Thinking\)/i, "")),
-  );
-}
-
-function classifyWindow(
-  minutes: number | null | undefined,
-): "fiveHour" | "sevenDay" | "other" {
-  if (!minutes || minutes <= 0) return "other";
-  if (Math.abs(minutes - 300) <= 90) return "fiveHour";
-  if (Math.abs(minutes - 10080) <= 1440) return "sevenDay";
-  return "other";
-}
-
-function normalizePlanLabel(p: ProviderQuota): string {
-  if (p.plan?.trim()) return p.plan;
-  const raw = p.planType?.trim();
-  if (!raw) return "Unknown";
-
-  const key = raw.toLowerCase();
-  const map: Record<string, string> = {
-    free: "Free",
-    go: "Go",
-    plus: "Plus",
-    pro: "Pro",
-    business: "Business",
-    team: "Business",
-    enterprise: "Enterprise",
-    edu: "Edu",
-    education: "Edu",
-    apikey: "API Key",
-    api_key: "API Key",
-  };
-  return map[key] ?? raw;
-}
-
-function codexModelsFromQuota(
-  p: ProviderQuota,
-): Array<{ name: string; windows: ModelWindows; severity: number }> {
-  const models: Record<string, ModelWindows> = {};
-
-  if (p.modelsDetailed) {
-    for (const [name, windows] of Object.entries(p.modelsDetailed)) {
-      models[name] = windows;
-    }
-  }
-
-  if (p.models) {
-    for (const [name, window] of Object.entries(p.models)) {
-      if (!models[name]) models[name] = {};
-      const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !models[name].fiveHour)
-        models[name].fiveHour = window;
-      else if (kind === "sevenDay" && !models[name].sevenDay)
-        models[name].sevenDay = window;
-      else {
-        if (!models[name].other) models[name].other = [];
-        models[name].other!.push(window);
-      }
-    }
-  }
-
-  if (Object.keys(models).length === 0 && (p.primary || p.secondary)) {
-    const fallback: ModelWindows = {};
-    for (const window of [p.primary, p.secondary]) {
-      if (!window) continue;
-      const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !fallback.fiveHour) fallback.fiveHour = window;
-      else if (kind === "sevenDay" && !fallback.sevenDay)
-        fallback.sevenDay = window;
-      else {
-        if (!fallback.other) fallback.other = [];
-        fallback.other.push(window);
-      }
-    }
-    models["Codex"] = fallback;
-  }
-
-  return Object.entries(models)
-    .map(([name, windows]) => {
-      const values = [
-        windows.fiveHour?.remaining,
-        windows.sevenDay?.remaining,
-        ...(windows.other?.map((w) => w.remaining) ?? []),
-      ].filter((v): v is number => v !== undefined && v !== null);
-
-      return {
-        name,
-        windows,
-        severity: values.length > 0 ? Math.min(...values) : 101,
-      };
-    })
-    .sort((a, b) => a.severity - b.severity || a.name.localeCompare(b.name));
-}
-
-function applyCodexModelFilter(
-  models: Array<{ name: string; windows: ModelWindows; severity: number }>,
-  allowed?: string[],
-): Array<{ name: string; windows: ModelWindows; severity: number }> {
-  if (!allowed || allowed.length === 0) return models;
-  return models.filter((m) => allowed.includes(m.name));
 }
 
 function codexModelLine(
@@ -254,11 +85,11 @@ function codexModelLine(
   const rem = window?.remaining ?? null;
   const nameS = s(C.lavender, name.padEnd(maxLen));
   const b = bar(rem);
-  const pctS = s(getColorForPercent(rem), pct(rem).padStart(4));
+  const pctS = s(getColorForPercent(rem), formatPercent(rem).padStart(4));
   const etaS = window?.resetsAt
     ? s(
         C.teal,
-        `→ ${eta(window.resetsAt, rem)} ${resetTime(window.resetsAt, rem)}`,
+        `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`,
       )
     : s(C.teal, "→ N/A");
   return (
@@ -266,72 +97,9 @@ function codexModelLine(
   );
 }
 
-/**
- * Group antigravity models into tiers by shared reset time.
- * Models that reset together share the same quota pool.
- * Returns sorted by worst-first (most critical tier shown first).
- */
-interface Tier {
-  label: string;
-  worst: number;
-  models: string[];
-  resetsAt: string | null;
-}
-function buildAntigravityTiers(models: Record<string, QuotaWindow>): Tier[] {
-  const filtered = filterModels(models);
-  // Group by resetsAt timestamp
-  const groups = new Map<
-    string,
-    { names: string[]; worsts: number[]; resetsAt: string | null }
-  >();
-  for (const m of filtered) {
-    const key = m.resetsAt ?? "none";
-    if (!groups.has(key))
-      groups.set(key, { names: [], worsts: [], resetsAt: m.resetsAt });
-    const g = groups.get(key)!;
-    g.names.push(m.name);
-    g.worsts.push(m.remaining ?? 0);
-  }
-
-  const tiers: Tier[] = [];
-  for (const [, g] of groups) {
-    // Build a label from the dominant family
-    const families = new Set(
-      g.names.map((n) => {
-        const l = n.toLowerCase();
-        if (l.includes("claude") || l.includes("gpt")) return "Claude";
-        return n.replace(/\s*\(.*?\)/g, "").trim();
-      }),
-    );
-    const label = [...families].join(" + ");
-    tiers.push({
-      label,
-      worst: Math.min(...g.worsts),
-      models: g.names,
-      resetsAt: g.resetsAt,
-    });
-  }
-
-  // Sort: worst first (most critical), then alphabetically
-  return tiers.sort(
-    (a, b) => a.worst - b.worst || a.label.localeCompare(b.label),
-  );
-}
-
 // Section label with connecting line: ┣━ ◆ Label
 const label = (text: string, color: string) =>
   s(color, B.lt + B.h) + " " + s(C.mauve, B.diamond + " " + text, true);
-
-function windowLabel(
-  minutes: number | null | undefined,
-  fallback: string,
-): string {
-  if (!minutes || minutes <= 0) return fallback;
-  const day = 60 * 24;
-  if (minutes % day === 0) return `${minutes / day}-day limit`;
-  if (minutes % 60 === 0) return `${minutes / 60}-hour limit`;
-  return `${minutes}-minute limit`;
-}
 
 /**
  * Build Claude tooltip
@@ -360,11 +128,11 @@ function buildClaudeTooltip(p: ProviderQuota): string {
       const b = bar(p.primary.remaining);
       const pctS = s(
         getColorForPercent(p.primary.remaining),
-        pct(p.primary.remaining).padStart(4),
+        formatPercent(p.primary.remaining).padStart(4),
       );
       const etaS = s(
         C.teal,
-        `→ ${eta(p.primary.resetsAt, p.primary.remaining)} ${resetTime(p.primary.resetsAt, p.primary.remaining)}`,
+        `→ ${formatEta(p.primary.resetsAt, p.primary.remaining)} ${formatResetTime(p.primary.resetsAt, p.primary.remaining)}`,
       );
       lines.push(
         v +
@@ -393,11 +161,11 @@ function buildClaudeTooltip(p: ProviderQuota): string {
         const b = bar(window.remaining);
         const pctS = s(
           getColorForPercent(window.remaining),
-          pct(window.remaining).padStart(4),
+          formatPercent(window.remaining).padStart(4),
         );
         const etaS = s(
           C.teal,
-          `→ ${eta(window.resetsAt, window.remaining)} ${resetTime(window.resetsAt, window.remaining)}`,
+          `→ ${formatEta(window.resetsAt, window.remaining)} ${formatResetTime(window.resetsAt, window.remaining)}`,
         );
         lines.push(
           v +
@@ -423,11 +191,11 @@ function buildClaudeTooltip(p: ProviderQuota): string {
       const b = bar(p.secondary.remaining);
       const pctS = s(
         getColorForPercent(p.secondary.remaining),
-        pct(p.secondary.remaining).padStart(4),
+        formatPercent(p.secondary.remaining).padStart(4),
       );
       const etaS = s(
         C.teal,
-        `→ ${eta(p.secondary.resetsAt, p.secondary.remaining)} ${resetTime(p.secondary.resetsAt, p.secondary.remaining)}`,
+        `→ ${formatEta(p.secondary.resetsAt, p.secondary.remaining)} ${formatResetTime(p.secondary.resetsAt, p.secondary.remaining)}`,
       );
       lines.push(
         v +
@@ -450,7 +218,7 @@ function buildClaudeTooltip(p: ProviderQuota): string {
       lines.push(label("Extra Usage", C.peach));
       const name = s(C.lavender, "Budget".padEnd(20));
       const b = bar(remaining);
-      const pctS = s(getColorForPercent(remaining), pct(remaining).padStart(4));
+      const pctS = s(getColorForPercent(remaining), formatPercent(remaining).padStart(4));
       const usedS = s(
         C.teal,
         `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`,
@@ -539,7 +307,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
       const b = bar(p.extraUsage.remaining);
       const pctS = s(
         getColorForPercent(p.extraUsage.remaining),
-        pct(p.extraUsage.remaining).padStart(4),
+        formatPercent(p.extraUsage.remaining).padStart(4),
       );
       const limitS =
         p.extraUsage.limit === -1
@@ -563,72 +331,6 @@ function buildCodexTooltip(p: ProviderQuota): string {
 
   lines.push(v);
   lines.push(s(C.green, B.bl + B.h.repeat(55)));
-
-  return lines.join("\n");
-}
-
-/**
- * Build Antigravity tooltip
- */
-function buildAntigravityTooltip(p: ProviderQuota): string {
-  const lines: string[] = [];
-  const v = s(C.blue, B.v);
-  const settings = loadSettingsSync();
-
-  lines.push(
-    s(C.blue, B.tl + B.h) +
-      " " +
-      s(C.blue, "Antigravity", true) +
-      " " +
-      s(C.blue, B.h.repeat(45)),
-  );
-  lines.push(v);
-
-  if (p.error) {
-    lines.push(v + "  " + s(C.red, `⚠️ ${p.error}`));
-  } else if (!p.models || Object.keys(p.models).length === 0) {
-    lines.push(v + "  " + s(C.muted, "No models available"));
-  } else {
-    let models = filterModels(p.models);
-    models = applyModelFilter(models, settings.models?.[p.provider]);
-
-    if (models.length === 0) {
-      lines.push(label("Available Models", C.blue));
-      lines.push(v + "  " + s(C.muted, "No models selected"));
-    } else {
-      const maxLen = Math.max(...models.map((m) => m.name.length), 20);
-
-      lines.push(label("Available Models", C.blue));
-      for (const m of models) {
-        const name = s(C.lavender, m.name.padEnd(maxLen));
-        const b = bar(m.remaining);
-        const pctS = s(
-          getColorForPercent(m.remaining),
-          pct(m.remaining).padStart(4),
-        );
-        const etaS = s(
-          C.teal,
-          `→ ${eta(m.resetsAt, m.remaining)} ${resetTime(m.resetsAt, m.remaining)}`,
-        );
-        lines.push(
-          v +
-            "  " +
-            indicator(m.remaining) +
-            " " +
-            name +
-            " " +
-            b +
-            " " +
-            pctS +
-            " " +
-            etaS,
-        );
-      }
-    }
-  }
-
-  lines.push(v);
-  lines.push(s(C.blue, B.bl + B.h.repeat(55)));
 
   return lines.join("\n");
 }
@@ -665,7 +367,7 @@ function buildAmpTooltip(p: ProviderQuota): string {
       const b = bar(free.remaining);
       const pctS = s(
         getColorForPercent(free.remaining),
-        pct(free.remaining).padStart(4),
+        formatPercent(free.remaining).padStart(4),
       );
       lines.push(label("Free Tier", C.mauve));
       lines.push(v + "  " + indicator(free.remaining) + " " + b + " " + pctS);
@@ -688,7 +390,7 @@ function buildAmpTooltip(p: ProviderQuota): string {
         subs.push(
           s(
             C.teal,
-            `Full in ${eta(free.resetsAt, free.remaining)}  ${resetTime(free.resetsAt, free.remaining)}`,
+            `Full in ${formatEta(free.resetsAt, free.remaining)}  ${formatResetTime(free.resetsAt, free.remaining)}`,
           ),
         );
       }
@@ -736,9 +438,6 @@ function buildTooltip(quotas: AllQuotas): string {
         break;
       case "codex":
         sections.push(buildCodexTooltip(p));
-        break;
-      case "antigravity":
-        sections.push(buildAntigravityTooltip(p));
         break;
       case "amp":
         sections.push(buildAmpTooltip(p));
@@ -801,9 +500,6 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
       case "codex":
         tooltip = buildCodexTooltip(quota);
         break;
-      case "antigravity":
-        tooltip = buildAntigravityTooltip(quota);
-        break;
       case "amp":
         tooltip = buildAmpTooltip(quota);
         break;
@@ -832,41 +528,13 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
     case "codex":
       tooltip = buildCodexTooltip(quota);
       break;
-    case "antigravity":
-      tooltip = buildAntigravityTooltip(quota);
-      break;
     case "amp":
       tooltip = buildAmpTooltip(quota);
       break;
   }
 
-  // For antigravity: show Claude tier + Flash tier in bar text
-  let text = pctColored(val);
-  if (quota.provider === "antigravity" && quota.models) {
-    const tiers = buildAntigravityTiers(quota.models);
-    // Only show tiers containing Claude or Flash models
-    const shown = tiers.filter(
-      (t) =>
-        t.models.some((n) => /claude|gpt/i.test(n)) ||
-        t.models.some((n) => /flash/i.test(n)),
-    );
-    const display = shown.length > 0 ? shown : tiers.slice(0, 2);
-    if (display.length > 0) {
-      text = display
-        .map((t) => s(getColorForPercent(t.worst), pct(t.worst)))
-        .join(" " + s(C.muted, "-") + " ");
-
-      // Status based on worst displayed tier
-      const worst = Math.min(...display.map((t) => t.worst));
-      if (worst < 10) status = "critical";
-      else if (worst < 30) status = "warn";
-      else if (worst < 60) status = "low";
-      else status = "ok";
-    }
-  }
-
   return {
-    text,
+    text: pctColored(val),
     tooltip,
     class: `qbar-${quota.provider} ${status}`,
   };

@@ -27,14 +27,12 @@ const SEPARATOR_STYLES = [
 const PROVIDER_NAMES: Record<string, string> = {
   claude: "Claude",
   codex: "Codex",
-  antigravity: "Antigravity",
   amp: "Amp",
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
   claude: catppuccin.peach,
   codex: catppuccin.green,
-  antigravity: catppuccin.blue,
   amp: catppuccin.mauve,
 };
 
@@ -60,7 +58,7 @@ async function applyCSS(
   const providers =
     providerOrder.length > 0
       ? providerOrder
-      : ["claude", "codex", "antigravity", "amp"];
+      : ["claude", "codex", "amp"];
   const first = providers[0];
   const last = providers[providers.length - 1];
 

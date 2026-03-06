@@ -1,7 +1,7 @@
 {
   "name": "qbar",
   "version": "3.0.0",
-  "description": "LLM quota monitor for Waybar - Claude, Codex, Antigravity",
+  "description": "LLM quota monitor for Waybar - Claude, Codex, Amp",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
@@ -18,7 +18,6 @@
     "waybar",
     "claude",
     "codex",
-    "antigravity",
     "llm",
     "quota"
   ],

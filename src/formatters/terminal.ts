@@ -1,10 +1,18 @@
 import { CONFIG } from "../config";
 import type {
   AllQuotas,
-  ModelWindows,
   ProviderQuota,
   QuotaWindow,
 } from "../providers/types";
+import {
+  formatPercent,
+  formatEta,
+  formatResetTime,
+  classifyWindow,
+  normalizePlanLabel,
+  codexModelsFromQuota,
+  applyCodexModelFilter,
+} from "./shared";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
 
 // ANSI color codes (Catppuccin Mocha)
@@ -53,154 +61,10 @@ function bar(pct: number | null): string {
   return `${color}${"█".repeat(filled)}${C.muted}${"░".repeat(20 - filled)}${C.reset}`;
 }
 
-function pct(val: number | null): string {
-  if (val === null) return "?%";
-  return `${Math.round(val)}%`;
-}
-
 function indicator(val: number | null): string {
   if (val === null) return `${C.muted}${B.dotO}${C.reset}`;
   const color = getColor(val);
   return `${color}${B.dot}${C.reset}`;
-}
-
-function eta(iso: string | null, remaining: number | null): string {
-  if (remaining === 100) return "Full";
-  if (!iso) return "?";
-  const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return "0m";
-  const d = Math.floor(diff / 86400000);
-  const h = Math.floor((diff % 86400000) / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  return d > 0
-    ? `${d}d ${h.toString().padStart(2, "0")}h`
-    : `${h}h ${m.toString().padStart(2, "0")}m`;
-}
-
-function resetTime(iso: string | null, remaining: number | null): string {
-  if (remaining === 100) return "";
-  if (!iso) return "(??:??)";
-  const d = new Date(iso);
-  return `(${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")})`;
-}
-
-function isValidModel(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    !/^(tab_|chat_|test_|internal_)/.test(lower) &&
-    !/preview$/i.test(name) &&
-    !/2\.5/i.test(name)
-  );
-}
-
-function applyModelFilter(
-  models: Array<{ name: string; remaining: number; resetsAt: string | null }>,
-  allowed?: string[],
-): Array<{ name: string; remaining: number; resetsAt: string | null }> {
-  if (!allowed || allowed.length === 0) return models;
-  return models.filter(
-    (m) =>
-      allowed.includes(m.name) ||
-      allowed.includes(m.name.replace(/\s*\(Thinking\)/i, "")),
-  );
-}
-
-function classifyWindow(
-  minutes: number | null | undefined,
-): "fiveHour" | "sevenDay" | "other" {
-  if (!minutes || minutes <= 0) return "other";
-  if (Math.abs(minutes - 300) <= 90) return "fiveHour";
-  if (Math.abs(minutes - 10080) <= 1440) return "sevenDay";
-  return "other";
-}
-
-function normalizePlanLabel(p: ProviderQuota): string {
-  if (p.plan?.trim()) return p.plan;
-  const raw = p.planType?.trim();
-  if (!raw) return "Unknown";
-
-  const key = raw.toLowerCase();
-  const map: Record<string, string> = {
-    free: "Free",
-    go: "Go",
-    plus: "Plus",
-    pro: "Pro",
-    business: "Business",
-    team: "Business",
-    enterprise: "Enterprise",
-    edu: "Edu",
-    education: "Edu",
-    apikey: "API Key",
-    api_key: "API Key",
-  };
-  return map[key] ?? raw;
-}
-
-function codexModelsFromQuota(
-  p: ProviderQuota,
-): Array<{ name: string; windows: ModelWindows; severity: number }> {
-  const models: Record<string, ModelWindows> = {};
-
-  if (p.modelsDetailed) {
-    for (const [name, windows] of Object.entries(p.modelsDetailed)) {
-      models[name] = windows;
-    }
-  }
-
-  if (p.models) {
-    for (const [name, window] of Object.entries(p.models)) {
-      if (!models[name]) models[name] = {};
-      const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !models[name].fiveHour)
-        models[name].fiveHour = window;
-      else if (kind === "sevenDay" && !models[name].sevenDay)
-        models[name].sevenDay = window;
-      else {
-        if (!models[name].other) models[name].other = [];
-        models[name].other!.push(window);
-      }
-    }
-  }
-
-  if (Object.keys(models).length === 0 && (p.primary || p.secondary)) {
-    const fallback: ModelWindows = {};
-    for (const window of [p.primary, p.secondary]) {
-      if (!window) continue;
-      const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !fallback.fiveHour) fallback.fiveHour = window;
-      else if (kind === "sevenDay" && !fallback.sevenDay)
-        fallback.sevenDay = window;
-      else {
-        if (!fallback.other) fallback.other = [];
-        fallback.other.push(window);
-      }
-    }
-    models["Codex"] = fallback;
-  }
-
-  return Object.entries(models)
-    .map(([name, windows]) => {
-      const values = [
-        windows.fiveHour?.remaining,
-        windows.sevenDay?.remaining,
-        ...(windows.other?.map((w) => w.remaining) ?? []),
-      ].filter((v): v is number => v !== undefined && v !== null);
-
-      return {
-        name,
-        windows,
-        severity: values.length > 0 ? Math.min(...values) : 101,
-      };
-    })
-    .sort((a, b) => a.severity - b.severity || a.name.localeCompare(b.name));
-}
-
-function applyCodexModelFilter(
-  models: Array<{ name: string; windows: ModelWindows; severity: number }>,
-  allowed?: string[],
-): Array<{ name: string; windows: ModelWindows; severity: number }> {
-  if (!allowed || allowed.length === 0) return models;
-  return models.filter((m) => allowed.includes(m.name));
 }
 
 // Vertical bar with provider color
@@ -209,17 +73,6 @@ const v = (color: string) => `${color}${B.v}${C.reset}`;
 // Section label: ┣━ ◆ Label
 const label = (text: string, color: string) =>
   `${color}${B.lt}${B.h}${C.reset} ${C.mauve}${C.bold}${B.diamond} ${text}${C.reset}`;
-
-function windowLabel(
-  minutes: number | null | undefined,
-  fallback: string,
-): string {
-  if (!minutes || minutes <= 0) return fallback;
-  const day = 60 * 24;
-  if (minutes % day === 0) return `${minutes / day}-day limit`;
-  if (minutes % 60 === 0) return `${minutes / 60}-hour limit`;
-  return `${minutes}-minute limit`;
-}
 
 // Model line
 function modelLine(
@@ -232,8 +85,8 @@ function modelLine(
   const reset = window?.resetsAt ?? null;
   const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
   const barS = bar(rem);
-  const pctS = `${getColor(rem)}${pct(rem).padStart(4)}${C.reset}`;
-  const etaS = `${C.teal}→ ${eta(reset, rem)} ${resetTime(reset, rem)}${C.reset}`;
+  const pctS = `${getColor(rem)}${formatPercent(rem).padStart(4)}${C.reset}`;
+  const etaS = `${C.teal}→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}${C.reset}`;
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
@@ -246,9 +99,9 @@ function codexModelLine(
   const rem = window?.remaining ?? null;
   const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
   const barS = bar(rem);
-  const pctS = `${getColor(rem)}${pct(rem).padStart(4)}${C.reset}`;
+  const pctS = `${getColor(rem)}${formatPercent(rem).padStart(4)}${C.reset}`;
   const etaS = window?.resetsAt
-    ? `${C.teal}→ ${eta(window.resetsAt, rem)} ${resetTime(window.resetsAt, rem)}${C.reset}`
+    ? `${C.teal}→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}${C.reset}`
     : `${C.teal}→ N/A${C.reset}`;
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
@@ -299,7 +152,7 @@ function buildClaude(p: ProviderQuota): string[] {
       lines.push(label("Extra Usage", vc));
       const nameS = `${C.lavender}${"Budget".padEnd(maxLen)}${C.reset}`;
       const barS = bar(remaining);
-      const pctS = `${getColor(remaining)}${pct(remaining).padStart(4)}${C.reset}`;
+      const pctS = `${getColor(remaining)}${formatPercent(remaining).padStart(4)}${C.reset}`;
       const usedS = `${C.teal}$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}${C.reset}`;
       lines.push(
         `${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`,
@@ -367,7 +220,7 @@ function buildCodex(p: ProviderQuota): string[] {
       lines.push(label("Credits", vc));
       const nameS = `${C.lavender}${"Balance".padEnd(maxLen)}${C.reset}`;
       const barS = bar(p.extraUsage.remaining);
-      const pctS = `${getColor(p.extraUsage.remaining)}${pct(p.extraUsage.remaining).padStart(4)}${C.reset}`;
+      const pctS = `${getColor(p.extraUsage.remaining)}${formatPercent(p.extraUsage.remaining).padStart(4)}${C.reset}`;
       const infoS =
         p.extraUsage.limit === -1
           ? `${C.teal}Unlimited${C.reset}`
@@ -375,68 +228,6 @@ function buildCodex(p: ProviderQuota): string[] {
       lines.push(
         `${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`,
       );
-    }
-  }
-
-  lines.push(v(vc));
-  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
-
-  return lines;
-}
-
-function buildAntigravity(p: ProviderQuota): string[] {
-  const lines: string[] = [];
-  const vc = C.blue;
-  const settings = loadSettingsSync();
-
-  lines.push(
-    `${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Antigravity${C.reset} ${vc}${B.h.repeat(45)}${C.reset}`,
-  );
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
-  } else if (!p.models || Object.keys(p.models).length === 0) {
-    lines.push(`${v(vc)}  ${C.muted}No models available${C.reset}`);
-  } else {
-    let models = Object.entries(p.models)
-      .filter(([name]) => isValidModel(name))
-      .sort(([a], [b]) => {
-        const pri = (n: string) =>
-          n.toLowerCase().includes("claude")
-            ? 0
-            : n.toLowerCase().includes("gpt")
-              ? 1
-              : n.toLowerCase().includes("gemini")
-                ? 2
-                : 3;
-        return pri(a) - pri(b) || a.localeCompare(b);
-      })
-      .map(([name, window]) => ({
-        name,
-        remaining: window.remaining ?? 0,
-        resetsAt: window.resetsAt,
-      }));
-
-    models = applyModelFilter(models, settings.models?.[p.provider]);
-
-    if (models.length === 0) {
-      lines.push(label("Available Models", vc));
-      lines.push(`${v(vc)}  ${C.muted}No models selected${C.reset}`);
-    } else {
-      const maxLen = Math.max(...models.map(({ name }) => name.length), 20);
-
-      lines.push(label("Available Models", vc));
-      for (const model of models) {
-        lines.push(
-          modelLine(
-            model.name,
-            { remaining: model.remaining, resetsAt: model.resetsAt },
-            maxLen,
-            vc,
-          ),
-        );
-      }
     }
   }
 
@@ -468,7 +259,7 @@ function buildAmp(p: ProviderQuota): string[] {
     if (free) {
       lines.push(label("Free Tier", vc));
       const barS = bar(free.remaining);
-      const pctS = `${getColor(free.remaining)}${pct(free.remaining).padStart(4)}${C.reset}`;
+      const pctS = `${getColor(free.remaining)}${formatPercent(free.remaining).padStart(4)}${C.reset}`;
       lines.push(`${v(vc)}  ${indicator(free.remaining)} ${barS} ${pctS}`);
 
       // Build sub-details
@@ -486,7 +277,7 @@ function buildAmp(p: ProviderQuota): string[] {
 
       if (free.resetsAt && free.remaining !== 100) {
         subs.push(
-          `${C.teal}Full in ${eta(free.resetsAt, free.remaining)}  ${resetTime(free.resetsAt, free.remaining)}${C.reset}`,
+          `${C.teal}Full in ${formatEta(free.resetsAt, free.remaining)}  ${formatResetTime(free.resetsAt, free.remaining)}${C.reset}`,
         );
       }
 
@@ -516,7 +307,7 @@ function buildAmp(p: ProviderQuota): string[] {
       for (const [name, window] of entries) {
         const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
         const barS = bar(window.remaining);
-        const pctS = `${getColor(window.remaining)}${pct(window.remaining).padStart(4)}${C.reset}`;
+        const pctS = `${getColor(window.remaining)}${formatPercent(window.remaining).padStart(4)}${C.reset}`;
         lines.push(
           `${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`,
         );
@@ -547,9 +338,6 @@ export function formatForTerminal(quotas: AllQuotas): string {
         break;
       case "codex":
         sections.push(buildCodex(p));
-        break;
-      case "antigravity":
-        sections.push(buildAntigravity(p));
         break;
       case "amp":
         sections.push(buildAmp(p));

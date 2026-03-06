@@ -48,14 +48,6 @@ const MODULES_CONFIG = `
     "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
     "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right codex"
   },
-  "custom/qbar-antigravity": {
-    "exec": "$HOME/.local/bin/qbar --provider antigravity",
-    "return-type": "json",
-    "interval": 120,
-    "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right antigravity"
-  },
   "custom/qbar-amp": {
     "exec": "$HOME/.local/bin/qbar --provider amp",
     "return-type": "json",
@@ -86,12 +78,12 @@ type SeparatorStyle =
 
 function generateCSS(
   separatorStyle: SeparatorStyle = "pipe",
-  providerOrder: string[] = ["claude", "codex", "antigravity", "amp"],
+  providerOrder: string[] = ["claude", "codex", "amp"],
 ): string {
   const providers =
     providerOrder.length > 0
       ? providerOrder
-      : ["claude", "codex", "antigravity", "amp"];
+      : ["claude", "codex", "amp"];
   const firstProvider = providers[0];
   const lastProvider = providers[providers.length - 1];
 
@@ -100,7 +92,6 @@ function generateCSS(
 /* qbar - LLM quota monitor */
 #custom-qbar-claude,
 #custom-qbar-codex,
-#custom-qbar-antigravity,
 #custom-qbar-amp {
   padding-left: 22px;
   padding-right: 6px;
@@ -111,7 +102,6 @@ function generateCSS(
 
 #custom-qbar-claude { background-image: url("qbar/icons/claude-code-icon.png"); }
 #custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
-#custom-qbar-antigravity { background-image: url("qbar/icons/antigravity-icon.png"); }
 #custom-qbar-amp { background-image: url("qbar/icons/amp-icon.svg"); }
 `;
 
@@ -183,14 +173,14 @@ ${innerModules.map((p) => `#custom-qbar-${p}`).join(",\n")} {
 
   // Status colors with subtle neon glow for warnings
   css += `
-#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok, #custom-qbar-amp.ok { color: ${CSS_COLORS.green}; border-bottom-color: ${CSS_COLORS.green}; }
-#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low, #custom-qbar-amp.low { color: ${CSS_COLORS.yellow}; border-bottom-color: ${CSS_COLORS.yellow}; }
-#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn, #custom-qbar-amp.warn {
+#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-amp.ok { color: ${CSS_COLORS.green}; border-bottom-color: ${CSS_COLORS.green}; }
+#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-amp.low { color: ${CSS_COLORS.yellow}; border-bottom-color: ${CSS_COLORS.yellow}; }
+#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-amp.warn {
   color: ${CSS_COLORS.orange};
   border-bottom-color: ${CSS_COLORS.orange};
   text-shadow: 0 0 3px rgba(250, 179, 135, 0.4);
 }
-#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical, #custom-qbar-amp.critical {
+#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-amp.critical {
   color: ${CSS_COLORS.red};
   border-bottom-color: ${CSS_COLORS.red};
   text-shadow: 0 0 5px rgba(243, 139, 168, 0.6);
@@ -199,7 +189,6 @@ ${innerModules.map((p) => `#custom-qbar-${p}`).join(",\n")} {
 
 #custom-qbar-claude.disconnected,
 #custom-qbar-codex.disconnected,
-#custom-qbar-antigravity.disconnected,
 #custom-qbar-amp.disconnected {
   color: ${CSS_COLORS.red};
   padding-left: 30px;
@@ -299,7 +288,7 @@ async function updateWaybarConfig(): Promise<boolean> {
       const newModules =
         existingModules.trimEnd() +
         (existingModules.trim().endsWith(",") ? "" : ",") +
-        '\n    "custom/qbar-claude",\n    "custom/qbar-codex",\n    "custom/qbar-antigravity",\n    "custom/qbar-amp"';
+        '\n    "custom/qbar-claude",\n    "custom/qbar-codex",\n    "custom/qbar-amp"';
       content = content.replace(
         modulesRightMatch[0],
         `"modules-right": [${newModules}]`,

@@ -109,7 +109,6 @@ async function cleanWaybarConfig(): Promise<void> {
     // Remove qbar modules from modules-right
     content = content.replace(/"custom\/qbar-claude"\s*,?\s*/g, "");
     content = content.replace(/"custom\/qbar-codex"\s*,?\s*/g, "");
-    content = content.replace(/"custom\/qbar-antigravity"\s*,?\s*/g, "");
     content = content.replace(/"custom\/qbar-amp"\s*,?\s*/g, "");
 
     // Remove module definitions (multi-line)
@@ -119,10 +118,6 @@ async function cleanWaybarConfig(): Promise<void> {
     );
     content = content.replace(
       /,?\s*"custom\/qbar-codex"\s*:\s*\{[^}]*\}/gs,
-      "",
-    );
-    content = content.replace(
-      /,?\s*"custom\/qbar-antigravity"\s*:\s*\{[^}]*\}/gs,
       "",
     );
     content = content.replace(/,?\s*"custom\/qbar-amp"\s*:\s*\{[^}]*\}/gs, "");
@@ -156,11 +151,11 @@ async function cleanWaybarStyles(): Promise<void> {
 
     // Remove qbar CSS blocks (all variations)
     content = content.replace(
-      /\/\* qbar.*?\*\/[\s\S]*?#custom-qbar-(?:antigravity|amp)\.disconnected\s*\{[^}]*\}\s*/g,
+      /\/\* qbar.*?\*\/[\s\S]*?#custom-qbar-amp\.disconnected\s*\{[^}]*\}\s*/g,
       "",
     );
     content = content.replace(
-      /#custom-qbar-claude[\s\S]*?#custom-qbar-(?:antigravity|amp)\.disconnected\s*\{[^}]*\}\s*/g,
+      /#custom-qbar-claude[\s\S]*?#custom-qbar-amp\.disconnected\s*\{[^}]*\}\s*/g,
       "",
     );
 

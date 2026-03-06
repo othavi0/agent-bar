@@ -1,12 +1,10 @@
 export * from './types';
 export { ClaudeProvider } from './claude';
 export { CodexProvider } from './codex';
-export { AntigravityProvider } from './antigravity';
 export { AmpProvider } from './amp';
 
 import { ClaudeProvider } from './claude';
 import { CodexProvider } from './codex';
-import { AntigravityProvider } from './antigravity';
 import { AmpProvider } from './amp';
 import type { Provider, ProviderQuota, AllQuotas } from './types';
 
@@ -16,7 +14,6 @@ import type { Provider, ProviderQuota, AllQuotas } from './types';
 export const providers: Provider[] = [
   new ClaudeProvider(),
   new CodexProvider(),
-  new AntigravityProvider(),
   new AmpProvider(),
 ];
 

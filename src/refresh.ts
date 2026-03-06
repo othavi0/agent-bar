@@ -24,21 +24,6 @@ async function refresh() {
     await cache.invalidate('claude-usage');
     await cache.invalidate('codex-quota');
 
-    // Antigravity cache keys are per-account (antigravity-quota-<email>). Nuke them all.
-    try {
-      const { readdirSync, unlinkSync } = await import('node:fs');
-      const { join } = await import('node:path');
-
-      const dir = (await import('./config')).CONFIG.paths.cache;
-      for (const name of readdirSync(dir)) {
-        if (name.startsWith('antigravity-quota-') && name.endsWith('.json')) {
-          try { unlinkSync(join(dir, name)); } catch {}
-        }
-      }
-    } catch {
-      // ignore
-    }
-    
     spinner.text = 'Fetching fresh data...';
 
     if (provider) {

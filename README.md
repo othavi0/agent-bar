@@ -1,6 +1,6 @@
 # qbar - Omarchy LLM Monitor on Waybar!
 
-Shows remaining usage for **Claude**, **Codex**, **Amp** and **Antigravity** in your bar.
+Shows remaining usage for **Claude**, **Codex** and **Amp** in your bar.
 
 ## Installation
 
@@ -42,7 +42,7 @@ qbar uninstall    # Remove qbar from system
 | Flag | Description |
 |------|-------------|
 | `-t, --terminal` | Terminal output (ANSI colors) |
-| `-p, --provider` | Filter: `claude`, `codex`, or `antigravity` |
+| `-p, --provider` | Filter: `claude`, `codex`, or `amp` |
 | `-r, --refresh` | Force cache refresh |
 | `-h, --help` | Show help |
 
@@ -64,7 +64,7 @@ Use `qbar menu` → **Provider login**. qbar installs CLIs automatically via `ya
 |----------|-------------|
 | Claude | Uses your Claude.ai account (claude-code CLI) |
 | Codex | Uses your OpenAI Codex account (codex CLI) |
-| Antigravity | Uses Google OAuth (antigravity-usage) |
+| Amp | Uses your Amp account (amp CLI) |
 
 ## Colors
 
@@ -94,7 +94,7 @@ cp ~/.config/waybar/config.jsonc.qbar-backup-XXXXX ~/.config/waybar/config.jsonc
 
 ```
 ~/.config/waybar/
-├── config.jsonc              # qbar-claude, qbar-codex, qbar-antigravity modules
+├── config.jsonc              # qbar-claude, qbar-codex, qbar-amp modules
 ├── style.css                 # Module styles and colors
 ├── qbar/icons/               # Provider PNG icons
 └── scripts/

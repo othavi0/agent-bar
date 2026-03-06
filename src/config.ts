@@ -19,9 +19,6 @@ export const CONFIG = {
       auth: join(homedir(), '.codex', 'auth.json'),
       sessions: join(homedir(), '.codex', 'sessions'),
     },
-    antigravity: {
-      accounts: join(XDG_CONFIG_HOME, 'antigravity-usage', 'accounts'),
-    },
     amp: {
       bin: join(homedir(), '.cache', '.bun', 'bin', 'amp'),
       settings: join(XDG_CONFIG_HOME, 'amp', 'settings.json'),
@@ -33,7 +30,6 @@ export const CONFIG = {
   cache: {
     ttlMs: 300_000,              // 5 minutes default TTL
     codexTtlMs: 300_000,         // 5 minutes for Codex
-    antigravityTtlMs: 900_000,   // 15 minutes for Antigravity (API is slower)
     lockTimeoutMs: 5_000,        // Lock timeout
   },
 

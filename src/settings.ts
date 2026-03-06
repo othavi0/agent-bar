@@ -22,12 +22,7 @@ export interface Settings {
       | "none";
     providerOrder: string[];
   };
-  tooltip: {
-    // Keep for backward compat, but simplify
-    showWeekly: boolean;
-    showResetTime: boolean;
-    showProgressBar: boolean;
-  };
+  tooltip: Record<string, never>;
   /** Per-provider model visibility. Key = provider id, value = array of model names to show. Empty array = show all. */
   models?: Record<string, string[]>;
   /** Per-provider window visibility policy. */
@@ -36,16 +31,12 @@ export interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   waybar: {
-    providers: ["claude", "codex", "antigravity", "amp"],
+    providers: ["claude", "codex", "amp"],
     showPercentage: true,
     separators: "pipe",
-    providerOrder: ["claude", "codex", "antigravity", "amp"],
+    providerOrder: ["claude", "codex", "amp"],
   },
-  tooltip: {
-    showWeekly: true,
-    showResetTime: true,
-    showProgressBar: true,
-  },
+  tooltip: {},
   models: {},
   windowPolicy: {
     codex: "both",

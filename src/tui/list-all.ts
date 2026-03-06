@@ -1,10 +1,14 @@
 import * as p from "@clack/prompts";
+import {
+  formatPercent,
+  formatEta,
+  formatResetTime,
+  normalizePlanLabel,
+  codexModelsFromQuota,
+  applyCodexModelFilter,
+} from "../formatters/shared";
 import { getAllQuotas } from "../providers";
-import type {
-  ModelWindows,
-  ProviderQuota,
-  QuotaWindow,
-} from "../providers/types";
+import type { ProviderQuota, QuotaWindow } from "../providers/types";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
 import { catppuccin, colorize, getQuotaColor, semantic } from "./colors";
 
@@ -35,138 +39,6 @@ function indicator(val: number | null): string {
   return colorize(B.dot, getQuotaColor(val));
 }
 
-function pct(val: number | null): string {
-  if (val === null) return "?%";
-  return `${Math.round(val)}%`;
-}
-
-function eta(iso: string | null, remaining: number | null): string {
-  if (remaining === 100) return "Full";
-  if (!iso) return "?";
-  const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return "0m";
-  const d = Math.floor(diff / 86400000);
-  const h = Math.floor((diff % 86400000) / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  return d > 0
-    ? `${d}d ${h.toString().padStart(2, "0")}h`
-    : `${h}h ${m.toString().padStart(2, "0")}m`;
-}
-
-function resetTime(iso: string | null, remaining: number | null): string {
-  if (remaining === 100) return "";
-  if (!iso) return "(??:??)";
-  const d = new Date(iso);
-  return `(${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")})`;
-}
-
-function isValidModel(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    !/^(tab_|chat_|test_|internal_)/.test(lower) &&
-    !/preview$/i.test(name) &&
-    !/2\.5/i.test(name)
-  );
-}
-
-function classifyWindow(
-  minutes: number | null | undefined,
-): "fiveHour" | "sevenDay" | "other" {
-  if (!minutes || minutes <= 0) return "other";
-  if (Math.abs(minutes - 300) <= 90) return "fiveHour";
-  if (Math.abs(minutes - 10080) <= 1440) return "sevenDay";
-  return "other";
-}
-
-function normalizePlanLabel(p: ProviderQuota): string {
-  if (p.plan?.trim()) return p.plan;
-  const raw = p.planType?.trim();
-  if (!raw) return "Unknown";
-
-  const key = raw.toLowerCase();
-  const map: Record<string, string> = {
-    free: "Free",
-    go: "Go",
-    plus: "Plus",
-    pro: "Pro",
-    business: "Business",
-    team: "Business",
-    enterprise: "Enterprise",
-    edu: "Edu",
-    education: "Edu",
-    apikey: "API Key",
-    api_key: "API Key",
-  };
-  return map[key] ?? raw;
-}
-
-function codexModelsFromQuota(
-  p: ProviderQuota,
-): Array<{ name: string; windows: ModelWindows; severity: number }> {
-  const models: Record<string, ModelWindows> = {};
-
-  if (p.modelsDetailed) {
-    for (const [name, windows] of Object.entries(p.modelsDetailed)) {
-      models[name] = windows;
-    }
-  }
-
-  if (p.models) {
-    for (const [name, window] of Object.entries(p.models)) {
-      if (!models[name]) models[name] = {};
-      const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !models[name].fiveHour)
-        models[name].fiveHour = window;
-      else if (kind === "sevenDay" && !models[name].sevenDay)
-        models[name].sevenDay = window;
-      else {
-        if (!models[name].other) models[name].other = [];
-        models[name].other!.push(window);
-      }
-    }
-  }
-
-  if (Object.keys(models).length === 0 && (p.primary || p.secondary)) {
-    const fallback: ModelWindows = {};
-    for (const window of [p.primary, p.secondary]) {
-      if (!window) continue;
-      const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !fallback.fiveHour) fallback.fiveHour = window;
-      else if (kind === "sevenDay" && !fallback.sevenDay)
-        fallback.sevenDay = window;
-      else {
-        if (!fallback.other) fallback.other = [];
-        fallback.other.push(window);
-      }
-    }
-    models["Codex"] = fallback;
-  }
-
-  return Object.entries(models)
-    .map(([name, windows]) => {
-      const values = [
-        windows.fiveHour?.remaining,
-        windows.sevenDay?.remaining,
-        ...(windows.other?.map((w) => w.remaining) ?? []),
-      ].filter((v): v is number => v !== undefined && v !== null);
-
-      return {
-        name,
-        windows,
-        severity: values.length > 0 ? Math.min(...values) : 101,
-      };
-    })
-    .sort((a, b) => a.severity - b.severity || a.name.localeCompare(b.name));
-}
-
-function applyCodexModelFilter(
-  models: Array<{ name: string; windows: ModelWindows; severity: number }>,
-  allowed?: string[],
-): Array<{ name: string; windows: ModelWindows; severity: number }> {
-  if (!allowed || allowed.length === 0) return models;
-  return models.filter((m) => allowed.includes(m.name));
-}
-
 // Vertical bar
 const v = (color: string) => colorize(B.v, color);
 
@@ -187,9 +59,9 @@ function modelLine(
   const reset = window?.resetsAt ?? null;
   const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
   const barS = bar(rem);
-  const pctS = colorize(pct(rem).padStart(4), getQuotaColor(rem));
+  const pctS = colorize(formatPercent(rem).padStart(4), getQuotaColor(rem));
   const etaS = colorize(
-    `→ ${eta(reset, rem)} ${resetTime(reset, rem)}`,
+    `→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}`,
     catppuccin.teal,
   );
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
@@ -204,10 +76,10 @@ function codexModelLine(
   const rem = window?.remaining ?? null;
   const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
   const barS = bar(rem);
-  const pctS = colorize(pct(rem).padStart(4), getQuotaColor(rem));
+  const pctS = colorize(formatPercent(rem).padStart(4), getQuotaColor(rem));
   const etaS = window?.resetsAt
     ? colorize(
-        `→ ${eta(window.resetsAt, rem)} ${resetTime(window.resetsAt, rem)}`,
+        `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`,
         catppuccin.teal,
       )
     : colorize("→ N/A", catppuccin.teal);
@@ -263,7 +135,7 @@ function buildClaude(p: ProviderQuota): string[] {
       const nameS = colorize("Budget".padEnd(maxLen), catppuccin.lavender);
       const barS = bar(remaining);
       const pctS = colorize(
-        pct(remaining).padStart(4),
+        formatPercent(remaining).padStart(4),
         getQuotaColor(remaining),
       );
       const usedS = colorize(
@@ -341,7 +213,7 @@ function buildCodex(p: ProviderQuota): string[] {
       const nameS = colorize("Balance".padEnd(maxLen), catppuccin.lavender);
       const barS = bar(p.extraUsage.remaining);
       const pctS = colorize(
-        pct(p.extraUsage.remaining).padStart(4),
+        formatPercent(p.extraUsage.remaining).padStart(4),
         getQuotaColor(p.extraUsage.remaining),
       );
       const infoS =
@@ -386,7 +258,7 @@ function buildAmp(p: ProviderQuota): string[] {
       const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
       const barS = bar(window.remaining);
       const pctS = colorize(
-        pct(window.remaining).padStart(4),
+        formatPercent(window.remaining).padStart(4),
         getQuotaColor(window.remaining),
       );
       lines.push(
@@ -400,52 +272,6 @@ function buildAmp(p: ProviderQuota): string[] {
     lines.push(
       `${v(vc)}  ${colorize(`Account: ${p.account}`, semantic.muted)}`,
     );
-  }
-
-  lines.push(v(vc));
-  lines.push(colorize(B.bl + B.h.repeat(55), vc));
-
-  return lines;
-}
-
-function buildAntigravity(p: ProviderQuota): string[] {
-  const lines: string[] = [];
-  const vc = catppuccin.blue;
-
-  lines.push(
-    colorize(B.tl + B.h, vc) +
-      " " +
-      colorize("Antigravity", vc, true) +
-      " " +
-      colorize(B.h.repeat(45), vc),
-  );
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, catppuccin.red)}`);
-  } else if (!p.models || Object.keys(p.models).length === 0) {
-    lines.push(`${v(vc)}  ${colorize("No models available", semantic.muted)}`);
-  } else {
-    const models = Object.entries(p.models)
-      .filter(([name]) => isValidModel(name))
-      .sort(([a], [b]) => {
-        const pri = (n: string) =>
-          n.toLowerCase().includes("claude")
-            ? 0
-            : n.toLowerCase().includes("gpt")
-              ? 1
-              : n.toLowerCase().includes("gemini")
-                ? 2
-                : 3;
-        return pri(a) - pri(b) || a.localeCompare(b);
-      });
-
-    const maxLen = Math.max(...models.map(([n]) => n.length), 20);
-
-    lines.push(label("Available Models", vc));
-    for (const [name, window] of models) {
-      lines.push(modelLine(name, window, maxLen, vc));
-    }
   }
 
   lines.push(v(vc));
@@ -474,9 +300,6 @@ export async function showListAll(): Promise<void> {
         break;
       case "codex":
         sections.push(buildCodex(provider));
-        break;
-      case "antigravity":
-        sections.push(buildAntigravity(provider));
         break;
       case "amp":
         sections.push(buildAmp(provider));

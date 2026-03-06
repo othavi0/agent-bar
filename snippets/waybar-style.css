@@ -8,7 +8,6 @@
 
 #custom-qbar-claude,
 #custom-qbar-codex,
-#custom-qbar-antigravity,
 #custom-qbar-amp {
   padding-left: 26px;
   padding-right: 10px;
@@ -25,7 +24,6 @@
 }
 
 #custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
-#custom-qbar-antigravity { background-image: url("qbar/icons/antigravity-icon.png"); }
 #custom-qbar-amp { background-image: url("qbar/icons/amp-icon.png"); }
 
 /* Last module border */
@@ -34,14 +32,13 @@
 }
 
 /* Status colors */
-#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-antigravity.ok, #custom-qbar-amp.ok { color: #a6e3a1; }
-#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-antigravity.low, #custom-qbar-amp.low { color: #f9e2af; }
-#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-antigravity.warn, #custom-qbar-amp.warn { color: #fab387; }
-#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-antigravity.critical, #custom-qbar-amp.critical { color: #f38ba8; }
+#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-amp.ok { color: #a6e3a1; }
+#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-amp.low { color: #f9e2af; }
+#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-amp.warn { color: #fab387; }
+#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-amp.critical { color: #f38ba8; }
 
 #custom-qbar-claude.loading,
 #custom-qbar-codex.loading,
-#custom-qbar-antigravity.loading,
 #custom-qbar-amp.loading {
   animation: qbar-pulse 0.8s ease-in-out infinite;
   color: #89dceb;
@@ -50,7 +47,6 @@
 /* Disconnected state */
 #custom-qbar-claude.disconnected,
 #custom-qbar-codex.disconnected,
-#custom-qbar-antigravity.disconnected,
 #custom-qbar-amp.disconnected {
   color: #f38ba8;
   padding-left: 30px;
