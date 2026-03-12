@@ -3,6 +3,7 @@ import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { cache } from '../cache';
 import type { ModelWindows, Provider, ProviderQuota, QuotaWindow } from './types';
+import pkg from '../../package.json';
 
 interface CodexWindowRaw {
   used_percent: number;
@@ -464,7 +465,7 @@ export class CodexProvider implements Provider {
         method: 'initialize',
         id: 0,
         params: {
-          clientInfo: { name: 'qbar', title: 'qbar', version: '3.0.0' },
+          clientInfo: { name: 'qbar', title: 'qbar', version: pkg.version },
         },
       });
     });

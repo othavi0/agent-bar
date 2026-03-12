@@ -1,4 +1,8 @@
-const ansiFromHex = (hex: string) => {
+/** Respect the NO_COLOR convention (https://no-color.org/) */
+const NO_COLOR = !!process.env.NO_COLOR;
+
+const ansiFromHex = (hex: string): string => {
+  if (NO_COLOR) return "";
   const clean = hex.replace("#", "");
   const r = Number.parseInt(clean.slice(0, 2), 16);
   const g = Number.parseInt(clean.slice(2, 4), 16);
@@ -36,9 +40,9 @@ export const PROVIDER_HEX = {
 } as const;
 
 export const ANSI = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
+  reset: NO_COLOR ? "" : "\x1b[0m",
+  bold: NO_COLOR ? "" : "\x1b[1m",
+  dim: NO_COLOR ? "" : "\x1b[2m",
   green: ansiFromHex(ONE_DARK.green),
   yellow: ansiFromHex(ONE_DARK.yellow),
   orange: ansiFromHex(ONE_DARK.orange),
@@ -60,5 +64,17 @@ export const PROVIDER_ANSI = {
   claude: ANSI.orange,
   codex: ANSI.green,
   amp: ANSI.magenta,
+} as const;
+
+/** Box-drawing characters (bold variant) — single source of truth */
+export const BOX = {
+  tl: "┏",
+  bl: "┗",
+  lt: "┣",
+  h: "━",
+  v: "┃",
+  dot: "●",
+  dotO: "○",
+  diamond: "◆",
 } as const;
 

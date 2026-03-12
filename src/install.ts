@@ -1,4 +1,5 @@
 import * as p from '@clack/prompts';
+import { createSpinner } from './spinner';
 import { colorize, semantic } from './tui/colors';
 
 /**
@@ -60,22 +61,22 @@ export async function ensureYayPackage(pkg: string, label?: string, binName?: st
   const ok = await ensureYay();
   if (!ok) return false;
 
-  const spinner = p.spinner();
-  spinner.start(`Installing ${label ?? pkg}...`);
+  const spinner = createSpinner(`Installing ${label ?? pkg}...`);
+  spinner.start();
 
   try {
     // --needed: skip if already installed
     // --noconfirm: non-interactive (Omarchy usage)
     const code = await runInteractive('yay', ['-S', '--needed', '--noconfirm', pkg]);
     if (code === 0) {
-      spinner.stop(colorize(`${label ?? pkg} ready`, semantic.good));
+      spinner.succeed(`${label ?? pkg} ready`);
       return true;
     }
 
-    spinner.stop(colorize(`Failed to install ${label ?? pkg}`, semantic.danger));
+    spinner.fail(`Failed to install ${label ?? pkg}`);
     return false;
   } catch {
-    spinner.stop(colorize(`Failed to install ${label ?? pkg}`, semantic.danger));
+    spinner.fail(`Failed to install ${label ?? pkg}`);
     return false;
   }
 }
@@ -96,20 +97,20 @@ export async function ensureBunGlobalPackage(pkg: string, label?: string): Promi
   const bin = pkg;
   if (await hasCmd(bin)) return true;
 
-  const spinner = p.spinner();
-  spinner.start(`Installing ${label ?? pkg}...`);
+  const spinner = createSpinner(`Installing ${label ?? pkg}...`);
+  spinner.start();
 
   try {
     const code = await runInteractive('bun', ['add', '-g', pkg]);
     if (code === 0) {
-      spinner.stop(colorize(`${label ?? pkg} ready`, semantic.good));
+      spinner.succeed(`${label ?? pkg} ready`);
       return true;
     }
 
-    spinner.stop(colorize(`Failed to install ${label ?? pkg}`, semantic.danger));
+    spinner.fail(`Failed to install ${label ?? pkg}`);
     return false;
   } catch {
-    spinner.stop(colorize(`Failed to install ${label ?? pkg}`, semantic.danger));
+    spinner.fail(`Failed to install ${label ?? pkg}`);
     return false;
   }
 }

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import * as p from '@clack/prompts';
 import { colorize, semantic, oneDark } from './colors';
 import { ensureBunGlobalPackage, ensureYayPackage, hasCmd } from '../install';
@@ -24,7 +25,6 @@ function findAmpBin(): string | null {
     `${home}/.bun/bin/amp`,
   ];
 
-  const { existsSync } = require('node:fs');
   for (const p of paths) {
     if (existsSync(p)) return p;
   }

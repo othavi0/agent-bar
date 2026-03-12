@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import { loadSettings, saveSettings, type WindowPolicy } from '../settings';
 import { providers } from '../providers';
 import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
+import { classifyWindow, normalizePlanLabel } from '../formatters/shared';
 import { oneDark, semantic, colorize } from './colors';
 
 interface ProviderOption {
@@ -10,35 +11,6 @@ interface ProviderOption {
   modelCount: number;
   planLabel: string;
   quota: ProviderQuota;
-}
-
-function classifyWindow(minutes: number | null | undefined): 'fiveHour' | 'sevenDay' | 'other' {
-  if (!minutes || minutes <= 0) return 'other';
-  if (Math.abs(minutes - 300) <= 90) return 'fiveHour';
-  if (Math.abs(minutes - 10080) <= 1440) return 'sevenDay';
-  return 'other';
-}
-
-function normalizePlanLabel(quota: ProviderQuota): string {
-  if (quota.plan?.trim()) return quota.plan;
-  const raw = quota.planType?.trim();
-  if (!raw) return 'Unknown';
-
-  const key = raw.toLowerCase();
-  const map: Record<string, string> = {
-    free: 'Free',
-    go: 'Go',
-    plus: 'Plus',
-    pro: 'Pro',
-    business: 'Business',
-    team: 'Business',
-    enterprise: 'Enterprise',
-    edu: 'Edu',
-    education: 'Edu',
-    apikey: 'API Key',
-    api_key: 'API Key',
-  };
-  return map[key] ?? raw;
 }
 
 function getModelWindowsMap(quota: ProviderQuota): Record<string, ModelWindows> {
@@ -132,8 +104,8 @@ function buildModelHint(windows: ModelWindows, policy: WindowPolicy): string {
 export async function configureModels(): Promise<boolean> {
   const settings = await loadSettings();
 
-  const spinner = p.spinner();
-  spinner.start('Checking providers for model data...');
+  const s = p.spinner();
+  s.start('Checking providers for model data...');
 
   const providerOptions: ProviderOption[] = [];
   for (const prov of providers) {
@@ -155,7 +127,7 @@ export async function configureModels(): Promise<boolean> {
     }
   }
 
-  spinner.stop(colorize(`${providerOptions.length} provider(s) with model-level data`, semantic.good));
+  s.stop(`${providerOptions.length} provider(s) with model-level data`);
 
   if (providerOptions.length === 0) {
     p.log.warn(colorize('No providers with model-level data found', semantic.warning));

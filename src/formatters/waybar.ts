@@ -14,42 +14,25 @@ import {
   applyCodexModelFilter,
 } from "./shared";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
-import { ONE_DARK } from "../theme";
+import { ONE_DARK, PROVIDER_HEX, BOX } from "../theme";
 
-const C = {
-  green: ONE_DARK.green,
-  yellow: ONE_DARK.yellow,
-  orange: ONE_DARK.orange,
-  red: ONE_DARK.red,
-  text: ONE_DARK.text,
-  subtext: ONE_DARK.muted,
-  muted: ONE_DARK.comment,
-  lavender: ONE_DARK.textBright,
-  teal: ONE_DARK.cyan,
-  blue: ONE_DARK.blue,
-  mauve: ONE_DARK.magenta,
-  peach: ONE_DARK.orange,
-  sapphire: ONE_DARK.brightBlue,
-  pink: ONE_DARK.brightMagenta,
-  sky: ONE_DARK.cyan,
-} as const;
-
-// Box drawing - BOLD characters
-const B = {
-  tl: "┏",
-  bl: "┗",
-  lt: "┣", // left tee for connecting labels
-  h: "━",
-  v: "┃",
-  dot: "●",
-  dotO: "○",
-  diamond: "◆",
-};
+// Uniform tooltip width — all 3 cards share the same border
+const TOOLTIP_BORDER = 56; // total visual chars per line (┗ + 55 ━)
 
 interface WaybarOutput {
   text: string;
   tooltip: string;
   class: string;
+}
+
+/** Escape special XML characters in dynamic content before embedding in Pango markup */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&apos;")
+    .replace(/"/g, "&quot;");
 }
 
 const s = (color: string, text: string, bold = false) =>
@@ -60,20 +43,20 @@ function pctColored(val: number | null): string {
 }
 
 function bar(val: number | null): string {
-  if (val === null) return s(C.muted, "░".repeat(20));
+  if (val === null) return s(ONE_DARK.comment, "░".repeat(20));
   const filled = Math.floor(val / 5);
   return (
     s(getColorForPercent(val), "█".repeat(filled)) +
-    s(C.muted, "░".repeat(20 - filled))
+    s(ONE_DARK.comment, "░".repeat(20 - filled))
   );
 }
 
 function indicator(val: number | null): string {
-  if (val === null) return s(C.muted, B.dotO);
-  if (val < 10) return s(C.red, B.dot);
-  if (val < 30) return s(C.orange, B.dot);
-  if (val < 60) return s(C.yellow, B.dot);
-  return s(C.green, B.dot);
+  if (val === null) return s(ONE_DARK.comment, BOX.dotO);
+  if (val < 10) return s(ONE_DARK.red, BOX.dot);
+  if (val < 30) return s(ONE_DARK.orange, BOX.dot);
+  if (val < 60) return s(ONE_DARK.yellow, BOX.dot);
+  return s(ONE_DARK.green, BOX.dot);
 }
 
 function codexModelLine(
@@ -83,55 +66,77 @@ function codexModelLine(
   v: string,
 ): string {
   const rem = window?.remaining ?? null;
-  const nameS = s(C.lavender, name.padEnd(maxLen));
+  const nameS = s(ONE_DARK.textBright, name.padEnd(maxLen));
   const b = bar(rem);
   const pctS = s(getColorForPercent(rem), formatPercent(rem).padStart(4));
   const etaS = window?.resetsAt
     ? s(
-        C.teal,
+        ONE_DARK.cyan,
         `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`,
       )
-    : s(C.teal, "→ N/A");
+    : s(ONE_DARK.cyan, "→ N/A");
   return (
     v + "  " + indicator(rem) + " " + nameS + " " + b + " " + pctS + " " + etaS
   );
 }
 
-// Section label with connecting line: ┣━ ◆ Label
+// Section label with connecting line: ┣━ ◆ Label (uses provider color)
 const label = (text: string, color: string) =>
-  s(color, B.lt + B.h) + " " + s(C.mauve, B.diamond + " " + text, true);
+  s(color, BOX.lt + BOX.h) + " " + s(color, BOX.diamond + " " + text, true);
+
+function formatAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (diffMs < 60000) return "just now";
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
+}
+
+function buildHeader(title: string, subtitle: string | undefined, color: string): string {
+  const fullTitle = subtitle ? `${title} · ${subtitle}` : title;
+  const fill = Math.max(1, TOOLTIP_BORDER - 4 - fullTitle.length);
+  return s(color, BOX.tl + BOX.h) + " " + s(color, fullTitle, true) + " " + s(color, BOX.h.repeat(fill));
+}
+
+function buildFooter(color: string, fetchedAt?: string): string {
+  if (!fetchedAt) {
+    return s(color, BOX.bl + BOX.h.repeat(TOOLTIP_BORDER - 1));
+  }
+  const ago = formatAgo(fetchedAt);
+  const stamp = ` cached · ${ago} `;
+  const totalDashes = TOOLTIP_BORDER - 1 - stamp.length;
+  const left = Math.max(1, Math.floor(totalDashes / 2));
+  const right = Math.max(1, totalDashes - left);
+  return s(color, BOX.bl + BOX.h.repeat(left)) + s(ONE_DARK.comment, stamp) + s(color, BOX.h.repeat(right));
+}
 
 /**
  * Build Claude tooltip
  */
-function buildClaudeTooltip(p: ProviderQuota): string {
+function buildClaudeTooltip(p: ProviderQuota, fetchedAt?: string): string {
   const lines: string[] = [];
-  const v = s(C.peach, B.v);
+  const vc = PROVIDER_HEX.claude;
+  const v = s(vc, BOX.v);
+  const planLabel = normalizePlanLabel(p);
 
-  lines.push(
-    s(C.peach, B.tl + B.h) +
-      " " +
-      s(C.peach, "Claude", true) +
-      " " +
-      s(C.peach, B.h.repeat(50)),
-  );
+  lines.push(buildHeader("Claude", planLabel !== "Unknown" ? planLabel : undefined, vc));
   lines.push(v);
 
   if (p.error) {
-    lines.push(v + "  " + s(C.red, `⚠️ ${p.error}`));
+    lines.push(v + "  " + s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`));
   } else {
     const maxLen = 20;
 
     if (p.primary) {
-      lines.push(label("5-hour limit (shared)", C.peach));
-      const name = s(C.lavender, "All Models".padEnd(maxLen));
+      lines.push(label("5-hour limit (shared)", vc));
+      const name = s(ONE_DARK.textBright, "All Models".padEnd(maxLen));
       const b = bar(p.primary.remaining);
       const pctS = s(
         getColorForPercent(p.primary.remaining),
         formatPercent(p.primary.remaining).padStart(4),
       );
       const etaS = s(
-        C.teal,
+        ONE_DARK.cyan,
         `→ ${formatEta(p.primary.resetsAt, p.primary.remaining)} ${formatResetTime(p.primary.resetsAt, p.primary.remaining)}`,
       );
       lines.push(
@@ -152,19 +157,19 @@ function buildClaudeTooltip(p: ProviderQuota): string {
     // Per-model weekly quotas (when API provides them)
     if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
       lines.push(v);
-      lines.push(label("Weekly per model", C.peach));
+      lines.push(label("Weekly per model", vc));
       const entries = Object.entries(p.weeklyModels);
       const wMaxLen = Math.max(...entries.map(([name]) => name.length), 20);
 
       for (const [name, window] of entries) {
-        const nameS = s(C.lavender, name.padEnd(wMaxLen));
+        const nameS = s(ONE_DARK.textBright, name.padEnd(wMaxLen));
         const b = bar(window.remaining);
         const pctS = s(
           getColorForPercent(window.remaining),
           formatPercent(window.remaining).padStart(4),
         );
         const etaS = s(
-          C.teal,
+          ONE_DARK.cyan,
           `→ ${formatEta(window.resetsAt, window.remaining)} ${formatResetTime(window.resetsAt, window.remaining)}`,
         );
         lines.push(
@@ -186,15 +191,15 @@ function buildClaudeTooltip(p: ProviderQuota): string {
     // Generic weekly (shared)
     if (p.secondary) {
       lines.push(v);
-      lines.push(label("Weekly limit (shared)", C.peach));
-      const name = s(C.lavender, "All Models".padEnd(20));
+      lines.push(label("Weekly limit (shared)", vc));
+      const name = s(ONE_DARK.textBright, "All Models".padEnd(20));
       const b = bar(p.secondary.remaining);
       const pctS = s(
         getColorForPercent(p.secondary.remaining),
         formatPercent(p.secondary.remaining).padStart(4),
       );
       const etaS = s(
-        C.teal,
+        ONE_DARK.cyan,
         `→ ${formatEta(p.secondary.resetsAt, p.secondary.remaining)} ${formatResetTime(p.secondary.resetsAt, p.secondary.remaining)}`,
       );
       lines.push(
@@ -215,12 +220,12 @@ function buildClaudeTooltip(p: ProviderQuota): string {
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
       const { remaining, used, limit } = p.extraUsage;
       lines.push(v);
-      lines.push(label("Extra Usage", C.peach));
-      const name = s(C.lavender, "Budget".padEnd(20));
+      lines.push(label("Extra Usage", vc));
+      const name = s(ONE_DARK.textBright, "Budget".padEnd(20));
       const b = bar(remaining);
       const pctS = s(getColorForPercent(remaining), formatPercent(remaining).padStart(4));
       const usedS = s(
-        C.teal,
+        ONE_DARK.cyan,
         `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`,
       );
       lines.push(
@@ -240,7 +245,7 @@ function buildClaudeTooltip(p: ProviderQuota): string {
   }
 
   lines.push(v);
-  lines.push(s(C.peach, B.bl + B.h.repeat(55)));
+  lines.push(buildFooter(vc, fetchedAt));
 
   return lines.join("\n");
 }
@@ -248,40 +253,33 @@ function buildClaudeTooltip(p: ProviderQuota): string {
 /**
  * Build Codex tooltip
  */
-function buildCodexTooltip(p: ProviderQuota): string {
+function buildCodexTooltip(p: ProviderQuota, fetchedAt?: string): string {
   const lines: string[] = [];
-  const v = s(C.green, B.v);
+  const vc = PROVIDER_HEX.codex;
+  const v = s(vc, BOX.v);
   const settings = loadSettingsSync();
   const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? "both";
   const planLabel = normalizePlanLabel(p);
 
-  lines.push(
-    s(C.green, B.tl + B.h) +
-      " " +
-      s(C.green, "Codex", true) +
-      " " +
-      s(C.green, B.h.repeat(51)),
-  );
+  lines.push(buildHeader("Codex", planLabel !== "Unknown" ? planLabel : undefined, vc));
   lines.push(v);
 
   if (p.error) {
-    lines.push(v + "  " + s(C.red, `⚠️ ${p.error}`));
+    lines.push(v + "  " + s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`));
   } else {
-    lines.push(v + "  " + s(C.subtext, `Plan: ${planLabel}`));
-
     let models = codexModelsFromQuota(p);
     models = applyCodexModelFilter(models, settings.models?.[p.provider]);
 
     if (models.length === 0) {
       lines.push(v);
-      lines.push(label("Available Models", C.green));
-      lines.push(v + "  " + s(C.muted, "No models selected"));
+      lines.push(label("Available Models", vc));
+      lines.push(v + "  " + s(ONE_DARK.comment, "No models selected"));
     } else {
       const maxLen = Math.max(...models.map((m) => m.name.length), 20);
 
       if (policy !== "seven_day") {
         lines.push(v);
-        lines.push(label("5-hour limit", C.green));
+        lines.push(label("5-hour limit", vc));
         for (const model of models) {
           lines.push(
             codexModelLine(model.name, model.windows.fiveHour, maxLen, v),
@@ -291,7 +289,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
 
       if (policy !== "five_hour") {
         lines.push(v);
-        lines.push(label("7-day limit", C.green));
+        lines.push(label("7-day limit", vc));
         for (const model of models) {
           lines.push(
             codexModelLine(model.name, model.windows.sevenDay, maxLen, v),
@@ -302,8 +300,8 @@ function buildCodexTooltip(p: ProviderQuota): string {
 
     if (p.extraUsage?.enabled) {
       lines.push(v);
-      lines.push(label("Credits", C.green));
-      const name = s(C.lavender, "Balance".padEnd(20));
+      lines.push(label("Credits", vc));
+      const name = s(ONE_DARK.textBright, "Balance".padEnd(20));
       const b = bar(p.extraUsage.remaining);
       const pctS = s(
         getColorForPercent(p.extraUsage.remaining),
@@ -311,8 +309,8 @@ function buildCodexTooltip(p: ProviderQuota): string {
       );
       const limitS =
         p.extraUsage.limit === -1
-          ? s(C.teal, "Unlimited")
-          : s(C.teal, "Balance");
+          ? s(ONE_DARK.cyan, "Unlimited")
+          : s(ONE_DARK.cyan, "Balance");
       lines.push(
         v +
           "  " +
@@ -330,7 +328,7 @@ function buildCodexTooltip(p: ProviderQuota): string {
   }
 
   lines.push(v);
-  lines.push(s(C.green, B.bl + B.h.repeat(55)));
+  lines.push(buildFooter(vc, fetchedAt));
 
   return lines.join("\n");
 }
@@ -338,67 +336,46 @@ function buildCodexTooltip(p: ProviderQuota): string {
 /**
  * Build Amp tooltip
  */
-function buildAmpTooltip(p: ProviderQuota): string {
+function buildAmpTooltip(p: ProviderQuota, fetchedAt?: string): string {
   const lines: string[] = [];
-  const v = s(C.mauve, B.v);
+  const vc = PROVIDER_HEX.amp;
+  const v = s(vc, BOX.v);
   const m = p.meta ?? {};
-  const W = 40; // box width
 
-  // Thin tree connectors
-  const tee = s(C.muted, "├─"); // branch
-  const end = s(C.muted, "└─"); // last branch
-  const vt = s(C.muted, "│"); // thin vertical (continuation)
-
-  lines.push(
-    s(C.mauve, B.tl + B.h) +
-      " " +
-      s(C.mauve, "Amp", true) +
-      " " +
-      s(C.mauve, B.h.repeat(W)),
-  );
+  // Account goes in header for better hierarchy
+  const accountShort = p.account ? escapeXml(p.account) : undefined;
+  lines.push(buildHeader("Amp", accountShort, vc));
   lines.push(v);
 
   if (p.error) {
-    lines.push(v + "  " + s(C.red, `⚠️ ${p.error}`));
+    lines.push(v + "  " + s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`));
   } else {
     // --- Free Tier ---
     const free = p.models?.["Free Tier"];
     if (free) {
       const b = bar(free.remaining);
-      const pctS = s(
-        getColorForPercent(free.remaining),
-        formatPercent(free.remaining).padStart(4),
-      );
-      lines.push(label("Free Tier", C.mauve));
-      lines.push(v + "  " + indicator(free.remaining) + " " + b + " " + pctS);
+      const pctS = s(getColorForPercent(free.remaining), formatPercent(free.remaining).padStart(4));
 
-      // Build sub-details as tree branches
-      const subs: string[] = [];
-
-      // Dollar + rate on one line
-      const dollarParts: string[] = [];
-      if (m.replenishRate) dollarParts.push(s(C.teal, m.replenishRate));
-      const dollars = [m.freeRemaining, m.freeTotal]
-        .filter(Boolean)
-        .join(" / ");
-      if (dollars) dollarParts.push(s(C.text, `( ${dollars} )`));
-      if (m.bonus) dollarParts.push(s(C.teal, m.bonus));
-      if (dollarParts.length > 0) subs.push(dollarParts.join("  "));
-
-      // ETA to full
+      // ETA inline with bar (same style as Claude/Codex)
+      const etaParts: string[] = [];
       if (free.resetsAt && free.remaining !== 100) {
-        subs.push(
-          s(
-            C.teal,
-            `Full in ${formatEta(free.resetsAt, free.remaining)}  ${formatResetTime(free.resetsAt, free.remaining)}`,
-          ),
+        etaParts.push(
+          s(ONE_DARK.cyan, `→ Full in ${formatEta(free.resetsAt, free.remaining)} ${formatResetTime(free.resetsAt, free.remaining)}`),
         );
       }
+      const etaS = etaParts.length > 0 ? "  " + etaParts[0] : "";
 
-      // Render tree branches
-      for (let i = 0; i < subs.length; i++) {
-        const connector = i === subs.length - 1 ? end : tee;
-        lines.push(v + "  " + connector + " " + subs[i]);
+      lines.push(label("Free Tier", vc));
+      lines.push(v + "  " + indicator(free.remaining) + " " + b + " " + pctS + etaS);
+
+      // Rate / balance info on second line with ○ indicator
+      const infoParts: string[] = [];
+      if (m.replenishRate) infoParts.push(s(ONE_DARK.cyan, m.replenishRate));
+      const dollars = [m.freeRemaining, m.freeTotal].filter(Boolean).join(" / ");
+      if (dollars) infoParts.push(s(ONE_DARK.text, dollars));
+      if (m.bonus) infoParts.push(s(ONE_DARK.cyan, m.bonus));
+      if (infoParts.length > 0) {
+        lines.push(v + "  " + s(ONE_DARK.comment, BOX.dotO) + " " + infoParts.join(s(ONE_DARK.comment, "  |  ")));
       }
     }
 
@@ -407,40 +384,34 @@ function buildAmpTooltip(p: ProviderQuota): string {
     if (credits) {
       lines.push(v);
       const balance = m.creditsBalance ?? "$0";
-      const color = credits.remaining > 0 ? C.green : C.muted;
-      lines.push(label("Credits", C.mauve));
-      lines.push(
-        v + "  " + indicator(credits.remaining) + " " + s(color, balance),
-      );
+      const color = credits.remaining > 0 ? ONE_DARK.green : ONE_DARK.comment;
+      lines.push(label("Credits", vc));
+      lines.push(v + "  " + indicator(credits.remaining) + " " + s(color, balance + " remaining"));
     }
   }
 
-  if (p.account) {
-    lines.push(v);
-    lines.push(v + "  " + s(C.muted, `Account: ${p.account}`));
-  }
-
   lines.push(v);
-  lines.push(s(C.mauve, B.bl + B.h.repeat(W + 2)));
+  lines.push(buildFooter(vc, fetchedAt));
 
   return lines.join("\n");
 }
 
 function buildTooltip(quotas: AllQuotas): string {
   const sections: string[] = [];
+  const fetchedAt = quotas.fetchedAt;
 
   for (const p of quotas.providers) {
     if (!p.available && !p.error) continue;
 
     switch (p.provider) {
       case "claude":
-        sections.push(buildClaudeTooltip(p));
+        sections.push(buildClaudeTooltip(p, fetchedAt));
         break;
       case "codex":
-        sections.push(buildCodexTooltip(p));
+        sections.push(buildCodexTooltip(p, fetchedAt));
         break;
       case "amp":
-        sections.push(buildAmpTooltip(p));
+        sections.push(buildAmpTooltip(p, fetchedAt));
         break;
     }
   }
@@ -457,8 +428,8 @@ function buildText(quotas: AllQuotas): string {
     parts.push(pctColored(val));
   }
 
-  if (parts.length === 0) return s(C.muted, "No Providers");
-  return parts.join(" " + s(C.muted, "│") + " ");
+  if (parts.length === 0) return s(ONE_DARK.comment, "No Providers");
+  return parts.join(" " + s(ONE_DARK.comment, "│") + " ");
 }
 
 function getClass(quotas: AllQuotas): string {
@@ -506,7 +477,7 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
     }
 
     return {
-      text: `<span foreground='${C.red}'>󱘖</span>`,
+      text: `<span foreground='${ONE_DARK.red}'>󱘖</span>`,
       tooltip,
       class: `qbar-${quota.provider} disconnected`,
     };

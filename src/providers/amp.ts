@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { cache } from '../cache';
@@ -15,7 +16,6 @@ function findAmpBin(): string | null {
     `${home}/.bun/bin/amp`,
   ];
 
-  const { existsSync } = require('node:fs');
   for (const p of paths) {
     if (existsSync(p)) return p;
   }
@@ -83,27 +83,31 @@ export class AmpProvider implements Provider {
       const bonusMatch = stdout.match(/\+(\d+)%\s*bonus\s*for\s*(\d+)\s*more\s*days/);
       const bonus = bonusMatch ? `+${bonusMatch[1]}% (${bonusMatch[2]}d)` : null;
 
+      const parseAmpFreeTier = (
+        match: RegExpMatchArray,
+        replenish: RegExpMatchArray | null,
+        bonusM: RegExpMatchArray | null,
+      ): { pct: number; fullAt: string | null } => {
+        const remaining = parseFloat(match[1]);
+        const total = parseFloat(match[2]);
+        const pct = total > 0 ? Math.round((remaining / total) * 100) : 0;
+        let fullAt: string | null = null;
+        if (replenish && remaining < total) {
+          const ratePerHour = parseFloat(replenish[1]);
+          const effectiveRate = bonusM
+            ? ratePerHour * (1 + parseInt(bonusM[1]) / 100)
+            : ratePerHour;
+          const hoursToFull = (total - remaining) / effectiveRate;
+          fullAt = new Date(Date.now() + hoursToFull * 3_600_000).toISOString();
+        }
+        return { pct, fullAt };
+      };
+
       let primary: QuotaWindow | undefined;
 
       if (freeMatch) {
-        const remaining = parseFloat(freeMatch[1]);
-        const total = parseFloat(freeMatch[2]);
-        const pct = total > 0 ? Math.round((remaining / total) * 100) : 0;
-        
-        // Calculate ETA to 100%
-        let fullAt: string | null = null;
-        if (replenishMatch && remaining < total) {
-          const ratePerHour = parseFloat(replenishMatch[1]);
-          const effectiveRate = bonusMatch ? ratePerHour * (1 + parseInt(bonusMatch[1]) / 100) : ratePerHour;
-          const deficit = total - remaining;
-          const hoursToFull = deficit / effectiveRate;
-          fullAt = new Date(Date.now() + hoursToFull * 3600_000).toISOString();
-        }
-        
-        primary = {
-          remaining: pct,
-          resetsAt: fullAt,
-        };
+        const { pct, fullAt } = parseAmpFreeTier(freeMatch, replenishMatch, bonusMatch);
+        primary = { remaining: pct, resetsAt: fullAt };
       }
 
       const creditsMatch = stdout.match(/Individual credits:\s*\$([0-9.]+)\s*remaining/);
@@ -127,19 +131,8 @@ export class AmpProvider implements Provider {
       if (freeMatch) {
         const remaining = parseFloat(freeMatch[1]);
         const total = parseFloat(freeMatch[2]);
-        const pct = total > 0 ? Math.round((remaining / total) * 100) : 0;
-        
-        // Calculate ETA to 100% based on replenish rate
-        let fullAt: string | null = null;
-        if (replenishMatch && remaining < total) {
-          const ratePerHour = parseFloat(replenishMatch[1]);
-          const effectiveRate = bonusMatch ? ratePerHour * (1 + parseInt(bonusMatch[1]) / 100) : ratePerHour;
-          const deficit = total - remaining;
-          const hoursToFull = deficit / effectiveRate;
-          const msToFull = hoursToFull * 3600_000;
-          fullAt = new Date(Date.now() + msToFull).toISOString();
-        }
-        
+        const { pct, fullAt } = parseAmpFreeTier(freeMatch, replenishMatch, bonusMatch);
+
         models['Free Tier'] = { remaining: pct, resetsAt: fullAt };
         meta['freeRemaining'] = `$${remaining}`;
         meta['freeTotal'] = `$${total}`;

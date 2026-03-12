@@ -8,6 +8,17 @@ import { CodexProvider } from './codex';
 import { AmpProvider } from './amp';
 import type { Provider, ProviderQuota, AllQuotas } from './types';
 
+const PROVIDER_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 /**
  * All registered providers
  */
@@ -31,7 +42,7 @@ export async function getAllQuotas(): Promise<AllQuotas> {
   const results = await Promise.all(
     providers.map(async (provider): Promise<ProviderQuota> => {
       try {
-        return await provider.getQuota();
+        return await withTimeout(provider.getQuota(), PROVIDER_TIMEOUT_MS, provider.name);
       } catch (error) {
         return {
           provider: provider.id,
@@ -55,9 +66,9 @@ export async function getAllQuotas(): Promise<AllQuotas> {
 export async function getQuotaFor(providerId: string): Promise<ProviderQuota | null> {
   const provider = getProvider(providerId);
   if (!provider) return null;
-  
+
   try {
-    return await provider.getQuota();
+    return await withTimeout(provider.getQuota(), PROVIDER_TIMEOUT_MS, provider.name);
   } catch (error) {
     return {
       provider: providerId,

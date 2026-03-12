@@ -14,65 +14,35 @@ import {
   applyCodexModelFilter,
 } from "./shared";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
-import { ANSI } from "../theme";
-
-const C = {
-  reset: ANSI.reset,
-  bold: ANSI.bold,
-  green: ANSI.green,
-  yellow: ANSI.yellow,
-  orange: ANSI.orange,
-  red: ANSI.red,
-  muted: ANSI.comment,
-  text: ANSI.text,
-  subtext: ANSI.muted,
-  lavender: ANSI.textBright,
-  teal: ANSI.cyan,
-  mauve: ANSI.magenta,
-  blue: ANSI.blue,
-  sapphire: ANSI.brightBlue,
-  peach: ANSI.orange,
-};
-
-// Box drawing characters
-const B = {
-  tl: "┏",
-  bl: "┗",
-  lt: "┣",
-  h: "━",
-  v: "┃",
-  dot: "●",
-  dotO: "○",
-  diamond: "◆",
-};
+import { ANSI, BOX, PROVIDER_ANSI } from "../theme";
 
 function getColor(pct: number | null): string {
-  if (pct === null) return C.text;
-  if (pct >= CONFIG.thresholds.green) return C.green;
-  if (pct >= CONFIG.thresholds.yellow) return C.yellow;
-  if (pct >= CONFIG.thresholds.orange) return C.orange;
-  return C.red;
+  if (pct === null) return ANSI.text;
+  if (pct >= CONFIG.thresholds.green) return ANSI.green;
+  if (pct >= CONFIG.thresholds.yellow) return ANSI.yellow;
+  if (pct >= CONFIG.thresholds.orange) return ANSI.orange;
+  return ANSI.red;
 }
 
 function bar(pct: number | null): string {
-  if (pct === null) return `${C.muted}${"░".repeat(20)}${C.reset}`;
+  if (pct === null) return `${ANSI.comment}${"░".repeat(20)}${ANSI.reset}`;
   const filled = Math.floor(pct / 5);
   const color = getColor(pct);
-  return `${color}${"█".repeat(filled)}${C.muted}${"░".repeat(20 - filled)}${C.reset}`;
+  return `${color}${"█".repeat(filled)}${ANSI.comment}${"░".repeat(20 - filled)}${ANSI.reset}`;
 }
 
 function indicator(val: number | null): string {
-  if (val === null) return `${C.muted}${B.dotO}${C.reset}`;
+  if (val === null) return `${ANSI.comment}${BOX.dotO}${ANSI.reset}`;
   const color = getColor(val);
-  return `${color}${B.dot}${C.reset}`;
+  return `${color}${BOX.dot}${ANSI.reset}`;
 }
 
 // Vertical bar with provider color
-const v = (color: string) => `${color}${B.v}${C.reset}`;
+const v = (color: string) => `${color}${BOX.v}${ANSI.reset}`;
 
 // Section label: ┣━ ◆ Label
 const label = (text: string, color: string) =>
-  `${color}${B.lt}${B.h}${C.reset} ${C.mauve}${C.bold}${B.diamond} ${text}${C.reset}`;
+  `${color}${BOX.lt}${BOX.h}${ANSI.reset} ${ANSI.magenta}${ANSI.bold}${BOX.diamond} ${text}${ANSI.reset}`;
 
 // Model line
 function modelLine(
@@ -83,10 +53,10 @@ function modelLine(
 ): string {
   const rem = window?.remaining ?? null;
   const reset = window?.resetsAt ?? null;
-  const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
+  const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
   const barS = bar(rem);
-  const pctS = `${getColor(rem)}${formatPercent(rem).padStart(4)}${C.reset}`;
-  const etaS = `${C.teal}→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}${C.reset}`;
+  const pctS = `${getColor(rem)}${formatPercent(rem).padStart(4)}${ANSI.reset}`;
+  const etaS = `${ANSI.cyan}→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}${ANSI.reset}`;
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
@@ -97,26 +67,26 @@ function codexModelLine(
   vColor: string,
 ): string {
   const rem = window?.remaining ?? null;
-  const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
+  const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
   const barS = bar(rem);
-  const pctS = `${getColor(rem)}${formatPercent(rem).padStart(4)}${C.reset}`;
+  const pctS = `${getColor(rem)}${formatPercent(rem).padStart(4)}${ANSI.reset}`;
   const etaS = window?.resetsAt
-    ? `${C.teal}→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}${C.reset}`
-    : `${C.teal}→ N/A${C.reset}`;
+    ? `${ANSI.cyan}→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}${ANSI.reset}`
+    : `${ANSI.cyan}→ N/A${ANSI.reset}`;
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
 function buildClaude(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const vc = C.peach;
+  const vc = PROVIDER_ANSI.claude;
 
   lines.push(
-    `${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Claude${C.reset} ${vc}${B.h.repeat(50)}${C.reset}`,
+    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Claude${ANSI.reset} ${vc}${BOX.h.repeat(50)}${ANSI.reset}`,
   );
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
+    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
   } else {
     const maxLen = 20;
 
@@ -150,10 +120,10 @@ function buildClaude(p: ProviderQuota): string[] {
       const { remaining, used, limit } = p.extraUsage;
       lines.push(v(vc));
       lines.push(label("Extra Usage", vc));
-      const nameS = `${C.lavender}${"Budget".padEnd(maxLen)}${C.reset}`;
+      const nameS = `${ANSI.textBright}${"Budget".padEnd(maxLen)}${ANSI.reset}`;
       const barS = bar(remaining);
-      const pctS = `${getColor(remaining)}${formatPercent(remaining).padStart(4)}${C.reset}`;
-      const usedS = `${C.teal}$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}${C.reset}`;
+      const pctS = `${getColor(remaining)}${formatPercent(remaining).padStart(4)}${ANSI.reset}`;
+      const usedS = `${ANSI.cyan}$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}${ANSI.reset}`;
       lines.push(
         `${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`,
       );
@@ -161,28 +131,28 @@ function buildClaude(p: ProviderQuota): string[] {
   }
 
   lines.push(v(vc));
-  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
+  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
 
   return lines;
 }
 
 function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const vc = C.green;
+  const vc = PROVIDER_ANSI.codex;
   const settings = loadSettingsSync();
   const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? "both";
   const planLabel = normalizePlanLabel(p);
 
   lines.push(
-    `${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Codex${C.reset} ${vc}${B.h.repeat(51)}${C.reset}`,
+    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Codex${ANSI.reset} ${vc}${BOX.h.repeat(51)}${ANSI.reset}`,
   );
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
+    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
   } else {
     const maxLen = 20;
-    lines.push(`${v(vc)}  ${C.subtext}Plan: ${planLabel}${C.reset}`);
+    lines.push(`${v(vc)}  ${ANSI.muted}Plan: ${planLabel}${ANSI.reset}`);
 
     let models = codexModelsFromQuota(p);
     models = applyCodexModelFilter(models, settings.models?.[p.provider]);
@@ -190,7 +160,7 @@ function buildCodex(p: ProviderQuota): string[] {
     if (models.length === 0) {
       lines.push(v(vc));
       lines.push(label("Available Models", vc));
-      lines.push(`${v(vc)}  ${C.muted}No models selected${C.reset}`);
+      lines.push(`${v(vc)}  ${ANSI.comment}No models selected${ANSI.reset}`);
     } else {
       const modelLen = Math.max(...models.map((m) => m.name.length), maxLen);
 
@@ -218,13 +188,13 @@ function buildCodex(p: ProviderQuota): string[] {
     if (p.extraUsage?.enabled) {
       lines.push(v(vc));
       lines.push(label("Credits", vc));
-      const nameS = `${C.lavender}${"Balance".padEnd(maxLen)}${C.reset}`;
+      const nameS = `${ANSI.textBright}${"Balance".padEnd(maxLen)}${ANSI.reset}`;
       const barS = bar(p.extraUsage.remaining);
-      const pctS = `${getColor(p.extraUsage.remaining)}${formatPercent(p.extraUsage.remaining).padStart(4)}${C.reset}`;
+      const pctS = `${getColor(p.extraUsage.remaining)}${formatPercent(p.extraUsage.remaining).padStart(4)}${ANSI.reset}`;
       const infoS =
         p.extraUsage.limit === -1
-          ? `${C.teal}Unlimited${C.reset}`
-          : `${C.teal}Balance${C.reset}`;
+          ? `${ANSI.cyan}Unlimited${ANSI.reset}`
+          : `${ANSI.cyan}Balance${ANSI.reset}`;
       lines.push(
         `${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`,
       );
@@ -232,34 +202,34 @@ function buildCodex(p: ProviderQuota): string[] {
   }
 
   lines.push(v(vc));
-  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
+  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
 
   return lines;
 }
 
 function buildAmp(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const vc = C.mauve;
+  const vc = PROVIDER_ANSI.amp;
   const m = p.meta ?? {};
 
   lines.push(
-    `${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}Amp${C.reset} ${vc}${B.h.repeat(53)}${C.reset}`,
+    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Amp${ANSI.reset} ${vc}${BOX.h.repeat(53)}${ANSI.reset}`,
   );
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${C.red}⚠️ ${p.error}${C.reset}`);
+    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
   } else {
     // Thin tree connectors
-    const tee = `${C.muted}├─${C.reset}`;
-    const end = `${C.muted}└─${C.reset}`;
+    const tee = `${ANSI.comment}├─${ANSI.reset}`;
+    const end = `${ANSI.comment}└─${ANSI.reset}`;
 
     // Free Tier
     const free = p.models?.["Free Tier"];
     if (free) {
       lines.push(label("Free Tier", vc));
       const barS = bar(free.remaining);
-      const pctS = `${getColor(free.remaining)}${formatPercent(free.remaining).padStart(4)}${C.reset}`;
+      const pctS = `${getColor(free.remaining)}${formatPercent(free.remaining).padStart(4)}${ANSI.reset}`;
       lines.push(`${v(vc)}  ${indicator(free.remaining)} ${barS} ${pctS}`);
 
       // Build sub-details
@@ -267,17 +237,17 @@ function buildAmp(p: ProviderQuota): string[] {
 
       const dollarParts: string[] = [];
       if (m.replenishRate)
-        dollarParts.push(`${C.teal}${m.replenishRate}${C.reset}`);
+        dollarParts.push(`${ANSI.cyan}${m.replenishRate}${ANSI.reset}`);
       const dollars = [m.freeRemaining, m.freeTotal]
         .filter(Boolean)
         .join(" / ");
-      if (dollars) dollarParts.push(`${C.text}( ${dollars} )${C.reset}`);
-      if (m.bonus) dollarParts.push(`${C.teal}${m.bonus}${C.reset}`);
+      if (dollars) dollarParts.push(`${ANSI.text}( ${dollars} )${ANSI.reset}`);
+      if (m.bonus) dollarParts.push(`${ANSI.cyan}${m.bonus}${ANSI.reset}`);
       if (dollarParts.length > 0) subs.push(dollarParts.join("  "));
 
       if (free.resetsAt && free.remaining !== 100) {
         subs.push(
-          `${C.teal}Full in ${formatEta(free.resetsAt, free.remaining)}  ${formatResetTime(free.resetsAt, free.remaining)}${C.reset}`,
+          `${ANSI.cyan}Full in ${formatEta(free.resetsAt, free.remaining)}  ${formatResetTime(free.resetsAt, free.remaining)}${ANSI.reset}`,
         );
       }
 
@@ -291,11 +261,11 @@ function buildAmp(p: ProviderQuota): string[] {
     const credits = p.models?.["Credits"];
     if (credits) {
       lines.push(v(vc));
-      lines.push(label("Credits", vc));
       const balance = m.creditsBalance ?? "$0";
-      const color = credits.remaining > 0 ? C.green : C.muted;
+      const color = credits.remaining > 0 ? ANSI.green : ANSI.comment;
+      lines.push(label("Credits", vc));
       lines.push(
-        `${v(vc)}  ${indicator(credits.remaining)} ${color}${balance}${C.reset}`,
+        `${v(vc)}  ${indicator(credits.remaining)} ${color}${balance}${ANSI.reset}`,
       );
     }
 
@@ -305,9 +275,9 @@ function buildAmp(p: ProviderQuota): string[] {
       const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
       lines.push(label("Usage", vc));
       for (const [name, window] of entries) {
-        const nameS = `${C.lavender}${name.padEnd(maxLen)}${C.reset}`;
+        const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
         const barS = bar(window.remaining);
-        const pctS = `${getColor(window.remaining)}${formatPercent(window.remaining).padStart(4)}${C.reset}`;
+        const pctS = `${getColor(window.remaining)}${formatPercent(window.remaining).padStart(4)}${ANSI.reset}`;
         lines.push(
           `${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`,
         );
@@ -317,11 +287,11 @@ function buildAmp(p: ProviderQuota): string[] {
 
   if (p.account) {
     lines.push(v(vc));
-    lines.push(`${v(vc)}  ${C.muted}Account: ${p.account}${C.reset}`);
+    lines.push(`${v(vc)}  ${ANSI.comment}Account: ${p.account}${ANSI.reset}`);
   }
 
   lines.push(v(vc));
-  lines.push(`${vc}${B.bl}${B.h.repeat(55)}${C.reset}`);
+  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
 
   return lines;
 }
@@ -346,7 +316,7 @@ export function formatForTerminal(quotas: AllQuotas): string {
   }
 
   if (sections.length === 0) {
-    return `${C.muted}No providers connected${C.reset}`;
+    return `${ANSI.comment}No providers connected${ANSI.reset}`;
   }
 
   return sections.map((s) => s.join("\n")).join("\n\n");

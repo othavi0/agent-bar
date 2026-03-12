@@ -6,6 +6,7 @@
 
 import * as p from "@clack/prompts";
 import { join } from "node:path";
+import { createSpinner } from "./spinner";
 import { oneDark, colorize, semantic } from "./tui/colors";
 
 // Get the qbar repo root
@@ -68,12 +69,12 @@ export async function main() {
   );
 
   // Fetch latest
-  const spinner = p.spinner();
-  spinner.start("Fetching latest changes...");
+  const spinner = createSpinner("Fetching latest changes...");
+  spinner.start();
 
   const fetch = await runCmd("git", ["fetch", "origin"], REPO_ROOT);
   if (!fetch.ok) {
-    spinner.stop(colorize("Failed to fetch", semantic.danger));
+    spinner.fail("Failed to fetch");
     p.log.error(fetch.output);
     return;
   }
@@ -83,12 +84,12 @@ export async function main() {
   const behind = status.output.includes("behind");
 
   if (!behind) {
-    spinner.stop(colorize("Already up to date!", semantic.good));
+    spinner.succeed("Already up to date!");
     p.outro(colorize("No updates available", semantic.subtitle));
     return;
   }
 
-  spinner.stop(colorize("Updates available", semantic.good));
+  spinner.succeed("Updates available");
 
   // Show what's coming
   const log = await runCmd(
@@ -118,11 +119,12 @@ export async function main() {
   }
 
   // Pull changes
-  spinner.start("Pulling changes...");
+  spinner.text = "Pulling changes...";
+  spinner.start();
   const pull = await runCmd("git", ["pull", "--ff-only"], REPO_ROOT);
 
   if (!pull.ok) {
-    spinner.stop(colorize("Pull failed", semantic.danger));
+    spinner.fail("Pull failed");
     p.log.error(pull.output);
     p.log.warn(
       colorize("Try: git stash && git pull && git stash pop", semantic.warning),
@@ -130,19 +132,20 @@ export async function main() {
     return;
   }
 
-  spinner.stop(colorize("Code updated", semantic.good));
+  spinner.succeed("Code updated");
 
   // Install dependencies
-  spinner.start("Installing dependencies...");
+  spinner.text = "Installing dependencies...";
+  spinner.start();
   const install = await runCmd("bun", ["install"], REPO_ROOT);
 
   if (!install.ok) {
-    spinner.stop(colorize("Install failed", semantic.danger));
+    spinner.fail("Install failed");
     p.log.error(install.output);
     return;
   }
 
-  spinner.stop(colorize("Dependencies updated", semantic.good));
+  spinner.succeed("Dependencies updated");
 
   // Get new version
   const newCommit = await runCmd(

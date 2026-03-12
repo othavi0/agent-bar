@@ -1,5 +1,6 @@
 import { logger } from "./logger";
-import { ANSI } from "./theme";
+import { ANSI, BOX } from "./theme";
+import pkg from "../package.json";
 
 export interface CliOptions {
   command:
@@ -25,68 +26,42 @@ export interface CliOptions {
   terminalScript?: string;
 }
 
-const C = {
-  reset: ANSI.reset,
-  bold: ANSI.bold,
-  green: ANSI.green,
-  yellow: ANSI.yellow,
-  blue: ANSI.blue,
-  mauve: ANSI.magenta,
-  teal: ANSI.cyan,
-  text: ANSI.text,
-  subtext: ANSI.muted,
-  muted: ANSI.comment,
-  peach: ANSI.orange,
-  lavender: ANSI.textBright,
-};
-
-// Box drawing (bold)
-const B = {
-  tl: "┏",
-  bl: "┗",
-  lt: "┣",
-  h: "━",
-  v: "┃",
-  diamond: "◆",
-  dot: "●",
-};
-
-const vc = C.mauve;
-const v = () => `${vc}${B.v}${C.reset}`;
+const vc = ANSI.magenta;
+const v = () => `${vc}${BOX.v}${ANSI.reset}`;
 const label = (text: string) =>
-  `${vc}${B.lt}${B.h}${C.reset} ${C.mauve}${C.bold}${B.diamond} ${text}${C.reset}`;
+  `${vc}${BOX.lt}${BOX.h}${ANSI.reset} ${ANSI.magenta}${ANSI.bold}${BOX.diamond} ${text}${ANSI.reset}`;
 
 // Alignment columns
 const COL1 = 22; // command/option column
 const COL2 = 35; // description starts here
 
 function cmdLine(name: string, desc: string): string {
-  return `${v()}  ${C.green}${B.dot}${C.reset} ${C.lavender}${name.padEnd(COL1)}${C.reset}${C.subtext}${desc}${C.reset}`;
+  return `${v()}  ${ANSI.green}${BOX.dot}${ANSI.reset} ${ANSI.textBright}${name.padEnd(COL1)}${ANSI.reset}${ANSI.muted}${desc}${ANSI.reset}`;
 }
 
 function optLine(flags: string, desc: string): string {
-  return `${v()}  ${C.yellow}${B.dot}${C.reset} ${C.lavender}${flags.padEnd(COL1)}${C.reset}${C.subtext}${desc}${C.reset}`;
+  return `${v()}  ${ANSI.yellow}${BOX.dot}${ANSI.reset} ${ANSI.textBright}${flags.padEnd(COL1)}${ANSI.reset}${ANSI.muted}${desc}${ANSI.reset}`;
 }
 
 function exLine(cmd: string, desc: string): string {
-  return `${v()}  ${C.teal}${B.dot}${C.reset} ${C.teal}${cmd.padEnd(COL1)}${C.reset}${C.muted}${desc}${C.reset}`;
+  return `${v()}  ${ANSI.cyan}${BOX.dot}${ANSI.reset} ${ANSI.cyan}${cmd.padEnd(COL1)}${ANSI.reset}${ANSI.comment}${desc}${ANSI.reset}`;
 }
 
 function infoLine(key: string, val: string): string {
-  return `${v()}  ${C.peach}${B.dot}${C.reset} ${C.peach}${key.padEnd(COL1)}${C.reset}${C.muted}${val}${C.reset}`;
+  return `${v()}  ${ANSI.orange}${BOX.dot}${ANSI.reset} ${ANSI.orange}${key.padEnd(COL1)}${ANSI.reset}${ANSI.comment}${val}${ANSI.reset}`;
 }
 
 function wbLine(action: string, desc: string): string {
-  return `${v()}  ${C.lavender}${action.padEnd(COL1)}${C.reset}${C.muted}→${C.reset} ${C.subtext}${desc}${C.reset}`;
+  return `${v()}  ${ANSI.textBright}${action.padEnd(COL1)}${ANSI.reset}${ANSI.comment}→${ANSI.reset} ${ANSI.muted}${desc}${ANSI.reset}`;
 }
 
 export function showHelp(): void {
-  const version = "3.0.0";
+  const version = pkg.version;
   const w = 58;
 
   console.log();
   console.log(
-    `${vc}${B.tl}${B.h}${C.reset} ${vc}${C.bold}qbar${C.reset} ${C.muted}v${version}${C.reset} ${vc}${B.h.repeat(w - 12)}${C.reset}`,
+    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}qbar${ANSI.reset} ${ANSI.comment}v${version}${ANSI.reset} ${vc}${BOX.h.repeat(w - 12)}${ANSI.reset}`,
   );
   console.log(v());
 
@@ -117,8 +92,16 @@ export function showHelp(): void {
   console.log(optLine("--terminal-script <path>", "Modules export launcher"));
   console.log(v());
 
-  console.log(`${vc}${B.bl}${B.h.repeat(w)}${C.reset}`);
+  console.log(`${vc}${BOX.bl}${BOX.h.repeat(w)}${ANSI.reset}`);
   console.log();
+}
+
+function requireNextArg(args: string[], i: number, flag: string): string {
+  if (i + 1 >= args.length) {
+    console.error(`Error: ${flag} requires a value`);
+    process.exit(1);
+  }
+  return args[i + 1];
 }
 
 export function parseArgs(args: string[]): CliOptions {
@@ -164,7 +147,8 @@ export function parseArgs(args: string[]): CliOptions {
         break;
       case "action-right":
         options.command = "action-right";
-        options.provider = args[++i];
+        options.provider = requireNextArg(args, i, "action-right");
+        i++;
         break;
       case "--terminal":
       case "-t":
@@ -176,26 +160,32 @@ export function parseArgs(args: string[]): CliOptions {
         break;
       case "--provider":
       case "-p":
-        options.provider = args[++i];
+        options.provider = requireNextArg(args, i, "--provider");
+        i++;
         break;
       case "--verbose":
       case "-v":
         options.verbose = true;
         break;
       case "--waybar-dir":
-        options.waybarDir = args[++i];
+        options.waybarDir = requireNextArg(args, i, "--waybar-dir");
+        i++;
         break;
       case "--scripts-dir":
-        options.scriptsDir = args[++i];
+        options.scriptsDir = requireNextArg(args, i, "--scripts-dir");
+        i++;
         break;
       case "--icons-dir":
-        options.iconsDir = args[++i];
+        options.iconsDir = requireNextArg(args, i, "--icons-dir");
+        i++;
         break;
       case "--qbar-bin":
-        options.qbarBin = args[++i];
+        options.qbarBin = requireNextArg(args, i, "--qbar-bin");
+        i++;
         break;
       case "--terminal-script":
-        options.terminalScript = args[++i];
+        options.terminalScript = requireNextArg(args, i, "--terminal-script");
+        i++;
         break;
       case "--help":
       case "-h":

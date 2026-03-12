@@ -10,19 +10,8 @@ import {
 import { getAllQuotas } from "../providers";
 import type { ProviderQuota, QuotaWindow } from "../providers/types";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
+import { BOX as B } from "../theme";
 import { oneDark, colorize, getQuotaColor, semantic } from "./colors";
-
-// Box drawing characters
-const B = {
-  tl: "┏",
-  bl: "┗",
-  lt: "┣",
-  h: "━",
-  v: "┃",
-  dot: "●",
-  dotO: "○",
-  diamond: "◆",
-};
 
 function bar(pct: number | null): string {
   if (pct === null) return colorize("░".repeat(20), semantic.muted);
@@ -282,11 +271,11 @@ function buildAmp(p: ProviderQuota): string[] {
 
 export async function showListAll(): Promise<void> {
   const s = p.spinner();
-  s.start(colorize("Loading quotas...", semantic.subtitle));
+  s.start('Loading quotas...');
 
   const quotas = await getAllQuotas();
 
-  s.stop(colorize("Quotas loaded", semantic.good));
+  s.stop('Quotas loaded');
 
   // Build output
   const sections: string[][] = [];
@@ -318,13 +307,15 @@ export async function showListAll(): Promise<void> {
 
   console.log(colorize("Press Enter to continue...", semantic.subtitle));
 
-  // Wait for enter
-  await new Promise<void>((resolve) => {
-    process.stdin.setRawMode?.(true);
-    process.stdin.resume();
-    process.stdin.once("data", () => {
-      process.stdin.setRawMode?.(false);
-      resolve();
+  // Wait for enter — always restore raw mode even if an error occurs
+  process.stdin.setRawMode?.(true);
+  process.stdin.resume();
+  try {
+    await new Promise<void>((resolve) => {
+      process.stdin.once("data", () => resolve());
     });
-  });
+  } finally {
+    process.stdin.setRawMode?.(false);
+    process.stdin.pause();
+  }
 }

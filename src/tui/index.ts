@@ -6,7 +6,11 @@ import { configureWaybar } from "./configure-waybar";
 import { showListAll } from "./list-all";
 import { loginProviderFlow } from "./login";
 
-const VERSION = "3.0.0";
+import pkg from "../../package.json";
+
+const VERSION = pkg.version;
+/** Delay between animation frames in ms */
+const LOGO_ANIM_FRAME_MS = 12;
 
 type MenuAction = "list" | "waybar" | "models" | "layout" | "login";
 
@@ -21,11 +25,12 @@ const LOGO_LINES = [
 ];
 
 const GRADIENT: number[][] = [
-  [209, 154, 102],
-  [229, 192, 123],
-  [86, 182, 194],
-  [97, 175, 239],
-  [198, 120, 221],
+  [209, 154, 102], // orange  #d19a66
+  [229, 192, 123], // yellow  #e5c07b
+  [152, 195, 121], // green   #98c379
+  [86, 182, 194],  // cyan    #56b6c2
+  [97, 175, 239],  // blue    #61afef
+  [198, 120, 221], // magenta #c678dd
 ];
 
 function gradientColor(t: number): string {
@@ -61,8 +66,8 @@ async function animateLogo(): Promise<void> {
   const maxLen = Math.max(...LOGO_LINES.map((l) => l.length));
   const height = LOGO_LINES.length;
 
-  // Hide cursor
-  process.stdout.write("\x1b[?25l");
+  // Hide cursor (only if writing to a real terminal)
+  if (process.stdout.isTTY) process.stdout.write("\x1b[?25l");
 
   // Reserve lines
   for (let i = 0; i < height; i++) process.stdout.write("\n");
@@ -88,7 +93,7 @@ async function animateLogo(): Promise<void> {
       process.stdout.write(out);
     }
 
-    await sleep(12);
+    await sleep(LOGO_ANIM_FRAME_MS);
   }
 
   // Final full render
@@ -107,7 +112,7 @@ async function animateLogo(): Promise<void> {
   }
 
   // Show cursor
-  process.stdout.write("\x1b[?25h");
+  if (process.stdout.isTTY) process.stdout.write("\x1b[?25h");
 }
 
 export async function runTui(): Promise<void> {
@@ -200,7 +205,7 @@ export async function runTui(): Promise<void> {
 }
 
 process.on("SIGINT", () => {
-  process.stdout.write("\x1b[?25h");
+  if (process.stdout.isTTY) process.stdout.write("\x1b[?25h");
   console.log("");
   p.outro(colorize("Cancelled", semantic.muted));
   process.exit(0);

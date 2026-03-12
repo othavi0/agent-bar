@@ -1,4 +1,5 @@
 import { mkdir } from "fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "os";
 import { join } from "path";
 import { normalizeProviderSelection } from "./waybar-contract";
@@ -83,20 +84,21 @@ export async function loadSettings(): Promise<Settings> {
     }
 
     return normalized;
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[qbar] Settings parse error (using defaults): ${err}\n`);
     return normalizeSettings(undefined);
   }
 }
 
 export function loadSettingsSync(): Settings {
   try {
-    const { existsSync, readFileSync } = require("node:fs");
     if (!existsSync(SETTINGS_FILE)) {
       return normalizeSettings(undefined);
     }
     const data = JSON.parse(readFileSync(SETTINGS_FILE, "utf-8"));
     return normalizeSettings(data);
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[qbar] Settings sync read error (using defaults): ${err}\n`);
     return normalizeSettings(undefined);
   }
 }

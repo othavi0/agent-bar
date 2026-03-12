@@ -5,19 +5,17 @@
  * Used by right-click on waybar module
  */
 
-import ora from 'ora';
+import { createSpinner } from './spinner';
 import { cache } from './cache';
 import { getAllQuotas, getQuotaFor } from './providers';
 import { outputTerminal } from './formatters/terminal';
+import { ANSI } from './theme';
 
 const provider = process.argv[2];
 
 async function refresh() {
-  const spinner = ora({
-    text: 'Refreshing quotas...',
-    spinner: 'dots',
-    color: 'cyan',
-  }).start();
+  const spinner = createSpinner('Refreshing quotas...');
+  spinner.start();
 
   try {
     // Invalidate cache
@@ -49,7 +47,7 @@ async function refresh() {
   Bun.spawn(['pkill', '-SIGUSR2', 'waybar']);
 
   // Auto-close after showing results
-  console.log('\n\x1b[2m(closing in 3s or press Enter...)\x1b[0m');
+  console.log(`\n${ANSI.dim}(closing in 3s or press Enter...)${ANSI.reset}`);
   await Promise.race([
     Bun.sleep(3000),
     new Promise<void>((resolve) => {

@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir } from 'fs/promises';
+import { cp, mkdir, readdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { CONFIG } from './config';
 import { logger } from './logger';
@@ -11,6 +11,8 @@ export class Cache {
   private cacheDir: string;
   private legacyCacheDir: string;
   private migrationAttempted = false;
+  /** In-flight fetch deduplication: key → Promise */
+  private inflight = new Map<string, Promise<unknown>>();
 
   constructor(cacheDir: string = CONFIG.paths.cache) {
     this.cacheDir = cacheDir;
@@ -18,6 +20,10 @@ export class Cache {
   }
 
   private getPath(key: string): string {
+    // Prevent path traversal: only allow safe characters in cache keys
+    if (!/^[a-zA-Z0-9_-]+$/.test(key)) {
+      throw new Error(`Invalid cache key: "${key}"`);
+    }
     return join(this.cacheDir, `${key}.json`);
   }
 
@@ -118,19 +124,19 @@ export class Cache {
    */
   async invalidate(key: string): Promise<void> {
     const path = this.getPath(key);
-    
+
     try {
-      const { unlinkSync } = await import('node:fs');
-      unlinkSync(path);
+      await unlink(path);
       logger.debug('Cache invalidated', { key });
-    } catch (error) {
+    } catch {
       // File doesn't exist or can't delete - that's fine
       logger.debug('Cache invalidate (no file)', { key });
     }
   }
 
   /**
-   * Get or fetch: returns cached data if valid, otherwise fetches and caches
+   * Get or fetch: returns cached data if valid, otherwise fetches and caches.
+   * Deduplicates concurrent requests for the same key.
    */
   async getOrFetch<T>(
     key: string,
@@ -142,9 +148,23 @@ export class Cache {
       return cached;
     }
 
-    const data = await fetcher();
-    await this.set(key, data, ttlMs);
-    return data;
+    // Deduplicate concurrent fetches for the same key
+    const existing = this.inflight.get(key);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+
+    const promise = fetcher().then(async (data) => {
+      await this.set(key, data, ttlMs);
+      this.inflight.delete(key);
+      return data;
+    }).catch((err) => {
+      this.inflight.delete(key);
+      throw err;
+    });
+
+    this.inflight.set(key, promise);
+    return promise as Promise<T>;
   }
 }
 

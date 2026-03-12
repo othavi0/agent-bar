@@ -46,8 +46,7 @@ export function classifyWindow(
 }
 
 export function normalizePlanLabel(p: ProviderQuota): string {
-  if (p.plan?.trim()) return p.plan;
-  const raw = p.planType?.trim();
+  const raw = (p.plan?.trim() || p.planType?.trim());
   if (!raw) return "Unknown";
 
   const key = raw.toLowerCase();
@@ -64,7 +63,8 @@ export function normalizePlanLabel(p: ProviderQuota): string {
     apikey: "API Key",
     api_key: "API Key",
   };
-  return map[key] ?? raw;
+  // Fallback: capitalize the raw string (e.g. "enterprise_pro" → "Enterprise Pro")
+  return map[key] ?? raw.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export interface CodexModelEntry {

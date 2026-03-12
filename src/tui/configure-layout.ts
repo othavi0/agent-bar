@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { loadSettings, saveSettings } from "../settings";
+import { PROVIDER_ANSI } from "../theme";
 import { oneDark, colorize, semantic } from "./colors";
 
 const SEPARATOR_STYLES = [
@@ -30,11 +31,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   amp: "Amp",
 };
 
-const PROVIDER_COLORS: Record<string, string> = {
-  claude: oneDark.orange,
-  codex: oneDark.green,
-  amp: oneDark.magenta,
-};
+const PROVIDER_COLORS: Record<string, string> = PROVIDER_ANSI;
 
 export async function configureLayout(): Promise<boolean> {
   const settings = await loadSettings();
@@ -100,14 +97,14 @@ export async function configureLayout(): Promise<boolean> {
   const newSeparator = sepResult as typeof currentSep;
 
   // --- Apply ---
-  const spinner = p.spinner();
-  spinner.start("Saving layout settings...");
+  const s = p.spinner();
+  s.start("Saving layout settings...");
 
   settings.waybar.providerOrder = newOrder;
   settings.waybar.separators = newSeparator;
   await saveSettings(settings);
 
-  spinner.stop(colorize("Layout preferences saved", semantic.good));
+  s.stop("Layout preferences saved");
 
   // Show summary
   const orderStr = newOrder

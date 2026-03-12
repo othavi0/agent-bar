@@ -119,7 +119,15 @@ async function main() {
 
   // Handle cache refresh
   if (options.refresh) {
-    await cache.invalidate("codex-quota");
+    const toInvalidate = options.provider
+      ? [options.provider]
+      : ["claude", "codex", "amp"];
+
+    for (const id of toInvalidate) {
+      if (id === "claude") await cache.invalidate("claude-usage");
+      else if (id === "codex") await cache.invalidate("codex-quota");
+      else if (id === "amp") await cache.invalidate("amp-quota");
+    }
     logger.info("Cache invalidated");
   }
 
