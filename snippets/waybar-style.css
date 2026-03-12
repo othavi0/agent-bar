@@ -1,9 +1,11 @@
-/* qbar Waybar Styles (copy into ~/.config/waybar/style.css)
-   Icons are loaded relative to ~/.config/waybar
+/* Reference snippet only.
+   Legacy manual Waybar CSS example for consumers that own live style.css edits.
 
-   Setup:
-     mkdir -p ~/.config/waybar/qbar
-     cp -r ./icons ~/.config/waybar/qbar/
+   Supported flat-onedark users should use:
+     /home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh
+
+   If you still use this manually, install qbar-owned assets first:
+     qbar assets install --waybar-dir ~/.config/waybar/qbar --scripts-dir ~/.config/waybar/scripts
 */
 
 #custom-qbar-claude,
@@ -14,7 +16,16 @@
   background-size: 14px 14px;
   background-repeat: no-repeat;
   background-position: 6px center;
-  border-left: 2px solid #45475a;
+  border-left: 1px solid #434d5d;
+  color: #c0c9d4;
+}
+
+#custom-qbar-claude:hover,
+#custom-qbar-codex:hover,
+#custom-qbar-amp:hover {
+  background-color: rgba(192, 201, 212, 0.04);
+  border-color: #3c4656;
+  color: #e2e8f0;
 }
 
 /* First module margin */
@@ -24,31 +35,31 @@
 }
 
 #custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
-#custom-qbar-amp { background-image: url("qbar/icons/amp-icon.png"); }
+#custom-qbar-amp { background-image: url("qbar/icons/amp-icon.svg"); }
 
 /* Last module border */
 #custom-qbar-amp {
-  border-right: 2px solid #45475a;
+  border-right: 1px solid #434d5d;
 }
 
 /* Status colors */
-#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-amp.ok { color: #a6e3a1; }
-#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-amp.low { color: #f9e2af; }
-#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-amp.warn { color: #fab387; }
-#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-amp.critical { color: #f38ba8; }
+#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-amp.ok { color: #98c379; }
+#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-amp.low { color: #e5c07b; }
+#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-amp.warn { color: #d19a66; }
+#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-amp.critical { color: #e06c75; }
 
 #custom-qbar-claude.loading,
 #custom-qbar-codex.loading,
 #custom-qbar-amp.loading {
   animation: qbar-pulse 0.8s ease-in-out infinite;
-  color: #89dceb;
+  color: #56b6c2;
 }
 
 /* Disconnected state */
 #custom-qbar-claude.disconnected,
 #custom-qbar-codex.disconnected,
 #custom-qbar-amp.disconnected {
-  color: #f38ba8;
+  color: #e06c75;
   padding-left: 30px;
   font-size: 14px;
 }

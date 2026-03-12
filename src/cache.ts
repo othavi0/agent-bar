@@ -1,4 +1,4 @@
-import { mkdir } from 'fs/promises';
+import { cp, mkdir, readdir } from 'fs/promises';
 import { join } from 'path';
 import { CONFIG } from './config';
 import { logger } from './logger';
@@ -9,9 +9,12 @@ import type { CacheEntry } from './providers/types';
  */
 export class Cache {
   private cacheDir: string;
+  private legacyCacheDir: string;
+  private migrationAttempted = false;
 
   constructor(cacheDir: string = CONFIG.paths.cache) {
     this.cacheDir = cacheDir;
+    this.legacyCacheDir = CONFIG.paths.legacyCache;
   }
 
   private getPath(key: string): string {
@@ -20,9 +23,41 @@ export class Cache {
 
   async ensureDir(): Promise<void> {
     try {
+      await this.migrateLegacyCache();
       await mkdir(this.cacheDir, { recursive: true });
     } catch (error) {
       logger.error('Failed to create cache directory', { error, dir: this.cacheDir });
+    }
+  }
+
+  private async migrateLegacyCache(): Promise<void> {
+    if (this.migrationAttempted) {
+      return;
+    }
+
+    this.migrationAttempted = true;
+
+    try {
+      const legacyEntries = await readdir(this.legacyCacheDir);
+      if (legacyEntries.length === 0) {
+        return;
+      }
+
+      await mkdir(this.cacheDir, { recursive: true });
+
+      for (const entry of legacyEntries) {
+        await cp(join(this.legacyCacheDir, entry), join(this.cacheDir, entry), {
+          force: false,
+          errorOnExist: false,
+        });
+      }
+
+      logger.info('Migrated qbar cache to XDG cache directory', {
+        from: this.legacyCacheDir,
+        to: this.cacheDir,
+      });
+    } catch (error) {
+      logger.debug('Legacy cache migration skipped', { error });
     }
   }
 

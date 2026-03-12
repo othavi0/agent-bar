@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import { loadSettings, saveSettings } from "../settings";
-import { catppuccin, colorize, semantic } from "./colors";
+import { oneDark, colorize, semantic } from "./colors";
 
 const SEPARATOR_STYLES = [
   { value: "pill" as const, label: "Pill", preview: "[ 100% ] [ 65% ]" },
@@ -31,165 +31,10 @@ const PROVIDER_NAMES: Record<string, string> = {
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
-  claude: catppuccin.peach,
-  codex: catppuccin.green,
-  amp: catppuccin.mauve,
+  claude: oneDark.orange,
+  codex: oneDark.green,
+  amp: oneDark.magenta,
 };
-
-/**
- * Apply CSS changes to waybar style.css
- */
-async function applyCSS(
-  separatorStyle: string,
-  providerOrder: string[],
-): Promise<void> {
-  const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
-  const { join } = await import("node:path");
-  const { homedir } = await import("node:os");
-
-  const HOME = homedir();
-  const styleFile = join(HOME, ".config", "waybar", "style.css");
-
-  if (!existsSync(styleFile)) return;
-
-  // We need generateCSS from setup — but to avoid circular deps, inline a lightweight version
-  const muted = "#6c7086";
-  const surface0 = "#313244";
-  const providers =
-    providerOrder.length > 0
-      ? providerOrder
-      : ["claude", "codex", "amp"];
-  const first = providers[0];
-  const last = providers[providers.length - 1];
-
-  let content = readFileSync(styleFile, "utf-8");
-
-  // Remove ALL existing separator rules (pill, underline, gap, outer borders, inter-module borders)
-  content = content.replace(
-    /\/\* Separator: (?:pill|underline|gap|outer borders|inter-module borders) \*\/[\s\S]*?(?=\n\/\*|\n#custom-qbar-claude\.ok|\n$)/gm,
-    "",
-  );
-
-  // Remove any previously added separator-specific padding/border overrides
-  content = content.replace(/#custom-qbar-\w+ \{ border-left:.*?\}\n?/g, "");
-  content = content.replace(/#custom-qbar-\w+ \{ border-right:.*?\}\n?/g, "");
-
-  // Add new separator rules before the status color rules
-  let separatorCSS = "";
-  if (separatorStyle === "pill") {
-    separatorCSS = `
-/* Separator: pill */
-${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
-  background-color: ${surface0};
-  border-radius: 6px;
-  margin: 2px 4px;
-  padding: 0 10px 0 28px;
-}
-`;
-  } else if (separatorStyle === "underline") {
-    separatorCSS = `
-/* Separator: underline */
-${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
-  border-bottom: 2px solid ${muted};
-  padding: 0 6px 2px 24px;
-  margin: 0 4px;
-}
-`;
-  } else if (separatorStyle === "gap") {
-    separatorCSS = `
-/* Separator: gap */
-${providers.map((pr) => `#custom-qbar-${pr}`).join(",\n")} {
-  margin: 0 8px;
-  padding: 0 4px 0 22px;
-}
-`;
-  } else if (separatorStyle !== "none") {
-    // Legacy classic borders
-    const styles: Record<string, { border: string; outer: string }> = {
-      pipe: { border: `1px solid ${muted}`, outer: `1px solid ${muted}` },
-      dot: { border: `2px dashed ${muted}`, outer: `2px dashed ${muted}` },
-      subtle: {
-        border: `1px solid ${surface0}`,
-        outer: `1px solid ${surface0}`,
-      },
-    };
-
-    const style = styles[separatorStyle] ?? styles.pipe;
-
-    separatorCSS = `
-/* Separator: outer borders */
-#custom-qbar-${first} { border-left: ${style.outer}; margin-left: 4px; padding-left: 26px; }
-#custom-qbar-${last} { border-right: ${style.outer}; margin-right: 4px; }
-
-/* Separator: inter-module borders */
-${providers
-  .slice(1)
-  .map((pr) => `#custom-qbar-${pr}`)
-  .join(",\n")} {
-  border-left: ${style.border};
-}
-`;
-  }
-
-  if (separatorCSS) {
-    // Insert before status colors
-    const insertPoint = content.indexOf("#custom-qbar-claude.ok");
-    if (insertPoint !== -1) {
-      content =
-        content.substring(0, insertPoint) +
-        separatorCSS +
-        "\n" +
-        content.substring(insertPoint);
-    } else {
-      content = content.trimEnd() + "\n" + separatorCSS;
-    }
-  }
-
-  // Clean up extra blank lines
-  content = content.replace(/\n{3,}/g, "\n\n");
-
-  writeFileSync(styleFile, content);
-}
-
-/**
- * Apply provider order to waybar config.jsonc
- */
-async function applyModuleOrder(providerOrder: string[]): Promise<void> {
-  const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
-  const { join } = await import("node:path");
-  const { homedir } = await import("node:os");
-
-  const HOME = homedir();
-  const configFile = join(HOME, ".config", "waybar", "config.jsonc");
-
-  if (!existsSync(configFile)) return;
-
-  let content = readFileSync(configFile, "utf-8");
-
-  // Find the modules-right array and reorder qbar modules within it
-  const modulesMatch = content.match(/"modules-right"\s*:\s*\[([\s\S]*?)\]/);
-  if (!modulesMatch) return;
-
-  const modulesContent = modulesMatch[1];
-  const moduleList = modulesContent
-    .split(",")
-    .map((m) => m.trim().replace(/"/g, ""));
-
-  // Separate non-qbar and qbar modules
-  const nonQbar = moduleList.filter((m) => !m.startsWith("custom/qbar-"));
-  const qbarModules = providerOrder.map((p) => `custom/qbar-${p}`);
-
-  // Rebuild: non-qbar first, then qbar in order
-  const newModules = [...nonQbar, ...qbarModules];
-  const newModulesStr = newModules.map((m) => `\n    "${m}"`).join(",");
-
-  content = content.replace(
-    /"modules-right"\s*:\s*\[[\s\S]*?\]/,
-    `"modules-right": [${newModulesStr}]`,
-  );
-
-  writeFileSync(configFile, content);
-}
 
 export async function configureLayout(): Promise<boolean> {
   const settings = await loadSettings();
@@ -200,7 +45,7 @@ export async function configureLayout(): Promise<boolean> {
       colorize("Current order:", semantic.subtitle),
       "",
       ...settings.waybar.providerOrder.map((id, i) => {
-        const color = PROVIDER_COLORS[id] ?? catppuccin.text;
+        const color = PROVIDER_COLORS[id] ?? oneDark.text;
         const name = PROVIDER_NAMES[id] ?? id;
         return `  ${colorize(`${i + 1}.`, semantic.muted)} ${colorize(name, color)}`;
       }),
@@ -223,7 +68,7 @@ export async function configureLayout(): Promise<boolean> {
       value: id,
       label: colorize(
         PROVIDER_NAMES[id] ?? id,
-        PROVIDER_COLORS[id] ?? catppuccin.text,
+        PROVIDER_COLORS[id] ?? oneDark.text,
       ),
     })),
     initialValues: settings.waybar.providerOrder,
@@ -243,7 +88,7 @@ export async function configureLayout(): Promise<boolean> {
       value: s.value,
       label: colorize(
         s.label,
-        s.value === currentSep ? catppuccin.green : catppuccin.text,
+        s.value === currentSep ? oneDark.green : oneDark.text,
       ),
       hint: colorize(s.preview, semantic.muted),
     })),
@@ -256,32 +101,20 @@ export async function configureLayout(): Promise<boolean> {
 
   // --- Apply ---
   const spinner = p.spinner();
-  spinner.start("Applying layout changes...");
+  spinner.start("Saving layout settings...");
 
   settings.waybar.providerOrder = newOrder;
   settings.waybar.separators = newSeparator;
   await saveSettings(settings);
 
-  // Apply CSS changes
-  await applyCSS(newSeparator, newOrder);
-
-  // Apply module order
-  await applyModuleOrder(newOrder);
-
-  // Reload waybar
-  try {
-    Bun.spawn(["pkill", "-USR2", "waybar"]);
-    await Bun.sleep(500);
-  } catch {}
-
-  spinner.stop(colorize("Layout updated, Waybar reloaded", semantic.good));
+  spinner.stop(colorize("Layout preferences saved", semantic.good));
 
   // Show summary
   const orderStr = newOrder
     .map((id) =>
       colorize(
         PROVIDER_NAMES[id] ?? id,
-        PROVIDER_COLORS[id] ?? catppuccin.text,
+        PROVIDER_COLORS[id] ?? oneDark.text,
       ),
     )
     .join(colorize(" → ", semantic.muted));
@@ -289,7 +122,11 @@ export async function configureLayout(): Promise<boolean> {
   p.log.info(
     colorize("Separator:", semantic.subtitle) +
       " " +
-      colorize(newSeparator, catppuccin.green),
+      colorize(newSeparator, oneDark.green),
+  );
+  p.log.info(
+    colorize("Apply:", semantic.subtitle) +
+      " run the flat-onedark qbar overlay enable/apply script to sync Waybar.",
   );
 
   return true;

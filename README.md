@@ -1,111 +1,55 @@
-# qbar - Omarchy LLM Monitor on Waybar!
+# qbar
 
-Shows remaining usage for **Claude**, **Codex** and **Amp** in your bar.
+`qbar` shows Claude, Codex, and Amp quota state in Waybar.
 
-## Installation
+This repo owns the `qbar` runtime, settings, cache, icons, and helper script. It does not own your live `~/.config/waybar/config.jsonc` or `style.css`.
+
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/othavioquiliao/qbar.git
-cd qbar
-
-# Install dependencies
 bun install
-
-# Configure everything automatically (copies icons, edits waybar config/css, creates symlink)
-bun src/setup.ts
+./scripts/qbar setup
 ```
 
-Done. The modules appear in Waybar.
+`qbar setup` is a safe wrapper. It installs qbar-owned assets and the local symlink, but it does not edit live Waybar files.
 
-## Usage
-
-| Action | Description |
-|--------|-------------|
-| **Hover** | Shows tooltip with quota details |
-| **Left click** | Opens interactive menu |
-| **Right click** | Refresh (or login if disconnected) |
-
-### Commands
+For the supported `flat-onedark` integration, enable the overlay from the theme repo after setup:
 
 ```bash
-qbar              # JSON output for Waybar
-qbar status       # Show quotas in terminal
-qbar menu         # Interactive menu
-qbar setup        # (Re)configure Waybar automatically
-qbar update       # Update qbar to latest version
-qbar uninstall    # Remove qbar from system
+/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh
 ```
 
-### Options
+Manual snippet-based wiring still exists as reference, but it is not the recommended path for `flat-onedark`.
 
-| Flag | Description |
-|------|-------------|
-| `-t, --terminal` | Terminal output (ANSI colors) |
-| `-p, --provider` | Filter: `claude`, `codex`, or `amp` |
-| `-r, --refresh` | Force cache refresh |
-| `-h, --help` | Show help |
-
-### Examples
+## Commands
 
 ```bash
-qbar                    # JSON output for Waybar
-qbar menu               # Open interactive menu
-qbar status             # Colored quota display
-qbar -t -p claude       # Claude only (terminal)
-qbar -r                 # Force refresh all providers
+qbar
+qbar status
+qbar menu
+qbar setup
+qbar assets install --waybar-dir ~/.config/waybar/qbar --scripts-dir ~/.config/waybar/scripts
+qbar export waybar-modules --qbar-bin '$HOME/.local/bin/qbar' --terminal-script ~/.config/waybar/scripts/qbar-open-terminal
+qbar export waybar-css --icons-dir ~/.config/waybar/qbar/icons
+qbar uninstall
+qbar update
 ```
 
-## Provider Login
+## Docs
 
-Use `qbar menu` → **Provider login**. qbar installs CLIs automatically via `yay`:
+- [Docs index](docs/README.md)
+- [Commands](docs/commands.md)
+- [Runtime](docs/runtime.md)
+- [Waybar contract](docs/waybar-contract.md)
+- [Integration](docs/integration.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
-| Provider | Description |
-|----------|-------------|
-| Claude | Uses your Claude.ai account (claude-code CLI) |
-| Codex | Uses your OpenAI Codex account (codex CLI) |
-| Amp | Uses your Amp account (amp CLI) |
+## Related Theme Docs
 
-## Colors
-
-| Remaining | Color |
-|-----------|-------|
-| ≥60% | 🟢 Green |
-| ≥30% | 🟡 Yellow |
-| ≥10% | 🟠 Orange |
-| <10% | 🔴 Red |
-
-## Troubleshooting
-
-**Waybar doesn't start after setup?**
-```bash
-# Restore backup (created automatically)
-ls ~/.config/waybar/*.qbar-backup-*
-cp ~/.config/waybar/config.jsonc.qbar-backup-XXXXX ~/.config/waybar/config.jsonc
-```
-
-**Provider shows disconnected icon (󱘖)?**
-- Right-click the module to start login
-
-**Refresh doesn't update value?**
-- Cache lasts 2 minutes. Right-click forces immediate refresh.
-
-## Architecture
-
-```
-~/.config/waybar/
-├── config.jsonc              # qbar-claude, qbar-codex, qbar-amp modules
-├── style.css                 # Module styles and colors
-├── qbar/icons/               # Provider PNG icons
-└── scripts/
-    └── qbar-open-terminal    # Helper for floating terminal
-
-~/.config/qbar/
-└── settings.json             # User preferences
-
-~/.config/waybar/qbar/cache/
-└── *.json                    # Quota cache (2min TTL)
-```
+- [flat-onedark README](/home/othavio/Work/themes/omarchy-flat-onedark-theme/README.md)
+- [flat-onedark qbar integration](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/qbar-integration.md)
+- [flat-onedark build and apply](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/build-and-apply.md)
+- [flat-onedark troubleshooting](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/troubleshooting.md)
 
 ## License
 

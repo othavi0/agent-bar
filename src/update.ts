@@ -6,7 +6,7 @@
 
 import * as p from "@clack/prompts";
 import { join } from "node:path";
-import { catppuccin, colorize, semantic } from "./tui/colors";
+import { oneDark, colorize, semantic } from "./tui/colors";
 
 // Get the qbar repo root
 const REPO_ROOT = join(import.meta.dir, "..");
@@ -36,7 +36,7 @@ async function runCmd(
 export async function main() {
   console.clear();
 
-  p.intro(colorize("qbar update", catppuccin.mauve));
+  p.intro(colorize("qbar update", oneDark.blue));
 
   // Check if we're in a git repo
   const gitCheck = await runCmd("git", ["rev-parse", "--git-dir"], REPO_ROOT);

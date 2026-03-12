@@ -1,9 +1,14 @@
-// qbar Waybar modules (recommended: per-provider modules)
+// Reference snippet only.
+// This is a legacy manual Waybar wiring example for consumers that own their own
+// live config.jsonc edits.
 //
-// 1) Add to modules-right:
-//    "custom/qbar-claude", "custom/qbar-codex", "custom/qbar-amp"
+// Supported flat-onedark users should not copy this into the live bar manually.
+// Use:
+//   /home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh
 //
-// 2) Add the modules below.
+// If you still use this manual path:
+//   1) add "custom/qbar-claude", "custom/qbar-codex", "custom/qbar-amp" to modules-right
+//   2) merge the modules below into your config.jsonc
 
 {
   "custom/qbar-claude": {

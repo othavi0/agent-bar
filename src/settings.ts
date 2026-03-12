@@ -1,6 +1,7 @@
 import { mkdir } from "fs/promises";
 import { homedir } from "os";
 import { join } from "path";
+import { normalizeProviderSelection } from "./waybar-contract";
 
 const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 const SETTINGS_DIR = join(XDG_CONFIG_HOME, "qbar");
@@ -43,23 +44,47 @@ const DEFAULT_SETTINGS: Settings = {
   },
 };
 
+function normalizeSettings(data: Partial<Settings> | undefined): Settings {
+  const merged: Settings = {
+    waybar: { ...DEFAULT_SETTINGS.waybar, ...data?.waybar },
+    tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data?.tooltip },
+    models: { ...DEFAULT_SETTINGS.models, ...data?.models },
+    windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data?.windowPolicy },
+  };
+
+  const normalizedWaybar = normalizeProviderSelection(
+    merged.waybar.providers,
+    merged.waybar.providerOrder,
+  );
+
+  merged.waybar.providers = normalizedWaybar.providers;
+  merged.waybar.providerOrder = normalizedWaybar.providerOrder;
+
+  return merged;
+}
+
+function serializeSettings(settings: Settings): string {
+  return JSON.stringify(settings);
+}
+
 export async function loadSettings(): Promise<Settings> {
   const file = Bun.file(SETTINGS_FILE);
 
   if (!(await file.exists())) {
-    return { ...DEFAULT_SETTINGS };
+    return normalizeSettings(undefined);
   }
 
   try {
     const data = await file.json();
-    return {
-      waybar: { ...DEFAULT_SETTINGS.waybar, ...data.waybar },
-      tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data.tooltip },
-      models: { ...DEFAULT_SETTINGS.models, ...data.models },
-      windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data.windowPolicy },
-    };
+    const normalized = normalizeSettings(data);
+
+    if (serializeSettings(normalized) !== JSON.stringify(data)) {
+      await saveSettings(normalized);
+    }
+
+    return normalized;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return normalizeSettings(undefined);
   }
 }
 
@@ -67,23 +92,18 @@ export function loadSettingsSync(): Settings {
   try {
     const { existsSync, readFileSync } = require("node:fs");
     if (!existsSync(SETTINGS_FILE)) {
-      return { ...DEFAULT_SETTINGS };
+      return normalizeSettings(undefined);
     }
     const data = JSON.parse(readFileSync(SETTINGS_FILE, "utf-8"));
-    return {
-      waybar: { ...DEFAULT_SETTINGS.waybar, ...data.waybar },
-      tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data.tooltip },
-      models: { ...DEFAULT_SETTINGS.models, ...data.models },
-      windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data.windowPolicy },
-    };
+    return normalizeSettings(data);
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return normalizeSettings(undefined);
   }
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
   await mkdir(SETTINGS_DIR, { recursive: true });
-  await Bun.write(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  await Bun.write(SETTINGS_FILE, JSON.stringify(normalizeSettings(settings), null, 2));
 }
 
 export function getSettingsPath(): string {

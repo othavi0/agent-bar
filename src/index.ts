@@ -9,6 +9,12 @@ import { getAllQuotas, getQuotaFor } from "./providers";
 import type { AllQuotas } from "./providers/types";
 import { loadSettings } from "./settings";
 import { runTui } from "./tui";
+import {
+  exportWaybarCss,
+  exportWaybarModules,
+  getDefaultWaybarAssetPaths,
+  installWaybarAssets,
+} from "./waybar-contract";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -44,6 +50,56 @@ async function main() {
   if (options.command === "setup") {
     const { main: setupMain } = await import("./setup");
     await setupMain();
+    process.exit(0);
+  }
+
+  if (options.command === "assets-install") {
+    const defaults = getDefaultWaybarAssetPaths();
+    const result = installWaybarAssets({
+      waybarDir: options.waybarDir ?? defaults.waybarDir,
+      scriptsDir: options.scriptsDir ?? defaults.scriptsDir,
+    });
+    console.log(JSON.stringify(result));
+    process.exit(0);
+  }
+
+  if (options.command === "export-waybar-modules") {
+    const defaults = getDefaultWaybarAssetPaths();
+    const settings = await loadSettings();
+    console.log(
+      JSON.stringify(
+        exportWaybarModules(
+          {
+            qbarBin: options.qbarBin ?? defaults.qbarBin,
+            terminalScript: options.terminalScript ?? defaults.terminalScript,
+          },
+          settings.waybar.providerOrder as ("claude" | "codex" | "amp")[],
+        ),
+        null,
+        2,
+      ),
+    );
+    process.exit(0);
+  }
+
+  if (options.command === "export-waybar-css") {
+    const defaults = getDefaultWaybarAssetPaths();
+    const settings = await loadSettings();
+    console.log(
+      JSON.stringify(
+        exportWaybarCss({
+          iconsDir: options.iconsDir ?? defaults.iconsDir,
+          providerOrder: settings.waybar.providerOrder as (
+            | "claude"
+            | "codex"
+            | "amp"
+          )[],
+          separators: settings.waybar.separators,
+        }),
+        null,
+        2,
+      ),
+    );
     process.exit(0);
   }
 

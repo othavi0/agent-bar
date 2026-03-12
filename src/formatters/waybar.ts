@@ -14,24 +14,24 @@ import {
   applyCodexModelFilter,
 } from "./shared";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
+import { ONE_DARK } from "../theme";
 
-// Catppuccin Mocha palette
 const C = {
-  green: "#a6e3a1",
-  yellow: "#f9e2af",
-  orange: "#fab387",
-  red: "#f38ba8",
-  text: "#cdd6f4",
-  subtext: "#bac2de",
-  muted: "#6c7086",
-  lavender: "#b4befe",
-  teal: "#94e2d5",
-  blue: "#89b4fa",
-  mauve: "#cba6f7",
-  peach: "#fab387",
-  sapphire: "#74c7ec",
-  pink: "#f5c2e7",
-  sky: "#89dceb",
+  green: ONE_DARK.green,
+  yellow: ONE_DARK.yellow,
+  orange: ONE_DARK.orange,
+  red: ONE_DARK.red,
+  text: ONE_DARK.text,
+  subtext: ONE_DARK.muted,
+  muted: ONE_DARK.comment,
+  lavender: ONE_DARK.textBright,
+  teal: ONE_DARK.cyan,
+  blue: ONE_DARK.blue,
+  mauve: ONE_DARK.magenta,
+  peach: ONE_DARK.orange,
+  sapphire: ONE_DARK.brightBlue,
+  pink: ONE_DARK.brightMagenta,
+  sky: ONE_DARK.cyan,
 } as const;
 
 // Box drawing - BOLD characters

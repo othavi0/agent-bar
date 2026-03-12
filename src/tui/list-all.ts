@@ -10,7 +10,7 @@ import {
 import { getAllQuotas } from "../providers";
 import type { ProviderQuota, QuotaWindow } from "../providers/types";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
-import { catppuccin, colorize, getQuotaColor, semantic } from "./colors";
+import { oneDark, colorize, getQuotaColor, semantic } from "./colors";
 
 // Box drawing characters
 const B = {
@@ -46,7 +46,7 @@ const v = (color: string) => colorize(B.v, color);
 const label = (text: string, providerColor: string) =>
   colorize(B.lt + B.h, providerColor) +
   " " +
-  colorize(B.diamond + " " + text, catppuccin.mauve, true);
+  colorize(B.diamond + " " + text, oneDark.blue, true);
 
 // Model line
 function modelLine(
@@ -57,12 +57,12 @@ function modelLine(
 ): string {
   const rem = window?.remaining ?? null;
   const reset = window?.resetsAt ?? null;
-  const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
+  const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
   const barS = bar(rem);
   const pctS = colorize(formatPercent(rem).padStart(4), getQuotaColor(rem));
   const etaS = colorize(
     `→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}`,
-    catppuccin.teal,
+    oneDark.cyan,
   );
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
@@ -74,21 +74,21 @@ function codexModelLine(
   vColor: string,
 ): string {
   const rem = window?.remaining ?? null;
-  const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
+  const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
   const barS = bar(rem);
   const pctS = colorize(formatPercent(rem).padStart(4), getQuotaColor(rem));
   const etaS = window?.resetsAt
     ? colorize(
         `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`,
-        catppuccin.teal,
+        oneDark.cyan,
       )
-    : colorize("→ N/A", catppuccin.teal);
+    : colorize("→ N/A", oneDark.cyan);
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
 function buildClaude(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const vc = catppuccin.peach;
+  const vc = oneDark.orange;
 
   lines.push(
     colorize(B.tl + B.h, vc) +
@@ -100,7 +100,7 @@ function buildClaude(p: ProviderQuota): string[] {
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, catppuccin.red)}`);
+    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, oneDark.red)}`);
   } else {
     const maxLen = 20;
 
@@ -132,7 +132,7 @@ function buildClaude(p: ProviderQuota): string[] {
       const { remaining, used, limit } = p.extraUsage;
       lines.push(v(vc));
       lines.push(label("Extra Usage", vc));
-      const nameS = colorize("Budget".padEnd(maxLen), catppuccin.lavender);
+      const nameS = colorize("Budget".padEnd(maxLen), oneDark.textBright);
       const barS = bar(remaining);
       const pctS = colorize(
         formatPercent(remaining).padStart(4),
@@ -140,7 +140,7 @@ function buildClaude(p: ProviderQuota): string[] {
       );
       const usedS = colorize(
         `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`,
-        catppuccin.teal,
+        oneDark.cyan,
       );
       lines.push(
         `${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`,
@@ -156,7 +156,7 @@ function buildClaude(p: ProviderQuota): string[] {
 
 function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const vc = catppuccin.green;
+  const vc = oneDark.green;
   const settings = loadSettingsSync();
   const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? "both";
   const planLabel = normalizePlanLabel(p);
@@ -171,7 +171,7 @@ function buildCodex(p: ProviderQuota): string[] {
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, catppuccin.red)}`);
+    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, oneDark.red)}`);
   } else {
     const maxLen = 20;
     lines.push(`${v(vc)}  ${colorize(`Plan: ${planLabel}`, semantic.muted)}`);
@@ -210,7 +210,7 @@ function buildCodex(p: ProviderQuota): string[] {
     if (p.extraUsage?.enabled) {
       lines.push(v(vc));
       lines.push(label("Credits", vc));
-      const nameS = colorize("Balance".padEnd(maxLen), catppuccin.lavender);
+      const nameS = colorize("Balance".padEnd(maxLen), oneDark.textBright);
       const barS = bar(p.extraUsage.remaining);
       const pctS = colorize(
         formatPercent(p.extraUsage.remaining).padStart(4),
@@ -218,8 +218,8 @@ function buildCodex(p: ProviderQuota): string[] {
       );
       const infoS =
         p.extraUsage.limit === -1
-          ? colorize("Unlimited", catppuccin.teal)
-          : colorize("Balance", catppuccin.teal);
+          ? colorize("Unlimited", oneDark.cyan)
+          : colorize("Balance", oneDark.cyan);
       lines.push(
         `${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`,
       );
@@ -234,7 +234,7 @@ function buildCodex(p: ProviderQuota): string[] {
 
 function buildAmp(p: ProviderQuota): string[] {
   const lines: string[] = [];
-  const vc = catppuccin.mauve;
+  const vc = oneDark.magenta;
 
   lines.push(
     colorize(B.tl + B.h, vc) +
@@ -246,7 +246,7 @@ function buildAmp(p: ProviderQuota): string[] {
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, catppuccin.red)}`);
+    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, oneDark.red)}`);
   } else if (!p.models || Object.keys(p.models).length === 0) {
     lines.push(`${v(vc)}  ${colorize("No usage data", semantic.muted)}`);
   } else {
@@ -255,7 +255,7 @@ function buildAmp(p: ProviderQuota): string[] {
 
     lines.push(label("Usage", vc));
     for (const [name, window] of entries) {
-      const nameS = colorize(name.padEnd(maxLen), catppuccin.lavender);
+      const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
       const barS = bar(window.remaining);
       const pctS = colorize(
         formatPercent(window.remaining).padStart(4),

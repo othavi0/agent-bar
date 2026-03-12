@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { ANSI } from "./theme";
 
 export interface CliOptions {
   command:
@@ -9,27 +10,34 @@ export interface CliOptions {
     | "help"
     | "action-right"
     | "setup"
+    | "assets-install"
+    | "export-waybar-modules"
+    | "export-waybar-css"
     | "update"
     | "uninstall";
   refresh: boolean;
   provider?: string;
   verbose: boolean;
+  waybarDir?: string;
+  scriptsDir?: string;
+  iconsDir?: string;
+  qbarBin?: string;
+  terminalScript?: string;
 }
 
-// Catppuccin Mocha ANSI colors
 const C = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  green: "\x1b[38;2;166;227;161m",
-  yellow: "\x1b[38;2;249;226;175m",
-  blue: "\x1b[38;2;137;180;250m",
-  mauve: "\x1b[38;2;203;166;247m",
-  teal: "\x1b[38;2;148;226;213m",
-  text: "\x1b[38;2;205;214;244m",
-  subtext: "\x1b[38;2;166;173;200m",
-  muted: "\x1b[38;2;108;112;134m",
-  peach: "\x1b[38;2;250;179;135m",
-  lavender: "\x1b[38;2;180;190;254m",
+  reset: ANSI.reset,
+  bold: ANSI.bold,
+  green: ANSI.green,
+  yellow: ANSI.yellow,
+  blue: ANSI.blue,
+  mauve: ANSI.magenta,
+  teal: ANSI.cyan,
+  text: ANSI.text,
+  subtext: ANSI.muted,
+  muted: ANSI.comment,
+  peach: ANSI.orange,
+  lavender: ANSI.textBright,
 };
 
 // Box drawing (bold)
@@ -86,7 +94,10 @@ export function showHelp(): void {
   console.log(label("Commands"));
   console.log(cmdLine("menu", "Interactive TUI menu"));
   console.log(cmdLine("status", "Show quotas in terminal"));
-  console.log(cmdLine("setup", "Configure Waybar automatically"));
+  console.log(cmdLine("setup", "Safe setup wrapper (assets + guidance)"));
+  console.log(cmdLine("assets install", "Install icons/helper only"));
+  console.log(cmdLine("export waybar-modules", "Print Waybar JSON module contract"));
+  console.log(cmdLine("export waybar-css", "Print Waybar CSS JSON contract"));
   console.log(cmdLine("update", "Update qbar to latest version"));
   console.log(cmdLine("uninstall", "Remove qbar from system"));
   console.log(v());
@@ -96,6 +107,14 @@ export function showHelp(): void {
   console.log(wbLine("Left click", "Interactive menu"));
   console.log(wbLine("Right click", "Refresh / Login"));
   console.log(wbLine("Hover", "Detailed tooltip"));
+  console.log(v());
+
+  console.log(label("Flags"));
+  console.log(optLine("--waybar-dir <path>", "Assets install target"));
+  console.log(optLine("--scripts-dir <path>", "Terminal helper target"));
+  console.log(optLine("--icons-dir <path>", "CSS export icon directory"));
+  console.log(optLine("--qbar-bin <path>", "Modules export qbar binary"));
+  console.log(optLine("--terminal-script <path>", "Modules export launcher"));
   console.log(v());
 
   console.log(`${vc}${B.bl}${B.h.repeat(w)}${C.reset}`);
@@ -122,6 +141,21 @@ export function parseArgs(args: string[]): CliOptions {
       case "setup":
         options.command = "setup";
         break;
+      case "assets":
+        if (args[i + 1] === "install") {
+          options.command = "assets-install";
+          i += 1;
+        }
+        break;
+      case "export":
+        if (args[i + 1] === "waybar-modules") {
+          options.command = "export-waybar-modules";
+          i += 1;
+        } else if (args[i + 1] === "waybar-css") {
+          options.command = "export-waybar-css";
+          i += 1;
+        }
+        break;
       case "update":
         options.command = "update";
         break;
@@ -147,6 +181,21 @@ export function parseArgs(args: string[]): CliOptions {
       case "--verbose":
       case "-v":
         options.verbose = true;
+        break;
+      case "--waybar-dir":
+        options.waybarDir = args[++i];
+        break;
+      case "--scripts-dir":
+        options.scriptsDir = args[++i];
+        break;
+      case "--icons-dir":
+        options.iconsDir = args[++i];
+        break;
+      case "--qbar-bin":
+        options.qbarBin = args[++i];
+        break;
+      case "--terminal-script":
+        options.terminalScript = args[++i];
         break;
       case "--help":
       case "-h":

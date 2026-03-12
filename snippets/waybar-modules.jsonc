@@ -1,6 +1,7 @@
 {
-  "//": "qbar modules (copy into your waybar config.jsonc)",
-  "//2": "Add custom/qbar-claude, custom/qbar-codex, custom/qbar-amp to modules-right",
+  "//": "Reference snippet only. Legacy manual integration example.",
+  "//2": "Supported flat-onedark users should use /home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh",
+  "//3": "If you use this manually, merge these modules into config.jsonc and place custom/qbar-claude, custom/qbar-codex, custom/qbar-amp in modules-right.",
 
   "custom/qbar-claude": {
     "exec": "$HOME/.local/bin/qbar --provider claude",

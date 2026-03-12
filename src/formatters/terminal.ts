@@ -14,24 +14,24 @@ import {
   applyCodexModelFilter,
 } from "./shared";
 import { loadSettingsSync, type WindowPolicy } from "../settings";
+import { ANSI } from "../theme";
 
-// ANSI color codes (Catppuccin Mocha)
 const C = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  green: "\x1b[38;2;166;227;161m", // #a6e3a1
-  yellow: "\x1b[38;2;249;226;175m", // #f9e2af
-  orange: "\x1b[38;2;250;179;135m", // #fab387
-  red: "\x1b[38;2;243;139;168m", // #f38ba8
-  muted: "\x1b[38;2;108;112;134m", // #6c7086
-  text: "\x1b[38;2;205;214;244m", // #cdd6f4
-  subtext: "\x1b[38;2;186;194;222m", // #bac2de
-  lavender: "\x1b[38;2;180;190;254m", // #b4befe
-  teal: "\x1b[38;2;148;226;213m", // #94e2d5
-  mauve: "\x1b[38;2;203;166;247m", // #cba6f7
-  blue: "\x1b[38;2;137;180;250m", // #89b4fa
-  sapphire: "\x1b[38;2;116;199;236m", // #74c7ec
-  peach: "\x1b[38;2;250;179;135m", // #fab387
+  reset: ANSI.reset,
+  bold: ANSI.bold,
+  green: ANSI.green,
+  yellow: ANSI.yellow,
+  orange: ANSI.orange,
+  red: ANSI.red,
+  muted: ANSI.comment,
+  text: ANSI.text,
+  subtext: ANSI.muted,
+  lavender: ANSI.textBright,
+  teal: ANSI.cyan,
+  mauve: ANSI.magenta,
+  blue: ANSI.blue,
+  sapphire: ANSI.brightBlue,
+  peach: ANSI.orange,
 };
 
 // Box drawing characters

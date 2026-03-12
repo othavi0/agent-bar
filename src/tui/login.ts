@@ -1,6 +1,6 @@
 import * as p from '@clack/prompts';
 import { providers } from '../providers';
-import { catppuccin, semantic, colorize } from './colors';
+import { oneDark, semantic, colorize } from './colors';
 import { ensureBunGlobalPackage, ensureYayPackage } from '../install';
 import { loadSettings, saveSettings } from '../settings';
 
@@ -101,8 +101,8 @@ export async function loginProviderFlow(): Promise<void> {
       return {
         value: prov.id,
         label: available 
-          ? colorize(prov.name, catppuccin.green) 
-          : colorize(`${prov.name}`, catppuccin.text) + colorize(' (not logged in)', semantic.muted),
+          ? colorize(prov.name, oneDark.green) 
+          : colorize(`${prov.name}`, oneDark.text) + colorize(' (not logged in)', semantic.muted),
         hint: available ? 'already logged in' : 'run login flow',
       };
     })

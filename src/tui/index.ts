@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { catppuccin, colorize, semantic } from "./colors";
+import { oneDark, colorize, semantic } from "./colors";
 import { configureLayout } from "./configure-layout";
 import { configureModels } from "./configure-models";
 import { configureWaybar } from "./configure-waybar";
@@ -20,13 +20,12 @@ const LOGO_LINES = [
   "     ██                         ",
 ];
 
-// Catppuccin gradient: mauve → lavender → blue → sapphire → teal
 const GRADIENT: number[][] = [
-  [203, 166, 247],
-  [180, 190, 254],
-  [137, 180, 250],
-  [116, 199, 236],
-  [148, 226, 213],
+  [209, 154, 102],
+  [229, 192, 123],
+  [86, 182, 194],
+  [97, 175, 239],
+  [198, 120, 221],
 ];
 
 function gradientColor(t: number): string {
@@ -49,7 +48,7 @@ function colorLogo(): string {
           if (!ch.trim()) return ch;
           return gradientColor(idx / maxLen) + ch;
         })
-        .join("") + catppuccin.reset
+        .join("") + oneDark.reset
     );
   }).join("\n");
 }
@@ -85,7 +84,7 @@ async function animateLogo(): Promise<void> {
           out += gradientColor(c / maxLen) + ch;
         }
       }
-      out += catppuccin.reset + "\x1b[K\n";
+      out += oneDark.reset + "\x1b[K\n";
       process.stdout.write(out);
     }
 
@@ -104,7 +103,7 @@ async function animateLogo(): Promise<void> {
         out += gradientColor(c / maxLen) + ch;
       }
     }
-    process.stdout.write(out + catppuccin.reset + "\x1b[K\n");
+    process.stdout.write(out + oneDark.reset + "\x1b[K\n");
   }
 
   // Show cursor
@@ -139,27 +138,27 @@ export async function runTui(): Promise<void> {
       options: [
         {
           value: "list" as const,
-          label: colorize("List all", catppuccin.text),
+          label: colorize("List all", oneDark.text),
           hint: colorize("view quotas for all providers", semantic.muted),
         },
         {
           value: "waybar" as const,
-          label: colorize("Configure Waybar", catppuccin.text),
+          label: colorize("Configure Waybar", oneDark.text),
           hint: colorize("select providers for the bar", semantic.muted),
         },
         {
           value: "models" as const,
-          label: colorize("Configure Models", catppuccin.text),
+          label: colorize("Configure Models", oneDark.text),
           hint: colorize("show/hide models in tooltip", semantic.muted),
         },
         {
           value: "layout" as const,
-          label: colorize("Customize Layout", catppuccin.text),
+          label: colorize("Customize Layout", oneDark.text),
           hint: colorize("reorder providers, separator style", semantic.muted),
         },
         {
           value: "login" as const,
-          label: colorize("Provider login", catppuccin.text),
+          label: colorize("Provider login", oneDark.text),
           hint: colorize("launch provider CLI login flows", semantic.muted),
         },
       ],

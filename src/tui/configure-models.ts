@@ -2,7 +2,7 @@ import * as p from '@clack/prompts';
 import { loadSettings, saveSettings, type WindowPolicy } from '../settings';
 import { providers } from '../providers';
 import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
-import { catppuccin, semantic, colorize } from './colors';
+import { oneDark, semantic, colorize } from './colors';
 
 interface ProviderOption {
   id: string;
@@ -167,7 +167,7 @@ export async function configureModels(): Promise<boolean> {
     options: [
       ...providerOptions.map((opt) => ({
         value: opt.id,
-        label: colorize(opt.name, catppuccin.text),
+        label: colorize(opt.name, oneDark.text),
         hint: colorize(`${opt.modelCount} models • Plan: ${opt.planLabel}`, semantic.muted),
       })),
       { value: 'back' as const, label: colorize('Back', semantic.muted) },
@@ -195,17 +195,17 @@ export async function configureModels(): Promise<boolean> {
     options: [
       {
         value: 'both' as const,
-        label: colorize('Always show 5h + 7d', catppuccin.text),
+        label: colorize('Always show 5h + 7d', oneDark.text),
         hint: colorize('Missing windows are shown as N/A', semantic.muted),
       },
       {
         value: 'five_hour' as const,
-        label: colorize('Show only 5h', catppuccin.text),
+        label: colorize('Show only 5h', oneDark.text),
         hint: colorize('Hide 7d column in tooltips', semantic.muted),
       },
       {
         value: 'seven_day' as const,
-        label: colorize('Show only 7d', catppuccin.text),
+        label: colorize('Show only 7d', oneDark.text),
         hint: colorize('Hide 5h column in tooltips', semantic.muted),
       },
     ],
@@ -244,7 +244,7 @@ export async function configureModels(): Promise<boolean> {
     message: colorize('Select models to show in tooltip', semantic.title),
     options: entries.map(([name, windows]) => ({
       value: name,
-      label: colorize(name, catppuccin.text),
+      label: colorize(name, oneDark.text),
       hint: colorize(buildModelHint(windows, selectedPolicy), semantic.muted),
     })),
     initialValues,

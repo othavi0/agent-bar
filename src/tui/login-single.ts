@@ -1,5 +1,5 @@
 import * as p from '@clack/prompts';
-import { colorize, semantic, catppuccin } from './colors';
+import { colorize, semantic, oneDark } from './colors';
 import { ensureBunGlobalPackage, ensureYayPackage, hasCmd } from '../install';
 import { loadSettings, saveSettings } from '../settings';
 

@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import { loadSettings, saveSettings } from '../settings';
 import { providers } from '../providers';
-import { catppuccin, semantic, colorize } from './colors';
+import { oneDark, semantic, colorize } from './colors';
 
 export async function configureWaybar(): Promise<boolean> {
   const settings = await loadSettings();
@@ -18,8 +18,8 @@ export async function configureWaybar(): Promise<boolean> {
   const options = availableProviders.map((prov) => ({
     value: prov.id,
     label: prov.available 
-      ? colorize(prov.name, catppuccin.green)
-      : colorize(prov.name, catppuccin.text) + colorize(' (not logged in)', semantic.muted),
+      ? colorize(prov.name, oneDark.green)
+      : colorize(prov.name, oneDark.text) + colorize(' (not logged in)', semantic.muted),
     hint: prov.available ? undefined : 'credentials not found',
   }));
 
@@ -61,14 +61,12 @@ export async function configureWaybar(): Promise<boolean> {
     p.log.info(colorize(`Removed: ${removed.join(', ')}`, semantic.muted));
   }
 
-  // Reload waybar so changes are visible immediately
-  try {
-    const { execSync } = await import('node:child_process');
-    execSync('killall -SIGUSR2 waybar', { stdio: 'ignore' });
-    p.log.success(colorize('Waybar reloaded ✓', semantic.good));
-  } catch {
-    p.log.warn(colorize('Could not reload waybar automatically', semantic.warning));
-  }
+  p.log.info(
+    colorize(
+      'Waybar wiring is theme-owned. Re-run the flat-onedark qbar overlay script to sync these settings.',
+      semantic.muted,
+    ),
+  );
 
   return true;
 }

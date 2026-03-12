@@ -1,14 +1,16 @@
 import { homedir } from 'os';
 import { join } from 'path';
+import { ONE_DARK } from './theme';
 
 // XDG Base Directory paths
 const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), '.config');
+const XDG_CACHE_HOME = Bun.env.XDG_CACHE_HOME || join(homedir(), '.cache');
 
 export const CONFIG = {
   // Paths
   paths: {
-    // Cache inside waybar config folder
-    cache: join(XDG_CONFIG_HOME, 'waybar', 'qbar', 'cache'),
+    cache: join(XDG_CACHE_HOME, 'qbar'),
+    legacyCache: join(XDG_CONFIG_HOME, 'waybar', 'qbar', 'cache'),
     config: join(XDG_CONFIG_HOME, 'qbar'),
     
     // Provider credential paths
@@ -42,14 +44,14 @@ export const CONFIG = {
     },
   },
 
-  // UI Colors (Catppuccin Mocha)
+  // UI Colors (One Dark)
   colors: {
-    green: '#a6e3a1',   // >= 60%
-    yellow: '#f9e2af',  // >= 30%
-    orange: '#fab387',  // >= 10%
-    red: '#f38ba8',     // < 10%
-    muted: '#6c7086',   // empty bar segments
-    text: '#cdd6f4',    // default/unknown text
+    green: ONE_DARK.green,   // >= 60%
+    yellow: ONE_DARK.yellow, // >= 30%
+    orange: ONE_DARK.orange, // >= 10%
+    red: ONE_DARK.red,       // < 10%
+    muted: ONE_DARK.comment, // empty bar segments
+    text: ONE_DARK.text,     // default/unknown text
   },
 
   // Thresholds for color coding (percentage remaining)
