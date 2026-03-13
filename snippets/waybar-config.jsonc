@@ -3,8 +3,7 @@
 // live config.jsonc edits.
 //
 // Supported flat-onedark users should not copy this into the live bar manually.
-// Use:
-//   /home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh
+// Use enable-qbar-safe.sh from the flat-onedark theme repo.
 //
 // If you still use this manual path:
 //   1) add "custom/qbar-claude", "custom/qbar-codex", "custom/qbar-amp" to modules-right

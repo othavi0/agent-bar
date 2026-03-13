@@ -11,11 +11,11 @@ In the supported `flat-onedark` environment:
 - the theme persists overlay state in `~/.config/waybar/.flat-onedark-qbar-overlay.json`
 - the theme re-applies the overlay after repair and theme apply flows
 
-Use:
+Use the following scripts from the flat-onedark theme repo:
 
-- [/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh](/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh)
-- [/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/disable-qbar-safe.sh](/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/disable-qbar-safe.sh)
-- [/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/apply-theme.sh](/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/apply-theme.sh)
+- `scripts/enable-qbar-safe.sh`
+- `scripts/disable-qbar-safe.sh`
+- `scripts/apply-theme.sh`
 
 ## What `qbar setup` Does
 
@@ -47,6 +47,7 @@ The reference snippets live in:
 
 ## Theme Cross-Links
 
-- [flat-onedark README](/home/othavio/Work/themes/omarchy-flat-onedark-theme/README.md)
-- [flat-onedark qbar integration](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/qbar-integration.md)
-- [flat-onedark troubleshooting](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/troubleshooting.md)
+See the flat-onedark theme repo for:
+- flat-onedark README
+- flat-onedark qbar integration docs
+- flat-onedark troubleshooting

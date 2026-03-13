@@ -16,10 +16,10 @@ bun install
 For the supported `flat-onedark` integration, enable the overlay from the theme repo after setup:
 
 ```bash
-/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh
+<flat-onedark-theme-repo>/scripts/enable-qbar-safe.sh
 ```
 
-Manual snippet-based wiring still exists as reference, but it is not the recommended path for `flat-onedark`.
+For manual Waybar integration (without the flat-onedark theme), merge the snippets in `snippets/` into your `~/.config/waybar/config.jsonc` and `style.css`.
 
 ## Commands
 
@@ -46,10 +46,11 @@ qbar update
 
 ## Related Theme Docs
 
-- [flat-onedark README](/home/othavio/Work/themes/omarchy-flat-onedark-theme/README.md)
-- [flat-onedark qbar integration](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/qbar-integration.md)
-- [flat-onedark build and apply](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/build-and-apply.md)
-- [flat-onedark troubleshooting](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/troubleshooting.md)
+See the flat-onedark theme repo for:
+- flat-onedark README
+- flat-onedark qbar integration
+- flat-onedark build and apply
+- flat-onedark troubleshooting
 
 ## License
 
