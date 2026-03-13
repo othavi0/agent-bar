@@ -26,8 +26,7 @@ bun run typecheck      # tsc --noEmit
 
 ## Ownership boundary
 
-qbar owns: providers, auth flows, settings, cache, icons.
-flat-onedark theme owns: Waybar `config.jsonc` and `style.css` mutations.
+qbar owns: providers, auth flows, settings, cache, icons, and Waybar integration (`config.jsonc` + `style.css` wiring).
 
 ## Key paths
 

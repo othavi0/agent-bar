@@ -1,7 +1,8 @@
 import * as p from '@clack/prompts';
+import { existsSync } from 'node:fs';
 import { providers } from '../providers';
 import { oneDark, semantic, colorize } from './colors';
-import { ensureBunGlobalPackage, ensureYayPackage } from '../install';
+import { ensureBunGlobalPackage, ensureCommand } from '../install';
 import { loadSettings, saveSettings } from '../settings';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
@@ -13,30 +14,12 @@ async function runInteractive(cmd: string, args: string[] = []): Promise<number>
   return await proc.exited;
 }
 
-async function commandExists(cmd: string): Promise<boolean> {
-  try {
-    // Prefer Bun.which (doesn't depend on shell/which availability)
-    if (typeof Bun.which === 'function') {
-      return Bun.which(cmd) !== null;
-    }
-
-    const proc = Bun.spawn(['which', cmd], { stdout: 'ignore', stderr: 'ignore' });
-    return await proc.exited === 0;
-  } catch {
-    return false;
-  }
-}
-
 async function ensureClaudeCli(): Promise<boolean> {
-  // Omarchy-only: force AUR latest
-  // binName='claude' because the package is claude-code but binary is claude
-  return await ensureYayPackage('aur/claude-code', 'aur/claude-code', 'claude');
+  return ensureCommand('claude', 'Install Claude Code CLI first (binary: claude).');
 }
 
 async function ensureCodexCli(): Promise<boolean> {
-  // Omarchy-only: force AUR latest
-  // binName='codex' because the package is openai-codex-bin but binary is codex
-  return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin', 'codex');
+  return ensureCommand('codex', 'Install OpenAI Codex CLI first (binary: codex).');
 }
 
 function findAmpBin(): string | null {
@@ -51,7 +34,6 @@ function findAmpBin(): string | null {
     `${home}/.bun/bin/amp`,
   ];
 
-  const { existsSync } = require('node:fs');
   for (const p of paths) {
     if (existsSync(p)) return p;
   }
@@ -60,19 +42,7 @@ function findAmpBin(): string | null {
 }
 
 async function ensureAmpCli(): Promise<boolean> {
-  return await ensureBunGlobalPackage('@anthropic-ai/amp', 'amp');
-}
-
-async function waitEnter(): Promise<void> {
-  const { createInterface } = await import('node:readline');
-  p.log.info(colorize('Press Enter to continue...', semantic.subtitle));
-  await new Promise<void>((resolve) => {
-    const rl = createInterface({ input: process.stdin });
-    rl.once('line', () => {
-      rl.close();
-      resolve();
-    });
-  });
+  return ensureBunGlobalPackage('@anthropic-ai/amp', 'amp', 'amp');
 }
 
 async function activateProvider(providerId: string): Promise<void> {

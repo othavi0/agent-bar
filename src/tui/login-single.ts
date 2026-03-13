@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import * as p from '@clack/prompts';
-import { colorize, semantic, oneDark } from './colors';
-import { ensureBunGlobalPackage, ensureYayPackage, hasCmd } from '../install';
+import { colorize, semantic } from './colors';
+import { ensureBunGlobalPackage, ensureCommand } from '../install';
 import { loadSettings, saveSettings } from '../settings';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
@@ -33,15 +33,15 @@ function findAmpBin(): string | null {
 }
 
 async function ensureClaudeCli(): Promise<boolean> {
-  return await ensureYayPackage('aur/claude-code', 'aur/claude-code', 'claude');
+  return ensureCommand('claude', 'Install Claude Code CLI first (binary: claude).');
 }
 
 async function ensureCodexCli(): Promise<boolean> {
-  return await ensureYayPackage('aur/openai-codex-bin', 'aur/openai-codex-bin', 'codex');
+  return ensureCommand('codex', 'Install OpenAI Codex CLI first (binary: codex).');
 }
 
 async function ensureAmpCli(): Promise<boolean> {
-  return await ensureBunGlobalPackage('@anthropic-ai/amp', 'amp');
+  return ensureBunGlobalPackage('@anthropic-ai/amp', 'amp', 'amp');
 }
 
 async function activateProvider(providerId: string): Promise<void> {
@@ -66,13 +66,6 @@ async function waitEnter(): Promise<void> {
 }
 
 export async function loginSingleProvider(providerId: string): Promise<void> {
-  // Quick sanity
-  if (!await hasCmd('yay')) {
-    p.log.error(colorize('yay not found. This flow is Omarchy-only.', semantic.danger));
-    await waitEnter();
-    return;
-  }
-
   switch (providerId) {
     case 'claude': {
       p.note(

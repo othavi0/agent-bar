@@ -229,17 +229,49 @@ export function exportWaybarCss(options: WaybarCssExportOptions): { css: string 
 
   const providerOrder =
     options.providerOrder.length > 0 ? options.providerOrder : [...WAYBAR_PROVIDERS];
+  const allProviderSelectors = WAYBAR_PROVIDERS.map(
+    (provider) => `#custom-qbar-${provider}`,
+  ).join(",\n");
+  const stateSelectors = (state: string) =>
+    WAYBAR_PROVIDERS.map((provider) => `#custom-qbar-${provider}.${state}`).join(", ");
   const separators = separatorCss(providerOrder, options.separators);
 
   return {
     css: [
-      "/* qbar waybar asset contract */",
+      "/* qbar waybar stylesheet */",
+      `${allProviderSelectors} {`,
+      "  padding-left: 26px;",
+      "  padding-right: 10px;",
+      "  background-size: 14px 14px;",
+      "  background-repeat: no-repeat;",
+      "  background-position: 6px center;",
+      "  border-left: 1px solid #434d5d;",
+      `  color: ${ONE_DARK.text};`,
+      "  transition: color 120ms ease, background-color 120ms ease;",
+      "}",
+      "",
+      `${allProviderSelectors}:hover {`,
+      "  background-color: rgba(192, 201, 212, 0.04);",
+      "  border-color: #3c4656;",
+      `  color: ${ONE_DARK.textBright};`,
+      "}",
+      "",
       `#custom-qbar-claude { background-image: url("${iconRef("claude-code-icon.png")}"); }`,
       `#custom-qbar-codex { background-image: url("${iconRef("codex-icon.png")}"); }`,
       `#custom-qbar-amp { background-image: url("${iconRef("amp-icon.svg")}"); }`,
-      `#custom-qbar-claude:hover { background-image: url("${iconRef("claude-code-icon.png")}"); }`,
-      `#custom-qbar-codex:hover { background-image: url("${iconRef("codex-icon.png")}"); }`,
-      `#custom-qbar-amp:hover { background-image: url("${iconRef("amp-icon.svg")}"); }`,
+      "",
+      `${stateSelectors("ok")} { color: ${ONE_DARK.green}; }`,
+      `${stateSelectors("low")} { color: ${ONE_DARK.yellow}; }`,
+      `${stateSelectors("warn")} { color: ${ONE_DARK.orange}; }`,
+      `${stateSelectors("critical")} { color: ${ONE_DARK.red}; }`,
+      `${stateSelectors("disconnected")} { color: ${ONE_DARK.red}; }`,
+      `${stateSelectors("qbar-hidden")} {`,
+      "  min-width: 0;",
+      "  padding: 0;",
+      "  margin: 0;",
+      "  border: 0;",
+      "  background-image: none;",
+      "}",
       "",
       separators,
     ].join("\n"),

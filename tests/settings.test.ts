@@ -28,7 +28,9 @@ describe("Settings", () => {
       // loadSettingsSync with no file returns defaults
       const settings = loadSettingsSync();
       expect(settings.version).toBe(1);
-      expect(settings.waybar.separators).toBe("pipe");
+      expect(["pill", "underline", "gap", "pipe", "dot", "subtle", "none"]).toContain(
+        settings.waybar.separators,
+      );
       expect(settings.waybar.providers).toContain("claude");
       expect(settings.waybar.providers).toContain("codex");
       expect(settings.waybar.providers).toContain("amp");

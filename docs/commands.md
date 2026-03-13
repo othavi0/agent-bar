@@ -7,11 +7,13 @@
 | `qbar` | Prints Waybar JSON for one provider or the default surface. | No writes unless cache refresh runs. |
 | `qbar status` | Prints quota status in the terminal. | Cache only. |
 | `qbar menu` | Opens the TUI menu. | Settings and provider auth as needed. |
-| `qbar setup` | Safe setup wrapper. Installs qbar-owned assets and symlink only. | `~/.config/waybar/qbar`, `~/.config/waybar/scripts/qbar-open-terminal`, `~/.local/bin/qbar` |
+| `qbar setup` | Full setup. Installs assets, symlink, Waybar config wiring, and style import. | `~/.config/waybar/*`, `~/.local/bin/qbar`, qbar paths |
+| `qbar apply-local` | Re-applies local project changes to live Waybar. | `~/.config/waybar/*` qbar-managed entries |
 | `qbar assets install --waybar-dir <path> --scripts-dir <path>` | Installs icons and terminal helper into caller-selected paths. | Caller-selected asset paths only. |
-| `qbar export waybar-modules --qbar-bin <path> --terminal-script <path>` | Prints the JSON module contract consumed by theme-owned wiring. | No writes. |
-| `qbar export waybar-css --icons-dir <path>` | Prints the CSS contract consumed by theme-owned wiring. | No writes. |
-| `qbar uninstall` | Removes qbar-owned files without touching live Waybar config/style. | qbar-owned paths only. |
+| `qbar export waybar-modules --qbar-bin <path> --terminal-script <path>` | Prints the JSON module contract. | No writes. |
+| `qbar export waybar-css --icons-dir <path>` | Prints the qbar CSS contract. | No writes. |
+| `qbar uninstall` | Interactive removal of qbar integration + owned files. | qbar-managed entries and qbar-owned paths |
+| `qbar remove` | Forced removal without prompt. | Same targets as uninstall |
 | `qbar update` | Updates the local qbar checkout. | Repo checkout and installed symlink target. |
 
 ## Common Flags
@@ -25,11 +27,9 @@
 
 ## Operational Notes
 
-- `qbar setup` is not a Waybar mutation command anymore.
-- `qbar uninstall` intentionally leaves `~/.config/waybar/config.jsonc` and `style.css` alone.
-- For `flat-onedark`, use the theme-owned overlay entrypoints instead of manual edits:
-  - [/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh](/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh)
-  - [/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/disable-qbar-safe.sh](/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/disable-qbar-safe.sh)
+- `qbar setup` and `qbar apply-local` are idempotent.
+- qbar uses managed include/import entries instead of replacing your entire Waybar files.
+- `qbar remove` is intended for non-interactive cleanup scripts.
 
 ## Examples
 
@@ -37,7 +37,11 @@
 qbar
 qbar status --provider codex
 qbar menu
+qbar setup
+qbar apply-local
 qbar assets install --waybar-dir ~/.config/waybar/qbar --scripts-dir ~/.config/waybar/scripts
 qbar export waybar-modules --qbar-bin '$HOME/.local/bin/qbar' --terminal-script ~/.config/waybar/scripts/qbar-open-terminal
 qbar export waybar-css --icons-dir ~/.config/waybar/qbar/icons
+qbar uninstall
+qbar remove
 ```

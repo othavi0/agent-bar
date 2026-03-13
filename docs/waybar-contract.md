@@ -1,6 +1,6 @@
 # Waybar Contract
 
-`qbar` exposes a safe contract for external Waybar owners. It does not patch live Waybar files directly.
+`qbar` exposes a stable contract for module JSON and CSS generation. This same contract is used by `setup`/`apply-local` to wire live Waybar files.
 
 ## Asset Install
 
@@ -50,6 +50,7 @@ This prints JSON with a single `css` field. The CSS:
 - resolves icon URLs from the provided icon directory
 - emits provider-specific selectors for `claude`, `codex`, and `amp`
 - emits separator styling based on current settings
+- includes qbar base module styling and status classes
 
 ## Returned Classes
 
@@ -63,14 +64,3 @@ The Waybar modules can emit these classes:
 - `qbar-hidden`
 
 `qbar-hidden` is intended for consumers that collapse disabled providers without removing the module shell.
-
-## Supported Consumer
-
-The primary supported consumer in this workspace is:
-
-- [/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/apply-qbar-overlay.sh](/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/apply-qbar-overlay.sh)
-
-Related theme docs:
-
-- [flat-onedark qbar integration](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/qbar-integration.md)
-- [flat-onedark build and apply](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/build-and-apply.md)

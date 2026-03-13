@@ -2,7 +2,7 @@
 
 `qbar` shows Claude, Codex, and Amp quota state in Waybar.
 
-This repo owns the `qbar` runtime, settings, cache, icons, and helper script. It does not own your live `~/.config/waybar/config.jsonc` or `style.css`.
+qbar is now fully theme-agnostic. It owns its own Waybar integration and no longer depends on external theme repositories.
 
 ## Quick Start
 
@@ -11,15 +11,7 @@ bun install
 ./scripts/qbar setup
 ```
 
-`qbar setup` is a safe wrapper. It installs qbar-owned assets and the local symlink, but it does not edit live Waybar files.
-
-For the supported `flat-onedark` integration, enable the overlay from the theme repo after setup:
-
-```bash
-<flat-onedark-theme-repo>/scripts/enable-qbar-safe.sh
-```
-
-For manual Waybar integration (without the flat-onedark theme), merge the snippets in `snippets/` into your `~/.config/waybar/config.jsonc` and `style.css`.
+`qbar setup` now installs assets, wires `~/.config/waybar/config.jsonc` + `~/.config/waybar/style.css`, and reloads Waybar.
 
 ## Commands
 
@@ -28,12 +20,28 @@ qbar
 qbar status
 qbar menu
 qbar setup
+qbar apply-local
 qbar assets install --waybar-dir ~/.config/waybar/qbar --scripts-dir ~/.config/waybar/scripts
 qbar export waybar-modules --qbar-bin '$HOME/.local/bin/qbar' --terminal-script ~/.config/waybar/scripts/qbar-open-terminal
 qbar export waybar-css --icons-dir ~/.config/waybar/qbar/icons
 qbar uninstall
+qbar remove
 qbar update
 ```
+
+## Setup Scripts
+
+```bash
+./scripts/qbar-setup
+./scripts/qbar-apply-local
+./scripts/qbar-uninstall
+./scripts/qbar-remove
+```
+
+- `qbar-setup`: full install + live Waybar wiring.
+- `qbar-apply-local`: re-apply project changes to your live Waybar.
+- `qbar-uninstall`: interactive removal of integration and owned files.
+- `qbar-remove`: forced removal without prompt.
 
 ## Docs
 
@@ -43,14 +51,6 @@ qbar update
 - [Waybar contract](docs/waybar-contract.md)
 - [Integration](docs/integration.md)
 - [Troubleshooting](docs/troubleshooting.md)
-
-## Related Theme Docs
-
-See the flat-onedark theme repo for:
-- flat-onedark README
-- flat-onedark qbar integration
-- flat-onedark build and apply
-- flat-onedark troubleshooting
 
 ## License
 

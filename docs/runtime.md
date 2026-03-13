@@ -9,14 +9,15 @@
 | `~/.local/bin/qbar` | Convenience symlink to the repo script. | `qbar setup` |
 | `~/.config/waybar/qbar/icons/` | Provider icons consumed by Waybar. | `qbar assets install` |
 | `~/.config/waybar/scripts/qbar-open-terminal` | Helper that opens the qbar menu in a terminal. | `qbar assets install` |
+| `~/.config/waybar/qbar/modules.jsonc` | Generated Waybar module include file. | `qbar setup` / `qbar apply-local` |
+| `~/.config/waybar/qbar/style.css` | Generated qbar Waybar stylesheet. | `qbar setup` / `qbar apply-local` |
 
-## Not Owned By qbar
+## Managed Entries In Live Waybar Files
 
-- `~/.config/waybar/config.jsonc`
-- `~/.config/waybar/style.css`
-- `~/.config/waybar/.flat-onedark-qbar-overlay.json`
+- `config.jsonc`: qbar appends `custom/qbar-*` modules to `modules-right` and ensures an `include` entry.
+- `style.css`: qbar ensures one import line: `@import url("./qbar/style.css");`.
 
-Those files belong to the theme-owned overlay flow in `flat-onedark`, not to `qbar`.
+qbar does not replace the full file contents.
 
 ## Settings Normalization
 
@@ -37,8 +38,7 @@ The supported provider set is:
 
 - Primary cache path: `~/.cache/qbar`
 - Default TTL: 5 minutes
-- Older installs may still have leftover cache data from the pre-migration layout.
-- New runtime writes belong under `~/.cache/qbar`.
+- Legacy cache under `~/.config/waybar/qbar/cache` is cleaned on uninstall/remove.
 
 ## Related Docs
 

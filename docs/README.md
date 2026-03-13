@@ -1,6 +1,6 @@
 # qbar Docs
 
-`qbar` provides quota runtime, assets, and a Waybar export contract. In the supported `flat-onedark` setup, the theme owns the live Waybar wiring.
+`qbar` provides quota runtime, assets, and native Waybar integration.
 
 ## Read In This Order
 
@@ -12,16 +12,10 @@
 
 ## Model
 
-- `qbar` owns providers, auth flow, settings, cache, icons, and the terminal helper.
-- `qbar setup` is safe. It does not edit `~/.config/waybar/config.jsonc` or `style.css`.
-- `qbar export waybar-modules` and `qbar export waybar-css` expose the supported Waybar contract.
-- `flat-onedark` consumes that contract and owns the optional overlay on the live bar.
-
-## Theme Cross-Links
-
-- [flat-onedark README](/home/othavio/Work/themes/omarchy-flat-onedark-theme/README.md)
-- [flat-onedark qbar integration](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/qbar-integration.md)
-- [flat-onedark build and apply](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/build-and-apply.md)
+- `qbar` owns providers, auth flow, settings, cache, icons, terminal helper, and Waybar wiring.
+- `qbar setup` installs and wires `config.jsonc` + `style.css` in an idempotent way.
+- `qbar apply-local` re-syncs the live Waybar setup from the current project checkout.
+- `qbar uninstall` and `qbar remove` clean both integration and owned artifacts.
 
 ## Historical Notes
 

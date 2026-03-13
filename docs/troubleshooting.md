@@ -7,9 +7,8 @@
 | Provider auth/login failure | `qbar` |
 | Cache looks stale | `qbar` |
 | `qbar status` fails in a terminal | `qbar` |
-| Waybar parser error after overlay apply | Theme or manual Waybar wiring |
-| Waybar module missing from the live bar | Theme or manual Waybar wiring |
-| Overlay state file exists but bar is stock | Theme |
+| Waybar parser error after setup/apply | Live Waybar config/style |
+| Waybar module missing from the live bar | Live Waybar config wiring |
 
 ## qbar Runtime Checks
 
@@ -20,29 +19,28 @@ qbar --provider codex
 qbar --provider amp
 ```
 
-If these fail outside Waybar, the issue is in `qbar` or provider auth, not in the theme overlay.
+If these fail outside Waybar, the issue is in `qbar` or provider auth.
 
 ## Common Cases
 
 ### `qbar setup` finished but nothing appeared in Waybar
 
-Expected. `qbar setup` no longer edits live Waybar files.
-
-For `flat-onedark`, run:
+Run:
 
 ```bash
-/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh
+qbar apply-local
 ```
+
+Then reload Waybar manually if needed: `pkill -SIGUSR2 waybar`.
 
 ### Waybar fails after manual CSS edits
 
 Waybar uses GTK CSS, not browser CSS. Avoid unsupported constructs in manual integration, especially web-style variables and pseudo-selectors that GTK rejects.
 
-If you use `flat-onedark`, restore the supported path instead of debugging drifted manual edits:
+To reset qbar-managed style wiring:
 
 ```bash
-/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/disable-qbar-safe.sh
-/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/enable-qbar-safe.sh
+qbar apply-local
 ```
 
 ### Provider order looks wrong
@@ -51,15 +49,8 @@ If you use `flat-onedark`, restore the supported path instead of debugging drift
 
 ### Uninstall removed qbar but Waybar still references qbar modules
 
-That is expected if the external consumer still owns the wiring. For `flat-onedark`, disable the overlay from the theme repo before or after uninstall:
+Run forced cleanup:
 
 ```bash
-/home/othavio/Work/themes/omarchy-flat-onedark-theme/scripts/disable-qbar-safe.sh
-qbar uninstall
+qbar remove
 ```
-
-## Related Theme Docs
-
-- [flat-onedark qbar integration](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/qbar-integration.md)
-- [flat-onedark build and apply](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/build-and-apply.md)
-- [flat-onedark troubleshooting](/home/othavio/Work/themes/omarchy-flat-onedark-theme/docs/troubleshooting.md)

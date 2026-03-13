@@ -63,6 +63,12 @@ async function main() {
     process.exit(0);
   }
 
+  if (options.command === "apply-local") {
+    const { main: applyLocalMain } = await import("./apply-local");
+    await applyLocalMain();
+    process.exit(0);
+  }
+
   if (options.command === "export-waybar-modules") {
     const defaults = getDefaultWaybarAssetPaths();
     const settings = await loadSettings();
@@ -114,6 +120,12 @@ async function main() {
   if (options.command === "uninstall") {
     const { main: uninstallMain } = await import("./uninstall");
     await uninstallMain();
+    process.exit(0);
+  }
+
+  if (options.command === "remove") {
+    const { main: removeMain } = await import("./remove");
+    await removeMain();
     process.exit(0);
   }
 

@@ -1,53 +1,43 @@
 # Integration
 
-## Supported Model
+## Ownership Model
 
-`qbar` is runtime-owned. The Waybar wiring can be owned by another system.
+qbar owns both runtime and Waybar integration.
 
-In the supported `flat-onedark` environment:
+- qbar installs assets under `~/.config/waybar/qbar`
+- qbar injects module references into `modules-right`
+- qbar injects a managed `include` entry for module definitions
+- qbar injects a managed CSS `@import` for qbar styles
 
-- `qbar` installs assets and exposes exports
-- the theme owns the live Waybar files
-- the theme persists overlay state in `~/.config/waybar/.flat-onedark-qbar-overlay.json`
-- the theme re-applies the overlay after repair and theme apply flows
+Your existing Waybar layout remains intact. qbar patches only qbar-specific entries.
 
-Use the following scripts from the flat-onedark theme repo:
+## Setup Flow
 
-- `scripts/enable-qbar-safe.sh`
-- `scripts/disable-qbar-safe.sh`
-- `scripts/apply-theme.sh`
+`qbar setup` performs:
 
-## What `qbar setup` Does
+1. install icons to `~/.config/waybar/qbar/icons`
+2. install `qbar-open-terminal` to `~/.config/waybar/scripts`
+3. create `~/.local/bin/qbar` symlink
+4. wire `config.jsonc` and `style.css`
+5. reload Waybar
 
-`qbar setup` is a safe wrapper. It only:
+## Local Re-Apply
 
-1. installs icons under `~/.config/waybar/qbar/icons`
-2. installs `qbar-open-terminal` under `~/.config/waybar/scripts`
-3. creates `~/.local/bin/qbar`
+Use `qbar apply-local` when you are inside the project and want to re-sync live Waybar files with the current checkout.
 
-It does not:
+## Removal
 
-- edit `~/.config/waybar/config.jsonc`
-- edit `~/.config/waybar/style.css`
-- enable a theme overlay by itself
+- `qbar uninstall`: interactive cleanup.
+- `qbar remove`: force cleanup without prompt.
 
-## Manual Integration
+Both commands remove qbar-managed config/style entries and qbar-owned files.
 
-Manual snippet-based wiring still exists for non-theme consumers, but it is a reference path. If you use it:
+## Snippets
 
-- you own all edits to live Waybar files
-- you own placement under `modules-right`
-- you own CSS compatibility with Waybar/GTK
+`snippets/` still exists as reference material, but is not required for normal setup.
 
-The reference snippets live in:
+Reference files:
 
 - [`snippets/waybar-config.jsonc`](../snippets/waybar-config.jsonc)
 - [`snippets/waybar-modules.jsonc`](../snippets/waybar-modules.jsonc)
 - [`snippets/waybar-style.css`](../snippets/waybar-style.css)
-
-## Theme Cross-Links
-
-See the flat-onedark theme repo for:
-- flat-onedark README
-- flat-onedark qbar integration docs
-- flat-onedark troubleshooting

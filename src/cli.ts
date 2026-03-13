@@ -12,10 +12,12 @@ export interface CliOptions {
     | "action-right"
     | "setup"
     | "assets-install"
+    | "apply-local"
     | "export-waybar-modules"
     | "export-waybar-css"
     | "update"
-    | "uninstall";
+    | "uninstall"
+    | "remove";
   refresh: boolean;
   provider?: string;
   verbose: boolean;
@@ -33,7 +35,6 @@ const label = (text: string) =>
 
 // Alignment columns
 const COL1 = 22; // command/option column
-const COL2 = 35; // description starts here
 
 function cmdLine(name: string, desc: string): string {
   return `${v()}  ${ANSI.green}${BOX.dot}${ANSI.reset} ${ANSI.textBright}${name.padEnd(COL1)}${ANSI.reset}${ANSI.muted}${desc}${ANSI.reset}`;
@@ -41,10 +42,6 @@ function cmdLine(name: string, desc: string): string {
 
 function optLine(flags: string, desc: string): string {
   return `${v()}  ${ANSI.yellow}${BOX.dot}${ANSI.reset} ${ANSI.textBright}${flags.padEnd(COL1)}${ANSI.reset}${ANSI.muted}${desc}${ANSI.reset}`;
-}
-
-function exLine(cmd: string, desc: string): string {
-  return `${v()}  ${ANSI.cyan}${BOX.dot}${ANSI.reset} ${ANSI.cyan}${cmd.padEnd(COL1)}${ANSI.reset}${ANSI.comment}${desc}${ANSI.reset}`;
 }
 
 function infoLine(key: string, val: string): string {
@@ -69,12 +66,14 @@ export function showHelp(): void {
   console.log(label("Commands"));
   console.log(cmdLine("menu", "Interactive TUI menu"));
   console.log(cmdLine("status", "Show quotas in terminal"));
-  console.log(cmdLine("setup", "Safe setup wrapper (assets + guidance)"));
+  console.log(cmdLine("setup", "Install + wire qbar in Waybar"));
+  console.log(cmdLine("apply-local", "Re-apply local repo changes"));
   console.log(cmdLine("assets install", "Install icons/helper only"));
   console.log(cmdLine("export waybar-modules", "Print Waybar JSON module contract"));
   console.log(cmdLine("export waybar-css", "Print Waybar CSS JSON contract"));
   console.log(cmdLine("update", "Update qbar to latest version"));
-  console.log(cmdLine("uninstall", "Remove qbar from system"));
+  console.log(cmdLine("uninstall", "Remove qbar + integration"));
+  console.log(cmdLine("remove", "Force remove without prompt"));
   console.log(v());
 
   // Waybar
@@ -134,6 +133,15 @@ export function parseArgs(args: string[]): CliOptions {
           i += 1;
         }
         break;
+      case "apply":
+        if (args[i + 1] === "local") {
+          options.command = "apply-local";
+          i += 1;
+        }
+        break;
+      case "apply-local":
+        options.command = "apply-local";
+        break;
       case "export":
         if (args[i + 1] === "waybar-modules") {
           options.command = "export-waybar-modules";
@@ -148,6 +156,9 @@ export function parseArgs(args: string[]): CliOptions {
         break;
       case "uninstall":
         options.command = "uninstall";
+        break;
+      case "remove":
+        options.command = "remove";
         break;
       case "action-right":
         options.command = "action-right";

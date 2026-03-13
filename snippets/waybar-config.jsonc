@@ -2,9 +2,6 @@
 // This is a legacy manual Waybar wiring example for consumers that own their own
 // live config.jsonc edits.
 //
-// Supported flat-onedark users should not copy this into the live bar manually.
-// Use enable-qbar-safe.sh from the flat-onedark theme repo.
-//
 // If you still use this manual path:
 //   1) add "custom/qbar-claude", "custom/qbar-codex", "custom/qbar-amp" to modules-right
 //   2) merge the modules below into your config.jsonc

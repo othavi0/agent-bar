@@ -123,7 +123,7 @@ export async function configureLayout(): Promise<boolean> {
   );
   p.log.info(
     colorize("Apply:", semantic.subtitle) +
-      " run the flat-onedark qbar overlay enable/apply script to sync Waybar.",
+      " run `qbar apply-local` to sync Waybar now.",
   );
 
   return true;

@@ -9,11 +9,15 @@ import {
   getDefaultWaybarAssetPaths,
   installWaybarAssets,
 } from "./waybar-contract";
+import {
+  applyWaybarIntegration,
+  getDefaultWaybarIntegrationPaths,
+} from "./waybar-integration";
 
 const HOME = homedir();
 const REPO_ROOT = join(import.meta.dir, "..");
 
-function createSymlink(): string {
+export function createSymlink(): string {
   const localBin = join(HOME, ".local", "bin");
   const link = join(localBin, "qbar");
   const target = join(REPO_ROOT, "scripts", "qbar");
@@ -28,29 +32,41 @@ function createSymlink(): string {
   return link;
 }
 
+function reloadWaybar(): void {
+  try {
+    Bun.spawn(["pkill", "-SIGUSR2", "waybar"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  } catch {
+    // noop
+  }
+}
+
 export async function main() {
   console.clear();
 
   p.intro(colorize("qbar setup", oneDark.blue));
 
   const defaults = getDefaultWaybarAssetPaths();
+  const integrationPaths = getDefaultWaybarIntegrationPaths();
 
   p.note(
     [
-      "This setup no longer edits Waybar config.jsonc or style.css.",
+      "This setup is theme-agnostic and fully managed by qbar.",
       "",
-      "It only does the safe qbar-owned work:",
-      "  1. Copies icons into ~/.config/waybar/qbar/icons",
-      "  2. Installs qbar-open-terminal into ~/.config/waybar/scripts",
-      "  3. Creates ~/.local/bin/qbar",
-      "",
-      "Enable the actual Waybar overlay from the flat-onedark theme repo.",
+      "It will:",
+      "  1. Install qbar icons + terminal helper",
+      "  2. Create ~/.local/bin/qbar symlink",
+      `  3. Wire ${integrationPaths.waybarConfigPath}`,
+      `  4. Wire ${integrationPaths.waybarStylePath}`,
+      "  5. Reload Waybar",
     ].join("\n"),
-    colorize("Safe setup", semantic.title),
+    colorize("Setup", semantic.title),
   );
 
   const proceed = await p.confirm({
-    message: "Install qbar assets and symlink?",
+    message: "Apply qbar setup now?",
     initialValue: true,
   });
 
@@ -65,7 +81,15 @@ export async function main() {
       scriptsDir: defaults.scriptsDir,
       repoRoot: REPO_ROOT,
     });
+
     const link = createSymlink();
+    const integrationResult = applyWaybarIntegration({
+      iconsDir: assetResult.iconsDir,
+      qbarBin: defaults.qbarBin,
+      terminalScript: assetResult.terminalScript,
+    });
+
+    reloadWaybar();
 
     p.log.success(
       colorize(
@@ -80,6 +104,23 @@ export async function main() {
       ),
     );
     p.log.success(colorize(`Installed symlink at ${link}`, semantic.good));
+    p.log.success(
+      colorize(
+        integrationResult.configChanged
+          ? `Updated ${integrationPaths.waybarConfigPath}`
+          : `${integrationPaths.waybarConfigPath} already in sync`,
+        semantic.good,
+      ),
+    );
+    p.log.success(
+      colorize(
+        integrationResult.styleChanged
+          ? `Updated ${integrationPaths.waybarStylePath}`
+          : `${integrationPaths.waybarStylePath} already in sync`,
+        semantic.good,
+      ),
+    );
+    p.log.success(colorize("Waybar reload signal sent", semantic.good));
 
     const localBin = join(HOME, ".local", "bin");
     const pathDirs = (process.env.PATH ?? "").split(":");
@@ -92,12 +133,7 @@ export async function main() {
       );
     }
 
-    p.note(
-      "Use your theme-owned qbar overlay script to wire qbar into Waybar.\nFor flat-onedark, run scripts/enable-qbar-safe.sh from the theme repo.",
-      colorize("Next step", semantic.subtitle),
-    );
-
-    p.outro(colorize("Safe setup complete", semantic.good));
+    p.outro(colorize("Setup complete", semantic.good));
   } catch (error) {
     p.outro(
       colorize(

@@ -63,7 +63,7 @@ export async function configureWaybar(): Promise<boolean> {
 
   p.log.info(
     colorize(
-      'Waybar wiring is theme-owned. Re-run the flat-onedark qbar overlay script to sync these settings.',
+      'Run `qbar apply-local` to sync these changes into Waybar now.',
       semantic.muted,
     ),
   );

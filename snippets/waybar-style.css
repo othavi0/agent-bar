@@ -1,8 +1,6 @@
 /* Reference snippet only.
    Legacy manual Waybar CSS example for consumers that own live style.css edits.
 
-   Supported flat-onedark users should use enable-qbar-safe.sh from the flat-onedark theme repo.
-
    If you still use this manually, install qbar-owned assets first:
      qbar assets install --waybar-dir ~/.config/waybar/qbar --scripts-dir ~/.config/waybar/scripts
 */
@@ -46,13 +44,6 @@
 #custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-amp.low { color: #e5c07b; }
 #custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-amp.warn { color: #d19a66; }
 #custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-amp.critical { color: #e06c75; }
-
-#custom-qbar-claude.loading,
-#custom-qbar-codex.loading,
-#custom-qbar-amp.loading {
-  animation: qbar-pulse 0.8s ease-in-out infinite;
-  color: #56b6c2;
-}
 
 /* Disconnected state */
 #custom-qbar-claude.disconnected,

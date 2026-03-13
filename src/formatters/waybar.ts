@@ -18,6 +18,26 @@ import { ONE_DARK, PROVIDER_HEX, BOX } from "../theme";
 
 // Uniform tooltip width — all 3 cards share the same border
 const TOOLTIP_BORDER = 56; // total visual chars per line (┗ + 55 ━)
+const SETTINGS_CACHE_TTL_MS = 5_000;
+
+let settingsCache: {
+  value: ReturnType<typeof loadSettingsSync>;
+  expiresAt: number;
+} | null = null;
+
+function loadSettingsCached(): ReturnType<typeof loadSettingsSync> {
+  const now = Date.now();
+  if (settingsCache && settingsCache.expiresAt > now) {
+    return settingsCache.value;
+  }
+
+  const value = loadSettingsSync();
+  settingsCache = {
+    value,
+    expiresAt: now + SETTINGS_CACHE_TTL_MS,
+  };
+  return value;
+}
 
 interface WaybarOutput {
   text: string;
@@ -257,7 +277,7 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt?: string): string {
   const lines: string[] = [];
   const vc = PROVIDER_HEX.codex;
   const v = s(vc, BOX.v);
-  const settings = loadSettingsSync();
+  const settings = loadSettingsCached();
   const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? "both";
   const planLabel = normalizePlanLabel(p);
 
