@@ -5,7 +5,7 @@ import { parseArgs, showHelp } from "./cli";
 import { outputTerminal } from "./formatters/terminal";
 import { formatProviderForWaybar, outputWaybar } from "./formatters/waybar";
 import { logger } from "./logger";
-import { getAllQuotas, getQuotaFor } from "./providers";
+import { getAllQuotas, getProvider, getQuotaFor } from "./providers";
 import type { AllQuotas } from "./providers/types";
 import { loadSettings } from "./settings";
 import { runTui } from "./tui";
@@ -124,9 +124,8 @@ async function main() {
       : ["claude", "codex", "amp"];
 
     for (const id of toInvalidate) {
-      if (id === "claude") await cache.invalidate("claude-usage");
-      else if (id === "codex") await cache.invalidate("codex-quota");
-      else if (id === "amp") await cache.invalidate("amp-quota");
+      const prov = getProvider(id);
+      if (prov) await cache.invalidate(prov.cacheKey);
     }
     logger.info("Cache invalidated");
   }

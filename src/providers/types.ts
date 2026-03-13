@@ -67,12 +67,14 @@ export interface Provider {
   readonly id: string;
   /** Display name */
   readonly name: string;
-  
+  /** Cache key used for storing/retrieving cached quota data */
+  readonly cacheKey: string;
+
   /**
    * Check if provider is available (has credentials)
    */
   isAvailable(): Promise<boolean>;
-  
+
   /**
    * Fetch current quota information
    */

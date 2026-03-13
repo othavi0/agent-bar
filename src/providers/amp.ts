@@ -26,6 +26,7 @@ function findAmpBin(): string | null {
 export class AmpProvider implements Provider {
   readonly id = 'amp';
   readonly name = 'Amp';
+  readonly cacheKey = 'amp-quota';
 
   async isAvailable(): Promise<boolean> {
     return findAmpBin() !== null;

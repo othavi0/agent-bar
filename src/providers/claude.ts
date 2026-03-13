@@ -46,6 +46,7 @@ interface ClaudeUsageResponse {
 export class ClaudeProvider implements Provider {
   readonly id = 'claude';
   readonly name = 'Claude';
+  readonly cacheKey = 'claude-usage';
 
   async isAvailable(): Promise<boolean> {
     const file = Bun.file(CONFIG.paths.claude.credentials);

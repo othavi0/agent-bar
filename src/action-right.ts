@@ -66,8 +66,7 @@ export async function handleActionRight(providerId: string): Promise<void> {
   // Force refresh on right-click (ignore TTL cache).
   try {
     const { cache } = await import('./cache');
-    if (providerId === 'codex') await cache.invalidate('codex-quota');
-    if (providerId === 'claude') await cache.invalidate('claude-usage');
+    await cache.invalidate(provider.cacheKey);
   } catch {
     // ignore
   }

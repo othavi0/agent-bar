@@ -67,6 +67,7 @@ interface CodexSessionEvent {
 export class CodexProvider implements Provider {
   readonly id = 'codex';
   readonly name = 'Codex';
+  readonly cacheKey = 'codex-quota';
 
   async isAvailable(): Promise<boolean> {
     const file = Bun.file(CONFIG.paths.codex.auth);

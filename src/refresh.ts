@@ -7,7 +7,7 @@
 
 import { createSpinner } from './spinner';
 import { cache } from './cache';
-import { getAllQuotas, getQuotaFor } from './providers';
+import { getAllQuotas, getProvider, getQuotaFor, providers } from './providers';
 import { outputTerminal } from './formatters/terminal';
 import { ANSI } from './theme';
 
@@ -19,8 +19,14 @@ async function refresh() {
 
   try {
     // Invalidate cache
-    await cache.invalidate('claude-usage');
-    await cache.invalidate('codex-quota');
+    if (provider) {
+      const prov = getProvider(provider);
+      if (prov) await cache.invalidate(prov.cacheKey);
+    } else {
+      for (const prov of providers) {
+        await cache.invalidate(prov.cacheKey);
+      }
+    }
 
     spinner.text = 'Fetching fresh data...';
 
