@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+if ! command -v bun &>/dev/null; then
+  echo "qbar: bun is required but not found. Install it: https://bun.sh" >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 QBAR_DIR="$(dirname "$SCRIPT_DIR")"
 exec bun "$QBAR_DIR/src/index.ts" "$@"

@@ -3,7 +3,7 @@
 import * as p from "@clack/prompts";
 import { mkdirSync, symlinkSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { oneDark, colorize, semantic } from "./tui/colors";
 import {
   getDefaultWaybarAssetPaths,
@@ -80,6 +80,17 @@ export async function main() {
       ),
     );
     p.log.success(colorize(`Installed symlink at ${link}`, semantic.good));
+
+    const localBin = join(HOME, ".local", "bin");
+    const pathDirs = (process.env.PATH ?? "").split(":");
+    if (!pathDirs.some((d) => resolve(d) === resolve(localBin))) {
+      p.log.warn(
+        colorize(
+          `~/.local/bin is not in your PATH. Add to your shell profile:\n  export PATH="$HOME/.local/bin:$PATH"`,
+          semantic.warning,
+        ),
+      );
+    }
 
     p.note(
       "Use your theme-owned qbar overlay script to wire qbar into Waybar.\nFor flat-onedark, run scripts/enable-qbar-safe.sh from the theme repo.",

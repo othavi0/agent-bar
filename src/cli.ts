@@ -92,6 +92,10 @@ export function showHelp(): void {
   console.log(optLine("--terminal-script <path>", "Modules export launcher"));
   console.log(v());
 
+  console.log(label("Info"));
+  console.log(infoLine("Run with", "./scripts/qbar  or  bun run start"));
+  console.log(v());
+
   console.log(`${vc}${BOX.bl}${BOX.h.repeat(w)}${ANSI.reset}`);
   console.log();
 }
