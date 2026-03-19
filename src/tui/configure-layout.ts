@@ -169,7 +169,7 @@ export async function configureLayout(): Promise<boolean> {
     await getAllQuotas();
     reloadWaybar();
     s.message("Waiting for Waybar to reload...");
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 8000));
     s.stop("Applied to Waybar");
   } catch {
     s.stop("Preferences saved");
