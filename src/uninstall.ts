@@ -86,15 +86,20 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
 
   const removed: string[] = [];
   const failed: string[] = [];
+  const s = p.spinner();
 
+  s.start("Removing Waybar integration...");
   const integrationResult = removeWaybarIntegration({ paths: integrationPaths });
+  s.stop("Waybar integration removed");
 
+  s.start("Cleaning up files...");
   removePathIfExists(defaults.waybarDir, removed, failed);
   removePathIfExists(join(defaults.scriptsDir, "qbar-open-terminal"), removed, failed);
   removePathIfExists(QBAR_SETTINGS_DIR, removed, failed);
   removePathIfExists(CONFIG.paths.cache, removed, failed);
   removePathIfExists(CONFIG.paths.legacyCache, removed, failed);
   removePathIfExists(QBAR_SYMLINK, removed, failed);
+  s.stop("Files cleaned up");
 
   if (integrationResult.configChanged) {
     p.log.success(
@@ -118,8 +123,9 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
   }
 
   if (integrationResult.configChanged || integrationResult.styleChanged) {
+    s.start("Reloading Waybar...");
     reloadWaybar();
-    p.log.info(colorize("Waybar reload signal sent", semantic.subtitle));
+    s.stop("Waybar reloaded");
   }
 
   if (removed.length > 0) {

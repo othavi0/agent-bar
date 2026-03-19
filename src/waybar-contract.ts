@@ -35,11 +35,10 @@ export interface WaybarCssExportOptions {
   providerOrder: WaybarProviderId[];
   separators:
     | "pill"
-    | "underline"
     | "gap"
-    | "pipe"
-    | "dot"
-    | "subtle"
+    | "bare"
+    | "glass"
+    | "shadow"
     | "none";
 }
 
@@ -88,24 +87,14 @@ function separatorCss(
   }
 
   const providerSelectors = providers.map((provider) => `#custom-qbar-${provider}`);
+  const selectorBlock = providerSelectors.join(",\n");
 
   if (separatorStyle === "pill") {
     return [
       "/* qbar separators: pill */",
-      `${providerSelectors.join(",\n")} {`,
+      `${selectorBlock} {`,
       `  background-color: ${QBAR_SURFACE};`,
       "  border-radius: 4px;",
-      "}",
-      "",
-    ].join("\n");
-  }
-
-  if (separatorStyle === "underline") {
-    return [
-      "/* qbar separators: underline */",
-      `${providerSelectors.join(",\n")} {`,
-      `  border-bottom: 2px solid ${QBAR_MUTED};`,
-      "  border-radius: 0;",
       "}",
       "",
     ].join("\n");
@@ -114,56 +103,61 @@ function separatorCss(
   if (separatorStyle === "gap") {
     return [
       "/* qbar separators: gap */",
-      `${providerSelectors.join(",\n")} {`,
+      `${selectorBlock} {`,
       "  border-color: transparent;",
       "}",
       "",
     ].join("\n");
   }
 
-  if (separatorStyle === "none") {
+  if (separatorStyle === "bare") {
     return [
-      "/* qbar separators: none */",
-      `${providerSelectors.join(",\n")} {`,
+      "/* qbar separators: bare */",
+      `${selectorBlock} {`,
       "  border-color: transparent;",
-      "  margin: 0;",
+      "  background-color: transparent;",
+      "}",
+      `${selectorBlock}:hover {`,
+      "  background-color: transparent;",
+      "  border-color: transparent;",
       "}",
       "",
     ].join("\n");
   }
 
-  const borderStyle =
-    separatorStyle === "subtle"
-      ? `1px solid ${QBAR_SURFACE}`
-      : separatorStyle === "dot"
-        ? `2px dashed ${QBAR_MUTED}`
-        : `1px solid ${QBAR_MUTED}`;
-  const lines = [
-    `/* qbar separators: ${separatorStyle} */`,
-    `#custom-qbar-${providers[0]} {`,
-    `  border-left: ${borderStyle};`,
-    "}",
-  ];
-
-  if (providers.length > 1) {
-    lines.push(
-      `${providers
-        .slice(1)
-        .map((provider) => `#custom-qbar-${provider}`)
-        .join(",\n")} {`,
-      `  border-left: ${borderStyle};`,
+  if (separatorStyle === "glass") {
+    return [
+      "/* qbar separators: glass */",
+      `${selectorBlock} {`,
+      "  background-color: rgba(192, 201, 212, 0.04);",
+      "  border-color: transparent;",
+      "  border-radius: 4px;",
       "}",
-    );
+      "",
+    ].join("\n");
   }
 
-  lines.push(
-    `#custom-qbar-${providers[providers.length - 1]} {`,
-    `  border-right: ${borderStyle};`,
+  if (separatorStyle === "shadow") {
+    return [
+      "/* qbar separators: shadow */",
+      `${selectorBlock} {`,
+      "  border-color: transparent;",
+      "  border-radius: 4px;",
+      "  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);",
+      "}",
+      "",
+    ].join("\n");
+  }
+
+  // none
+  return [
+    "/* qbar separators: none */",
+    `${selectorBlock} {`,
+    "  border-color: transparent;",
+    "  margin: 0;",
     "}",
     "",
-  );
-
-  return lines.join("\n");
+  ].join("\n");
 }
 
 export function getDefaultWaybarAssetPaths() {

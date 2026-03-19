@@ -28,7 +28,7 @@ describe("Settings", () => {
       // loadSettingsSync with no file returns defaults
       const settings = loadSettingsSync();
       expect(settings.version).toBe(1);
-      expect(["pill", "underline", "gap", "pipe", "dot", "subtle", "none"]).toContain(
+      expect(["pill", "gap", "bare", "glass", "shadow", "none"]).toContain(
         settings.waybar.separators,
       );
       expect(settings.waybar.providers).toContain("claude");
@@ -96,7 +96,7 @@ describe("Settings", () => {
       // Instead, test the normalization logic by checking defaults
       const settings = loadSettingsSync();
       // Default separator should be "pipe"
-      expect(["pill", "underline", "gap", "pipe", "dot", "subtle", "none"]).toContain(
+      expect(["pill", "gap", "bare", "glass", "shadow", "none"]).toContain(
         settings.waybar.separators,
       );
     });
@@ -113,7 +113,7 @@ describe("Settings", () => {
     });
 
     it("valid separators are all accepted", () => {
-      const validSeparators = ["pill", "underline", "gap", "pipe", "dot", "subtle", "none"];
+      const validSeparators = ["pill", "gap", "bare", "glass", "shadow", "none"];
       for (const sep of validSeparators) {
         expect(validSeparators).toContain(sep);
       }

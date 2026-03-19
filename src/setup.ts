@@ -76,34 +76,35 @@ export async function main() {
   }
 
   try {
+    const s = p.spinner();
+
+    s.start("Installing icons and terminal helper...");
     const assetResult = installWaybarAssets({
       waybarDir: defaults.waybarDir,
       scriptsDir: defaults.scriptsDir,
       repoRoot: REPO_ROOT,
     });
+    s.stop("Assets installed");
 
+    s.start("Creating symlink...");
     const link = createSymlink();
+    s.stop("Symlink created");
+
+    s.start("Wiring Waybar config and styles...");
     const integrationResult = applyWaybarIntegration({
       iconsDir: assetResult.iconsDir,
       qbarBin: defaults.qbarBin,
       terminalScript: assetResult.terminalScript,
     });
+    s.stop("Waybar integration applied");
 
+    s.start("Reloading Waybar...");
     reloadWaybar();
+    s.stop("Waybar reloaded");
 
-    p.log.success(
-      colorize(
-        `Installed icons to ${assetResult.iconsDir}`,
-        semantic.good,
-      ),
-    );
-    p.log.success(
-      colorize(
-        `Installed terminal helper to ${assetResult.terminalScript}`,
-        semantic.good,
-      ),
-    );
-    p.log.success(colorize(`Installed symlink at ${link}`, semantic.good));
+    p.log.success(colorize(`Icons: ${assetResult.iconsDir}`, semantic.good));
+    p.log.success(colorize(`Helper: ${assetResult.terminalScript}`, semantic.good));
+    p.log.success(colorize(`Symlink: ${link}`, semantic.good));
     p.log.success(
       colorize(
         integrationResult.configChanged
@@ -120,7 +121,6 @@ export async function main() {
         semantic.good,
       ),
     );
-    p.log.success(colorize("Waybar reload signal sent", semantic.good));
 
     const localBin = join(HOME, ".local", "bin");
     const pathDirs = (process.env.PATH ?? "").split(":");

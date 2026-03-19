@@ -12,7 +12,7 @@ export type WindowPolicy = "both" | "five_hour" | "seven_day";
 
 const CURRENT_VERSION = 1;
 
-const VALID_SEPARATORS = ["pill", "underline", "gap", "pipe", "dot", "subtle", "none"] as const;
+const VALID_SEPARATORS = ["pill", "gap", "bare", "glass", "shadow", "none"] as const;
 type SeparatorStyle = (typeof VALID_SEPARATORS)[number];
 
 const VALID_WINDOW_POLICIES = ["both", "five_hour", "seven_day"] as const;
@@ -37,7 +37,7 @@ const DEFAULT_SETTINGS: Settings = {
   waybar: {
     providers: ["claude", "codex", "amp"],
     showPercentage: true,
-    separators: "pipe",
+    separators: "gap",
     providerOrder: ["claude", "codex", "amp"],
   },
   tooltip: {},

@@ -2,7 +2,6 @@ import * as p from "@clack/prompts";
 import { oneDark, colorize, semantic } from "./colors";
 import { configureLayout } from "./configure-layout";
 import { configureModels } from "./configure-models";
-import { configureWaybar } from "./configure-waybar";
 import { showListAll } from "./list-all";
 import { loginProviderFlow } from "./login";
 
@@ -12,7 +11,7 @@ const VERSION = pkg.version;
 /** Delay between animation frames in ms */
 const LOGO_ANIM_FRAME_MS = 12;
 
-type MenuAction = "list" | "waybar" | "models" | "layout" | "login";
+type MenuAction = "list" | "layout" | "models" | "login";
 
 // Block-style logo inspired by Omarchy branding
 const LOGO_LINES = [
@@ -147,19 +146,14 @@ export async function runTui(): Promise<void> {
           hint: colorize("view quotas for all providers", semantic.muted),
         },
         {
-          value: "waybar" as const,
-          label: colorize("Configure Waybar", oneDark.text),
-          hint: colorize("select providers for the bar", semantic.muted),
+          value: "layout" as const,
+          label: colorize("Customize Waybar", oneDark.text),
+          hint: colorize("providers, order, separator style", semantic.muted),
         },
         {
           value: "models" as const,
           label: colorize("Configure Models", oneDark.text),
           hint: colorize("show/hide models in tooltip", semantic.muted),
-        },
-        {
-          value: "layout" as const,
-          label: colorize("Customize Layout", oneDark.text),
-          hint: colorize("reorder providers, separator style", semantic.muted),
         },
         {
           value: "login" as const,
@@ -181,10 +175,6 @@ export async function runTui(): Promise<void> {
     switch (action) {
       case "list":
         await showListAll();
-        break;
-
-      case "waybar":
-        await configureWaybar();
         break;
 
       case "models":

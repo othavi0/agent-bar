@@ -29,22 +29,30 @@ export async function main() {
   const integrationPaths = getDefaultWaybarIntegrationPaths();
 
   try {
+    const s = p.spinner();
+
+    s.start("Syncing assets...");
     const assets = installWaybarAssets({
       waybarDir: defaults.waybarDir,
       scriptsDir: defaults.scriptsDir,
       repoRoot: REPO_ROOT,
     });
+    s.stop("Assets synced");
 
+    s.start("Applying Waybar integration...");
     const integration = applyWaybarIntegration({
       iconsDir: assets.iconsDir,
       qbarBin: defaults.qbarBin,
       terminalScript: assets.terminalScript,
     });
+    s.stop("Integration applied");
 
+    s.start("Reloading Waybar...");
     reloadWaybar();
+    s.stop("Waybar reloaded");
 
-    p.log.success(colorize(`Synced icons: ${assets.iconsDir}`, semantic.good));
-    p.log.success(colorize(`Synced helper: ${assets.terminalScript}`, semantic.good));
+    p.log.success(colorize(`Icons: ${assets.iconsDir}`, semantic.good));
+    p.log.success(colorize(`Helper: ${assets.terminalScript}`, semantic.good));
     p.log.success(
       colorize(
         integration.configChanged

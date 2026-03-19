@@ -12,6 +12,8 @@ function findAmpBin(): string | null {
 
   const home = process.env.HOME ?? '';
   const paths = [
+    `${home}/.local/bin/amp`,
+    `${home}/.amp/bin/amp`,
     `${home}/.cache/.bun/bin/amp`,
     `${home}/.bun/bin/amp`,
   ];

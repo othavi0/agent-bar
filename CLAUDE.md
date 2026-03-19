@@ -40,7 +40,7 @@ qbar owns: providers, auth flows, settings, cache, icons, and Waybar integration
 ## Settings
 
 Settings use schema versioning (`version: 1`). Fields are validated on load:
-- `waybar.separators` must be one of: pill, underline, gap, pipe, dot, subtle, none (default: pipe)
+- `waybar.separators` must be one of: pill, gap, bare, glass, shadow, none (default: gap)
 - `windowPolicy` values must be: both, five_hour, seven_day (default: both)
 - Invalid values silently fall back to defaults
 

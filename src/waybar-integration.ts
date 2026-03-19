@@ -191,13 +191,29 @@ function ensureModulesRight(
   content: string,
   moduleIDs: string[],
 ): { content: string; changed: boolean } {
+  const qbarPrefix = "custom/qbar-";
+
   const rewriteResult = rewriteStringArrayProperty(content, "modules-right", (values) => {
+    // Add missing qbar modules
     const merged = [...values];
     for (const moduleID of moduleIDs) {
       if (!merged.includes(moduleID)) {
         merged.push(moduleID);
       }
     }
+
+    // Reorder existing qbar modules to match desired order
+    const qbarIndices = merged
+      .map((v, i) => (v.startsWith(qbarPrefix) ? i : -1))
+      .filter((i) => i !== -1);
+
+    if (qbarIndices.length > 0) {
+      const orderedQbar = moduleIDs.filter((id) => merged.includes(id));
+      for (let i = 0; i < qbarIndices.length; i++) {
+        merged[qbarIndices[i]] = orderedQbar[i];
+      }
+    }
+
     return merged;
   });
 
