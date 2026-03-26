@@ -1,7 +1,7 @@
-import { existsSync } from 'node:fs';
 import * as p from '@clack/prompts';
+import { ensureAmpCli, findAmpBin } from '../amp-cli';
 import { colorize, semantic } from './colors';
-import { ensureBunGlobalPackage, ensureCommand } from '../install';
+import { ensureCommand } from '../install';
 import { loadSettings, saveSettings } from '../settings';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
@@ -13,27 +13,6 @@ async function runInteractive(cmd: string, args: string[] = []): Promise<number>
   return await proc.exited;
 }
 
-function findAmpBin(): string | null {
-  if (typeof Bun.which === 'function') {
-    const found = Bun.which('amp');
-    if (found) return found;
-  }
-
-  const home = process.env.HOME ?? '';
-  const paths = [
-    `${home}/.local/bin/amp`,
-    `${home}/.amp/bin/amp`,
-    `${home}/.cache/.bun/bin/amp`,
-    `${home}/.bun/bin/amp`,
-  ];
-
-  for (const p of paths) {
-    if (existsSync(p)) return p;
-  }
-
-  return null;
-}
-
 async function ensureClaudeCli(): Promise<boolean> {
   return ensureCommand('claude', 'Install Claude Code CLI first (binary: claude).');
 }
@@ -42,8 +21,12 @@ async function ensureCodexCli(): Promise<boolean> {
   return ensureCommand('codex', 'Install OpenAI Codex CLI first (binary: codex).');
 }
 
-async function ensureAmpCli(): Promise<boolean> {
-  return ensureBunGlobalPackage('@anthropic-ai/amp', 'amp', 'amp');
+function reloadWaybar(): void {
+  try {
+    Bun.spawn(['pkill', '-USR2', 'waybar']);
+  } catch {
+    // ignore
+  }
 }
 
 async function activateProvider(providerId: string): Promise<void> {
@@ -87,6 +70,7 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       const code = await runInteractive('claude');
       if (code === 0) {
         await activateProvider('claude');
+        reloadWaybar();
       }
       await waitEnter();
       return;
@@ -107,6 +91,7 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       const code = await runInteractive('codex', ['auth', 'login']);
       if (code === 0) {
         await activateProvider('codex');
+        reloadWaybar();
       }
       await waitEnter();
       return;
@@ -118,18 +103,26 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
         colorize('Amp Login', semantic.title)
       );
 
-      const ampBin = findAmpBin();
+      let ampBin = findAmpBin();
       if (!ampBin) {
         const ok = await ensureAmpCli();
         if (!ok) {
           await waitEnter();
           return;
         }
+        ampBin = findAmpBin();
       }
 
-      const code = await runInteractive(ampBin || 'amp', ['login']);
+      if (!ampBin) {
+        p.log.error(colorize('Amp CLI is still unavailable after install.', semantic.danger));
+        await waitEnter();
+        return;
+      }
+
+      const code = await runInteractive(ampBin, ['login']);
       if (code === 0) {
         await activateProvider('amp');
+        reloadWaybar();
       }
       await waitEnter();
       return;

@@ -1,8 +1,8 @@
 import * as p from '@clack/prompts';
-import { existsSync } from 'node:fs';
+import { ensureAmpCli, findAmpBin } from '../amp-cli';
 import { providers } from '../providers';
 import { oneDark, semantic, colorize } from './colors';
-import { ensureBunGlobalPackage, ensureCommand } from '../install';
+import { ensureCommand } from '../install';
 import { loadSettings, saveSettings } from '../settings';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
@@ -20,31 +20,6 @@ async function ensureClaudeCli(): Promise<boolean> {
 
 async function ensureCodexCli(): Promise<boolean> {
   return ensureCommand('codex', 'Install OpenAI Codex CLI first (binary: codex).');
-}
-
-function findAmpBin(): string | null {
-  if (typeof Bun.which === 'function') {
-    const found = Bun.which('amp');
-    if (found) return found;
-  }
-
-  const home = process.env.HOME ?? '';
-  const paths = [
-    `${home}/.local/bin/amp`,
-    `${home}/.amp/bin/amp`,
-    `${home}/.cache/.bun/bin/amp`,
-    `${home}/.bun/bin/amp`,
-  ];
-
-  for (const p of paths) {
-    if (existsSync(p)) return p;
-  }
-
-  return null;
-}
-
-async function ensureAmpCli(): Promise<boolean> {
-  return ensureBunGlobalPackage('@anthropic-ai/amp', 'amp', 'amp');
 }
 
 async function activateProvider(providerId: string): Promise<void> {
@@ -155,13 +130,19 @@ export async function loginProviderFlow(): Promise<void> {
 
       if (p.isCancel(cont) || !cont) return;
 
-      const ampBin = findAmpBin();
+      let ampBin = findAmpBin();
       if (!ampBin) {
         const ok = await ensureAmpCli();
         if (!ok) return;
+        ampBin = findAmpBin();
       }
 
-      const code = await runInteractive(ampBin || 'amp', ['login']);
+      if (!ampBin) {
+        p.log.error(colorize('Amp CLI is still unavailable after install.', semantic.danger));
+        return;
+      }
+
+      const code = await runInteractive(ampBin, ['login']);
       if (code === 0) {
         await activateProvider('amp');
       }

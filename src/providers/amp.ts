@@ -1,29 +1,8 @@
-import { existsSync } from 'node:fs';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { cache } from '../cache';
+import { AMP_MISSING_ERROR, findAmpBin } from '../amp-cli';
 import type { Provider, ProviderQuota, QuotaWindow } from './types';
-
-function findAmpBin(): string | null {
-  if (typeof Bun.which === 'function') {
-    const found = Bun.which('amp');
-    if (found) return found;
-  }
-
-  const home = process.env.HOME ?? '';
-  const paths = [
-    `${home}/.local/bin/amp`,
-    `${home}/.amp/bin/amp`,
-    `${home}/.cache/.bun/bin/amp`,
-    `${home}/.bun/bin/amp`,
-  ];
-
-  for (const p of paths) {
-    if (existsSync(p)) return p;
-  }
-
-  return null;
-}
 
 export class AmpProvider implements Provider {
   readonly id = 'amp';
@@ -43,7 +22,7 @@ export class AmpProvider implements Provider {
 
     const bin = findAmpBin();
     if (!bin) {
-      return { ...base, error: 'Amp CLI not installed' };
+      return { ...base, error: AMP_MISSING_ERROR };
     }
 
     try {

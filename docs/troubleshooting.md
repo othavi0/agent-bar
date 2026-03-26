@@ -47,6 +47,16 @@ qbar apply-local
 
 `qbar` normalizes `waybar.providers` and `waybar.providerOrder` in `~/.config/qbar/settings.json`. Unsupported providers are dropped and missing enabled providers are appended.
 
+### Amp is missing or right-click does not start Amp login
+
+The Amp flow now expects the official installer:
+
+```bash
+curl -fsSL https://ampcode.com/install.sh | bash
+```
+
+After install, run `amp login` or right-click the Amp module again. If Waybar still looks stale, reload it manually with `pkill -SIGUSR2 waybar`.
+
 ### Uninstall removed qbar but Waybar still references qbar modules
 
 Run forced cleanup:
