@@ -49,14 +49,14 @@ export class AmpProvider implements Provider {
       const exitCode = await proc.exited;
 
       if (exitCode !== 0) {
-        return { ...base, error: 'Not logged in' };
+        return { ...base, error: 'Not logged in. Run `qbar login amp` to authenticate.' };
       }
 
       const accountMatch = stdout.match(/Signed in as (\S+)/);
       const account = accountMatch?.[1] || undefined;
 
       if (!account) {
-        return { ...base, error: 'Not logged in' };
+        return { ...base, error: 'Not logged in. Run `qbar login amp` to authenticate.' };
       }
 
       const freeMatch = stdout.match(/Amp Free:\s*\$([0-9.]+)\/\$([0-9.]+)\s*remaining/);
