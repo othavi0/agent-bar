@@ -23,14 +23,6 @@ async function waitEnter(): Promise<void> {
   });
 }
 
-function reloadWaybar(): void {
-  try {
-    Bun.spawn(["pkill", "-USR2", "waybar"]);
-  } catch {
-    // ignore
-  }
-}
-
 export async function handleActionRight(providerId: string): Promise<void> {
   if (!providerId) {
     console.error('Usage: qbar action-right <provider>');
@@ -85,7 +77,6 @@ export async function handleActionRight(providerId: string): Promise<void> {
       providers: [fresh],
       fetchedAt: new Date().toISOString(),
     });
-    reloadWaybar();
   } else {
     p.log.error(colorize(`Failed to fetch ${provider.name} quota`, semantic.danger));
   }

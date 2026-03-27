@@ -14,6 +14,7 @@ describe("exportWaybarModules", () => {
     expect(result.modules["custom/qbar-claude"]["on-click"]).toBe(
       "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
     );
+    expect(result.modules["custom/qbar-codex"]["exec-on-event"]).toBe(true);
     expect(result.modules["custom/qbar-amp"]["on-click-right"]).toBe(
       "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right amp",
     );

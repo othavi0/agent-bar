@@ -2,12 +2,12 @@
 
 ## Decide Which Layer Owns The Problem
 
-| Symptom | Likely owner |
-| --- | --- |
-| Provider auth/login failure | `qbar` |
-| Cache looks stale | `qbar` |
-| `qbar status` fails in a terminal | `qbar` |
-| Waybar parser error after setup/apply | Live Waybar config/style |
+| Symptom                                 | Likely owner              |
+| --------------------------------------- | ------------------------- |
+| Provider auth/login failure             | `qbar`                    |
+| Cache looks stale                       | `qbar`                    |
+| `qbar status` fails in a terminal       | `qbar`                    |
+| Waybar parser error after setup/apply   | Live Waybar config/style  |
 | Waybar module missing from the live bar | Live Waybar config wiring |
 
 ## qbar Runtime Checks

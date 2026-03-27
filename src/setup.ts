@@ -103,7 +103,9 @@ export async function main() {
     s.stop("Waybar reloaded");
 
     p.log.success(colorize(`Icons: ${assetResult.iconsDir}`, semantic.good));
-    p.log.success(colorize(`Helper: ${assetResult.terminalScript}`, semantic.good));
+    p.log.success(
+      colorize(`Helper: ${assetResult.terminalScript}`, semantic.good),
+    );
     p.log.success(colorize(`Symlink: ${link}`, semantic.good));
     p.log.success(
       colorize(
