@@ -21,14 +21,6 @@ async function ensureCodexCli(): Promise<boolean> {
   return ensureCommand('codex', 'Install OpenAI Codex CLI first (binary: codex).');
 }
 
-function reloadWaybar(): void {
-  try {
-    Bun.spawn(['pkill', '-USR2', 'waybar']);
-  } catch {
-    // ignore
-  }
-}
-
 async function activateProvider(providerId: string): Promise<void> {
   const settings = await loadSettings();
 
@@ -70,7 +62,6 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       const code = await runInteractive('claude');
       if (code === 0) {
         await activateProvider('claude');
-        reloadWaybar();
       }
       await waitEnter();
       return;
@@ -91,7 +82,6 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       const code = await runInteractive('codex', ['auth', 'login']);
       if (code === 0) {
         await activateProvider('codex');
-        reloadWaybar();
       }
       await waitEnter();
       return;
@@ -122,7 +112,6 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       const code = await runInteractive(ampBin, ['login']);
       if (code === 0) {
         await activateProvider('amp');
-        reloadWaybar();
       }
       await waitEnter();
       return;

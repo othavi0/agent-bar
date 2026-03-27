@@ -72,6 +72,7 @@ function moduleDefinition(
     exec: `${qbarBin} --provider ${provider}`,
     "return-type": "json",
     interval: 120,
+    "exec-on-event": true,
     tooltip: true,
     "on-click": `${terminalScript} ${qbarBin} menu`,
     "on-click-right": `${terminalScript} ${qbarBin} action-right ${provider}`,

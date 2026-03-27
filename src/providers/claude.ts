@@ -72,7 +72,7 @@ export class ClaudeProvider implements Provider {
     // Check credentials
     const file = Bun.file(CONFIG.paths.claude.credentials);
     if (!await file.exists()) {
-      return { ...base, error: 'Not logged in' };
+      return { ...base, error: 'Not logged in. Run `qbar login claude` to authenticate.' };
     }
 
     let creds: ClaudeCredentials;
@@ -120,7 +120,7 @@ export class ClaudeProvider implements Provider {
 
       // Check for token expiration
       if (usage.error?.error_code === 'token_expired') {
-        return { ...base, plan, error: 'Token expired - please login again' };
+        return { ...base, plan, error: 'Token expired. Run `qbar login claude` to renew.' };
       }
 
       // Parse quota windows

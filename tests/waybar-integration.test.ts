@@ -78,6 +78,7 @@ describe("waybar integration flow", () => {
 
     const generatedModules = await readFile(paths.modulesIncludePath, "utf8");
     expect(generatedModules).toContain("custom/qbar-");
+    expect(generatedModules).toContain('"exec-on-event": true');
 
     const generatedStyle = await readFile(paths.styleIncludePath, "utf8");
     expect(generatedStyle).toContain("#custom-qbar-claude");

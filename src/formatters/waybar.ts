@@ -51,7 +51,7 @@ function escapeXml(str: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/'/g, "&apos;")
+    .replace(/'/g, "&#39;")
     .replace(/"/g, "&quot;");
 }
 

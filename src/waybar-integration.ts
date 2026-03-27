@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadSettingsSync } from "./settings";
@@ -58,6 +58,13 @@ function writeText(path: string, content: string): void {
   writeFileSync(path, content.endsWith("\n") ? content : `${content}\n`, "utf8");
 }
 
+function backupIfNeeded(path: string): void {
+  const backupPath = `${path}.qbar-backup`;
+  if (!existsSync(backupPath) && existsSync(path)) {
+    copyFileSync(path, backupPath);
+  }
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -66,7 +73,11 @@ function parseQuotedStrings(block: string): string[] {
   const values: string[] = [];
   const matches = block.matchAll(/"((?:\\.|[^"\\])*)"/g);
   for (const match of matches) {
-    values.push(JSON.parse(`"${match[1]}"`) as string);
+    try {
+      values.push(JSON.parse(`"${match[1]}"`) as string);
+    } catch {
+      continue;
+    }
   }
   return values;
 }
@@ -346,6 +357,7 @@ export function applyWaybarIntegration(
 
   const configChanged = currentConfig !== nextConfig;
   if (configChanged) {
+    backupIfNeeded(paths.waybarConfigPath);
     writeText(paths.waybarConfigPath, nextConfig);
   }
 
@@ -353,6 +365,7 @@ export function applyWaybarIntegration(
   const styleBase = currentStyle ?? "";
   const styleResult = ensureStyleImport(styleBase);
   if (styleResult.changed || currentStyle === null) {
+    backupIfNeeded(paths.waybarStylePath);
     writeText(paths.waybarStylePath, styleResult.content);
   }
 
