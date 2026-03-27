@@ -16,6 +16,10 @@ import {
   installWaybarAssets,
 } from "./waybar-contract";
 
+// Graceful shutdown
+process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT', () => process.exit(0));
+
 async function main() {
   const args = process.argv.slice(2);
   const options = parseArgs(args);

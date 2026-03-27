@@ -480,7 +480,7 @@ export class CodexProvider implements Provider {
     };
 
     if (!await this.isAvailable()) {
-      return { ...base, error: 'Not logged in' };
+      return { ...base, error: 'Not logged in. Run `qbar login codex` to authenticate.' };
     }
 
     const cached = await cache.get<CodexRateLimits>('codex-quota');
@@ -490,6 +490,7 @@ export class CodexProvider implements Provider {
       limits = await this.fetchRateLimitsViaAppServer();
 
       if (!limits) {
+        logger.warn('Codex app-server unavailable, falling back to session log');
         const sessionFile = await this.findLatestSessionFile();
         if (!sessionFile) {
           return { ...base, error: 'No session data found' };
