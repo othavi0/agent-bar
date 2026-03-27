@@ -1,47 +1,47 @@
-# qbar
+# agent-bar-omarchy
 
-`qbar` shows Claude, Codex, and Amp quota state in Waybar.
+`agent-bar-omarchy` shows Claude, Codex, and Amp quota state in Waybar.
 
-qbar is now fully theme-agnostic. It owns its own Waybar integration and no longer depends on external theme repositories.
+agent-bar-omarchy is now fully theme-agnostic. It owns its own Waybar integration and no longer depends on external theme repositories.
 
 ## Quick Start
 
 ```bash
 bun install
-./scripts/qbar setup
+./scripts/agent-bar-omarchy setup
 ```
 
-`qbar setup` now installs assets, wires `~/.config/waybar/config.jsonc` + `~/.config/waybar/style.css`, and reloads Waybar.
+`agent-bar-omarchy setup` now installs assets, wires `~/.config/waybar/config.jsonc` + `~/.config/waybar/style.css`, and reloads Waybar.
 
 ## Commands
 
 ```bash
-qbar
-qbar status
-qbar menu
-qbar setup
-qbar apply-local
-qbar assets install --waybar-dir ~/.config/waybar/qbar --scripts-dir ~/.config/waybar/scripts
-qbar export waybar-modules --qbar-bin '$HOME/.local/bin/qbar' --terminal-script ~/.config/waybar/scripts/qbar-open-terminal
-qbar export waybar-css --icons-dir ~/.config/waybar/qbar/icons
-qbar uninstall
-qbar remove
-qbar update
+agent-bar-omarchy
+agent-bar-omarchy status
+agent-bar-omarchy menu
+agent-bar-omarchy setup
+agent-bar-omarchy apply-local
+agent-bar-omarchy assets install --waybar-dir ~/.config/waybar/agent-bar-omarchy --scripts-dir ~/.config/waybar/scripts
+agent-bar-omarchy export waybar-modules --app-bin '$HOME/.local/bin/agent-bar-omarchy' --terminal-script ~/.config/waybar/scripts/agent-bar-omarchy-open-terminal
+agent-bar-omarchy export waybar-css --icons-dir ~/.config/waybar/agent-bar-omarchy/icons
+agent-bar-omarchy uninstall
+agent-bar-omarchy remove
+agent-bar-omarchy update
 ```
 
 ## Setup Scripts
 
 ```bash
-./scripts/qbar-setup
-./scripts/qbar-apply-local
-./scripts/qbar-uninstall
-./scripts/qbar-remove
+./scripts/agent-bar-omarchy-setup
+./scripts/agent-bar-omarchy-apply-local
+./scripts/agent-bar-omarchy-uninstall
+./scripts/agent-bar-omarchy-remove
 ```
 
-- `qbar-setup`: full install + live Waybar wiring.
-- `qbar-apply-local`: re-apply project changes to your live Waybar.
-- `qbar-uninstall`: interactive removal of integration and owned files.
-- `qbar-remove`: forced removal without prompt.
+- `agent-bar-omarchy-setup`: full install + live Waybar wiring.
+- `agent-bar-omarchy-apply-local`: re-apply project changes to your live Waybar.
+- `agent-bar-omarchy-uninstall`: interactive removal of integration and owned files.
+- `agent-bar-omarchy-remove`: forced removal without prompt.
 
 ## Docs
 

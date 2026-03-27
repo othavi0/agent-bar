@@ -3,34 +3,34 @@
 // live config.jsonc edits.
 //
 // If you still use this manual path:
-//   1) add "custom/qbar-claude", "custom/qbar-codex", "custom/qbar-amp" to modules-right
+//   1) add "custom/agent-bar-omarchy-claude", "custom/agent-bar-omarchy-codex", "custom/agent-bar-omarchy-amp" to modules-right
 //   2) merge the modules below into your config.jsonc
 
 {
-  "custom/qbar-claude": {
-    "exec": "$HOME/.local/bin/qbar --provider claude",
+  "custom/agent-bar-omarchy-claude": {
+    "exec": "$HOME/.local/bin/agent-bar-omarchy --provider claude",
     "return-type": "json",
     "interval": 120,
     "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right claude"
+    "on-click": "$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy action-right claude"
   },
 
-  "custom/qbar-codex": {
-    "exec": "$HOME/.local/bin/qbar --provider codex",
+  "custom/agent-bar-omarchy-codex": {
+    "exec": "$HOME/.local/bin/agent-bar-omarchy --provider codex",
     "return-type": "json",
     "interval": 120,
     "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right codex"
+    "on-click": "$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy action-right codex"
   },
 
-  "custom/qbar-amp": {
-    "exec": "$HOME/.local/bin/qbar --provider amp",
+  "custom/agent-bar-omarchy-amp": {
+    "exec": "$HOME/.local/bin/agent-bar-omarchy --provider amp",
     "return-type": "json",
     "interval": 120,
     "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar menu",
-    "on-click-right": "$HOME/.config/waybar/scripts/qbar-open-terminal $HOME/.local/bin/qbar action-right amp"
+    "on-click": "$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy menu",
+    "on-click-right": "$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy action-right amp"
   }
 }

@@ -1,6 +1,6 @@
-# Contribuindo para o qbar
+# Contribuindo para o agent-bar-omarchy
 
-Obrigado pelo interesse em contribuir com o qbar! Este guia cobre o essencial para
+Obrigado pelo interesse em contribuir com o agent-bar-omarchy! Este guia cobre o essencial para
 configurar o ambiente, manter a consistencia do codigo e enviar suas alteracoes.
 
 ## Pre-requisitos
@@ -16,7 +16,7 @@ configurar o ambiente, manter a consistencia do codigo e enviar suas alteracoes.
 
 ```bash
 git clone <repo-url>
-cd qbar
+cd agent-bar-omarchy
 bun install
 ```
 
@@ -25,14 +25,14 @@ Pronto. Nao ha etapa de build -- o Bun executa TypeScript diretamente.
 ## Comandos uteis
 
 ```bash
-bun run start          # Executar (equivale a ./scripts/qbar)
+bun run start          # Executar (equivale a ./scripts/agent-bar-omarchy)
 bun run dev            # Watch mode (reinicia ao salvar)
 bun test               # Rodar testes (com coverage via bunfig.toml)
 bun run typecheck      # tsc --noEmit -- validacao de tipos sem emitir arquivos
 ```
 
-> **Atencao:** nao use `bun ./scripts/qbar`. O arquivo e um shim bash e o Bun vai
-> tentar interpreta-lo como JavaScript. Use `./scripts/qbar` (shell) ou `bun run start`.
+> **Atencao:** nao use `bun ./scripts/agent-bar-omarchy`. O arquivo e um shim bash e o Bun vai
+> tentar interpreta-lo como JavaScript. Use `./scripts/agent-bar-omarchy` (shell) ou `bun run start`.
 
 ## Conventional Commits (em portugues)
 
@@ -71,9 +71,9 @@ src/
   index.ts              # Entry point e command dispatcher
   cli.ts                # Parser de argumentos CLI
   config.ts             # Constantes (cache TTL, paths)
-  settings.ts           # Leitura/escrita de ~/.config/qbar/settings.json
+  settings.ts           # Leitura/escrita de ~/.config/agent-bar-omarchy/settings.json
   cache.ts              # Cache em disco com TTL
-  setup.ts              # Comando `qbar setup`
+  setup.ts              # Comando `agent-bar-omarchy setup`
   waybar-contract.ts    # Contrato de modulos/CSS para Waybar
   waybar-integration.ts # Wiring automatico no config.jsonc + style.css
   providers/
@@ -85,7 +85,7 @@ src/
   formatters/           # Formatacao de output (terminal e Waybar)
   tui/                  # Menus interativos e login flows (clack/prompts)
 scripts/
-  qbar                  # Bash shim (entry point do bin)
+  agent-bar-omarchy                  # Bash shim (entry point do bin)
 tests/                  # Testes (bun:test)
 icons/                  # Icones dos providers para Waybar
 docs/                   # Documentacao detalhada

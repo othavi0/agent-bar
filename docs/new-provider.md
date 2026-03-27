@@ -2,7 +2,7 @@
 
 ## Overview
 
-Um **provider** em qbar representa uma fonte de dados de quota de LLM. Cada provider implementa a interface `Provider` definida em `src/providers/types.ts`, que exige:
+Um **provider** em agent-bar-omarchy representa uma fonte de dados de quota de LLM. Cada provider implementa a interface `Provider` definida em `src/providers/types.ts`, que exige:
 
 | Campo/Metodo     | Tipo                          | Descricao                                     |
 |------------------|-------------------------------|-----------------------------------------------|
@@ -45,7 +45,7 @@ export class MyProvider implements Provider {
     };
 
     if (!await this.isAvailable()) {
-      return { ...base, error: 'Not logged in. Run `qbar login my-provider` to authenticate.' };
+      return { ...base, error: 'Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.' };
     }
 
     try {
@@ -106,7 +106,7 @@ export class MyProvider implements Provider {
      ```
    - Adicionar a regra CSS de icone na funcao `exportWaybarCss`:
      ```typescript
-     `#custom-qbar-my-provider { background-image: url("${iconRef("my-provider-icon.svg")}"); }`
+     `#custom-agent-bar-omarchy-my-provider { background-image: url("${iconRef("my-provider-icon.svg")}"); }`
      ```
 5. **Adicionar ao TUI login flow** em `src/tui/login.ts` — adicionar um `case` no `switch(choice)` com as instrucoes de login do provider
 6. **Adicionar paths de credenciais** a `CONFIG.paths` em `src/config.ts`:

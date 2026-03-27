@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 
+import { APP_NAME } from "./app-identity";
 import { runUninstall } from "./uninstall";
 
 export async function main() {
-  await runUninstall({ force: true, title: "qbar remove" });
+  await runUninstall({ force: true, title: `${APP_NAME} remove` });
 }
 
 if (import.meta.main) {

@@ -1,4 +1,5 @@
 import * as p from "@clack/prompts";
+import { APP_NAME } from "../app-identity";
 import { loadSettings, saveSettings } from "../settings";
 import { providers } from "../providers";
 import { PROVIDER_ANSI } from "../theme";
@@ -175,7 +176,7 @@ export async function configureLayout(): Promise<boolean> {
     s.stop("Preferences saved");
     p.log.warn(
       colorize(
-        "Could not sync Waybar automatically. Run `qbar apply-local` to update.",
+        `Could not sync Waybar automatically. Run \`${APP_NAME} apply-local\` to update.`,
         semantic.muted,
       ),
     );
@@ -198,7 +199,7 @@ export async function configureLayout(): Promise<boolean> {
   );
   p.log.info(
     colorize(
-      "If changes didn't take effect, run `qbar apply-local` to refresh.",
+      `If changes didn't take effect, run \`${APP_NAME} apply-local\` to refresh.`,
       semantic.muted,
     ),
   );

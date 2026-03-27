@@ -2,6 +2,7 @@
 
 import * as p from "@clack/prompts";
 import { join } from "node:path";
+import { APP_NAME } from "./app-identity";
 import { getDefaultWaybarAssetPaths, installWaybarAssets } from "./waybar-contract";
 import {
   applyWaybarIntegration,
@@ -23,7 +24,7 @@ function reloadWaybar(): void {
 }
 
 export async function main() {
-  p.intro(colorize("qbar apply-local", oneDark.blue));
+  p.intro(colorize(`${APP_NAME} apply-local`, oneDark.blue));
 
   const defaults = getDefaultWaybarAssetPaths();
   const integrationPaths = getDefaultWaybarIntegrationPaths();
@@ -42,7 +43,7 @@ export async function main() {
     s.start("Applying Waybar integration...");
     const integration = applyWaybarIntegration({
       iconsDir: assets.iconsDir,
-      qbarBin: defaults.qbarBin,
+      appBin: defaults.appBin,
       terminalScript: assets.terminalScript,
     });
     s.stop("Integration applied");

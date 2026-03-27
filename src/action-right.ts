@@ -1,11 +1,12 @@
 /**
- * qbar action-right <provider>
+ * agent-bar-omarchy action-right <provider>
  *
  * Used by Waybar right-click.
  * - If provider is disconnected/expired: start login flow.
  * - Else: refresh that provider and show full status in terminal.
  */
 
+import { APP_NAME } from './app-identity';
 import * as p from '@clack/prompts';
 import { getProvider, getQuotaFor } from './providers';
 import { outputTerminal } from './formatters/terminal';
@@ -25,7 +26,7 @@ async function waitEnter(): Promise<void> {
 
 export async function handleActionRight(providerId: string): Promise<void> {
   if (!providerId) {
-    console.error('Usage: qbar action-right <provider>');
+    console.error(`Usage: ${APP_NAME} action-right <provider>`);
     process.exit(1);
   }
 

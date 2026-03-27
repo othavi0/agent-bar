@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v bun &>/dev/null; then
+  echo "agent-bar-omarchy: bun is required but not found. Install it: https://bun.sh" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+APP_DIR="$(dirname "$SCRIPT_DIR")"
+exec bun "$APP_DIR/src/index.ts" "$@"

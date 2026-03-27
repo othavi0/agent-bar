@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 /**
- * qbar refresh - Force refresh with visual spinner
+ * agent-bar-omarchy refresh - Force refresh with visual spinner
  * Used by right-click on waybar module
  */
 

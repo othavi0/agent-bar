@@ -1,9 +1,18 @@
 # Changelog
 
-All notable changes to qbar will be documented in this file.
+All notable changes to agent-bar-omarchy will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Changed
+
+- Renamed the project from `qbar` to `agent-bar-omarchy`
+- Migrated runtime state from `~/.config/qbar` and `~/.cache/qbar` to `~/.config/agent-bar-omarchy` and `~/.cache/agent-bar-omarchy`
+- Migrated Waybar assets and module IDs from the `qbar` namespace to `agent-bar-omarchy`
+- Removed the legacy `qbar` CLI entrypoint in favor of `agent-bar-omarchy`
 
 ## [3.0.0] - 2026-03-27
 

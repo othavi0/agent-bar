@@ -25,11 +25,22 @@ describe("ONE_DARK hex palette", () => {
 
 describe("ANSI escape codes", () => {
   it("generates true-color escape sequences", () => {
-    // Green = #98c379 → rgb(152,195,121)
+    if (process.env.NO_COLOR) {
+      expect(ANSI.green).toBe("");
+      return;
+    }
+
     expect(ANSI.green).toBe("\x1b[38;2;152;195;121m");
   });
 
   it("has reset and formatting codes", () => {
+    if (process.env.NO_COLOR) {
+      expect(ANSI.reset).toBe("");
+      expect(ANSI.bold).toBe("");
+      expect(ANSI.dim).toBe("");
+      return;
+    }
+
     expect(ANSI.reset).toBe("\x1b[0m");
     expect(ANSI.bold).toBe("\x1b[1m");
     expect(ANSI.dim).toBe("\x1b[2m");
@@ -43,7 +54,11 @@ describe("ANSI escape codes", () => {
     ];
     for (const key of colorKeys) {
       const val = (ANSI as Record<string, string>)[key];
-      expect(val).toContain("\x1b[38;2;");
+      if (process.env.NO_COLOR) {
+        expect(val).toBe("");
+      } else {
+        expect(val).toContain("\x1b[38;2;");
+      }
     }
   });
 });

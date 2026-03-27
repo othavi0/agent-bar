@@ -1,13 +1,13 @@
 /* Reference snippet only.
    Legacy manual Waybar CSS example for consumers that own live style.css edits.
 
-   If you still use this manually, install qbar-owned assets first:
-     qbar assets install --waybar-dir ~/.config/waybar/qbar --scripts-dir ~/.config/waybar/scripts
+   If you still use this manually, install agent-bar-omarchy-owned assets first:
+     agent-bar-omarchy assets install --waybar-dir ~/.config/waybar/agent-bar-omarchy --scripts-dir ~/.config/waybar/scripts
 */
 
-#custom-qbar-claude,
-#custom-qbar-codex,
-#custom-qbar-amp {
+#custom-agent-bar-omarchy-claude,
+#custom-agent-bar-omarchy-codex,
+#custom-agent-bar-omarchy-amp {
   padding-left: 26px;
   padding-right: 10px;
   background-size: 14px 14px;
@@ -17,38 +17,38 @@
   color: #c0c9d4;
 }
 
-#custom-qbar-claude:hover,
-#custom-qbar-codex:hover,
-#custom-qbar-amp:hover {
+#custom-agent-bar-omarchy-claude:hover,
+#custom-agent-bar-omarchy-codex:hover,
+#custom-agent-bar-omarchy-amp:hover {
   background-color: rgba(192, 201, 212, 0.04);
   border-color: #3c4656;
   color: #e2e8f0;
 }
 
 /* First module margin */
-#custom-qbar-claude {
+#custom-agent-bar-omarchy-claude {
   margin-left: 8px;
-  background-image: url("qbar/icons/claude-code-icon.png");
+  background-image: url("agent-bar-omarchy/icons/claude-code-icon.png");
 }
 
-#custom-qbar-codex { background-image: url("qbar/icons/codex-icon.png"); }
-#custom-qbar-amp { background-image: url("qbar/icons/amp-icon.svg"); }
+#custom-agent-bar-omarchy-codex { background-image: url("agent-bar-omarchy/icons/codex-icon.png"); }
+#custom-agent-bar-omarchy-amp { background-image: url("agent-bar-omarchy/icons/amp-icon.svg"); }
 
 /* Last module border */
-#custom-qbar-amp {
+#custom-agent-bar-omarchy-amp {
   border-right: 1px solid #434d5d;
 }
 
 /* Status colors */
-#custom-qbar-claude.ok, #custom-qbar-codex.ok, #custom-qbar-amp.ok { color: #98c379; }
-#custom-qbar-claude.low, #custom-qbar-codex.low, #custom-qbar-amp.low { color: #e5c07b; }
-#custom-qbar-claude.warn, #custom-qbar-codex.warn, #custom-qbar-amp.warn { color: #d19a66; }
-#custom-qbar-claude.critical, #custom-qbar-codex.critical, #custom-qbar-amp.critical { color: #e06c75; }
+#custom-agent-bar-omarchy-claude.ok, #custom-agent-bar-omarchy-codex.ok, #custom-agent-bar-omarchy-amp.ok { color: #98c379; }
+#custom-agent-bar-omarchy-claude.low, #custom-agent-bar-omarchy-codex.low, #custom-agent-bar-omarchy-amp.low { color: #e5c07b; }
+#custom-agent-bar-omarchy-claude.warn, #custom-agent-bar-omarchy-codex.warn, #custom-agent-bar-omarchy-amp.warn { color: #d19a66; }
+#custom-agent-bar-omarchy-claude.critical, #custom-agent-bar-omarchy-codex.critical, #custom-agent-bar-omarchy-amp.critical { color: #e06c75; }
 
 /* Disconnected state */
-#custom-qbar-claude.disconnected,
-#custom-qbar-codex.disconnected,
-#custom-qbar-amp.disconnected {
+#custom-agent-bar-omarchy-claude.disconnected,
+#custom-agent-bar-omarchy-codex.disconnected,
+#custom-agent-bar-omarchy-amp.disconnected {
   color: #e06c75;
   padding-left: 30px;
   font-size: 14px;

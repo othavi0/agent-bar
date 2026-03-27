@@ -1,3 +1,6 @@
+import {
+  APP_BASE_CLASS,
+} from "../app-identity";
 import { getColorForPercent } from "../config";
 import type {
   AllQuotas,
@@ -453,7 +456,7 @@ function buildText(quotas: AllQuotas): string {
 }
 
 function getClass(quotas: AllQuotas): string {
-  const classes: string[] = ["qbar"];
+  const classes: string[] = [APP_BASE_CLASS];
 
   for (const p of quotas.providers) {
     if (!p.available) continue;
@@ -499,7 +502,7 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
     return {
       text: `<span foreground='${ONE_DARK.red}'>󱘖</span>`,
       tooltip,
-      class: `qbar-${quota.provider} disconnected`,
+      class: `${APP_BASE_CLASS}-${quota.provider} disconnected`,
     };
   }
 
@@ -527,6 +530,6 @@ export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
   return {
     text: pctColored(val),
     tooltip,
-    class: `qbar-${quota.provider} ${status}`,
+    class: `${APP_BASE_CLASS}-${quota.provider} ${status}`,
   };
 }

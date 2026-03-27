@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { APP_NAME } from "./app-identity";
 import { ensureCommand } from "./install";
 import { colorize, semantic } from "./tui/colors";
 
@@ -67,7 +68,7 @@ export async function ensureAmpCli(): Promise<boolean> {
 
   p.note(
     [
-      "Amp CLI is required before qbar can fetch usage or open Amp login.",
+      `Amp CLI is required before ${APP_NAME} can fetch usage or open Amp login.`,
       "",
       `Installer: ${colorize(AMP_INSTALL_COMMAND, semantic.accent)}`,
     ].join("\n"),
@@ -108,7 +109,7 @@ export async function ensureAmpCli(): Promise<boolean> {
   if (!ampBin) {
     p.log.error(
       colorize(
-        "Amp installer finished, but qbar could not find the amp binary. Check that ~/.local/bin is available and try again.",
+        `Amp installer finished, but ${APP_NAME} could not find the amp binary. Check that ~/.local/bin is available and try again.`,
         semantic.danger,
       ),
     );

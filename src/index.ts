@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { APP_HIDDEN_CLASS } from "./app-identity";
 import { cache } from "./cache";
 import { parseArgs, showHelp } from "./cli";
 import { outputTerminal } from "./formatters/terminal";
@@ -80,7 +81,7 @@ async function main() {
       JSON.stringify(
         exportWaybarModules(
           {
-            qbarBin: options.qbarBin ?? defaults.qbarBin,
+            appBin: options.appBin ?? defaults.appBin,
             terminalScript: options.terminalScript ?? defaults.terminalScript,
           },
           settings.waybar.providerOrder as ("claude" | "codex" | "amp")[],
@@ -156,7 +157,7 @@ async function main() {
     // If provider is disabled in waybar settings, output empty (hidden module)
     if (!settings.waybar.providers.includes(options.provider)) {
       console.log(
-        JSON.stringify({ text: "", tooltip: "", class: "qbar-hidden" }),
+        JSON.stringify({ text: "", tooltip: "", class: APP_HIDDEN_CLASS }),
       );
       process.exit(0);
     }

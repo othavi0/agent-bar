@@ -1,4 +1,4 @@
-# qbar
+# agent-bar-omarchy
 
 LLM quota monitor for Waybar. Tracks Claude, Codex, and Amp usage.
 
@@ -6,36 +6,36 @@ LLM quota monitor for Waybar. Tracks Claude, Codex, and Amp usage.
 
 ```bash
 bun install
-bun run start          # or: ./scripts/qbar
+bun run start          # or: ./scripts/agent-bar-omarchy
 bun run dev            # watch mode
 bun test               # tests
 bun run typecheck      # tsc --noEmit
 ```
 
-**Do NOT** run `bun ./scripts/qbar` — that file is a bash shim and Bun will try to parse it as JavaScript. Use `./scripts/qbar` (shell) or `bun run start` instead.
+**Do NOT** run `bun ./scripts/agent-bar-omarchy` — that file is a bash shim and Bun will try to parse it as JavaScript. Use `./scripts/agent-bar-omarchy` (shell) or `bun run start` instead.
 
 ## Architecture
 
 - `src/index.ts` — CLI entry point and command dispatcher
 - `src/providers/` — Claude, Codex, Amp; each implements `Provider` from `src/providers/types.ts` (id, name, cacheKey, isAvailable, getQuota)
-- `src/settings.ts` — `~/.config/qbar/settings.json`, normalize-on-load, atomic write (tmp+rename)
+- `src/settings.ts` — `~/.config/agent-bar-omarchy/settings.json`, normalize-on-load, atomic write (tmp+rename)
 - `src/waybar-contract.ts` — Waybar module/CSS export contract (icons, JSON modules, CSS JSON)
 - `src/tui/` — Interactive menu and login flows (clack/prompts)
 - `src/formatters/` — Terminal and Waybar output formatting
-- `scripts/qbar` — Bash wrapper (`#!/usr/bin/env bash`) used as `bin` entry in package.json. Do not convert to TS.
+- `scripts/agent-bar-omarchy` — Bash wrapper (`#!/usr/bin/env bash`) used as `bin` entry in package.json. Do not convert to TS.
 
 ## Ownership boundary
 
-qbar owns: providers, auth flows, settings, cache, icons, and Waybar integration (`config.jsonc` + `style.css` wiring).
+agent-bar-omarchy owns: providers, auth flows, settings, cache, icons, and Waybar integration (`config.jsonc` + `style.css` wiring).
 
 ## Key paths
 
 | Path | Purpose |
 |------|---------|
-| `~/.config/qbar/settings.json` | User settings (versioned, validated, atomic writes) |
-| `~/.cache/qbar/` | Cache directory |
-| `~/.local/bin/qbar` | Symlink created by `qbar setup` |
-| `~/.config/waybar/qbar/icons/` | Provider icons installed by setup |
+| `~/.config/agent-bar-omarchy/settings.json` | User settings (versioned, validated, atomic writes) |
+| `~/.cache/agent-bar-omarchy/` | Cache directory |
+| `~/.local/bin/agent-bar-omarchy` | Symlink created by `agent-bar-omarchy setup` |
+| `~/.config/waybar/agent-bar-omarchy/icons/` | Provider icons installed by setup |
 
 ## Settings
 

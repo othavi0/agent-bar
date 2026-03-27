@@ -1,3 +1,4 @@
+import { APP_NAME } from '../app-identity';
 import { join } from 'path';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
@@ -466,7 +467,7 @@ export class CodexProvider implements Provider {
         method: 'initialize',
         id: 0,
         params: {
-          clientInfo: { name: 'qbar', title: 'qbar', version: pkg.version },
+          clientInfo: { name: APP_NAME, title: APP_NAME, version: pkg.version },
         },
       });
     });
@@ -480,7 +481,7 @@ export class CodexProvider implements Provider {
     };
 
     if (!await this.isAvailable()) {
-      return { ...base, error: 'Not logged in. Run `qbar login codex` to authenticate.' };
+      return { ...base, error: `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.` };
     }
 
     const cached = await cache.get<CodexRateLimits>('codex-quota');

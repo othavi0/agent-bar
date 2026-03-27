@@ -1,12 +1,14 @@
 import { mkdir, rename } from "fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+} from "node:fs";
 import { homedir } from "os";
 import { join } from "path";
+import { APP_NAME, LEGACY_APP_NAME } from "./app-identity";
 import { normalizeProviderSelection } from "./waybar-contract";
-
-const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-const SETTINGS_DIR = join(XDG_CONFIG_HOME, "qbar");
-const SETTINGS_FILE = join(SETTINGS_DIR, "settings.json");
 
 export type WindowPolicy = "both" | "five_hour" | "seven_day";
 
@@ -16,6 +18,58 @@ const VALID_SEPARATORS = ["pill", "gap", "bare", "glass", "shadow", "none"] as c
 type SeparatorStyle = (typeof VALID_SEPARATORS)[number];
 
 const VALID_WINDOW_POLICIES = ["both", "five_hour", "seven_day"] as const;
+
+interface SettingsPaths {
+  settingsDir: string;
+  settingsFile: string;
+  legacySettingsDir: string;
+  legacySettingsFile: string;
+}
+
+const attemptedSettingsMigrations = new Set<string>();
+
+function getSettingsPaths(): SettingsPaths {
+  const xdgConfigHome =
+    process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  const settingsDir = join(xdgConfigHome, APP_NAME);
+  const legacySettingsDir = join(xdgConfigHome, LEGACY_APP_NAME);
+
+  return {
+    settingsDir,
+    settingsFile: join(settingsDir, "settings.json"),
+    legacySettingsDir,
+    legacySettingsFile: join(legacySettingsDir, "settings.json"),
+  };
+}
+
+function migrateLegacySettingsSync(): void {
+  const paths = getSettingsPaths();
+  const migrationKey = `${paths.legacySettingsDir}->${paths.settingsDir}`;
+
+  if (attemptedSettingsMigrations.has(migrationKey)) {
+    return;
+  }
+
+  attemptedSettingsMigrations.add(migrationKey);
+  if (!existsSync(paths.legacySettingsDir) || existsSync(paths.settingsDir)) {
+    return;
+  }
+
+  try {
+    mkdirSync(join(paths.settingsDir, ".."), { recursive: true });
+    renameSync(paths.legacySettingsDir, paths.settingsDir);
+  } catch (err) {
+    const code = err instanceof Error && "code" in err
+      ? String((err as NodeJS.ErrnoException).code ?? "")
+      : "";
+
+    if (code === "EROFS" || code === "EPERM" || code === "EACCES") {
+      return;
+    }
+
+    process.stderr.write(`[${APP_NAME}] Settings migration skipped: ${String(err)}\n`);
+  }
+}
 
 export interface Settings {
   version: number;
@@ -107,7 +161,10 @@ function serializeSettings(settings: Settings): string {
 }
 
 export async function loadSettings(): Promise<Settings> {
-  const file = Bun.file(SETTINGS_FILE);
+  migrateLegacySettingsSync();
+
+  const { settingsFile } = getSettingsPaths();
+  const file = Bun.file(settingsFile);
 
   if (!(await file.exists())) {
     return normalizeSettings(undefined);
@@ -123,31 +180,38 @@ export async function loadSettings(): Promise<Settings> {
 
     return normalized;
   } catch (err) {
-    process.stderr.write(`[qbar] Settings parse error (using defaults): ${err}\n`);
+    process.stderr.write(`[${APP_NAME}] Settings parse error (using defaults): ${err}\n`);
     return normalizeSettings(undefined);
   }
 }
 
 export function loadSettingsSync(): Settings {
+  migrateLegacySettingsSync();
+
+  const { settingsFile } = getSettingsPaths();
   try {
-    if (!existsSync(SETTINGS_FILE)) {
+    if (!existsSync(settingsFile)) {
       return normalizeSettings(undefined);
     }
-    const data = JSON.parse(readFileSync(SETTINGS_FILE, "utf-8"));
+    const data = JSON.parse(readFileSync(settingsFile, "utf-8"));
     return normalizeSettings(data);
   } catch (err) {
-    process.stderr.write(`[qbar] Settings sync read error (using defaults): ${err}\n`);
+    process.stderr.write(`[${APP_NAME}] Settings sync read error (using defaults): ${err}\n`);
     return normalizeSettings(undefined);
   }
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
-  await mkdir(SETTINGS_DIR, { recursive: true });
-  const tmp = SETTINGS_FILE + ".tmp";
+  migrateLegacySettingsSync();
+
+  const { settingsDir, settingsFile } = getSettingsPaths();
+  await mkdir(settingsDir, { recursive: true });
+  const tmp = settingsFile + ".tmp";
   await Bun.write(tmp, JSON.stringify(normalizeSettings(settings), null, 2));
-  await rename(tmp, SETTINGS_FILE);
+  await rename(tmp, settingsFile);
 }
 
 export function getSettingsPath(): string {
-  return SETTINGS_FILE;
+  migrateLegacySettingsSync();
+  return getSettingsPaths().settingsFile;
 }

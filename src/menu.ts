@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 /**
- * qbar menu - Entry point for the interactive TUI
+ * agent-bar-omarchy menu - Entry point for the interactive TUI
  */
 
 import { runTui } from './tui';

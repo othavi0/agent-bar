@@ -1,17 +1,22 @@
 import { homedir } from 'os';
 import { join } from 'path';
+import { APP_NAME, LEGACY_APP_NAME } from './app-identity';
 import { ONE_DARK } from './theme';
 
 // XDG Base Directory paths
-const XDG_CONFIG_HOME = Bun.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-const XDG_CACHE_HOME = Bun.env.XDG_CACHE_HOME || join(homedir(), '.cache');
+const XDG_CONFIG_HOME =
+  process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
+const XDG_CACHE_HOME =
+  process.env.XDG_CACHE_HOME ?? Bun.env.XDG_CACHE_HOME ?? join(homedir(), '.cache');
 
 export const CONFIG = {
   // Paths
   paths: {
-    cache: join(XDG_CACHE_HOME, 'qbar'),
-    legacyCache: join(XDG_CONFIG_HOME, 'waybar', 'qbar', 'cache'),
-    config: join(XDG_CONFIG_HOME, 'qbar'),
+    cache: join(XDG_CACHE_HOME, APP_NAME),
+    legacyCache: join(XDG_CACHE_HOME, LEGACY_APP_NAME),
+    waybarLegacyCache: join(XDG_CONFIG_HOME, 'waybar', LEGACY_APP_NAME, 'cache'),
+    config: join(XDG_CONFIG_HOME, APP_NAME),
+    legacyConfig: join(XDG_CONFIG_HOME, LEGACY_APP_NAME),
     
     // Provider credential paths
     claude: {

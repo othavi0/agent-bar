@@ -1,15 +1,16 @@
 #!/usr/bin/env bun
 
 /**
- * qbar update - Update qbar to latest version
+ * agent-bar-omarchy update - Update agent-bar-omarchy to latest version
  */
 
 import * as p from "@clack/prompts";
 import { join } from "node:path";
+import { APP_NAME } from "./app-identity";
 import { createSpinner } from "./spinner";
 import { oneDark, colorize, semantic } from "./tui/colors";
 
-// Get the qbar repo root
+// Get the repo root
 const REPO_ROOT = join(import.meta.dir, "..");
 
 async function runCmd(
@@ -37,7 +38,7 @@ async function runCmd(
 export async function main() {
   console.clear();
 
-  p.intro(colorize("qbar update", oneDark.blue));
+  p.intro(colorize(`${APP_NAME} update`, oneDark.blue));
 
   // Check if we're in a git repo
   const gitCheck = await runCmd("git", ["rev-parse", "--git-dir"], REPO_ROOT);

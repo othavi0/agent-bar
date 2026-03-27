@@ -1,6 +1,6 @@
-# qbar Docs
+# agent-bar-omarchy Docs
 
-`qbar` provides quota runtime, assets, and native Waybar integration.
+`agent-bar-omarchy` provides quota runtime, assets, and native Waybar integration.
 
 ## Read In This Order
 
@@ -12,10 +12,10 @@
 
 ## Model
 
-- `qbar` owns providers, auth flow, settings, cache, icons, terminal helper, and Waybar wiring.
-- `qbar setup` installs and wires `config.jsonc` + `style.css` in an idempotent way.
-- `qbar apply-local` re-syncs the live Waybar setup from the current project checkout.
-- `qbar uninstall` and `qbar remove` clean both integration and owned artifacts.
+- `agent-bar-omarchy` owns providers, auth flow, settings, cache, icons, terminal helper, and Waybar wiring.
+- `agent-bar-omarchy setup` installs and wires `config.jsonc` + `style.css` in an idempotent way.
+- `agent-bar-omarchy apply-local` re-syncs the live Waybar setup from the current project checkout.
+- `agent-bar-omarchy uninstall` and `agent-bar-omarchy remove` clean both integration and owned artifacts.
 
 ## Historical Notes
 

@@ -4,9 +4,10 @@ import * as p from "@clack/prompts";
 import { existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { APP_NAME, LEGACY_APP_NAME } from "./app-identity";
 import { oneDark, colorize, semantic } from "./tui/colors";
 import { CONFIG } from "./config";
-import { getDefaultWaybarAssetPaths } from "./waybar-contract";
+import { getDefaultWaybarAssetPaths, getLegacyWaybarAssetPaths } from "./waybar-contract";
 import {
   getDefaultWaybarIntegrationPaths,
   removeWaybarIntegration,
@@ -14,8 +15,11 @@ import {
 
 const HOME = homedir();
 const defaults = getDefaultWaybarAssetPaths();
-const QBAR_SETTINGS_DIR = join(HOME, ".config", "qbar");
-const QBAR_SYMLINK = join(HOME, ".local", "bin", "qbar");
+const legacyDefaults = getLegacyWaybarAssetPaths(join(HOME, ".config", "waybar"));
+const SETTINGS_DIR = join(HOME, ".config", APP_NAME);
+const LEGACY_SETTINGS_DIR = join(HOME, ".config", LEGACY_APP_NAME);
+const APP_SYMLINK = join(HOME, ".local", "bin", APP_NAME);
+const LEGACY_SYMLINK = join(HOME, ".local", "bin", LEGACY_APP_NAME);
 
 export interface UninstallOptions {
   force?: boolean;
@@ -48,7 +52,7 @@ function reloadWaybar(): void {
 
 export async function runUninstall(options: UninstallOptions = {}): Promise<void> {
   const force = options.force ?? false;
-  const title = options.title ?? "qbar uninstall";
+  const title = options.title ?? `${APP_NAME} uninstall`;
   const integrationPaths = getDefaultWaybarIntegrationPaths();
 
   console.clear();
@@ -56,18 +60,23 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
 
   p.note(
     [
-      "This removes qbar integration and qbar-owned paths:",
+      `This removes ${APP_NAME} integration and owned paths, plus legacy ${LEGACY_APP_NAME} artifacts:`,
       "",
-      `  • ${integrationPaths.waybarConfigPath} (qbar entries only)`,
-      `  • ${integrationPaths.waybarStylePath} (qbar import only)`,
+      `  • ${integrationPaths.waybarConfigPath} (${APP_NAME} entries only)`,
+      `  • ${integrationPaths.waybarStylePath} (${APP_NAME} import only)`,
       `  • ${integrationPaths.modulesIncludePath}`,
       `  • ${integrationPaths.styleIncludePath}`,
       `  • ${defaults.waybarDir}`,
-      `  • ${defaults.scriptsDir}/qbar-open-terminal`,
-      `  • ${QBAR_SETTINGS_DIR}`,
+      `  • ${defaults.terminalScript}`,
+      `  • ${legacyDefaults.waybarDir}`,
+      `  • ${legacyDefaults.terminalScript}`,
+      `  • ${SETTINGS_DIR}`,
+      `  • ${LEGACY_SETTINGS_DIR}`,
       `  • ${CONFIG.paths.cache}`,
       `  • ${CONFIG.paths.legacyCache}`,
-      `  • ${QBAR_SYMLINK}`,
+      `  • ${CONFIG.paths.waybarLegacyCache}`,
+      `  • ${APP_SYMLINK}`,
+      `  • ${LEGACY_SYMLINK}`,
     ].join("\n"),
     colorize("What gets removed", semantic.title),
   );
@@ -94,11 +103,16 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
 
   s.start("Cleaning up files...");
   removePathIfExists(defaults.waybarDir, removed, failed);
-  removePathIfExists(join(defaults.scriptsDir, "qbar-open-terminal"), removed, failed);
-  removePathIfExists(QBAR_SETTINGS_DIR, removed, failed);
+  removePathIfExists(defaults.terminalScript, removed, failed);
+  removePathIfExists(legacyDefaults.waybarDir, removed, failed);
+  removePathIfExists(legacyDefaults.terminalScript, removed, failed);
+  removePathIfExists(SETTINGS_DIR, removed, failed);
+  removePathIfExists(LEGACY_SETTINGS_DIR, removed, failed);
   removePathIfExists(CONFIG.paths.cache, removed, failed);
   removePathIfExists(CONFIG.paths.legacyCache, removed, failed);
-  removePathIfExists(QBAR_SYMLINK, removed, failed);
+  removePathIfExists(CONFIG.paths.waybarLegacyCache, removed, failed);
+  removePathIfExists(APP_SYMLINK, removed, failed);
+  removePathIfExists(LEGACY_SYMLINK, removed, failed);
   s.stop("Files cleaned up");
 
   if (integrationResult.configChanged) {
@@ -116,7 +130,7 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
   if (integrationResult.removedIncludes.length > 0) {
     p.log.success(
       colorize(
-        `Removed ${integrationResult.removedIncludes.length} generated qbar include files`,
+        `Removed ${integrationResult.removedIncludes.length} generated include files`,
         semantic.good,
       ),
     );

@@ -4,6 +4,7 @@ import * as p from "@clack/prompts";
 import { mkdirSync, symlinkSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { APP_NAME, LEGACY_APP_NAME } from "./app-identity";
 import { oneDark, colorize, semantic } from "./tui/colors";
 import {
   getDefaultWaybarAssetPaths,
@@ -19,8 +20,9 @@ const REPO_ROOT = join(import.meta.dir, "..");
 
 export function createSymlink(): string {
   const localBin = join(HOME, ".local", "bin");
-  const link = join(localBin, "qbar");
-  const target = join(REPO_ROOT, "scripts", "qbar");
+  const link = join(localBin, APP_NAME);
+  const target = join(REPO_ROOT, "scripts", APP_NAME);
+  const legacyLink = join(localBin, LEGACY_APP_NAME);
 
   mkdirSync(localBin, { recursive: true });
 
@@ -29,6 +31,10 @@ export function createSymlink(): string {
   } catch {}
 
   symlinkSync(target, link);
+
+  try {
+    unlinkSync(legacyLink);
+  } catch {}
   return link;
 }
 
@@ -46,18 +52,18 @@ function reloadWaybar(): void {
 export async function main() {
   console.clear();
 
-  p.intro(colorize("qbar setup", oneDark.blue));
+  p.intro(colorize(`${APP_NAME} setup`, oneDark.blue));
 
   const defaults = getDefaultWaybarAssetPaths();
   const integrationPaths = getDefaultWaybarIntegrationPaths();
 
   p.note(
     [
-      "This setup is theme-agnostic and fully managed by qbar.",
+      `This setup is theme-agnostic and fully managed by ${APP_NAME}.`,
       "",
       "It will:",
-      "  1. Install qbar icons + terminal helper",
-      "  2. Create ~/.local/bin/qbar symlink",
+      `  1. Install ${APP_NAME} icons + terminal helper`,
+      `  2. Create ~/.local/bin/${APP_NAME} symlink`,
       `  3. Wire ${integrationPaths.waybarConfigPath}`,
       `  4. Wire ${integrationPaths.waybarStylePath}`,
       "  5. Reload Waybar",
@@ -66,7 +72,7 @@ export async function main() {
   );
 
   const proceed = await p.confirm({
-    message: "Apply qbar setup now?",
+    message: `Apply ${APP_NAME} setup now?`,
     initialValue: true,
   });
 
@@ -93,7 +99,7 @@ export async function main() {
     s.start("Wiring Waybar config and styles...");
     const integrationResult = applyWaybarIntegration({
       iconsDir: assetResult.iconsDir,
-      qbarBin: defaults.qbarBin,
+      appBin: defaults.appBin,
       terminalScript: assetResult.terminalScript,
     });
     s.stop("Waybar integration applied");

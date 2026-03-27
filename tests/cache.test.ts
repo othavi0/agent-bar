@@ -5,7 +5,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { Cache } from "../src/cache";
 
-const TEST_DIR = join(tmpdir(), `qbar-cache-test-${Date.now()}`);
+const TEST_DIR = join(tmpdir(), `agent-bar-omarchy-cache-test-${Date.now()}`);
 
 describe("Cache", () => {
   let cache: Cache;
@@ -289,6 +289,28 @@ describe("Cache", () => {
       await cache.ensureDir();
       // Call again - should be idempotent
       await cache.ensureDir();
+    });
+
+    it("moves legacy cache files into the new directory", async () => {
+      const nextDir = join(TEST_DIR, "new-cache");
+      const legacyDir = join(TEST_DIR, "qbar-cache");
+      const legacyWaybarDir = join(TEST_DIR, "legacy-waybar-cache");
+      const migrated = new Cache(nextDir, [legacyDir, legacyWaybarDir]);
+
+      await mkdir(legacyDir, { recursive: true });
+      await writeFile(
+        join(legacyDir, "claude-usage.json"),
+        JSON.stringify({
+          data: { remaining: 87 },
+          fetchedAt: Date.now(),
+          expiresAt: Date.now() + 60_000,
+        }),
+      );
+
+      await migrated.ensureDir();
+
+      expect(existsSync(join(nextDir, "claude-usage.json"))).toBe(true);
+      expect(existsSync(legacyDir)).toBe(false);
     });
   });
 });

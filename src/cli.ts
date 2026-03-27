@@ -1,3 +1,4 @@
+import { APP_NAME } from "./app-identity";
 import { logger } from "./logger";
 import { ANSI, BOX } from "./theme";
 import pkg from "../package.json";
@@ -24,7 +25,7 @@ export interface CliOptions {
   waybarDir?: string;
   scriptsDir?: string;
   iconsDir?: string;
-  qbarBin?: string;
+  appBin?: string;
   terminalScript?: string;
 }
 
@@ -58,7 +59,7 @@ export function showHelp(): void {
 
   console.log();
   console.log(
-    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}qbar${ANSI.reset} ${ANSI.comment}v${version}${ANSI.reset} ${vc}${BOX.h.repeat(w - 12)}${ANSI.reset}`,
+    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}${APP_NAME}${ANSI.reset} ${ANSI.comment}v${version}${ANSI.reset} ${vc}${BOX.h.repeat(Math.max(0, w - APP_NAME.length - 8))}${ANSI.reset}`,
   );
   console.log(v());
 
@@ -66,13 +67,13 @@ export function showHelp(): void {
   console.log(label("Commands"));
   console.log(cmdLine("menu", "Interactive TUI menu"));
   console.log(cmdLine("status", "Show quotas in terminal"));
-  console.log(cmdLine("setup", "Install + wire qbar in Waybar"));
+  console.log(cmdLine("setup", `Install + wire ${APP_NAME} in Waybar`));
   console.log(cmdLine("apply-local", "Re-apply local repo changes"));
   console.log(cmdLine("assets install", "Install icons/helper only"));
   console.log(cmdLine("export waybar-modules", "Print Waybar JSON module contract"));
   console.log(cmdLine("export waybar-css", "Print Waybar CSS JSON contract"));
-  console.log(cmdLine("update", "Update qbar to latest version"));
-  console.log(cmdLine("uninstall", "Remove qbar + integration"));
+  console.log(cmdLine("update", `Update ${APP_NAME} to latest version`));
+  console.log(cmdLine("uninstall", `Remove ${APP_NAME} + integration`));
   console.log(cmdLine("remove", "Force remove without prompt"));
   console.log(v());
 
@@ -87,12 +88,12 @@ export function showHelp(): void {
   console.log(optLine("--waybar-dir <path>", "Assets install target"));
   console.log(optLine("--scripts-dir <path>", "Terminal helper target"));
   console.log(optLine("--icons-dir <path>", "CSS export icon directory"));
-  console.log(optLine("--qbar-bin <path>", "Modules export qbar binary"));
+  console.log(optLine("--app-bin <path>", "Modules export app binary"));
   console.log(optLine("--terminal-script <path>", "Modules export launcher"));
   console.log(v());
 
   console.log(label("Info"));
-  console.log(infoLine("Run with", "./scripts/qbar  or  bun run start"));
+  console.log(infoLine("Run with", `./scripts/${APP_NAME}  or  bun run start`));
   console.log(v());
 
   console.log(`${vc}${BOX.bl}${BOX.h.repeat(w)}${ANSI.reset}`);
@@ -225,8 +226,8 @@ export function parseArgs(args: string[]): CliOptions {
         options.iconsDir = requireNextArg(args, i, "--icons-dir");
         i++;
         break;
-      case "--qbar-bin":
-        options.qbarBin = requireNextArg(args, i, "--qbar-bin");
+      case "--app-bin":
+        options.appBin = requireNextArg(args, i, "--app-bin");
         i++;
         break;
       case "--terminal-script":
@@ -246,7 +247,7 @@ export function parseArgs(args: string[]): CliOptions {
           if (suggestion) {
             console.error(`Unknown command: ${arg}. Did you mean '${suggestion}'?`);
           } else {
-            console.error(`Unknown command: ${arg}. Run 'qbar help' for available commands.`);
+            console.error(`Unknown command: ${arg}. Run '${APP_NAME} help' for available commands.`);
           }
         }
     }

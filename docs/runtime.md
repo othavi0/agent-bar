@@ -4,29 +4,29 @@
 
 | Path | Purpose | Owner |
 | --- | --- | --- |
-| `~/.config/qbar/settings.json` | Persistent user settings. | `qbar` |
-| `~/.cache/qbar/` | Active quota cache. | `qbar` |
-| `~/.local/bin/qbar` | Convenience symlink to the repo script. | `qbar setup` |
-| `~/.config/waybar/qbar/icons/` | Provider icons consumed by Waybar. | `qbar assets install` |
-| `~/.config/waybar/scripts/qbar-open-terminal` | Helper that opens the qbar menu in a terminal. | `qbar assets install` |
-| `~/.config/waybar/qbar/modules.jsonc` | Generated Waybar module include file. | `qbar setup` / `qbar apply-local` |
-| `~/.config/waybar/qbar/style.css` | Generated qbar Waybar stylesheet. | `qbar setup` / `qbar apply-local` |
+| `~/.config/agent-bar-omarchy/settings.json` | Persistent user settings. | `agent-bar-omarchy` |
+| `~/.cache/agent-bar-omarchy/` | Active quota cache. | `agent-bar-omarchy` |
+| `~/.local/bin/agent-bar-omarchy` | Convenience symlink to the repo script. | `agent-bar-omarchy setup` |
+| `~/.config/waybar/agent-bar-omarchy/icons/` | Provider icons consumed by Waybar. | `agent-bar-omarchy assets install` |
+| `~/.config/waybar/scripts/agent-bar-omarchy-open-terminal` | Helper that opens the agent-bar-omarchy menu in a terminal. | `agent-bar-omarchy assets install` |
+| `~/.config/waybar/agent-bar-omarchy/modules.jsonc` | Generated Waybar module include file. | `agent-bar-omarchy setup` / `agent-bar-omarchy apply-local` |
+| `~/.config/waybar/agent-bar-omarchy/style.css` | Generated agent-bar-omarchy Waybar stylesheet. | `agent-bar-omarchy setup` / `agent-bar-omarchy apply-local` |
 
 ## Managed Entries In Live Waybar Files
 
-- `config.jsonc`: qbar appends `custom/qbar-*` modules to `modules-right` and ensures an `include` entry.
-- `style.css`: qbar ensures one import line: `@import url("./qbar/style.css");`.
+- `config.jsonc`: agent-bar-omarchy appends `custom/agent-bar-omarchy-*` modules to `modules-right` and ensures an `include` entry.
+- `style.css`: agent-bar-omarchy ensures one import line: `@import url("./agent-bar-omarchy/style.css");`.
 
-qbar does not replace the full file contents.
+agent-bar-omarchy does not replace the full file contents.
 
 ## Settings Normalization
 
-`qbar` treats `waybar.providers` and `waybar.providerOrder` as one normalized selection:
+`agent-bar-omarchy` treats `waybar.providers` and `waybar.providerOrder` as one normalized selection:
 
 - unknown providers are discarded
 - duplicate providers are collapsed
 - enabled providers missing from `providerOrder` are appended
-- normalized settings are written back to `~/.config/qbar/settings.json`
+- normalized settings are written back to `~/.config/agent-bar-omarchy/settings.json`
 
 The supported provider set is:
 
@@ -36,9 +36,9 @@ The supported provider set is:
 
 ## Cache Behavior
 
-- Primary cache path: `~/.cache/qbar`
+- Primary cache path: `~/.cache/agent-bar-omarchy`
 - Default TTL: 5 minutes
-- Legacy cache under `~/.config/waybar/qbar/cache` is cleaned on uninstall/remove.
+- Legacy cache under `~/.config/waybar/agent-bar-omarchy/cache` is cleaned on uninstall/remove.
 
 ## Related Docs
 

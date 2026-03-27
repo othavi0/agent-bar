@@ -699,7 +699,7 @@ describe("CodexProvider", () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(false);
-      expect(q.error).toBe("Not logged in. Run `qbar login codex` to authenticate.");
+      expect(q.error).toBe("Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.");
       expect(q.provider).toBe("codex");
       expect(q.displayName).toBe("Codex");
     });

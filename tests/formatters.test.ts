@@ -121,9 +121,13 @@ describe("formatForTerminal", () => {
     const quotas = mockAllQuotas([mockClaudeQuota(80)]);
     const result = formatForTerminal(quotas);
 
-    // Should contain ANSI escape sequences
-    expect(result).toContain("\x1b[");
-    expect(result).toContain(ANSI.reset);
+    if (process.env.NO_COLOR) {
+      expect(result).not.toContain("\x1b[");
+      expect(ANSI.reset).toBe("");
+    } else {
+      expect(result).toContain("\x1b[");
+      expect(result).toContain(ANSI.reset);
+    }
   });
 });
 
@@ -169,7 +173,7 @@ describe("formatForWaybar", () => {
     const quotas = mockAllQuotas([mockClaudeQuota(80)]);
     const result = formatForWaybar(quotas);
 
-    expect(result.class).toContain("qbar");
+    expect(result.class).toContain("agent-bar-omarchy");
     expect(result.class).toContain("claude-ok");
   });
 
@@ -211,7 +215,7 @@ describe("formatProviderForWaybar", () => {
   it("returns percentage for available provider", () => {
     const result = formatProviderForWaybar(mockClaudeQuota(80));
 
-    expect(result.class).toContain("qbar-claude");
+    expect(result.class).toContain("agent-bar-omarchy-claude");
     expect(result.tooltip).toContain("Claude");
   });
 });

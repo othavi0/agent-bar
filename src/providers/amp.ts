@@ -1,3 +1,4 @@
+import { APP_NAME } from '../app-identity';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { cache } from '../cache';
@@ -49,14 +50,14 @@ export class AmpProvider implements Provider {
       const exitCode = await proc.exited;
 
       if (exitCode !== 0) {
-        return { ...base, error: 'Not logged in. Run `qbar login amp` to authenticate.' };
+        return { ...base, error: `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.` };
       }
 
       const accountMatch = stdout.match(/Signed in as (\S+)/);
       const account = accountMatch?.[1] || undefined;
 
       if (!account) {
-        return { ...base, error: 'Not logged in. Run `qbar login amp` to authenticate.' };
+        return { ...base, error: `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.` };
       }
 
       const freeMatch = stdout.match(/Amp Free:\s*\$([0-9.]+)\/\$([0-9.]+)\s*remaining/);

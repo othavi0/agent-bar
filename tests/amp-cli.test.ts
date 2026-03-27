@@ -18,17 +18,17 @@ describe("amp-cli helpers", () => {
   });
 
   it("checks common install paths under HOME", () => {
-    expect(getAmpCandidatePaths("/tmp/qbar-home")).toEqual([
-      "/tmp/qbar-home/.local/bin/amp",
-      "/tmp/qbar-home/.amp/bin/amp",
-      "/tmp/qbar-home/.cache/.bun/bin/amp",
-      "/tmp/qbar-home/.bun/bin/amp",
+    expect(getAmpCandidatePaths("/tmp/agent-bar-home")).toEqual([
+      "/tmp/agent-bar-home/.local/bin/amp",
+      "/tmp/agent-bar-home/.amp/bin/amp",
+      "/tmp/agent-bar-home/.cache/.bun/bin/amp",
+      "/tmp/agent-bar-home/.bun/bin/amp",
     ]);
   });
 
   it("prefers amp from PATH when available", () => {
     const found = findAmpBin({
-      home: "/tmp/qbar-home",
+      home: "/tmp/agent-bar-home",
       which: () => "/usr/local/bin/amp",
       exists: () => false,
     });
@@ -37,19 +37,19 @@ describe("amp-cli helpers", () => {
   });
 
   it("falls back to the known install locations", () => {
-    const home = "/tmp/qbar-home";
+    const home = "/tmp/agent-bar-home";
     const found = findAmpBin({
       home,
       which: () => null,
-      exists: (path) => path === "/tmp/qbar-home/.local/bin/amp",
+      exists: (path) => path === "/tmp/agent-bar-home/.local/bin/amp",
     });
 
-    expect(found).toBe("/tmp/qbar-home/.local/bin/amp");
+    expect(found).toBe("/tmp/agent-bar-home/.local/bin/amp");
   });
 
   it("returns null when amp is unavailable", () => {
     const found = findAmpBin({
-      home: "/tmp/qbar-home",
+      home: "/tmp/agent-bar-home",
       which: () => null,
       exists: () => false,
     });

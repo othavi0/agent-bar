@@ -9,6 +9,17 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  APP_HIDDEN_CLASS,
+  APP_NAME,
+  LEGACY_TERMINAL_HELPER_NAME,
+  LEGACY_WAYBAR_MODULE_PREFIX,
+  LEGACY_WAYBAR_NAMESPACE,
+  TERMINAL_HELPER_NAME,
+  WAYBAR_MODULE_PREFIX,
+  WAYBAR_NAMESPACE,
+  WAYBAR_SELECTOR_PREFIX,
+} from "./app-identity";
 import { ONE_DARK } from "./theme";
 
 export const WAYBAR_PROVIDERS = ["claude", "codex", "amp"] as const;
@@ -21,7 +32,7 @@ export interface InstallAssetsOptions {
 }
 
 export interface WaybarModuleExportOptions {
-  qbarBin: string;
+  appBin: string;
   terminalScript: string;
 }
 
@@ -44,8 +55,7 @@ export interface WaybarCssExportOptions {
 
 const HOME = homedir();
 const DEFAULT_REPO_ROOT = join(import.meta.dir, "..");
-const QBAR_SURFACE = ONE_DARK.overlay;
-const QBAR_MUTED = ONE_DARK.borderSoft;
+const SURFACE = ONE_DARK.overlay;
 
 function copyDir(src: string, dest: string): void {
   mkdirSync(dest, { recursive: true });
@@ -65,17 +75,17 @@ function copyDir(src: string, dest: string): void {
 
 function moduleDefinition(
   provider: WaybarProviderId,
-  qbarBin: string,
+  appBin: string,
   terminalScript: string,
 ) {
   return {
-    exec: `${qbarBin} --provider ${provider}`,
+    exec: `${appBin} --provider ${provider}`,
     "return-type": "json",
     interval: 120,
     "exec-on-event": true,
     tooltip: true,
-    "on-click": `${terminalScript} ${qbarBin} menu`,
-    "on-click-right": `${terminalScript} ${qbarBin} action-right ${provider}`,
+    "on-click": `${terminalScript} ${appBin} menu`,
+    "on-click-right": `${terminalScript} ${appBin} action-right ${provider}`,
   };
 }
 
@@ -87,14 +97,14 @@ function separatorCss(
     return "";
   }
 
-  const providerSelectors = providers.map((provider) => `#custom-qbar-${provider}`);
+  const providerSelectors = providers.map((provider) => `${WAYBAR_SELECTOR_PREFIX}${provider}`);
   const selectorBlock = providerSelectors.join(",\n");
 
   if (separatorStyle === "pill") {
     return [
-      "/* qbar separators: pill */",
+      `/* ${APP_NAME} separators: pill */`,
       `${selectorBlock} {`,
-      `  background-color: ${QBAR_SURFACE};`,
+      `  background-color: ${SURFACE};`,
       "  border-radius: 4px;",
       "}",
       "",
@@ -103,7 +113,7 @@ function separatorCss(
 
   if (separatorStyle === "gap") {
     return [
-      "/* qbar separators: gap */",
+      `/* ${APP_NAME} separators: gap */`,
       `${selectorBlock} {`,
       "  border-color: transparent;",
       "}",
@@ -113,7 +123,7 @@ function separatorCss(
 
   if (separatorStyle === "bare") {
     return [
-      "/* qbar separators: bare */",
+      `/* ${APP_NAME} separators: bare */`,
       `${selectorBlock} {`,
       "  border-color: transparent;",
       "  background-color: transparent;",
@@ -128,7 +138,7 @@ function separatorCss(
 
   if (separatorStyle === "glass") {
     return [
-      "/* qbar separators: glass */",
+      `/* ${APP_NAME} separators: glass */`,
       `${selectorBlock} {`,
       "  background-color: rgba(192, 201, 212, 0.04);",
       "  border-color: transparent;",
@@ -140,7 +150,7 @@ function separatorCss(
 
   if (separatorStyle === "shadow") {
     return [
-      "/* qbar separators: shadow */",
+      `/* ${APP_NAME} separators: shadow */`,
       `${selectorBlock} {`,
       "  border-color: transparent;",
       "  border-radius: 4px;",
@@ -150,9 +160,8 @@ function separatorCss(
     ].join("\n");
   }
 
-  // none
   return [
-    "/* qbar separators: none */",
+    `/* ${APP_NAME} separators: none */`,
     `${selectorBlock} {`,
     "  border-color: transparent;",
     "  margin: 0;",
@@ -162,15 +171,41 @@ function separatorCss(
 }
 
 export function getDefaultWaybarAssetPaths() {
-  const waybarDir = join(HOME, ".config", "waybar");
+  const waybarRoot = join(HOME, ".config", "waybar");
 
   return {
-    waybarDir: join(waybarDir, "qbar"),
-    scriptsDir: join(waybarDir, "scripts"),
-    iconsDir: join(waybarDir, "qbar", "icons"),
-    terminalScript: join(waybarDir, "scripts", "qbar-open-terminal"),
-    qbarBin: "$HOME/.local/bin/qbar",
+    waybarDir: join(waybarRoot, WAYBAR_NAMESPACE),
+    scriptsDir: join(waybarRoot, "scripts"),
+    iconsDir: join(waybarRoot, WAYBAR_NAMESPACE, "icons"),
+    terminalScript: join(waybarRoot, "scripts", TERMINAL_HELPER_NAME),
+    appBin: `$HOME/.local/bin/${APP_NAME}`,
   };
+}
+
+export function getLegacyWaybarAssetPaths(waybarRoot = join(HOME, ".config", "waybar")) {
+  return {
+    waybarDir: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE),
+    scriptsDir: join(waybarRoot, "scripts"),
+    iconsDir: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE, "icons"),
+    terminalScript: join(waybarRoot, "scripts", LEGACY_TERMINAL_HELPER_NAME),
+    appBin: `$HOME/.local/bin/${LEGACY_WAYBAR_NAMESPACE}`,
+  };
+}
+
+export function cleanupLegacyWaybarAssets(waybarRoot: string): string[] {
+  const legacy = getLegacyWaybarAssetPaths(waybarRoot);
+  const removed: string[] = [];
+
+  for (const path of [legacy.waybarDir, legacy.terminalScript]) {
+    if (!existsSync(path)) {
+      continue;
+    }
+
+    rmSync(path, { recursive: true, force: true });
+    removed.push(path);
+  }
+
+  return removed;
 }
 
 export function normalizeProviderSelection(
@@ -206,9 +241,9 @@ export function exportWaybarModules(
   const modules: Record<string, ReturnType<typeof moduleDefinition>> = {};
 
   for (const provider of providers) {
-    modules[`custom/qbar-${provider}`] = moduleDefinition(
+    modules[`${WAYBAR_MODULE_PREFIX}${provider}`] = moduleDefinition(
       provider,
-      options.qbarBin,
+      options.appBin,
       options.terminalScript,
     );
   }
@@ -225,15 +260,15 @@ export function exportWaybarCss(options: WaybarCssExportOptions): { css: string 
   const providerOrder =
     options.providerOrder.length > 0 ? options.providerOrder : [...WAYBAR_PROVIDERS];
   const allProviderSelectors = WAYBAR_PROVIDERS.map(
-    (provider) => `#custom-qbar-${provider}`,
+    (provider) => `${WAYBAR_SELECTOR_PREFIX}${provider}`,
   ).join(",\n");
   const stateSelectors = (state: string) =>
-    WAYBAR_PROVIDERS.map((provider) => `#custom-qbar-${provider}.${state}`).join(", ");
+    WAYBAR_PROVIDERS.map((provider) => `${WAYBAR_SELECTOR_PREFIX}${provider}.${state}`).join(", ");
   const separators = separatorCss(providerOrder, options.separators);
 
   return {
     css: [
-      "/* qbar waybar stylesheet */",
+      `/* ${APP_NAME} waybar stylesheet */`,
       `${allProviderSelectors} {`,
       "  padding-left: 26px;",
       "  padding-right: 10px;",
@@ -251,16 +286,16 @@ export function exportWaybarCss(options: WaybarCssExportOptions): { css: string 
       `  color: ${ONE_DARK.textBright};`,
       "}",
       "",
-      `#custom-qbar-claude { background-image: url("${iconRef("claude-code-icon.png")}"); }`,
-      `#custom-qbar-codex { background-image: url("${iconRef("codex-icon.png")}"); }`,
-      `#custom-qbar-amp { background-image: url("${iconRef("amp-icon.svg")}"); }`,
+      `${WAYBAR_SELECTOR_PREFIX}claude { background-image: url("${iconRef("claude-code-icon.png")}"); }`,
+      `${WAYBAR_SELECTOR_PREFIX}codex { background-image: url("${iconRef("codex-icon.png")}"); }`,
+      `${WAYBAR_SELECTOR_PREFIX}amp { background-image: url("${iconRef("amp-icon.svg")}"); }`,
       "",
       `${stateSelectors("ok")} { color: ${ONE_DARK.green}; }`,
       `${stateSelectors("low")} { color: ${ONE_DARK.yellow}; }`,
       `${stateSelectors("warn")} { color: ${ONE_DARK.orange}; }`,
       `${stateSelectors("critical")} { color: ${ONE_DARK.red}; }`,
       `${stateSelectors("disconnected")} { color: ${ONE_DARK.red}; }`,
-      `${stateSelectors("qbar-hidden")} {`,
+      `${stateSelectors(APP_HIDDEN_CLASS)} {`,
       "  min-width: 0;",
       "  padding: 0;",
       "  margin: 0;",
@@ -278,11 +313,11 @@ export function installWaybarAssets(options: InstallAssetsOptions): {
   terminalScript: string;
 } {
   const repoRoot = options.repoRoot ?? DEFAULT_REPO_ROOT;
-  const qbarDir = options.waybarDir;
+  const appDir = options.waybarDir;
   const iconsSource = join(repoRoot, "icons");
-  const iconsDest = join(qbarDir, "icons");
-  const scriptSource = join(repoRoot, "scripts", "qbar-open-terminal");
-  const scriptDest = join(options.scriptsDir, "qbar-open-terminal");
+  const iconsDest = join(appDir, "icons");
+  const scriptSource = join(repoRoot, "scripts", TERMINAL_HELPER_NAME);
+  const scriptDest = join(options.scriptsDir, TERMINAL_HELPER_NAME);
 
   if (!existsSync(iconsSource)) {
     throw new Error(`Icons folder not found: ${iconsSource}`);
@@ -293,7 +328,7 @@ export function installWaybarAssets(options: InstallAssetsOptions): {
   }
 
   rmSync(iconsDest, { recursive: true, force: true });
-  mkdirSync(qbarDir, { recursive: true });
+  mkdirSync(appDir, { recursive: true });
   copyDir(iconsSource, iconsDest);
 
   mkdirSync(options.scriptsDir, { recursive: true });

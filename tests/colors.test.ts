@@ -92,7 +92,7 @@ describe("colorize", () => {
 
   it("does not add bold prefix when isBold is false", () => {
     const result = colorize("hello", oneDark.green, false);
-    expect(result).not.toContain(oneDark.bold);
+    expect(result).toBe(`${oneDark.green}hello${oneDark.reset}`);
   });
 });
 

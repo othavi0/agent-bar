@@ -1,3 +1,4 @@
+import { APP_NAME } from '../app-identity';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { cache } from '../cache';
@@ -72,7 +73,7 @@ export class ClaudeProvider implements Provider {
     // Check credentials
     const file = Bun.file(CONFIG.paths.claude.credentials);
     if (!await file.exists()) {
-      return { ...base, error: 'Not logged in. Run `qbar login claude` to authenticate.' };
+      return { ...base, error: `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.` };
     }
 
     let creds: ClaudeCredentials;
@@ -120,7 +121,7 @@ export class ClaudeProvider implements Provider {
 
       // Check for token expiration
       if (usage.error?.error_code === 'token_expired') {
-        return { ...base, plan, error: 'Token expired. Run `qbar login claude` to renew.' };
+        return { ...base, plan, error: `Token expired. Open \`${APP_NAME} menu\` and choose Provider login.` };
       }
 
       // Parse quota windows
