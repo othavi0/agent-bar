@@ -30,16 +30,17 @@ agent-bar-omarchy owns: providers, auth flows, settings, cache, icons, and Wayba
 
 ## Key paths
 
-| Path | Purpose |
-|------|---------|
+| Path                                        | Purpose                                             |
+| ------------------------------------------- | --------------------------------------------------- |
 | `~/.config/agent-bar-omarchy/settings.json` | User settings (versioned, validated, atomic writes) |
-| `~/.cache/agent-bar-omarchy/` | Cache directory |
-| `~/.local/bin/agent-bar-omarchy` | Symlink created by `agent-bar-omarchy setup` |
-| `~/.config/waybar/agent-bar-omarchy/icons/` | Provider icons installed by setup |
+| `~/.cache/agent-bar-omarchy/`               | Cache directory                                     |
+| `~/.local/bin/agent-bar-omarchy`            | Symlink created by `agent-bar-omarchy setup`        |
+| `~/.config/waybar/agent-bar-omarchy/icons/` | Provider icons installed by setup                   |
 
 ## Settings
 
 Settings use schema versioning (`version: 1`). Fields are validated on load:
+
 - `waybar.separators` must be one of: pill, gap, bare, glass, shadow, none (default: gap)
 - `windowPolicy` values must be: both, five_hour, seven_day (default: both)
 - Invalid values silently fall back to defaults
@@ -47,6 +48,7 @@ Settings use schema versioning (`version: 1`). Fields are validated on load:
 ## Providers
 
 Each provider declares a `cacheKey` used for cache invalidation:
+
 - Claude: `claude-usage`
 - Codex: `codex-quota`
 - Amp: `amp-quota`
