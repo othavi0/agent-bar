@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { ProviderQuota } from '../../src/providers/types';
 
 // ---------------------------------------------------------------------------
@@ -27,10 +27,7 @@ const OUTPUT_NO_BONUS = [
   'replenishes +$0.25/hour',
 ].join('\n');
 
-const OUTPUT_NO_REPLENISH = [
-  'Signed in as user@email.com',
-  'Amp Free: $3.50/$5.00 remaining',
-].join('\n');
+const OUTPUT_NO_REPLENISH = ['Signed in as user@email.com', 'Amp Free: $3.50/$5.00 remaining'].join('\n');
 
 const OUTPUT_ZERO_CREDITS = [
   'Signed in as user@email.com',
@@ -64,9 +61,7 @@ mock.module('../../src/amp-cli', () => {
 
 // Mock cache — getOrFetch executes the fetcher directly (bypasses cache)
 mock.module('../../src/cache', () => {
-  mockCacheGetOrFetch = mock(
-    async (_key: string, fetcher: () => Promise<unknown>, _ttl?: number) => fetcher(),
-  );
+  mockCacheGetOrFetch = mock(async (_key: string, fetcher: () => Promise<unknown>, _ttl?: number) => fetcher());
   return {
     cache: {
       getOrFetch: mockCacheGetOrFetch,
@@ -89,9 +84,7 @@ describe('AmpProvider', () => {
     mockFindAmpBin.mockReset();
     mockFindAmpBin.mockReturnValue('/usr/bin/amp');
     mockCacheGetOrFetch.mockReset();
-    mockCacheGetOrFetch.mockImplementation(
-      async (_key: string, fetcher: () => Promise<unknown>) => fetcher(),
-    );
+    mockCacheGetOrFetch.mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) => fetcher());
   });
 
   afterEach(() => {
@@ -138,9 +131,7 @@ describe('AmpProvider', () => {
       const result = await provider.getQuota();
 
       expect(result.available).toBe(false);
-      expect(result.error).toBe(
-        'Amp CLI not installed. Right-click to install and log in.',
-      );
+      expect(result.error).toBe('Amp CLI not installed. Right-click to install and log in.');
       expect(result.provider).toBe('amp');
       expect(result.displayName).toBe('Amp');
     });
@@ -152,9 +143,7 @@ describe('AmpProvider', () => {
 
   describe('getQuota when amp exits with error', () => {
     it('returns available:false with "Not logged in"', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc('some error output', 1) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc('some error output', 1) as any);
 
       const result = await provider.getQuota();
 
@@ -188,9 +177,7 @@ describe('AmpProvider', () => {
     let result: ProviderQuota;
 
     beforeEach(async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(FULL_OUTPUT, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(FULL_OUTPUT, 0) as any);
       result = await provider.getQuota();
     });
 
@@ -224,10 +211,10 @@ describe('AmpProvider', () => {
 
     it('populates meta fields', () => {
       expect(result.meta).toBeDefined();
-      expect(result.meta!['freeRemaining']).toBe('$3.5');
-      expect(result.meta!['freeTotal']).toBe('$5');
-      expect(result.meta!['replenishRate']).toBe('+$0.25/hr');
-      expect(result.meta!['bonus']).toBe('+20% (5d)');
+      expect(result.meta!.freeRemaining).toBe('$3.5');
+      expect(result.meta!.freeTotal).toBe('$5');
+      expect(result.meta!.replenishRate).toBe('+$0.25/hr');
+      expect(result.meta!.bonus).toBe('+20% (5d)');
     });
 
     it('sets extraUsage.enabled when credits > 0', () => {
@@ -237,12 +224,12 @@ describe('AmpProvider', () => {
     });
 
     it('populates models["Credits"]', () => {
-      expect(result.models!['Credits']).toBeDefined();
-      expect(result.models!['Credits'].remaining).toBe(100);
+      expect(result.models!.Credits).toBeDefined();
+      expect(result.models!.Credits.remaining).toBe(100);
     });
 
     it('populates meta creditsBalance', () => {
-      expect(result.meta!['creditsBalance']).toBe('$10');
+      expect(result.meta!.creditsBalance).toBe('$10');
     });
   });
 
@@ -254,9 +241,7 @@ describe('AmpProvider', () => {
     let result: ProviderQuota;
 
     beforeEach(async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_NO_BONUS, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_NO_BONUS, 0) as any);
       result = await provider.getQuota();
     });
 
@@ -265,11 +250,11 @@ describe('AmpProvider', () => {
     });
 
     it('meta does not contain bonus', () => {
-      expect(result.meta!['bonus']).toBeUndefined();
+      expect(result.meta!.bonus).toBeUndefined();
     });
 
     it('still has replenishRate', () => {
-      expect(result.meta!['replenishRate']).toBe('+$0.25/hr');
+      expect(result.meta!.replenishRate).toBe('+$0.25/hr');
     });
 
     it('does not include extraUsage when no credits line', () => {
@@ -294,9 +279,7 @@ describe('AmpProvider', () => {
     let result: ProviderQuota;
 
     beforeEach(async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_NO_REPLENISH, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_NO_REPLENISH, 0) as any);
       result = await provider.getQuota();
     });
 
@@ -305,11 +288,11 @@ describe('AmpProvider', () => {
     });
 
     it('meta does not contain replenishRate', () => {
-      expect(result.meta!['replenishRate']).toBeUndefined();
+      expect(result.meta!.replenishRate).toBeUndefined();
     });
 
     it('meta does not contain bonus', () => {
-      expect(result.meta!['bonus']).toBeUndefined();
+      expect(result.meta!.bonus).toBeUndefined();
     });
 
     it('primary.resetsAt is null (no ETA without replenish)', () => {
@@ -323,9 +306,7 @@ describe('AmpProvider', () => {
 
   describe('credits parsing', () => {
     it('sets extraUsage.enabled when credits > 0', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(FULL_OUTPUT, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(FULL_OUTPUT, 0) as any);
 
       const result = await provider.getQuota();
       expect(result.extraUsage).toBeDefined();
@@ -333,31 +314,25 @@ describe('AmpProvider', () => {
     });
 
     it('does not set extraUsage when no credits line', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_NO_BONUS, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_NO_BONUS, 0) as any);
 
       const result = await provider.getQuota();
       expect(result.extraUsage).toBeUndefined();
     });
 
     it('does not set extraUsage when credits balance is $0.00', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_ZERO_CREDITS, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_ZERO_CREDITS, 0) as any);
 
       const result = await provider.getQuota();
       expect(result.extraUsage).toBeUndefined();
     });
 
     it('models["Credits"] has remaining 0 when balance is $0.00', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_ZERO_CREDITS, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_ZERO_CREDITS, 0) as any);
 
       const result = await provider.getQuota();
-      expect(result.models!['Credits']).toBeDefined();
-      expect(result.models!['Credits'].remaining).toBe(0);
+      expect(result.models!.Credits).toBeDefined();
+      expect(result.models!.Credits.remaining).toBe(0);
     });
   });
 
@@ -367,9 +342,7 @@ describe('AmpProvider', () => {
 
   describe('fullAt ETA calculation', () => {
     it('calculates ETA with bonus multiplier', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(FULL_OUTPUT, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(FULL_OUTPUT, 0) as any);
 
       const result = await provider.getQuota();
       const fullAt = new Date(result.primary!.resetsAt!);
@@ -381,9 +354,7 @@ describe('AmpProvider', () => {
     });
 
     it('calculates ETA without bonus', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_NO_BONUS, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_NO_BONUS, 0) as any);
 
       const result = await provider.getQuota();
       const fullAt = new Date(result.primary!.resetsAt!);
@@ -394,9 +365,7 @@ describe('AmpProvider', () => {
     });
 
     it('returns null resetsAt when quota is already full', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_FULL_QUOTA, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_FULL_QUOTA, 0) as any);
 
       const result = await provider.getQuota();
       // remaining == total, so no ETA needed
@@ -405,9 +374,7 @@ describe('AmpProvider', () => {
     });
 
     it('returns null resetsAt when no replenish rate', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(OUTPUT_NO_REPLENISH, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_NO_REPLENISH, 0) as any);
 
       const result = await provider.getQuota();
       expect(result.primary?.resetsAt).toBeNull();
@@ -420,9 +387,7 @@ describe('AmpProvider', () => {
 
   describe('spawn invocation', () => {
     it('calls Bun.spawn with [bin, "usage"] and pipe options', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(FULL_OUTPUT, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(FULL_OUTPUT, 0) as any);
 
       await provider.getQuota();
 
@@ -442,9 +407,7 @@ describe('AmpProvider', () => {
 
   describe('cache integration', () => {
     it('passes "amp-quota" as the cache key', async () => {
-      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-        makeMockProc(FULL_OUTPUT, 0) as any,
-      );
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(FULL_OUTPUT, 0) as any);
 
       await provider.getQuota();
 
@@ -473,13 +436,13 @@ describe('AmpProvider', () => {
   // -----------------------------------------------------------------------
 
   describe('error handling', () => {
-    it('returns "Failed to fetch usage" when cache.getOrFetch throws', async () => {
+    it('returns "Failed to fetch Amp usage" when cache.getOrFetch throws', async () => {
       mockCacheGetOrFetch.mockRejectedValue(new Error('network failure'));
 
       const result = await provider.getQuota();
 
       expect(result.available).toBe(false);
-      expect(result.error).toBe('Failed to fetch usage');
+      expect(result.error).toBe('Failed to fetch Amp usage');
     });
   });
 });

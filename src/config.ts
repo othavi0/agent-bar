@@ -4,10 +4,8 @@ import { APP_NAME, LEGACY_APP_NAME } from './app-identity';
 import { ONE_DARK } from './theme';
 
 // XDG Base Directory paths
-const XDG_CONFIG_HOME =
-  process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
-const XDG_CACHE_HOME =
-  process.env.XDG_CACHE_HOME ?? Bun.env.XDG_CACHE_HOME ?? join(homedir(), '.cache');
+const XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
+const XDG_CACHE_HOME = process.env.XDG_CACHE_HOME ?? Bun.env.XDG_CACHE_HOME ?? join(homedir(), '.cache');
 
 export const CONFIG = {
   // Paths
@@ -17,7 +15,7 @@ export const CONFIG = {
     waybarLegacyCache: join(XDG_CONFIG_HOME, 'waybar', LEGACY_APP_NAME, 'cache'),
     config: join(XDG_CONFIG_HOME, APP_NAME),
     legacyConfig: join(XDG_CONFIG_HOME, LEGACY_APP_NAME),
-    
+
     // Provider credential paths
     claude: {
       credentials: join(homedir(), '.claude', '.credentials.json'),
@@ -35,14 +33,13 @@ export const CONFIG = {
 
   // Cache settings
   cache: {
-    ttlMs: 300_000,              // 5 minutes default TTL
-    codexTtlMs: 300_000,         // 5 minutes for Codex
-    lockTimeoutMs: 5_000,        // Lock timeout
+    ttlMs: 300_000, // 5 minutes default TTL
+    lockTimeoutMs: 5_000, // Lock timeout
   },
 
   // API settings
   api: {
-    timeoutMs: 5_000,        // HTTP timeout
+    timeoutMs: 5_000, // HTTP timeout
     claude: {
       usageUrl: 'https://api.anthropic.com/api/oauth/usage',
       betaHeader: 'oauth-2025-04-20',
@@ -51,12 +48,12 @@ export const CONFIG = {
 
   // UI Colors (One Dark)
   colors: {
-    green: ONE_DARK.green,   // >= 60%
+    green: ONE_DARK.green, // >= 60%
     yellow: ONE_DARK.yellow, // >= 30%
     orange: ONE_DARK.orange, // >= 10%
-    red: ONE_DARK.red,       // < 10%
+    red: ONE_DARK.red, // < 10%
     muted: ONE_DARK.comment, // empty bar segments
-    text: ONE_DARK.text,     // default/unknown text
+    text: ONE_DARK.text, // default/unknown text
   },
 
   // Thresholds for color coding (percentage remaining)

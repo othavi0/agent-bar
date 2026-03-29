@@ -1,9 +1,9 @@
 import * as p from '@clack/prompts';
 import { ensureAmpCli, findAmpBin } from '../amp-cli';
-import { providers } from '../providers';
-import { oneDark, semantic, colorize } from './colors';
 import { ensureCommand } from '../install';
+import { providers } from '../providers';
 import { loadSettings, saveSettings } from '../settings';
+import { colorize, oneDark, semantic } from './colors';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -37,9 +37,14 @@ export async function loginProviderFlow(): Promise<void> {
     [
       'This helps you log in to provider CLIs.',
       '',
-      colorize('Space', semantic.highlight) + ' to select  ' + colorize('Enter', semantic.highlight) + ' to confirm  ' + colorize('q', semantic.highlight) + ' to go back',
+      colorize('Space', semantic.highlight) +
+        ' to select  ' +
+        colorize('Enter', semantic.highlight) +
+        ' to confirm  ' +
+        colorize('q', semantic.highlight) +
+        ' to go back',
     ].join('\n'),
-    colorize('Provider Login', semantic.title)
+    colorize('Provider Login', semantic.title),
   );
 
   const options = await Promise.all(
@@ -47,20 +52,17 @@ export async function loginProviderFlow(): Promise<void> {
       const available = await prov.isAvailable();
       return {
         value: prov.id,
-        label: available 
-          ? colorize(prov.name, oneDark.green) 
+        label: available
+          ? colorize(prov.name, oneDark.green)
           : colorize(`${prov.name}`, oneDark.text) + colorize(' (not logged in)', semantic.muted),
         hint: available ? 'already logged in' : 'run login flow',
       };
-    })
+    }),
   );
 
   const choice = await p.select({
     message: colorize('Choose provider', semantic.title),
-    options: [
-      ...options,
-      { value: 'back' as const, label: colorize('Back', semantic.muted) },
-    ],
+    options: [...options, { value: 'back' as const, label: colorize('Back', semantic.muted) }],
   });
 
   if (p.isCancel(choice) || choice === 'back') return;
@@ -71,19 +73,19 @@ export async function loginProviderFlow(): Promise<void> {
       p.note(
         [
           '1. Confirm the folder (trust prompt)',
-          '2. Type ' + colorize('/login', semantic.accent),
+          `2. Type ${colorize('/login', semantic.accent)}`,
           '3. Choose your login method',
         ].join('\n'),
-        colorize('Claude Login Steps', semantic.title)
+        colorize('Claude Login Steps', semantic.title),
       );
-      
+
       const cont = await p.confirm({
         message: 'Launch Claude CLI?',
         initialValue: true,
       });
-      
+
       if (p.isCancel(cont) || !cont) return;
-      
+
       const ok = await ensureClaudeCli();
       if (!ok) return;
 
@@ -96,17 +98,17 @@ export async function loginProviderFlow(): Promise<void> {
 
     case 'codex': {
       p.note(
-        'Will run ' + colorize('codex auth login', semantic.accent) + ' (OAuth flow)',
-        colorize('Codex Login', semantic.title)
+        `Will run ${colorize('codex auth login', semantic.accent)} (OAuth flow)`,
+        colorize('Codex Login', semantic.title),
       );
-      
+
       const cont = await p.confirm({
         message: 'Launch Codex auth?',
         initialValue: true,
       });
-      
+
       if (p.isCancel(cont) || !cont) return;
-      
+
       const ok = await ensureCodexCli();
       if (!ok) return;
 
@@ -118,10 +120,7 @@ export async function loginProviderFlow(): Promise<void> {
     }
 
     case 'amp': {
-      p.note(
-        'Will open Amp login in browser.',
-        colorize('Amp Login', semantic.title)
-      );
+      p.note('Will open Amp login in browser.', colorize('Amp Login', semantic.title));
 
       const cont = await p.confirm({
         message: 'Launch Amp login?',

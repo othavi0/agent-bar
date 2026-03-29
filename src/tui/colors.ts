@@ -1,4 +1,4 @@
-import { ANSI } from "../theme";
+import { ANSI } from '../theme';
 
 export const oneDark = {
   green: ANSI.green,

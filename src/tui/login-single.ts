@@ -1,8 +1,8 @@
 import * as p from '@clack/prompts';
 import { ensureAmpCli, findAmpBin } from '../amp-cli';
-import { colorize, semantic } from './colors';
 import { ensureCommand } from '../install';
 import { loadSettings, saveSettings } from '../settings';
+import { colorize, semantic } from './colors';
 
 async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
   const proc = Bun.spawn([cmd, ...args], {
@@ -46,11 +46,8 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
   switch (providerId) {
     case 'claude': {
       p.note(
-        [
-          '1) Run /login inside the Claude CLI',
-          '2) Finish the browser/auth steps',
-        ].join('\n'),
-        colorize('Claude Login', semantic.title)
+        ['1) Run /login inside the Claude CLI', '2) Finish the browser/auth steps'].join('\n'),
+        colorize('Claude Login', semantic.title),
       );
 
       const ok = await ensureClaudeCli();
@@ -68,10 +65,7 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
     }
 
     case 'codex': {
-      p.note(
-        'Will run ' + colorize('codex auth login', semantic.accent),
-        colorize('Codex Login', semantic.title)
-      );
+      p.note(`Will run ${colorize('codex auth login', semantic.accent)}`, colorize('Codex Login', semantic.title));
 
       const ok = await ensureCodexCli();
       if (!ok) {
@@ -88,10 +82,7 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
     }
 
     case 'amp': {
-      p.note(
-        'Will open Amp login in browser.',
-        colorize('Amp Login', semantic.title)
-      );
+      p.note('Will open Amp login in browser.', colorize('Amp Login', semantic.title));
 
       let ampBin = findAmpBin();
       if (!ampBin) {

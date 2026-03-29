@@ -1,25 +1,22 @@
 #!/usr/bin/env bun
 
-import * as p from "@clack/prompts";
-import { existsSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { APP_NAME, LEGACY_APP_NAME } from "./app-identity";
-import { oneDark, colorize, semantic } from "./tui/colors";
-import { CONFIG } from "./config";
-import { getDefaultWaybarAssetPaths, getLegacyWaybarAssetPaths } from "./waybar-contract";
-import {
-  getDefaultWaybarIntegrationPaths,
-  removeWaybarIntegration,
-} from "./waybar-integration";
+import { existsSync, rmSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import * as p from '@clack/prompts';
+import { APP_NAME, LEGACY_APP_NAME } from './app-identity';
+import { CONFIG } from './config';
+import { colorize, oneDark, semantic } from './tui/colors';
+import { getDefaultWaybarAssetPaths, getLegacyWaybarAssetPaths } from './waybar-contract';
+import { getDefaultWaybarIntegrationPaths, removeWaybarIntegration } from './waybar-integration';
 
 const HOME = homedir();
 const defaults = getDefaultWaybarAssetPaths();
-const legacyDefaults = getLegacyWaybarAssetPaths(join(HOME, ".config", "waybar"));
-const SETTINGS_DIR = join(HOME, ".config", APP_NAME);
-const LEGACY_SETTINGS_DIR = join(HOME, ".config", LEGACY_APP_NAME);
-const APP_SYMLINK = join(HOME, ".local", "bin", APP_NAME);
-const LEGACY_SYMLINK = join(HOME, ".local", "bin", LEGACY_APP_NAME);
+const legacyDefaults = getLegacyWaybarAssetPaths(join(HOME, '.config', 'waybar'));
+const SETTINGS_DIR = join(HOME, '.config', APP_NAME);
+const LEGACY_SETTINGS_DIR = join(HOME, '.config', LEGACY_APP_NAME);
+const APP_SYMLINK = join(HOME, '.local', 'bin', APP_NAME);
+const LEGACY_SYMLINK = join(HOME, '.local', 'bin', LEGACY_APP_NAME);
 
 export interface UninstallOptions {
   force?: boolean;
@@ -41,9 +38,9 @@ function removePathIfExists(path: string, removed: string[], failed: string[]) {
 
 function reloadWaybar(): void {
   try {
-    Bun.spawn(["pkill", "-SIGUSR2", "waybar"], {
-      stdout: "ignore",
-      stderr: "ignore",
+    Bun.spawn(['pkill', '-SIGUSR2', 'waybar'], {
+      stdout: 'ignore',
+      stderr: 'ignore',
     });
   } catch {
     // noop
@@ -61,7 +58,7 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
   p.note(
     [
       `This removes ${APP_NAME} integration and owned paths, plus legacy ${LEGACY_APP_NAME} artifacts:`,
-      "",
+      '',
       `  • ${integrationPaths.waybarConfigPath} (${APP_NAME} entries only)`,
       `  • ${integrationPaths.waybarStylePath} (${APP_NAME} import only)`,
       `  • ${integrationPaths.modulesIncludePath}`,
@@ -77,18 +74,18 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
       `  • ${CONFIG.paths.waybarLegacyCache}`,
       `  • ${APP_SYMLINK}`,
       `  • ${LEGACY_SYMLINK}`,
-    ].join("\n"),
-    colorize("What gets removed", semantic.title),
+    ].join('\n'),
+    colorize('What gets removed', semantic.title),
   );
 
   if (!force) {
     const proceed = await p.confirm({
-      message: "Continue with uninstall?",
+      message: 'Continue with uninstall?',
       initialValue: false,
     });
 
     if (p.isCancel(proceed) || !proceed) {
-      p.outro(colorize("Uninstall cancelled", semantic.muted));
+      p.outro(colorize('Uninstall cancelled', semantic.muted));
       return;
     }
   }
@@ -97,11 +94,11 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
   const failed: string[] = [];
   const s = p.spinner();
 
-  s.start("Removing Waybar integration...");
+  s.start('Removing Waybar integration...');
   const integrationResult = removeWaybarIntegration({ paths: integrationPaths });
-  s.stop("Waybar integration removed");
+  s.stop('Waybar integration removed');
 
-  s.start("Cleaning up files...");
+  s.start('Cleaning up files...');
   removePathIfExists(defaults.waybarDir, removed, failed);
   removePathIfExists(defaults.terminalScript, removed, failed);
   removePathIfExists(legacyDefaults.waybarDir, removed, failed);
@@ -113,33 +110,26 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
   removePathIfExists(CONFIG.paths.waybarLegacyCache, removed, failed);
   removePathIfExists(APP_SYMLINK, removed, failed);
   removePathIfExists(LEGACY_SYMLINK, removed, failed);
-  s.stop("Files cleaned up");
+  s.stop('Files cleaned up');
 
   if (integrationResult.configChanged) {
-    p.log.success(
-      colorize(`Updated ${integrationPaths.waybarConfigPath}`, semantic.good),
-    );
+    p.log.success(colorize(`Updated ${integrationPaths.waybarConfigPath}`, semantic.good));
   }
 
   if (integrationResult.styleChanged) {
-    p.log.success(
-      colorize(`Updated ${integrationPaths.waybarStylePath}`, semantic.good),
-    );
+    p.log.success(colorize(`Updated ${integrationPaths.waybarStylePath}`, semantic.good));
   }
 
   if (integrationResult.removedIncludes.length > 0) {
     p.log.success(
-      colorize(
-        `Removed ${integrationResult.removedIncludes.length} generated include files`,
-        semantic.good,
-      ),
+      colorize(`Removed ${integrationResult.removedIncludes.length} generated include files`, semantic.good),
     );
   }
 
   if (integrationResult.configChanged || integrationResult.styleChanged) {
-    s.start("Reloading Waybar...");
+    s.start('Reloading Waybar...');
     reloadWaybar();
-    s.stop("Waybar reloaded");
+    s.stop('Waybar reloaded');
   }
 
   if (removed.length > 0) {
@@ -159,7 +149,7 @@ export async function main() {
 
 if (import.meta.main) {
   main().catch((e) => {
-    console.error("Uninstall failed:", e);
+    console.error('Uninstall failed:', e);
     process.exit(1);
   });
 }

@@ -1,21 +1,21 @@
 #!/usr/bin/env bun
 
-import { APP_HIDDEN_CLASS } from "./app-identity";
-import { cache } from "./cache";
-import { parseArgs, showHelp } from "./cli";
-import { outputTerminal } from "./formatters/terminal";
-import { formatProviderForWaybar, outputWaybar } from "./formatters/waybar";
-import { logger } from "./logger";
-import { getAllQuotas, getProvider, getQuotaFor } from "./providers";
-import type { AllQuotas } from "./providers/types";
-import { loadSettings } from "./settings";
-import { runTui } from "./tui";
+import { APP_HIDDEN_CLASS } from './app-identity';
+import { cache } from './cache';
+import { parseArgs, showHelp } from './cli';
+import { outputTerminal } from './formatters/terminal';
+import { formatProviderForWaybar, outputWaybar } from './formatters/waybar';
+import { logger } from './logger';
+import { getAllQuotas, getProvider, getQuotaFor } from './providers';
+import type { AllQuotas } from './providers/types';
+import { loadSettings } from './settings';
+import { runTui } from './tui';
 import {
   exportWaybarCss,
   exportWaybarModules,
   getDefaultWaybarAssetPaths,
   installWaybarAssets,
-} from "./waybar-contract";
+} from './waybar-contract';
 
 // Graceful shutdown
 process.on('SIGTERM', () => process.exit(0));
@@ -27,38 +27,38 @@ async function main() {
 
   // Setup logging
   if (options.verbose) {
-    logger.setLevel("debug");
+    logger.setLevel('debug');
   } else {
     logger.setSilent(true);
   }
 
   // Handle help
-  if (options.command === "help") {
+  if (options.command === 'help') {
     showHelp();
     process.exit(0);
   }
 
   // Handle menu
-  if (options.command === "menu") {
+  if (options.command === 'menu') {
     await runTui();
     process.exit(0);
   }
 
   // Handle action-right (waybar right-click)
-  if (options.command === "action-right") {
-    const { handleActionRight } = await import("./action-right");
-    await handleActionRight(options.provider ?? "");
+  if (options.command === 'action-right') {
+    const { handleActionRight } = await import('./action-right');
+    await handleActionRight(options.provider ?? '');
     process.exit(0);
   }
 
   // Handle setup
-  if (options.command === "setup") {
-    const { main: setupMain } = await import("./setup");
+  if (options.command === 'setup') {
+    const { main: setupMain } = await import('./setup');
     await setupMain();
     process.exit(0);
   }
 
-  if (options.command === "assets-install") {
+  if (options.command === 'assets-install') {
     const defaults = getDefaultWaybarAssetPaths();
     const result = installWaybarAssets({
       waybarDir: options.waybarDir ?? defaults.waybarDir,
@@ -68,13 +68,13 @@ async function main() {
     process.exit(0);
   }
 
-  if (options.command === "apply-local") {
-    const { main: applyLocalMain } = await import("./apply-local");
+  if (options.command === 'apply-local') {
+    const { main: applyLocalMain } = await import('./apply-local');
     await applyLocalMain();
     process.exit(0);
   }
 
-  if (options.command === "export-waybar-modules") {
+  if (options.command === 'export-waybar-modules') {
     const defaults = getDefaultWaybarAssetPaths();
     const settings = await loadSettings();
     console.log(
@@ -84,7 +84,7 @@ async function main() {
             appBin: options.appBin ?? defaults.appBin,
             terminalScript: options.terminalScript ?? defaults.terminalScript,
           },
-          settings.waybar.providerOrder as ("claude" | "codex" | "amp")[],
+          settings.waybar.providerOrder as ('claude' | 'codex' | 'amp')[],
         ),
         null,
         2,
@@ -93,18 +93,14 @@ async function main() {
     process.exit(0);
   }
 
-  if (options.command === "export-waybar-css") {
+  if (options.command === 'export-waybar-css') {
     const defaults = getDefaultWaybarAssetPaths();
     const settings = await loadSettings();
     console.log(
       JSON.stringify(
         exportWaybarCss({
           iconsDir: options.iconsDir ?? defaults.iconsDir,
-          providerOrder: settings.waybar.providerOrder as (
-            | "claude"
-            | "codex"
-            | "amp"
-          )[],
+          providerOrder: settings.waybar.providerOrder as ('claude' | 'codex' | 'amp')[],
           separators: settings.waybar.separators,
         }),
         null,
@@ -115,36 +111,34 @@ async function main() {
   }
 
   // Handle update
-  if (options.command === "update") {
-    const { main: updateMain } = await import("./update");
+  if (options.command === 'update') {
+    const { main: updateMain } = await import('./update');
     await updateMain();
     process.exit(0);
   }
 
   // Handle uninstall
-  if (options.command === "uninstall") {
-    const { main: uninstallMain } = await import("./uninstall");
+  if (options.command === 'uninstall') {
+    const { main: uninstallMain } = await import('./uninstall');
     await uninstallMain();
     process.exit(0);
   }
 
-  if (options.command === "remove") {
-    const { main: removeMain } = await import("./remove");
+  if (options.command === 'remove') {
+    const { main: removeMain } = await import('./remove');
     await removeMain();
     process.exit(0);
   }
 
   // Handle cache refresh
   if (options.refresh) {
-    const toInvalidate = options.provider
-      ? [options.provider]
-      : ["claude", "codex", "amp"];
+    const toInvalidate = options.provider ? [options.provider] : ['claude', 'codex', 'amp'];
 
     for (const id of toInvalidate) {
       const prov = getProvider(id);
       if (prov) await cache.invalidate(prov.cacheKey);
     }
-    logger.info("Cache invalidated");
+    logger.info('Cache invalidated');
   }
 
   // Load settings
@@ -156,9 +150,7 @@ async function main() {
   if (options.provider) {
     // If provider is disabled in waybar settings, output empty (hidden module)
     if (!settings.waybar.providers.includes(options.provider)) {
-      console.log(
-        JSON.stringify({ text: "", tooltip: "", class: APP_HIDDEN_CLASS }),
-      );
+      console.log(JSON.stringify({ text: '', tooltip: '', class: APP_HIDDEN_CLASS }));
       process.exit(0);
     }
 
@@ -175,21 +167,17 @@ async function main() {
     quotas = await getAllQuotas();
 
     // Filter by settings for waybar output
-    if (options.command === "waybar") {
-      quotas.providers = quotas.providers.filter((p) =>
-        settings.waybar.providers.includes(p.provider),
-      );
+    if (options.command === 'waybar') {
+      quotas.providers = quotas.providers.filter((p) => settings.waybar.providers.includes(p.provider));
     }
   }
 
   // Output
   switch (options.command) {
-    case "terminal":
-    case "status":
+    case 'terminal':
+    case 'status':
       outputTerminal(quotas);
       break;
-
-    case "waybar":
     default:
       // If running in interactive terminal without explicit command, show help
       if (process.stdout.isTTY && args.length === 0) {
@@ -199,9 +187,7 @@ async function main() {
 
       // If single provider requested, use individual format for separate modules
       if (options.provider && quotas.providers.length === 1) {
-        console.log(
-          JSON.stringify(formatProviderForWaybar(quotas.providers[0])),
-        );
+        console.log(JSON.stringify(formatProviderForWaybar(quotas.providers[0])));
       } else {
         outputWaybar(quotas);
       }
@@ -210,6 +196,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  logger.error("Fatal error", { error });
+  logger.error('Fatal error', { error });
   process.exit(1);
 });

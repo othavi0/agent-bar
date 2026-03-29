@@ -4,25 +4,21 @@
  * agent-bar-omarchy update - Update agent-bar-omarchy to latest version
  */
 
-import * as p from "@clack/prompts";
-import { join } from "node:path";
-import { APP_NAME } from "./app-identity";
-import { createSpinner } from "./spinner";
-import { oneDark, colorize, semantic } from "./tui/colors";
+import { join } from 'node:path';
+import * as p from '@clack/prompts';
+import { APP_NAME } from './app-identity';
+import { createSpinner } from './spinner';
+import { colorize, oneDark, semantic } from './tui/colors';
 
 // Get the repo root
-const REPO_ROOT = join(import.meta.dir, "..");
+const REPO_ROOT = join(import.meta.dir, '..');
 
-async function runCmd(
-  cmd: string,
-  args: string[],
-  cwd: string,
-): Promise<{ ok: boolean; output: string }> {
+async function runCmd(cmd: string, args: string[], cwd: string): Promise<{ ok: boolean; output: string }> {
   try {
     const proc = Bun.spawn([cmd, ...args], {
       cwd,
-      stdout: "pipe",
-      stderr: "pipe",
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
 
     const stdout = await new Response(proc.stdout).text();
@@ -41,139 +37,110 @@ export async function main() {
   p.intro(colorize(`${APP_NAME} update`, oneDark.blue));
 
   // Check if we're in a git repo
-  const gitCheck = await runCmd("git", ["rev-parse", "--git-dir"], REPO_ROOT);
+  const gitCheck = await runCmd('git', ['rev-parse', '--git-dir'], REPO_ROOT);
   if (!gitCheck.ok) {
-    p.log.error(
-      colorize("Not a git repository. Cannot update.", semantic.danger),
-    );
-    p.outro(colorize("Update failed", semantic.danger));
+    p.log.error(colorize('Not a git repository. Cannot update.', semantic.danger));
+    p.outro(colorize('Update failed', semantic.danger));
     return;
   }
 
   // Get current version
-  const currentCommit = await runCmd(
-    "git",
-    ["rev-parse", "--short", "HEAD"],
-    REPO_ROOT,
-  );
-  const currentBranch = await runCmd(
-    "git",
-    ["branch", "--show-current"],
-    REPO_ROOT,
-  );
+  const currentCommit = await runCmd('git', ['rev-parse', '--short', 'HEAD'], REPO_ROOT);
+  const currentBranch = await runCmd('git', ['branch', '--show-current'], REPO_ROOT);
 
-  p.log.info(
-    colorize(`Branch: ${currentBranch.output.trim()}`, semantic.subtitle),
-  );
-  p.log.info(
-    colorize(`Current: ${currentCommit.output.trim()}`, semantic.subtitle),
-  );
+  p.log.info(colorize(`Branch: ${currentBranch.output.trim()}`, semantic.subtitle));
+  p.log.info(colorize(`Current: ${currentCommit.output.trim()}`, semantic.subtitle));
 
   // Fetch latest
-  const spinner = createSpinner("Fetching latest changes...");
+  const spinner = createSpinner('Fetching latest changes...');
   spinner.start();
 
-  const fetch = await runCmd("git", ["fetch", "origin"], REPO_ROOT);
+  const fetch = await runCmd('git', ['fetch', 'origin'], REPO_ROOT);
   if (!fetch.ok) {
-    spinner.fail("Failed to fetch");
+    spinner.fail('Failed to fetch');
     p.log.error(fetch.output);
     return;
   }
 
   // Check if there are updates
-  const status = await runCmd("git", ["status", "-uno"], REPO_ROOT);
-  const behind = status.output.includes("behind");
+  const status = await runCmd('git', ['status', '-uno'], REPO_ROOT);
+  const behind = status.output.includes('behind');
 
   if (!behind) {
-    spinner.succeed("Already up to date!");
-    p.outro(colorize("No updates available", semantic.subtitle));
+    spinner.succeed('Already up to date!');
+    p.outro(colorize('No updates available', semantic.subtitle));
     return;
   }
 
-  spinner.succeed("Updates available");
+  spinner.succeed('Updates available');
 
   // Show what's coming
-  const log = await runCmd(
-    "git",
-    ["log", "--oneline", "HEAD..origin/master", "-10"],
-    REPO_ROOT,
-  );
+  const log = await runCmd('git', ['log', '--oneline', 'HEAD..origin/master', '-10'], REPO_ROOT);
   if (log.ok && log.output.trim()) {
     p.note(
       log.output
         .trim()
-        .split("\n")
+        .split('\n')
         .map((l) => colorize(l, semantic.subtitle))
-        .join("\n"),
-      colorize("New commits", semantic.title),
+        .join('\n'),
+      colorize('New commits', semantic.title),
     );
   }
 
   const proceed = await p.confirm({
-    message: "Apply update?",
+    message: 'Apply update?',
     initialValue: true,
   });
 
   if (p.isCancel(proceed) || !proceed) {
-    p.outro(colorize("Update cancelled", semantic.muted));
+    p.outro(colorize('Update cancelled', semantic.muted));
     return;
   }
 
   // Pull changes
-  spinner.text = "Pulling changes...";
+  spinner.text = 'Pulling changes...';
   spinner.start();
-  const pull = await runCmd("git", ["pull", "--ff-only"], REPO_ROOT);
+  const pull = await runCmd('git', ['pull', '--ff-only'], REPO_ROOT);
 
   if (!pull.ok) {
-    spinner.fail("Pull failed");
+    spinner.fail('Pull failed');
     p.log.error(pull.output);
-    p.log.warn(
-      colorize("Try: git stash && git pull && git stash pop", semantic.warning),
-    );
+    p.log.warn(colorize('Try: git stash && git pull && git stash pop', semantic.warning));
     return;
   }
 
-  spinner.succeed("Code updated");
+  spinner.succeed('Code updated');
 
   // Install dependencies
-  spinner.text = "Installing dependencies...";
+  spinner.text = 'Installing dependencies...';
   spinner.start();
-  const install = await runCmd("bun", ["install"], REPO_ROOT);
+  const install = await runCmd('bun', ['install'], REPO_ROOT);
 
   if (!install.ok) {
-    spinner.fail("Install failed");
+    spinner.fail('Install failed');
     p.log.error(install.output);
     return;
   }
 
-  spinner.succeed("Dependencies updated");
+  spinner.succeed('Dependencies updated');
 
   // Get new version
-  const newCommit = await runCmd(
-    "git",
-    ["rev-parse", "--short", "HEAD"],
-    REPO_ROOT,
-  );
+  const newCommit = await runCmd('git', ['rev-parse', '--short', 'HEAD'], REPO_ROOT);
 
-  p.log.success(
-    colorize(
-      `Updated: ${currentCommit.output.trim()} → ${newCommit.output.trim()}`,
-      semantic.good,
-    ),
-  );
+  p.log.success(colorize(`Updated: ${currentCommit.output.trim()} → ${newCommit.output.trim()}`, semantic.good));
 
   // Reload waybar
   try {
-    Bun.spawn(["pkill", "-USR2", "waybar"]);
+    Bun.spawn(['pkill', '-USR2', 'waybar']);
   } catch {}
 
-  p.outro(colorize("Update complete!", semantic.good));
+  p.outro(colorize('Update complete!', semantic.good));
 }
 
 // Only auto-run when executed directly
 if (import.meta.main) {
   main().catch((e) => {
-    console.error("Update failed:", e);
+    console.error('Update failed:', e);
     process.exit(1);
   });
 }

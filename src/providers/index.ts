@@ -1,13 +1,17 @@
-export * from './types';
+export { AmpProvider } from './amp';
 export { ClaudeProvider } from './claude';
 export { CodexProvider } from './codex';
-export { AmpProvider } from './amp';
+export { getRegisteredProvider, getRegisteredProviderIds, getRegisteredProviders, registerProvider } from './registry';
+export * from './types';
 
-import { ClaudeProvider } from './claude';
-import { CodexProvider } from './codex';
-import { AmpProvider } from './amp';
+// Side-effect imports: each provider self-registers via registerProvider()
+import './claude';
+import './codex';
+import './amp';
+
 import { logger } from '../logger';
-import type { Provider, ProviderQuota, AllQuotas } from './types';
+import { getRegisteredProvider, getRegisteredProviders } from './registry';
+import type { AllQuotas, Provider, ProviderQuota } from './types';
 
 const PROVIDER_TIMEOUT_MS = 10_000;
 const MAX_RETRIES = 1;
@@ -16,17 +20,11 @@ const RETRY_DELAY_MS = 1_000;
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-    ),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
   ]);
 }
 
-async function fetchWithRetry<T>(
-  fn: () => Promise<T>,
-  timeoutMs: number,
-  label: string,
-): Promise<T> {
+async function fetchWithRetry<T>(fn: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -36,34 +34,31 @@ async function fetchWithRetry<T>(
       const isTimeout = lastError.message.includes('timed out');
       if (!isTimeout || attempt === MAX_RETRIES) throw lastError;
       logger.debug(`${label} timeout, retrying (${attempt + 1}/${MAX_RETRIES})...`);
-      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
     }
   }
   throw lastError;
 }
 
 /**
- * All registered providers
+ * All registered providers (derived from registry).
  */
-export const providers: Provider[] = [
-  new ClaudeProvider(),
-  new CodexProvider(),
-  new AmpProvider(),
-];
+export const providers: readonly Provider[] = getRegisteredProviders();
 
 /**
  * Get provider by ID
  */
 export function getProvider(id: string): Provider | undefined {
-  return providers.find(p => p.id === id);
+  return getRegisteredProvider(id);
 }
 
 /**
  * Fetch quotas from all available providers
  */
 export async function getAllQuotas(): Promise<AllQuotas> {
+  const allProviders = getRegisteredProviders();
   const results = await Promise.all(
-    providers.map(async (provider): Promise<ProviderQuota> => {
+    allProviders.map(async (provider): Promise<ProviderQuota> => {
       try {
         return await fetchWithRetry(() => provider.getQuota(), PROVIDER_TIMEOUT_MS, provider.name);
       } catch (error) {
@@ -74,7 +69,7 @@ export async function getAllQuotas(): Promise<AllQuotas> {
           error: error instanceof Error ? error.message : 'Unknown error',
         };
       }
-    })
+    }),
   );
 
   return {
@@ -87,7 +82,7 @@ export async function getAllQuotas(): Promise<AllQuotas> {
  * Fetch quota from a specific provider
  */
 export async function getQuotaFor(providerId: string): Promise<ProviderQuota | null> {
-  const provider = getProvider(providerId);
+  const provider = getRegisteredProvider(providerId);
   if (!provider) return null;
 
   try {

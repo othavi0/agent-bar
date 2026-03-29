@@ -1,13 +1,6 @@
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import {
   APP_NAME,
   BACKUP_SUFFIX,
@@ -17,17 +10,17 @@ import {
   LEGACY_WAYBAR_NAMESPACE,
   WAYBAR_MODULE_PREFIX,
   WAYBAR_NAMESPACE,
-} from "./app-identity";
-import { loadSettingsSync } from "./settings";
+} from './app-identity';
+import { loadSettingsSync } from './settings';
 import {
-  WAYBAR_PROVIDERS,
   cleanupLegacyWaybarAssets,
   exportWaybarCss,
   exportWaybarModules,
   getDefaultWaybarAssetPaths,
   normalizeProviderSelection,
+  WAYBAR_PROVIDERS,
   type WaybarProviderId,
-} from "./waybar-contract";
+} from './waybar-contract';
 
 export interface WaybarIntegrationPaths {
   waybarConfigPath: string;
@@ -71,27 +64,23 @@ function readText(path: string): string | null {
     return null;
   }
 
-  return readFileSync(path, "utf8");
+  return readFileSync(path, 'utf8');
 }
 
 function writeText(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content.endsWith("\n") ? content : `${content}\n`, "utf8");
+  writeFileSync(path, content.endsWith('\n') ? content : `${content}\n`, 'utf8');
 }
 
 function backupIfNeeded(path: string): void {
   const backupPath = `${path}${BACKUP_SUFFIX}`;
-  if (
-    !existsSync(backupPath)
-    && !existsSync(`${path}${LEGACY_BACKUP_SUFFIX}`)
-    && existsSync(path)
-  ) {
+  if (!existsSync(backupPath) && !existsSync(`${path}${LEGACY_BACKUP_SUFFIX}`) && existsSync(path)) {
     copyFileSync(path, backupPath);
   }
 }
 
 function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function parseQuotedStrings(block: string): string[] {
@@ -100,9 +89,7 @@ function parseQuotedStrings(block: string): string[] {
   for (const match of matches) {
     try {
       values.push(JSON.parse(`"${match[1]}"`) as string);
-    } catch {
-      continue;
-    }
+    } catch {}
   }
   return values;
 }
@@ -123,11 +110,11 @@ function arraysEqual(left: string[], right: string[]): boolean {
 
 function formatStringArray(values: string[], indent: string): string {
   if (values.length === 0) {
-    return "[]";
+    return '[]';
   }
 
   const itemIndent = `${indent}  `;
-  const lines = values.map((value) => `${itemIndent}${JSON.stringify(value)}`).join(",\n");
+  const lines = values.map((value) => `${itemIndent}${JSON.stringify(value)}`).join(',\n');
   return `[\n${lines}\n${indent}]`;
 }
 
@@ -142,25 +129,19 @@ function rewriteStringArrayProperty(
   propertyName: string,
   transform: (values: string[]) => string[],
 ): RewriteArrayResult {
-  const pattern = new RegExp(`("${escapeRegex(propertyName)}"\\s*:\\s*)\\[([\\s\\S]*?)\\]`, "g");
+  const pattern = new RegExp(`("${escapeRegex(propertyName)}"\\s*:\\s*)\\[([\\s\\S]*?)\\]`, 'g');
 
   let found = false;
   let changed = false;
 
   const rewritten = content.replace(
     pattern,
-    (
-      full: string,
-      prefix: string,
-      body: string,
-      offset: number,
-      source: string,
-    ): string => {
+    (full: string, prefix: string, body: string, offset: number, source: string): string => {
       found = true;
-      const lineStart = source.lastIndexOf("\n", offset) + 1;
+      const lineStart = source.lastIndexOf('\n', offset) + 1;
       const linePrefix = source.slice(lineStart, offset);
       const indentMatch = linePrefix.match(/^\s*/);
-      const indent = indentMatch ? indentMatch[0] : "";
+      const indent = indentMatch ? indentMatch[0] : '';
 
       const currentValues = parseQuotedStrings(body);
       const nextValues = transform(currentValues);
@@ -178,21 +159,17 @@ function rewriteStringArrayProperty(
 }
 
 function insertPropertyIntoFirstObject(content: string, propertyText: string): string {
-  const braceIndex = content.indexOf("{");
+  const braceIndex = content.indexOf('{');
   if (braceIndex === -1) {
-    throw new Error(
-      `Waybar config must contain an object to insert ${APP_NAME} integration.`,
-    );
+    throw new Error(`Waybar config must contain an object to insert ${APP_NAME} integration.`);
   }
 
   const afterBrace = content.slice(braceIndex + 1);
   const indentMatch = afterBrace.match(/\n(\s*)"/);
-  const indent = indentMatch ? indentMatch[1] : "  ";
+  const indent = indentMatch ? indentMatch[1] : '  ';
   const firstToken = afterBrace.trimStart();
-  const objectIsEmpty = firstToken.startsWith("}");
-  const insertion = objectIsEmpty
-    ? `\n${indent}${propertyText}\n`
-    : `\n${indent}${propertyText},`;
+  const objectIsEmpty = firstToken.startsWith('}');
+  const insertion = objectIsEmpty ? `\n${indent}${propertyText}\n` : `\n${indent}${propertyText},`;
 
   return `${content.slice(0, braceIndex + 1)}${insertion}${afterBrace}`;
 }
@@ -207,23 +184,20 @@ function isManagedModule(value: string): boolean {
 
 function stripManagedStyleImports(content: string): string {
   return content
+    .replace(new RegExp(`^\\s*\\/\\*\\s*${escapeRegex(APP_NAME)} managed import\\s*\\*\\/\\n?`, 'm'), '')
+    .replace(new RegExp(`^\\s*\\/\\*\\s*${escapeRegex(LEGACY_APP_NAME)} managed import\\s*\\*\\/\\n?`, 'm'), '')
     .replace(
-      new RegExp(`^\\s*\\/\\*\\s*${escapeRegex(APP_NAME)} managed import\\s*\\*\\/\\n?`, "m"),
-      "",
+      new RegExp(`^\\s*@import\\s+url\\((['"])\\./${escapeRegex(WAYBAR_NAMESPACE)}/style\\.css\\1\\);?\\n?`, 'm'),
+      '',
     )
     .replace(
-      new RegExp(`^\\s*\\/\\*\\s*${escapeRegex(LEGACY_APP_NAME)} managed import\\s*\\*\\/\\n?`, "m"),
-      "",
+      new RegExp(
+        `^\\s*@import\\s+url\\((['"])\\./${escapeRegex(LEGACY_WAYBAR_NAMESPACE)}/style\\.css\\1\\);?\\n?`,
+        'm',
+      ),
+      '',
     )
-    .replace(
-      new RegExp(`^\\s*@import\\s+url\\((['"])\\./${escapeRegex(WAYBAR_NAMESPACE)}/style\\.css\\1\\);?\\n?`, "m"),
-      "",
-    )
-    .replace(
-      new RegExp(`^\\s*@import\\s+url\\((['"])\\./${escapeRegex(LEGACY_WAYBAR_NAMESPACE)}/style\\.css\\1\\);?\\n?`, "m"),
-      "",
-    )
-    .replace(/^\s*\n/, "");
+    .replace(/^\s*\n/, '');
 }
 
 function ensureIncludePath(
@@ -231,7 +205,7 @@ function ensureIncludePath(
   includePath: string,
   legacyIncludePath: string,
 ): { content: string; changed: boolean } {
-  const rewriteResult = rewriteStringArrayProperty(content, "include", (values) => {
+  const rewriteResult = rewriteStringArrayProperty(content, 'include', (values) => {
     const next = values.filter((value) => value !== legacyIncludePath);
     if (!next.includes(includePath)) {
       next.push(includePath);
@@ -243,19 +217,16 @@ function ensureIncludePath(
     return { content: rewriteResult.content, changed: rewriteResult.changed };
   }
 
-  const includeProperty = `"include": ${formatStringArray([includePath], "  ")}`;
+  const includeProperty = `"include": ${formatStringArray([includePath], '  ')}`;
   return {
     content: insertPropertyIntoFirstObject(content, includeProperty),
     changed: true,
   };
 }
 
-function removeIncludePaths(
-  content: string,
-  includePaths: string[],
-): { content: string; changed: boolean } {
+function removeIncludePaths(content: string, includePaths: string[]): { content: string; changed: boolean } {
   const includeSet = new Set(includePaths);
-  const rewriteResult = rewriteStringArrayProperty(content, "include", (values) =>
+  const rewriteResult = rewriteStringArrayProperty(content, 'include', (values) =>
     values.filter((value) => !includeSet.has(value)),
   );
 
@@ -286,11 +257,8 @@ function reconcileManagedModules(values: string[], moduleIDs: string[]): string[
   return next;
 }
 
-function ensureModulesRight(
-  content: string,
-  moduleIDs: string[],
-): { content: string; changed: boolean } {
-  const rewriteResult = rewriteStringArrayProperty(content, "modules-right", (values) =>
+function ensureModulesRight(content: string, moduleIDs: string[]): { content: string; changed: boolean } {
+  const rewriteResult = rewriteStringArrayProperty(content, 'modules-right', (values) =>
     reconcileManagedModules(values, moduleIDs),
   );
 
@@ -298,7 +266,7 @@ function ensureModulesRight(
     return { content: rewriteResult.content, changed: rewriteResult.changed };
   }
 
-  const modulesProperty = `"modules-right": ${formatStringArray(moduleIDs, "  ")}`;
+  const modulesProperty = `"modules-right": ${formatStringArray(moduleIDs, '  ')}`;
   return {
     content: insertPropertyIntoFirstObject(content, modulesProperty),
     changed: true,
@@ -306,7 +274,7 @@ function ensureModulesRight(
 }
 
 function removeModulesRight(content: string): { content: string; changed: boolean } {
-  const rewriteResult = rewriteStringArrayProperty(content, "modules-right", (values) =>
+  const rewriteResult = rewriteStringArrayProperty(content, 'modules-right', (values) =>
     values.filter((value) => !isManagedModule(value)),
   );
 
@@ -315,9 +283,10 @@ function removeModulesRight(content: string): { content: string; changed: boolea
 
 function ensureStyleImport(content: string): { content: string; changed: boolean } {
   const stripped = stripManagedStyleImports(content);
-  const next = stripped.length > 0
-    ? `/* ${APP_NAME} managed import */\n${APP_STYLE_IMPORT}\n\n${stripped}`
-    : `/* ${APP_NAME} managed import */\n${APP_STYLE_IMPORT}\n`;
+  const next =
+    stripped.length > 0
+      ? `/* ${APP_NAME} managed import */\n${APP_STYLE_IMPORT}\n\n${stripped}`
+      : `/* ${APP_NAME} managed import */\n${APP_STYLE_IMPORT}\n`;
 
   return { content: next, changed: next !== content };
 }
@@ -330,11 +299,11 @@ function removeStyleImport(content: string): { content: string; changed: boolean
 function buildBootstrapConfig(moduleIDs: string[], includePath: string): string {
   return JSON.stringify(
     {
-      layer: "top",
-      position: "top",
-      "modules-left": [],
-      "modules-center": [],
-      "modules-right": moduleIDs,
+      layer: 'top',
+      position: 'top',
+      'modules-left': [],
+      'modules-center': [],
+      'modules-right': moduleIDs,
       include: [includePath],
     },
     null,
@@ -344,10 +313,7 @@ function buildBootstrapConfig(moduleIDs: string[], includePath: string): string 
 
 function resolveProviderOrder(): WaybarProviderId[] {
   const settings = loadSettingsSync();
-  const normalized = normalizeProviderSelection(
-    settings.waybar.providers,
-    settings.waybar.providerOrder,
-  );
+  const normalized = normalizeProviderSelection(settings.waybar.providers, settings.waybar.providerOrder);
 
   if (normalized.providerOrder.length > 0) {
     return normalized.providerOrder;
@@ -361,23 +327,23 @@ function resolveProviderOrder(): WaybarProviderId[] {
 }
 
 export function getDefaultWaybarIntegrationPaths(): WaybarIntegrationPaths {
-  const waybarRoot = join(homedir(), ".config", "waybar");
+  const waybarRoot = join(homedir(), '.config', 'waybar');
   return {
-    waybarConfigPath: join(waybarRoot, "config.jsonc"),
-    waybarStylePath: join(waybarRoot, "style.css"),
-    modulesIncludePath: join(waybarRoot, WAYBAR_NAMESPACE, "modules.jsonc"),
-    styleIncludePath: join(waybarRoot, WAYBAR_NAMESPACE, "style.css"),
+    waybarConfigPath: join(waybarRoot, 'config.jsonc'),
+    waybarStylePath: join(waybarRoot, 'style.css'),
+    modulesIncludePath: join(waybarRoot, WAYBAR_NAMESPACE, 'modules.jsonc'),
+    styleIncludePath: join(waybarRoot, WAYBAR_NAMESPACE, 'style.css'),
   };
 }
 
 export function getLegacyWaybarIntegrationPaths(
-  waybarRoot = join(homedir(), ".config", "waybar"),
+  waybarRoot = join(homedir(), '.config', 'waybar'),
 ): WaybarIntegrationPaths {
   return {
-    waybarConfigPath: join(waybarRoot, "config.jsonc"),
-    waybarStylePath: join(waybarRoot, "style.css"),
-    modulesIncludePath: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE, "modules.jsonc"),
-    styleIncludePath: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE, "style.css"),
+    waybarConfigPath: join(waybarRoot, 'config.jsonc'),
+    waybarStylePath: join(waybarRoot, 'style.css'),
+    modulesIncludePath: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE, 'modules.jsonc'),
+    styleIncludePath: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE, 'style.css'),
   };
 }
 
@@ -389,9 +355,7 @@ export function getLegacyModuleIDs(order: WaybarProviderId[]): string[] {
   return order.map((provider) => `${LEGACY_WAYBAR_MODULE_PREFIX}${provider}`);
 }
 
-export function applyWaybarIntegration(
-  options: ApplyWaybarIntegrationOptions = {},
-): ApplyWaybarIntegrationResult {
+export function applyWaybarIntegration(options: ApplyWaybarIntegrationOptions = {}): ApplyWaybarIntegrationResult {
   const paths = options.paths ?? getDefaultWaybarIntegrationPaths();
   const defaults = getDefaultWaybarAssetPaths();
   const legacyPaths = getLegacyWaybarIntegrationPaths(getManagedWaybarRoot(paths));
@@ -422,11 +386,7 @@ export function applyWaybarIntegration(
   if (currentConfig === null) {
     nextConfig = buildBootstrapConfig(moduleIDs, paths.modulesIncludePath);
   } else {
-    const includeResult = ensureIncludePath(
-      currentConfig,
-      paths.modulesIncludePath,
-      legacyPaths.modulesIncludePath,
-    );
+    const includeResult = ensureIncludePath(currentConfig, paths.modulesIncludePath, legacyPaths.modulesIncludePath);
     const modulesResult = ensureModulesRight(includeResult.content, moduleIDs);
     nextConfig = modulesResult.content;
   }
@@ -438,7 +398,7 @@ export function applyWaybarIntegration(
   }
 
   const currentStyle = readText(paths.waybarStylePath);
-  const styleResult = ensureStyleImport(currentStyle ?? "");
+  const styleResult = ensureStyleImport(currentStyle ?? '');
   if (styleResult.changed || currentStyle === null) {
     backupIfNeeded(paths.waybarStylePath);
     writeText(paths.waybarStylePath, styleResult.content);
@@ -460,9 +420,7 @@ export function applyWaybarIntegration(
   };
 }
 
-export function removeWaybarIntegration(
-  options: RemoveWaybarIntegrationOptions = {},
-): RemoveWaybarIntegrationResult {
+export function removeWaybarIntegration(options: RemoveWaybarIntegrationOptions = {}): RemoveWaybarIntegrationResult {
   const paths = options.paths ?? getDefaultWaybarIntegrationPaths();
   const legacyPaths = getLegacyWaybarIntegrationPaths(getManagedWaybarRoot(paths));
 
@@ -470,10 +428,7 @@ export function removeWaybarIntegration(
   let configChanged = false;
 
   if (currentConfig !== null) {
-    const includeResult = removeIncludePaths(currentConfig, [
-      paths.modulesIncludePath,
-      legacyPaths.modulesIncludePath,
-    ]);
+    const includeResult = removeIncludePaths(currentConfig, [paths.modulesIncludePath, legacyPaths.modulesIncludePath]);
     const modulesResult = removeModulesRight(includeResult.content);
     const nextConfig = modulesResult.content;
     configChanged = includeResult.changed || modulesResult.changed;

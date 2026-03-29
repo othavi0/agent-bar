@@ -1,6 +1,6 @@
-export const APP_NAME = "agent-bar-omarchy";
-export const LEGACY_APP_NAME = "qbar";
-export const APP_WINDOW_TITLE = "Agent Bar Omarchy";
+export const APP_NAME = 'agent-bar-omarchy';
+export const LEGACY_APP_NAME = 'qbar';
+export const APP_WINDOW_TITLE = 'Agent Bar Omarchy';
 
 export const APP_BASE_CLASS = APP_NAME;
 export const LEGACY_APP_BASE_CLASS = LEGACY_APP_NAME;

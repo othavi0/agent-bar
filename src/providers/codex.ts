@@ -1,10 +1,12 @@
-import { APP_NAME } from '../app-identity';
 import { join } from 'path';
-import { CONFIG } from '../config';
-import { logger } from '../logger';
-import { cache } from '../cache';
-import type { ModelWindows, Provider, ProviderQuota, QuotaWindow } from './types';
 import pkg from '../../package.json';
+import { APP_NAME } from '../app-identity';
+import { cache } from '../cache';
+import { CONFIG } from '../config';
+import { classifyWindow, normalizePlan } from '../formatters/shared';
+import { logger } from '../logger';
+import { registerProvider } from './registry';
+import type { ModelWindows, Provider, ProviderQuota, QuotaWindow } from './types';
 
 interface CodexWindowRaw {
   used_percent: number;
@@ -103,14 +105,12 @@ export class CodexProvider implements Provider {
             files.map(async (f) => ({
               path: f,
               mtime: (await Bun.file(f).stat()).mtimeMs,
-            }))
+            })),
           );
           sorted.sort((a, b) => b.mtime - a.mtime);
           return sorted[0].path;
         }
-      } catch {
-        continue;
-      }
+      } catch {}
     }
 
     return null;
@@ -129,9 +129,7 @@ export class CodexProvider implements Provider {
           if (event.payload?.type === 'token_count' && event.payload.rate_limits) {
             return event.payload.rate_limits;
           }
-        } catch {
-          continue;
-        }
+        } catch {}
       }
     } catch (error) {
       logger.error('Failed to read Codex session file', { error, filePath });
@@ -145,28 +143,9 @@ export class CodexProvider implements Provider {
     return new Date(timestamp * 1000).toISOString();
   }
 
-  private normalizePlanName(planType: string | null | undefined): string | undefined {
-    if (!planType) return undefined;
-    const key = planType.trim().toLowerCase();
-    const map: Record<string, string> = {
-      free: 'Free',
-      go: 'Go',
-      plus: 'Plus',
-      pro: 'Pro',
-      business: 'Business',
-      team: 'Business',
-      enterprise: 'Enterprise',
-      edu: 'Edu',
-      education: 'Edu',
-      apikey: 'API Key',
-      api_key: 'API Key',
-    };
-    return map[key] ?? planType;
-  }
-
   private toRawWindow(
     raw: CodexAppServerWindow | null | undefined,
-    fallbackMinutes: number
+    fallbackMinutes: number,
   ): CodexWindowRaw | undefined {
     if (!raw) return undefined;
     return {
@@ -176,10 +155,7 @@ export class CodexProvider implements Provider {
     };
   }
 
-  private normalizeBucket(
-    raw: CodexAppServerLimitBucket,
-    fallbackId?: string
-  ): CodexLimitBucket | null {
+  private normalizeBucket(raw: CodexAppServerLimitBucket, fallbackId?: string): CodexLimitBucket | null {
     const limitId = raw.limitId ?? fallbackId ?? null;
     if (!limitId) return null;
 
@@ -197,7 +173,7 @@ export class CodexProvider implements Provider {
 
   private normalizeAppServerRateLimits(
     raw: CodexAppServerRateLimitsReadResult,
-    accountPlanType?: string | null
+    accountPlanType?: string | null,
   ): CodexRateLimits | null {
     const buckets: Record<string, CodexLimitBucket> = {};
 
@@ -241,15 +217,6 @@ export class CodexProvider implements Provider {
     };
   }
 
-  private classifyWindow(minutes: number | null | undefined): 'fiveHour' | 'sevenDay' | 'other' {
-    if (!minutes || minutes <= 0) return 'other';
-
-    // Keep classification tolerant to provider-side changes.
-    if (Math.abs(minutes - 300) <= 90) return 'fiveHour';
-    if (Math.abs(minutes - 10080) <= 1440) return 'sevenDay';
-    return 'other';
-  }
-
   private toQuotaWindow(raw: CodexWindowRaw | undefined): QuotaWindow | undefined {
     if (!raw) return undefined;
     return {
@@ -260,14 +227,12 @@ export class CodexProvider implements Provider {
   }
 
   private formatBucketLabel(bucket: CodexLimitBucket): string {
-    const raw = (bucket.limit_name && bucket.limit_name.trim().length > 0)
-      ? bucket.limit_name
-      : bucket.limit_id;
+    const raw = bucket.limit_name && bucket.limit_name.trim().length > 0 ? bucket.limit_name : bucket.limit_id;
     const normalized = raw.replace(/[_-]+/g, ' ').trim();
     if (!normalized) return 'Codex';
     return normalized
       .split(/\s+/)
-      .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
+      .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
       .join(' ');
   }
 
@@ -283,7 +248,7 @@ export class CodexProvider implements Provider {
           const quotaWindow = this.toQuotaWindow(raw);
           if (!quotaWindow) continue;
 
-          const kind = this.classifyWindow(raw.window_minutes);
+          const kind = classifyWindow(raw.window_minutes);
           if (kind === 'fiveHour' && !windows.fiveHour) {
             windows.fiveHour = quotaWindow;
           } else if (kind === 'sevenDay' && !windows.sevenDay) {
@@ -323,7 +288,7 @@ export class CodexProvider implements Provider {
         if (!raw) continue;
         const quotaWindow = this.toQuotaWindow(raw);
         if (!quotaWindow) continue;
-        const kind = this.classifyWindow(raw.window_minutes);
+        const kind = classifyWindow(raw.window_minutes);
         if (kind === 'fiveHour' && !windows.fiveHour) windows.fiveHour = quotaWindow;
         else if (kind === 'sevenDay' && !windows.sevenDay) windows.sevenDay = quotaWindow;
         else {
@@ -337,7 +302,7 @@ export class CodexProvider implements Provider {
       if (!windows.sevenDay && limits.secondary) {
         windows.sevenDay = this.toQuotaWindow(limits.secondary);
       }
-      modelsDetailed['Codex'] = windows;
+      modelsDetailed.Codex = windows;
     }
 
     return modelsDetailed;
@@ -352,10 +317,7 @@ export class CodexProvider implements Provider {
     return models;
   }
 
-  private pickPrimary(
-    limits: CodexRateLimits,
-    modelsDetailed: Record<string, ModelWindows>
-  ): QuotaWindow | undefined {
+  private pickPrimary(limits: CodexRateLimits, modelsDetailed: Record<string, ModelWindows>): QuotaWindow | undefined {
     const explicit = this.toQuotaWindow(limits.primary);
     if (explicit) return explicit;
 
@@ -370,7 +332,7 @@ export class CodexProvider implements Provider {
 
   private pickSecondary(
     limits: CodexRateLimits,
-    modelsDetailed: Record<string, ModelWindows>
+    modelsDetailed: Record<string, ModelWindows>,
   ): QuotaWindow | undefined {
     const explicit = this.toQuotaWindow(limits.secondary);
     if (explicit) return explicit;
@@ -394,7 +356,7 @@ export class CodexProvider implements Provider {
       const rl = createInterface({ input: proc.stdout });
 
       let finished = false;
-      let accountPlanType: string | null | undefined = undefined;
+      let accountPlanType: string | null | undefined;
       let rateLimitsResult: CodexAppServerRateLimitsReadResult | null = null;
       let graceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -403,8 +365,12 @@ export class CodexProvider implements Provider {
         finished = true;
         if (graceTimer) clearTimeout(graceTimer);
         clearTimeout(timer);
-        try { rl.close(); } catch {}
-        try { proc.kill(); } catch {}
+        try {
+          rl.close();
+        } catch {}
+        try {
+          proc.kill();
+        } catch {}
         resolve(result);
       };
 
@@ -418,7 +384,7 @@ export class CodexProvider implements Provider {
 
       const send = (msg: unknown) => {
         try {
-          proc.stdin.write(JSON.stringify(msg) + '\n');
+          proc.stdin.write(`${JSON.stringify(msg)}\n`);
         } catch {
           // ignore
         }
@@ -480,30 +446,30 @@ export class CodexProvider implements Provider {
       available: false,
     };
 
-    if (!await this.isAvailable()) {
+    if (!(await this.isAvailable())) {
       return { ...base, error: `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.` };
     }
 
-    const cached = await cache.get<CodexRateLimits>('codex-quota');
-    let limits = cached;
+    let limits: CodexRateLimits;
+    try {
+      limits = await cache.getOrFetch<CodexRateLimits>(
+        'codex-quota',
+        async () => {
+          const appServerResult = await this.fetchRateLimitsViaAppServer();
+          if (appServerResult) return appServerResult;
 
-    if (!limits) {
-      limits = await this.fetchRateLimitsViaAppServer();
+          logger.warn('Codex app-server unavailable, falling back to session log');
+          const sessionFile = await this.findLatestSessionFile();
+          if (!sessionFile) throw new Error('No session data found');
 
-      if (!limits) {
-        logger.warn('Codex app-server unavailable, falling back to session log');
-        const sessionFile = await this.findLatestSessionFile();
-        if (!sessionFile) {
-          return { ...base, error: 'No session data found' };
-        }
-
-        limits = await this.extractRateLimits(sessionFile);
-        if (!limits) {
-          return { ...base, error: 'No rate limit data found (app-server + session log)' };
-        }
-      }
-
-      await cache.set('codex-quota', limits, CONFIG.cache.codexTtlMs);
+          const extracted = await this.extractRateLimits(sessionFile);
+          if (!extracted) throw new Error('No rate limit data found (app-server + session log)');
+          return extracted;
+        },
+        CONFIG.cache.ttlMs,
+      );
+    } catch (error) {
+      return { ...base, error: error instanceof Error ? error.message : 'Failed to fetch Codex usage' };
     }
 
     const modelsDetailed = this.buildModelWindows(limits);
@@ -534,8 +500,10 @@ export class CodexProvider implements Provider {
       ...(Object.keys(models).length > 0 ? { models } : {}),
       ...(Object.keys(modelsDetailed).length > 0 ? { modelsDetailed } : {}),
       ...(limits.plan_type ? { planType: limits.plan_type } : {}),
-      ...(this.normalizePlanName(limits.plan_type) ? { plan: this.normalizePlanName(limits.plan_type) } : {}),
+      ...(normalizePlan(limits.plan_type) ? { plan: normalizePlan(limits.plan_type) } : {}),
       ...(codexCredits ? { extraUsage: codexCredits } : {}),
     };
   }
 }
+
+registerProvider(new CodexProvider());

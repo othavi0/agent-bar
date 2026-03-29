@@ -1,26 +1,23 @@
-import * as p from "@clack/prompts";
+import * as p from '@clack/prompts';
 import {
-  formatPercent,
+  applyCodexModelFilter,
+  codexModelsFromQuota,
   formatEta,
+  formatPercent,
   formatResetTime,
   normalizePlanLabel,
-  codexModelsFromQuota,
-  applyCodexModelFilter,
-} from "../formatters/shared";
-import { getAllQuotas } from "../providers";
-import type { ProviderQuota, QuotaWindow } from "../providers/types";
-import { loadSettingsSync, type WindowPolicy } from "../settings";
-import { BOX as B } from "../theme";
-import { oneDark, colorize, getQuotaColor, semantic } from "./colors";
+} from '../formatters/shared';
+import { getAllQuotas } from '../providers';
+import type { ProviderQuota, QuotaWindow } from '../providers/types';
+import { loadSettingsSync, type WindowPolicy } from '../settings';
+import { BOX as B } from '../theme';
+import { colorize, getQuotaColor, oneDark, semantic } from './colors';
 
 function bar(pct: number | null): string {
-  if (pct === null) return colorize("░".repeat(20), semantic.muted);
+  if (pct === null) return colorize('░'.repeat(20), semantic.muted);
   const filled = Math.floor(pct / 5);
   const color = getQuotaColor(pct);
-  return (
-    colorize("█".repeat(filled), color) +
-    colorize("░".repeat(20 - filled), semantic.muted)
-  );
+  return colorize('█'.repeat(filled), color) + colorize('░'.repeat(20 - filled), semantic.muted);
 }
 
 function indicator(val: number | null): string {
@@ -33,45 +30,27 @@ const v = (color: string) => colorize(B.v, color);
 
 // Section label: ┣━ ◆ Label
 const label = (text: string, providerColor: string) =>
-  colorize(B.lt + B.h, providerColor) +
-  " " +
-  colorize(B.diamond + " " + text, oneDark.blue, true);
+  `${colorize(B.lt + B.h, providerColor)} ${colorize(`${B.diamond} ${text}`, oneDark.blue, true)}`;
 
 // Model line
-function modelLine(
-  name: string,
-  window: QuotaWindow | undefined,
-  maxLen: number,
-  vColor: string,
-): string {
+function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
   const rem = window?.remaining ?? null;
   const reset = window?.resetsAt ?? null;
   const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
   const barS = bar(rem);
   const pctS = colorize(formatPercent(rem).padStart(4), getQuotaColor(rem));
-  const etaS = colorize(
-    `→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}`,
-    oneDark.cyan,
-  );
+  const etaS = colorize(`→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}`, oneDark.cyan);
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-function codexModelLine(
-  name: string,
-  window: QuotaWindow | undefined,
-  maxLen: number,
-  vColor: string,
-): string {
+function codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
   const rem = window?.remaining ?? null;
   const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
   const barS = bar(rem);
   const pctS = colorize(formatPercent(rem).padStart(4), getQuotaColor(rem));
   const etaS = window?.resetsAt
-    ? colorize(
-        `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`,
-        oneDark.cyan,
-      )
-    : colorize("→ N/A", oneDark.cyan);
+    ? colorize(`→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`, oneDark.cyan)
+    : colorize('→ N/A', oneDark.cyan);
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
@@ -79,61 +58,44 @@ function buildClaude(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = oneDark.orange;
 
-  lines.push(
-    colorize(B.tl + B.h, vc) +
-      " " +
-      colorize("Claude", vc, true) +
-      " " +
-      colorize(B.h.repeat(50), vc),
-  );
+  lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Claude', vc, true)} ${colorize(B.h.repeat(50), vc)}`);
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, oneDark.red)}`);
+    lines.push(`${v(vc)}  ${colorize(`⚠️ ${p.error}`, oneDark.red)}`);
   } else {
     const maxLen = 20;
 
     if (p.primary) {
-      lines.push(label("5-hour limit", vc));
-      for (const m of ["Opus", "Sonnet", "Haiku"]) {
+      lines.push(label('5-hour limit', vc));
+      for (const m of ['Opus', 'Sonnet', 'Haiku']) {
         lines.push(modelLine(m, p.primary, maxLen, vc));
       }
     }
 
     if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
       lines.push(v(vc));
-      lines.push(label("Weekly limit", vc));
+      lines.push(label('Weekly limit', vc));
       const entries = Object.entries(p.weeklyModels);
-      const maxLenWeekly = Math.max(
-        ...entries.map(([name]) => name.length),
-        maxLen,
-      );
+      const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
       for (const [name, window] of entries) {
         lines.push(modelLine(name, window, maxLenWeekly, vc));
       }
     } else if (p.secondary) {
       lines.push(v(vc));
-      lines.push(label("Weekly limit", vc));
-      lines.push(modelLine("All Models", p.secondary, maxLen, vc));
+      lines.push(label('Weekly limit', vc));
+      lines.push(modelLine('All Models', p.secondary, maxLen, vc));
     }
 
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
       const { remaining, used, limit } = p.extraUsage;
       lines.push(v(vc));
-      lines.push(label("Extra Usage", vc));
-      const nameS = colorize("Budget".padEnd(maxLen), oneDark.textBright);
+      lines.push(label('Extra Usage', vc));
+      const nameS = colorize('Budget'.padEnd(maxLen), oneDark.textBright);
       const barS = bar(remaining);
-      const pctS = colorize(
-        formatPercent(remaining).padStart(4),
-        getQuotaColor(remaining),
-      );
-      const usedS = colorize(
-        `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`,
-        oneDark.cyan,
-      );
-      lines.push(
-        `${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`,
-      );
+      const pctS = colorize(formatPercent(remaining).padStart(4), getQuotaColor(remaining));
+      const usedS = colorize(`$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`, oneDark.cyan);
+      lines.push(`${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`);
     }
   }
 
@@ -147,20 +109,14 @@ function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = oneDark.green;
   const settings = loadSettingsSync();
-  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? "both";
+  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? 'both';
   const planLabel = normalizePlanLabel(p);
 
-  lines.push(
-    colorize(B.tl + B.h, vc) +
-      " " +
-      colorize("Codex", vc, true) +
-      " " +
-      colorize(B.h.repeat(51), vc),
-  );
+  lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Codex', vc, true)} ${colorize(B.h.repeat(51), vc)}`);
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, oneDark.red)}`);
+    lines.push(`${v(vc)}  ${colorize(`⚠️ ${p.error}`, oneDark.red)}`);
   } else {
     const maxLen = 20;
     lines.push(`${v(vc)}  ${colorize(`Plan: ${planLabel}`, semantic.muted)}`);
@@ -170,48 +126,36 @@ function buildCodex(p: ProviderQuota): string[] {
 
     if (models.length === 0) {
       lines.push(v(vc));
-      lines.push(label("Available Models", vc));
-      lines.push(`${v(vc)}  ${colorize("No models selected", semantic.muted)}`);
+      lines.push(label('Available Models', vc));
+      lines.push(`${v(vc)}  ${colorize('No models selected', semantic.muted)}`);
     } else {
       const modelLen = Math.max(...models.map((m) => m.name.length), maxLen);
 
-      if (policy !== "seven_day") {
+      if (policy !== 'seven_day') {
         lines.push(v(vc));
-        lines.push(label("5-hour limit", vc));
+        lines.push(label('5-hour limit', vc));
         for (const model of models) {
-          lines.push(
-            codexModelLine(model.name, model.windows.fiveHour, modelLen, vc),
-          );
+          lines.push(codexModelLine(model.name, model.windows.fiveHour, modelLen, vc));
         }
       }
 
-      if (policy !== "five_hour") {
+      if (policy !== 'five_hour') {
         lines.push(v(vc));
-        lines.push(label("7-day limit", vc));
+        lines.push(label('7-day limit', vc));
         for (const model of models) {
-          lines.push(
-            codexModelLine(model.name, model.windows.sevenDay, modelLen, vc),
-          );
+          lines.push(codexModelLine(model.name, model.windows.sevenDay, modelLen, vc));
         }
       }
     }
 
     if (p.extraUsage?.enabled) {
       lines.push(v(vc));
-      lines.push(label("Credits", vc));
-      const nameS = colorize("Balance".padEnd(maxLen), oneDark.textBright);
+      lines.push(label('Credits', vc));
+      const nameS = colorize('Balance'.padEnd(maxLen), oneDark.textBright);
       const barS = bar(p.extraUsage.remaining);
-      const pctS = colorize(
-        formatPercent(p.extraUsage.remaining).padStart(4),
-        getQuotaColor(p.extraUsage.remaining),
-      );
-      const infoS =
-        p.extraUsage.limit === -1
-          ? colorize("Unlimited", oneDark.cyan)
-          : colorize("Balance", oneDark.cyan);
-      lines.push(
-        `${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`,
-      );
+      const pctS = colorize(formatPercent(p.extraUsage.remaining).padStart(4), getQuotaColor(p.extraUsage.remaining));
+      const infoS = p.extraUsage.limit === -1 ? colorize('Unlimited', oneDark.cyan) : colorize('Balance', oneDark.cyan);
+      lines.push(`${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`);
     }
   }
 
@@ -225,42 +169,29 @@ function buildAmp(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = oneDark.magenta;
 
-  lines.push(
-    colorize(B.tl + B.h, vc) +
-      " " +
-      colorize("Amp", vc, true) +
-      " " +
-      colorize(B.h.repeat(53), vc),
-  );
+  lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Amp', vc, true)} ${colorize(B.h.repeat(53), vc)}`);
   lines.push(v(vc));
 
   if (p.error) {
-    lines.push(`${v(vc)}  ${colorize("⚠️ " + p.error, oneDark.red)}`);
+    lines.push(`${v(vc)}  ${colorize(`⚠️ ${p.error}`, oneDark.red)}`);
   } else if (!p.models || Object.keys(p.models).length === 0) {
-    lines.push(`${v(vc)}  ${colorize("No usage data", semantic.muted)}`);
+    lines.push(`${v(vc)}  ${colorize('No usage data', semantic.muted)}`);
   } else {
     const entries = Object.entries(p.models);
     const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
 
-    lines.push(label("Usage", vc));
+    lines.push(label('Usage', vc));
     for (const [name, window] of entries) {
       const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
       const barS = bar(window.remaining);
-      const pctS = colorize(
-        formatPercent(window.remaining).padStart(4),
-        getQuotaColor(window.remaining),
-      );
-      lines.push(
-        `${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`,
-      );
+      const pctS = colorize(formatPercent(window.remaining).padStart(4), getQuotaColor(window.remaining));
+      lines.push(`${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`);
     }
   }
 
   if (p.account) {
     lines.push(v(vc));
-    lines.push(
-      `${v(vc)}  ${colorize(`Account: ${p.account}`, semantic.muted)}`,
-    );
+    lines.push(`${v(vc)}  ${colorize(`Account: ${p.account}`, semantic.muted)}`);
   }
 
   lines.push(v(vc));
@@ -284,35 +215,35 @@ export async function showListAll(): Promise<void> {
     if (!provider.available && !provider.error) continue;
 
     switch (provider.provider) {
-      case "claude":
+      case 'claude':
         sections.push(buildClaude(provider));
         break;
-      case "codex":
+      case 'codex':
         sections.push(buildCodex(provider));
         break;
-      case "amp":
+      case 'amp':
         sections.push(buildAmp(provider));
         break;
     }
   }
 
   // Print
-  console.log("");
+  console.log('');
   for (const section of sections) {
     for (const line of section) {
       console.log(line);
     }
-    console.log("");
+    console.log('');
   }
 
-  console.log(colorize("Press Enter to continue...", semantic.subtitle));
+  console.log(colorize('Press Enter to continue...', semantic.subtitle));
 
   // Wait for enter — always restore raw mode even if an error occurs
   process.stdin.setRawMode?.(true);
   process.stdin.resume();
   try {
     await new Promise<void>((resolve) => {
-      process.stdin.once("data", () => resolve());
+      process.stdin.once('data', () => resolve());
     });
   } finally {
     process.stdin.setRawMode?.(false);

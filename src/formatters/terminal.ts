@@ -1,20 +1,15 @@
-import { CONFIG } from "../config";
-import type {
-  AllQuotas,
-  ProviderQuota,
-  QuotaWindow,
-} from "../providers/types";
+import { CONFIG } from '../config';
+import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
+import { loadSettingsSync, type WindowPolicy } from '../settings';
+import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
 import {
-  formatPercent,
-  formatEta,
-  formatResetTime,
-  classifyWindow,
-  normalizePlanLabel,
-  codexModelsFromQuota,
   applyCodexModelFilter,
-} from "./shared";
-import { loadSettingsSync, type WindowPolicy } from "../settings";
-import { ANSI, BOX, PROVIDER_ANSI } from "../theme";
+  codexModelsFromQuota,
+  formatEta,
+  formatPercent,
+  formatResetTime,
+  normalizePlanLabel,
+} from './shared';
 
 function getColor(pct: number | null): string {
   if (pct === null) return ANSI.text;
@@ -25,10 +20,10 @@ function getColor(pct: number | null): string {
 }
 
 function bar(pct: number | null): string {
-  if (pct === null) return `${ANSI.comment}${"░".repeat(20)}${ANSI.reset}`;
+  if (pct === null) return `${ANSI.comment}${'░'.repeat(20)}${ANSI.reset}`;
   const filled = Math.floor(pct / 5);
   const color = getColor(pct);
-  return `${color}${"█".repeat(filled)}${ANSI.comment}${"░".repeat(20 - filled)}${ANSI.reset}`;
+  return `${color}${'█'.repeat(filled)}${ANSI.comment}${'░'.repeat(20 - filled)}${ANSI.reset}`;
 }
 
 function indicator(val: number | null): string {
@@ -45,12 +40,7 @@ const label = (text: string, color: string) =>
   `${color}${BOX.lt}${BOX.h}${ANSI.reset} ${ANSI.magenta}${ANSI.bold}${BOX.diamond} ${text}${ANSI.reset}`;
 
 // Model line
-function modelLine(
-  name: string,
-  window: QuotaWindow | undefined,
-  maxLen: number,
-  vColor: string,
-): string {
+function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
   const rem = window?.remaining ?? null;
   const reset = window?.resetsAt ?? null;
   const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
@@ -60,12 +50,7 @@ function modelLine(
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-function codexModelLine(
-  name: string,
-  window: QuotaWindow | undefined,
-  maxLen: number,
-  vColor: string,
-): string {
+function codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
   const rem = window?.remaining ?? null;
   const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
   const barS = bar(rem);
@@ -91,19 +76,16 @@ function buildClaude(p: ProviderQuota): string[] {
     const maxLen = 20;
 
     if (p.primary) {
-      lines.push(label("5-hour limit (shared)", vc));
-      lines.push(modelLine("All Models", p.primary, maxLen, vc));
+      lines.push(label('5-hour limit (shared)', vc));
+      lines.push(modelLine('All Models', p.primary, maxLen, vc));
     }
 
     // Per-model weekly quotas (when API provides them)
     if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
       lines.push(v(vc));
-      lines.push(label("Weekly per model", vc));
+      lines.push(label('Weekly per model', vc));
       const entries = Object.entries(p.weeklyModels);
-      const maxLenWeekly = Math.max(
-        ...entries.map(([name]) => name.length),
-        maxLen,
-      );
+      const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
       for (const [name, window] of entries) {
         lines.push(modelLine(name, window, maxLenWeekly, vc));
       }
@@ -112,21 +94,19 @@ function buildClaude(p: ProviderQuota): string[] {
     // Generic weekly (shared)
     if (p.secondary) {
       lines.push(v(vc));
-      lines.push(label("Weekly limit (shared)", vc));
-      lines.push(modelLine("All Models", p.secondary, maxLen, vc));
+      lines.push(label('Weekly limit (shared)', vc));
+      lines.push(modelLine('All Models', p.secondary, maxLen, vc));
     }
 
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
       const { remaining, used, limit } = p.extraUsage;
       lines.push(v(vc));
-      lines.push(label("Extra Usage", vc));
-      const nameS = `${ANSI.textBright}${"Budget".padEnd(maxLen)}${ANSI.reset}`;
+      lines.push(label('Extra Usage', vc));
+      const nameS = `${ANSI.textBright}${'Budget'.padEnd(maxLen)}${ANSI.reset}`;
       const barS = bar(remaining);
       const pctS = `${getColor(remaining)}${formatPercent(remaining).padStart(4)}${ANSI.reset}`;
       const usedS = `${ANSI.cyan}$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}${ANSI.reset}`;
-      lines.push(
-        `${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`,
-      );
+      lines.push(`${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`);
     }
   }
 
@@ -140,7 +120,7 @@ function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = PROVIDER_ANSI.codex;
   const settings = loadSettingsSync();
-  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? "both";
+  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? 'both';
   const planLabel = normalizePlanLabel(p);
 
   lines.push(
@@ -159,45 +139,37 @@ function buildCodex(p: ProviderQuota): string[] {
 
     if (models.length === 0) {
       lines.push(v(vc));
-      lines.push(label("Available Models", vc));
+      lines.push(label('Available Models', vc));
       lines.push(`${v(vc)}  ${ANSI.comment}No models selected${ANSI.reset}`);
     } else {
       const modelLen = Math.max(...models.map((m) => m.name.length), maxLen);
 
-      if (policy !== "seven_day") {
+      if (policy !== 'seven_day') {
         lines.push(v(vc));
-        lines.push(label("5-hour limit", vc));
+        lines.push(label('5-hour limit', vc));
         for (const model of models) {
-          lines.push(
-            codexModelLine(model.name, model.windows.fiveHour, modelLen, vc),
-          );
+          lines.push(codexModelLine(model.name, model.windows.fiveHour, modelLen, vc));
         }
       }
 
-      if (policy !== "five_hour") {
+      if (policy !== 'five_hour') {
         lines.push(v(vc));
-        lines.push(label("7-day limit", vc));
+        lines.push(label('7-day limit', vc));
         for (const model of models) {
-          lines.push(
-            codexModelLine(model.name, model.windows.sevenDay, modelLen, vc),
-          );
+          lines.push(codexModelLine(model.name, model.windows.sevenDay, modelLen, vc));
         }
       }
     }
 
     if (p.extraUsage?.enabled) {
       lines.push(v(vc));
-      lines.push(label("Credits", vc));
-      const nameS = `${ANSI.textBright}${"Balance".padEnd(maxLen)}${ANSI.reset}`;
+      lines.push(label('Credits', vc));
+      const nameS = `${ANSI.textBright}${'Balance'.padEnd(maxLen)}${ANSI.reset}`;
       const barS = bar(p.extraUsage.remaining);
       const pctS = `${getColor(p.extraUsage.remaining)}${formatPercent(p.extraUsage.remaining).padStart(4)}${ANSI.reset}`;
       const infoS =
-        p.extraUsage.limit === -1
-          ? `${ANSI.cyan}Unlimited${ANSI.reset}`
-          : `${ANSI.cyan}Balance${ANSI.reset}`;
-      lines.push(
-        `${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`,
-      );
+        p.extraUsage.limit === -1 ? `${ANSI.cyan}Unlimited${ANSI.reset}` : `${ANSI.cyan}Balance${ANSI.reset}`;
+      lines.push(`${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`);
     }
   }
 
@@ -225,9 +197,9 @@ function buildAmp(p: ProviderQuota): string[] {
     const end = `${ANSI.comment}└─${ANSI.reset}`;
 
     // Free Tier
-    const free = p.models?.["Free Tier"];
+    const free = p.models?.['Free Tier'];
     if (free) {
-      lines.push(label("Free Tier", vc));
+      lines.push(label('Free Tier', vc));
       const barS = bar(free.remaining);
       const pctS = `${getColor(free.remaining)}${formatPercent(free.remaining).padStart(4)}${ANSI.reset}`;
       lines.push(`${v(vc)}  ${indicator(free.remaining)} ${barS} ${pctS}`);
@@ -236,14 +208,11 @@ function buildAmp(p: ProviderQuota): string[] {
       const subs: string[] = [];
 
       const dollarParts: string[] = [];
-      if (m.replenishRate)
-        dollarParts.push(`${ANSI.cyan}${m.replenishRate}${ANSI.reset}`);
-      const dollars = [m.freeRemaining, m.freeTotal]
-        .filter(Boolean)
-        .join(" / ");
+      if (m.replenishRate) dollarParts.push(`${ANSI.cyan}${m.replenishRate}${ANSI.reset}`);
+      const dollars = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
       if (dollars) dollarParts.push(`${ANSI.text}( ${dollars} )${ANSI.reset}`);
       if (m.bonus) dollarParts.push(`${ANSI.cyan}${m.bonus}${ANSI.reset}`);
-      if (dollarParts.length > 0) subs.push(dollarParts.join("  "));
+      if (dollarParts.length > 0) subs.push(dollarParts.join('  '));
 
       if (free.resetsAt && free.remaining !== 100) {
         subs.push(
@@ -258,29 +227,25 @@ function buildAmp(p: ProviderQuota): string[] {
     }
 
     // Credits
-    const credits = p.models?.["Credits"];
+    const credits = p.models?.Credits;
     if (credits) {
       lines.push(v(vc));
-      const balance = m.creditsBalance ?? "$0";
+      const balance = m.creditsBalance ?? '$0';
       const color = credits.remaining > 0 ? ANSI.green : ANSI.comment;
-      lines.push(label("Credits", vc));
-      lines.push(
-        `${v(vc)}  ${indicator(credits.remaining)} ${color}${balance}${ANSI.reset}`,
-      );
+      lines.push(label('Credits', vc));
+      lines.push(`${v(vc)}  ${indicator(credits.remaining)} ${color}${balance}${ANSI.reset}`);
     }
 
     // Fallback for unknown models
     if (!free && !credits && p.models && Object.keys(p.models).length > 0) {
       const entries = Object.entries(p.models);
       const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
-      lines.push(label("Usage", vc));
+      lines.push(label('Usage', vc));
       for (const [name, window] of entries) {
         const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
         const barS = bar(window.remaining);
         const pctS = `${getColor(window.remaining)}${formatPercent(window.remaining).padStart(4)}${ANSI.reset}`;
-        lines.push(
-          `${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`,
-        );
+        lines.push(`${v(vc)}  ${indicator(window.remaining)} ${nameS} ${barS} ${pctS}`);
       }
     }
   }
@@ -296,30 +261,62 @@ function buildAmp(p: ProviderQuota): string[] {
   return lines;
 }
 
+// ---------------------------------------------------------------------------
+// Terminal builder registry — eliminates switch statements for extensibility.
+// ---------------------------------------------------------------------------
+
+type TerminalBuilder = (p: ProviderQuota) => string[];
+
+const terminalBuilders = new Map<string, TerminalBuilder>([
+  ['claude', buildClaude],
+  ['codex', buildCodex],
+  ['amp', buildAmp],
+]);
+
+/**
+ * Register a terminal builder for a provider. Used by new providers to plug
+ * into the terminal formatter without touching existing switch statements.
+ */
+export function registerTerminalBuilder(providerId: string, builder: TerminalBuilder): void {
+  terminalBuilders.set(providerId, builder);
+}
+
+function buildGenericTerminal(p: ProviderQuota): string[] {
+  const vc = ANSI.text;
+  const vi = (c: string) => `${c}${BOX.v}${ANSI.reset}`;
+  const lines: string[] = [];
+  const name = p.displayName ?? p.provider;
+
+  lines.push(
+    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${name}${ANSI.reset} ${vc}${BOX.h.repeat(Math.max(1, 55 - name.length - 3))}${ANSI.reset}`,
+  );
+
+  if (p.error) {
+    lines.push(`${vi(vc)}  ${ANSI.red}${p.error}${ANSI.reset}`);
+  } else if (p.primary) {
+    const rem = p.primary.remaining;
+    const color = getColor(rem);
+    lines.push(`${vi(vc)}  ${color}${formatPercent(rem)} remaining${ANSI.reset}`);
+  }
+
+  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
+  return lines;
+}
+
 export function formatForTerminal(quotas: AllQuotas): string {
   const sections: string[][] = [];
 
   for (const p of quotas.providers) {
     if (!p.available && !p.error) continue;
-
-    switch (p.provider) {
-      case "claude":
-        sections.push(buildClaude(p));
-        break;
-      case "codex":
-        sections.push(buildCodex(p));
-        break;
-      case "amp":
-        sections.push(buildAmp(p));
-        break;
-    }
+    const builder = terminalBuilders.get(p.provider);
+    sections.push(builder ? builder(p) : buildGenericTerminal(p));
   }
 
   if (sections.length === 0) {
     return `${ANSI.comment}No providers connected${ANSI.reset}`;
   }
 
-  return sections.map((s) => s.join("\n")).join("\n\n");
+  return sections.map((s) => s.join('\n')).join('\n\n');
 }
 
 export function outputTerminal(quotas: AllQuotas): void {

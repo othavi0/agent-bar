@@ -94,7 +94,7 @@ export class Cache {
     const path = this.getPath(key);
     const file = Bun.file(path);
 
-    if (!await file.exists()) {
+    if (!(await file.exists())) {
       logger.debug('Cache miss (not found)', { key });
       return null;
     }
@@ -121,10 +121,10 @@ export class Cache {
    */
   async set<T>(key: string, data: T, ttlMs: number = CONFIG.cache.ttlMs): Promise<void> {
     await this.ensureDir();
-    
+
     const path = this.getPath(key);
     const now = Date.now();
-    
+
     const entry: CacheEntry<T> = {
       data,
       fetchedAt: now,
@@ -158,11 +158,7 @@ export class Cache {
    * Get or fetch: returns cached data if valid, otherwise fetches and caches.
    * Deduplicates concurrent requests for the same key.
    */
-  async getOrFetch<T>(
-    key: string,
-    fetcher: () => Promise<T>,
-    ttlMs: number = CONFIG.cache.ttlMs
-  ): Promise<T> {
+  async getOrFetch<T>(key: string, fetcher: () => Promise<T>, ttlMs: number = CONFIG.cache.ttlMs): Promise<T> {
     const cached = await this.get<T>(key);
     if (cached !== null) {
       return cached;
@@ -174,14 +170,16 @@ export class Cache {
       return existing as Promise<T>;
     }
 
-    const promise = fetcher().then(async (data) => {
-      await this.set(key, data, ttlMs);
-      this.inflight.delete(key);
-      return data;
-    }).catch((err) => {
-      this.inflight.delete(key);
-      throw err;
-    });
+    const promise = fetcher()
+      .then(async (data) => {
+        await this.set(key, data, ttlMs);
+        this.inflight.delete(key);
+        return data;
+      })
+      .catch((err) => {
+        this.inflight.delete(key);
+        throw err;
+      });
 
     this.inflight.set(key, promise);
     return promise as Promise<T>;

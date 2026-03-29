@@ -1,23 +1,18 @@
-import { mkdir, rename } from "fs/promises";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-} from "node:fs";
-import { homedir } from "os";
-import { join } from "path";
-import { APP_NAME, LEGACY_APP_NAME } from "./app-identity";
-import { normalizeProviderSelection } from "./waybar-contract";
+import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
+import { mkdir, rename } from 'fs/promises';
+import { homedir } from 'os';
+import { join } from 'path';
+import { APP_NAME, LEGACY_APP_NAME } from './app-identity';
+import { normalizeProviderSelection } from './waybar-contract';
 
-export type WindowPolicy = "both" | "five_hour" | "seven_day";
+export type WindowPolicy = 'both' | 'five_hour' | 'seven_day';
 
 const CURRENT_VERSION = 1;
 
-const VALID_SEPARATORS = ["pill", "gap", "bare", "glass", "shadow", "none"] as const;
+const VALID_SEPARATORS = ['pill', 'gap', 'bare', 'glass', 'shadow', 'none'] as const;
 type SeparatorStyle = (typeof VALID_SEPARATORS)[number];
 
-const VALID_WINDOW_POLICIES = ["both", "five_hour", "seven_day"] as const;
+const VALID_WINDOW_POLICIES = ['both', 'five_hour', 'seven_day'] as const;
 
 interface SettingsPaths {
   settingsDir: string;
@@ -29,16 +24,15 @@ interface SettingsPaths {
 const attemptedSettingsMigrations = new Set<string>();
 
 function getSettingsPaths(): SettingsPaths {
-  const xdgConfigHome =
-    process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
   const settingsDir = join(xdgConfigHome, APP_NAME);
   const legacySettingsDir = join(xdgConfigHome, LEGACY_APP_NAME);
 
   return {
     settingsDir,
-    settingsFile: join(settingsDir, "settings.json"),
+    settingsFile: join(settingsDir, 'settings.json'),
     legacySettingsDir,
-    legacySettingsFile: join(legacySettingsDir, "settings.json"),
+    legacySettingsFile: join(legacySettingsDir, 'settings.json'),
   };
 }
 
@@ -56,14 +50,12 @@ function migrateLegacySettingsSync(): void {
   }
 
   try {
-    mkdirSync(join(paths.settingsDir, ".."), { recursive: true });
+    mkdirSync(join(paths.settingsDir, '..'), { recursive: true });
     renameSync(paths.legacySettingsDir, paths.settingsDir);
   } catch (err) {
-    const code = err instanceof Error && "code" in err
-      ? String((err as NodeJS.ErrnoException).code ?? "")
-      : "";
+    const code = err instanceof Error && 'code' in err ? String((err as NodeJS.ErrnoException).code ?? '') : '';
 
-    if (code === "EROFS" || code === "EPERM" || code === "EACCES") {
+    if (code === 'EROFS' || code === 'EPERM' || code === 'EACCES') {
       return;
     }
 
@@ -89,15 +81,15 @@ export interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   version: CURRENT_VERSION,
   waybar: {
-    providers: ["claude", "codex", "amp"],
+    providers: ['claude', 'codex', 'amp'],
     showPercentage: true,
-    separators: "gap",
-    providerOrder: ["claude", "codex", "amp"],
+    separators: 'gap',
+    providerOrder: ['claude', 'codex', 'amp'],
   },
   tooltip: {},
   models: {},
   windowPolicy: {
-    codex: "both",
+    codex: 'both',
   },
 };
 
@@ -109,17 +101,17 @@ function migrateSettings(data: Record<string, unknown>, _fromVersion: number): R
 }
 
 function isValidSeparator(value: unknown): value is SeparatorStyle {
-  return typeof value === "string" && (VALID_SEPARATORS as readonly string[]).includes(value);
+  return typeof value === 'string' && (VALID_SEPARATORS as readonly string[]).includes(value);
 }
 
 function isValidWindowPolicy(value: unknown): value is WindowPolicy {
-  return typeof value === "string" && (VALID_WINDOW_POLICIES as readonly string[]).includes(value);
+  return typeof value === 'string' && (VALID_WINDOW_POLICIES as readonly string[]).includes(value);
 }
 
 function normalizeSettings(data: Partial<Settings> | undefined): Settings {
   // Handle version migration
   const version = (data as Record<string, unknown>)?.version;
-  if (typeof version === "number" && version < CURRENT_VERSION) {
+  if (typeof version === 'number' && version < CURRENT_VERSION) {
     data = migrateSettings(data as Record<string, unknown>, version) as Partial<Settings>;
   }
 
@@ -140,15 +132,12 @@ function normalizeSettings(data: Partial<Settings> | undefined): Settings {
   if (merged.windowPolicy) {
     for (const [key, value] of Object.entries(merged.windowPolicy)) {
       if (!isValidWindowPolicy(value)) {
-        merged.windowPolicy[key] = "both";
+        merged.windowPolicy[key] = 'both';
       }
     }
   }
 
-  const normalizedWaybar = normalizeProviderSelection(
-    merged.waybar.providers,
-    merged.waybar.providerOrder,
-  );
+  const normalizedWaybar = normalizeProviderSelection(merged.waybar.providers, merged.waybar.providerOrder);
 
   merged.waybar.providers = normalizedWaybar.providers;
   merged.waybar.providerOrder = normalizedWaybar.providerOrder;
@@ -193,7 +182,7 @@ export function loadSettingsSync(): Settings {
     if (!existsSync(settingsFile)) {
       return normalizeSettings(undefined);
     }
-    const data = JSON.parse(readFileSync(settingsFile, "utf-8"));
+    const data = JSON.parse(readFileSync(settingsFile, 'utf-8'));
     return normalizeSettings(data);
   } catch (err) {
     process.stderr.write(`[${APP_NAME}] Settings sync read error (using defaults): ${err}\n`);
@@ -206,7 +195,7 @@ export async function saveSettings(settings: Settings): Promise<void> {
 
   const { settingsDir, settingsFile } = getSettingsPaths();
   await mkdir(settingsDir, { recursive: true });
-  const tmp = settingsFile + ".tmp";
+  const tmp = `${settingsFile}.tmp`;
   await Bun.write(tmp, JSON.stringify(normalizeSettings(settings), null, 2));
   await rename(tmp, settingsFile);
 }

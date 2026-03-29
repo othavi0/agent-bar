@@ -1,8 +1,9 @@
+import { AMP_MISSING_ERROR, findAmpBin } from '../amp-cli';
 import { APP_NAME } from '../app-identity';
+import { cache } from '../cache';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
-import { cache } from '../cache';
-import { AMP_MISSING_ERROR, findAmpBin } from '../amp-cli';
+import { registerProvider } from './registry';
 import type { Provider, ProviderQuota, QuotaWindow } from './types';
 
 export class AmpProvider implements Provider {
@@ -30,11 +31,11 @@ export class AmpProvider implements Provider {
       return await cache.getOrFetch<ProviderQuota>(
         'amp-quota',
         async () => await this.fetchUsage(base, bin),
-        CONFIG.cache.ttlMs
+        CONFIG.cache.ttlMs,
       );
     } catch (error) {
       logger.error('Amp quota fetch error', { error });
-      return { ...base, error: 'Failed to fetch usage' };
+      return { ...base, error: 'Failed to fetch Amp usage' };
     }
   }
 
@@ -77,9 +78,7 @@ export class AmpProvider implements Provider {
         let fullAt: string | null = null;
         if (replenish && remaining < total) {
           const ratePerHour = parseFloat(replenish[1]);
-          const effectiveRate = bonusM
-            ? ratePerHour * (1 + parseInt(bonusM[1]) / 100)
-            : ratePerHour;
+          const effectiveRate = bonusM ? ratePerHour * (1 + parseInt(bonusM[1], 10) / 100) : ratePerHour;
           const hoursToFull = (total - remaining) / effectiveRate;
           fullAt = new Date(Date.now() + hoursToFull * 3_600_000).toISOString();
         }
@@ -117,16 +116,16 @@ export class AmpProvider implements Provider {
         const { pct, fullAt } = parseAmpFreeTier(freeMatch, replenishMatch, bonusMatch);
 
         models['Free Tier'] = { remaining: pct, resetsAt: fullAt };
-        meta['freeRemaining'] = `$${remaining}`;
-        meta['freeTotal'] = `$${total}`;
-        if (replenishRate) meta['replenishRate'] = replenishRate;
-        if (bonus) meta['bonus'] = bonus;
+        meta.freeRemaining = `$${remaining}`;
+        meta.freeTotal = `$${total}`;
+        if (replenishRate) meta.replenishRate = replenishRate;
+        if (bonus) meta.bonus = bonus;
       }
 
       if (creditsMatch) {
         const balance = parseFloat(creditsMatch[1]);
-        models['Credits'] = { remaining: balance > 0 ? 100 : 0, resetsAt: null };
-        meta['creditsBalance'] = `$${balance}`;
+        models.Credits = { remaining: balance > 0 ? 100 : 0, resetsAt: null };
+        meta.creditsBalance = `$${balance}`;
       }
 
       return {
@@ -144,3 +143,5 @@ export class AmpProvider implements Provider {
     }
   }
 }
+
+registerProvider(new AmpProvider());

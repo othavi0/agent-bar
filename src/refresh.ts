@@ -5,10 +5,10 @@
  * Used by right-click on waybar module
  */
 
-import { createSpinner } from './spinner';
 import { cache } from './cache';
-import { getAllQuotas, getProvider, getQuotaFor, providers } from './providers';
 import { outputTerminal } from './formatters/terminal';
+import { getAllQuotas, getProvider, getQuotaFor, providers } from './providers';
+import { createSpinner } from './spinner';
 import { ANSI } from './theme';
 
 const provider = process.argv[2];
@@ -43,12 +43,11 @@ async function refresh() {
       spinner.succeed('All providers refreshed!');
       outputTerminal(quotas);
     }
-    
   } catch (error) {
     spinner.fail('Refresh failed');
     console.error(error);
   }
-  
+
   // Signal waybar to update with new data
   Bun.spawn(['pkill', '-SIGUSR2', 'waybar']);
 

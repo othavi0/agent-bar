@@ -1,70 +1,59 @@
-import type {
-  ModelWindows,
-  ProviderQuota,
-  QuotaWindow,
-} from "../providers/types";
+import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
 
-export type WindowKind = "fiveHour" | "sevenDay" | "other";
+export type WindowKind = 'fiveHour' | 'sevenDay' | 'other';
 
 export function formatPercent(val: number | null): string {
-  return val === null ? "?%" : `${Math.round(val)}%`;
+  return val === null ? '?%' : `${Math.round(val)}%`;
 }
 
-export function formatEta(
-  iso: string | null,
-  remaining: number | null,
-): string {
-  if (remaining === 100) return "Full";
-  if (!iso) return "?";
+export function formatEta(iso: string | null, remaining: number | null): string {
+  if (remaining === 100) return 'Full';
+  if (!iso) return '?';
   const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return "0m";
+  if (diff < 0) return '0m';
   const d = Math.floor(diff / 86400000);
   const h = Math.floor((diff % 86400000) / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  return d > 0
-    ? `${d}d ${h.toString().padStart(2, "0")}h`
-    : `${h}h ${m.toString().padStart(2, "0")}m`;
+  return d > 0 ? `${d}d ${h.toString().padStart(2, '0')}h` : `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
-export function formatResetTime(
-  iso: string | null,
-  remaining: number | null,
-): string {
-  if (remaining === 100) return "";
-  if (!iso) return "(??:??)";
+export function formatResetTime(iso: string | null, remaining: number | null): string {
+  if (remaining === 100) return '';
+  if (!iso) return '(??:??)';
   const d = new Date(iso);
-  return `(${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")})`;
+  return `(${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')})`;
 }
 
-export function classifyWindow(
-  minutes: number | null | undefined,
-): WindowKind {
-  if (!minutes || minutes <= 0) return "other";
-  if (Math.abs(minutes - 300) <= 90) return "fiveHour";
-  if (Math.abs(minutes - 10080) <= 1440) return "sevenDay";
-  return "other";
+export function classifyWindow(minutes: number | null | undefined): WindowKind {
+  if (!minutes || minutes <= 0) return 'other';
+  if (Math.abs(minutes - 300) <= 90) return 'fiveHour';
+  if (Math.abs(minutes - 10080) <= 1440) return 'sevenDay';
+  return 'other';
+}
+
+const PLAN_MAP: Record<string, string> = {
+  free: 'Free',
+  go: 'Go',
+  plus: 'Plus',
+  pro: 'Pro',
+  business: 'Business',
+  team: 'Business',
+  enterprise: 'Enterprise',
+  edu: 'Edu',
+  education: 'Edu',
+  apikey: 'API Key',
+  api_key: 'API Key',
+};
+
+export function normalizePlan(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  const key = raw.trim().toLowerCase();
+  if (!key) return undefined;
+  return PLAN_MAP[key] ?? raw.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function normalizePlanLabel(p: ProviderQuota): string {
-  const raw = (p.plan?.trim() || p.planType?.trim());
-  if (!raw) return "Unknown";
-
-  const key = raw.toLowerCase();
-  const map: Record<string, string> = {
-    free: "Free",
-    go: "Go",
-    plus: "Plus",
-    pro: "Pro",
-    business: "Business",
-    team: "Business",
-    enterprise: "Enterprise",
-    edu: "Edu",
-    education: "Edu",
-    apikey: "API Key",
-    api_key: "API Key",
-  };
-  // Fallback: capitalize the raw string (e.g. "enterprise_pro" → "Enterprise Pro")
-  return map[key] ?? raw.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return normalizePlan(p.plan ?? p.planType) ?? 'Unknown';
 }
 
 export interface CodexModelEntry {
@@ -86,10 +75,8 @@ export function codexModelsFromQuota(p: ProviderQuota): CodexModelEntry[] {
     for (const [name, window] of Object.entries(p.models)) {
       if (!models[name]) models[name] = {};
       const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !models[name].fiveHour)
-        models[name].fiveHour = window;
-      else if (kind === "sevenDay" && !models[name].sevenDay)
-        models[name].sevenDay = window;
+      if (kind === 'fiveHour' && !models[name].fiveHour) models[name].fiveHour = window;
+      else if (kind === 'sevenDay' && !models[name].sevenDay) models[name].sevenDay = window;
       else {
         if (!models[name].other) models[name].other = [];
         models[name].other!.push(window);
@@ -102,15 +89,14 @@ export function codexModelsFromQuota(p: ProviderQuota): CodexModelEntry[] {
     for (const window of [p.primary, p.secondary]) {
       if (!window) continue;
       const kind = classifyWindow(window.windowMinutes);
-      if (kind === "fiveHour" && !fallback.fiveHour) fallback.fiveHour = window;
-      else if (kind === "sevenDay" && !fallback.sevenDay)
-        fallback.sevenDay = window;
+      if (kind === 'fiveHour' && !fallback.fiveHour) fallback.fiveHour = window;
+      else if (kind === 'sevenDay' && !fallback.sevenDay) fallback.sevenDay = window;
       else {
         if (!fallback.other) fallback.other = [];
         fallback.other.push(window);
       }
     }
-    models["Codex"] = fallback;
+    models.Codex = fallback;
   }
 
   return Object.entries(models)
@@ -130,10 +116,7 @@ export function codexModelsFromQuota(p: ProviderQuota): CodexModelEntry[] {
     .sort((a, b) => a.severity - b.severity || a.name.localeCompare(b.name));
 }
 
-export function applyCodexModelFilter(
-  models: CodexModelEntry[],
-  allowed?: string[],
-): CodexModelEntry[] {
+export function applyCodexModelFilter(models: CodexModelEntry[], allowed?: string[]): CodexModelEntry[] {
   if (!allowed || allowed.length === 0) return models;
   return models.filter((m) => allowed.includes(m.name));
 }

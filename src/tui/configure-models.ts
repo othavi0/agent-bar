@@ -1,9 +1,9 @@
 import * as p from '@clack/prompts';
-import { loadSettings, saveSettings, type WindowPolicy } from '../settings';
+import { classifyWindow, normalizePlanLabel } from '../formatters/shared';
 import { providers } from '../providers';
 import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
-import { classifyWindow, normalizePlanLabel } from '../formatters/shared';
-import { oneDark, semantic, colorize } from './colors';
+import { loadSettings, saveSettings, type WindowPolicy } from '../settings';
+import { colorize, oneDark, semantic } from './colors';
 
 interface ProviderOption {
   id: string;
@@ -153,8 +153,9 @@ export async function configureModels(): Promise<boolean> {
 
   const providerId = selectedProvider.id;
   const modelWindows = getModelWindowsMap(selectedProvider.quota);
-  const entries = Object.entries(modelWindows)
-    .sort((a, b) => severity(a[1]) - severity(b[1]) || a[0].localeCompare(b[0]));
+  const entries = Object.entries(modelWindows).sort(
+    (a, b) => severity(a[1]) - severity(b[1]) || a[0].localeCompare(b[0]),
+  );
 
   if (entries.length === 0) {
     p.log.warn(colorize('No models available for this provider', semantic.warning));
@@ -189,27 +190,27 @@ export async function configureModels(): Promise<boolean> {
 
   const modelNames = entries.map(([name]) => name);
   const currentSelection = settings.models?.[providerId] ?? [];
-  const initialValues = currentSelection.length > 0
-    ? currentSelection.filter((name) => modelNames.includes(name))
-    : modelNames;
+  const initialValues =
+    currentSelection.length > 0 ? currentSelection.filter((name) => modelNames.includes(name)) : modelNames;
   const preview = entries[0];
 
   p.note(
     [
-      colorize('Space', semantic.highlight) + ' toggle  ' +
-      colorize('Enter', semantic.highlight) + ' confirm  ' +
-      colorize('q', semantic.highlight) + ' back',
+      colorize('Space', semantic.highlight) +
+        ' toggle  ' +
+        colorize('Enter', semantic.highlight) +
+        ' confirm  ' +
+        colorize('q', semantic.highlight) +
+        ' back',
       '',
       `Plan: ${selectedProvider.planLabel}`,
       `Window policy: ${policyLabel(selectedPolicy)}`,
-      preview
-        ? `Preview (${preview[0]}): ${buildModelHint(preview[1], selectedPolicy)}`
-        : 'Preview: N/A',
+      preview ? `Preview (${preview[0]}): ${buildModelHint(preview[1], selectedPolicy)}` : 'Preview: N/A',
       '',
       'Selected models appear in the tooltip on hover.',
       'Deselected models are hidden.',
     ].join('\n'),
-    colorize(`${providerId} Models`, semantic.title)
+    colorize(`${providerId} Models`, semantic.title),
   );
 
   const result = await p.multiselect({
@@ -236,8 +237,8 @@ export async function configureModels(): Promise<boolean> {
   p.log.success(
     colorize(
       `Model configuration saved (${selectedProvider.planLabel}, ${policyLabel(selectedPolicy)})`,
-      semantic.good
-    )
+      semantic.good,
+    ),
   );
   return true;
 }

@@ -12,7 +12,9 @@
     "dev": "bun --watch run src/index.ts",
     "test": "bun test",
     "typecheck": "bun x tsc --noEmit",
-    "build": "bun build src/index.ts --outdir dist --target bun"
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "lint": "bunx biome check",
+    "lint:fix": "bunx biome check --write"
   },
   "keywords": [
     "waybar",
@@ -24,6 +26,7 @@
   "author": "Othavio",
   "license": "MIT",
   "devDependencies": {
+    "@biomejs/biome": "2.4.9",
     "@types/bun": "latest",
     "typescript": "5.9.3"
   },

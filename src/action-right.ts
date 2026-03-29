@@ -6,10 +6,10 @@
  * - Else: refresh that provider and show full status in terminal.
  */
 
-import { APP_NAME } from './app-identity';
 import * as p from '@clack/prompts';
-import { getProvider, getQuotaFor } from './providers';
+import { APP_NAME } from './app-identity';
 import { outputTerminal } from './formatters/terminal';
+import { getProvider, getQuotaFor } from './providers';
 import { colorize, semantic } from './tui/colors';
 
 async function waitEnter(): Promise<void> {
@@ -50,10 +50,9 @@ export async function handleActionRight(providerId: string): Promise<void> {
   const quota = await provider.getQuota();
   const baseDisconnect = /expired|not logged in|login again|please login/i;
   const codexDisconnect = /no session data|no rate limit data|auth|token/i;
-  const looksDisconnected = !!quota.error && (
-    baseDisconnect.test(quota.error) ||
-    (providerId === 'codex' && codexDisconnect.test(quota.error))
-  );
+  const looksDisconnected =
+    !!quota.error &&
+    (baseDisconnect.test(quota.error) || (providerId === 'codex' && codexDisconnect.test(quota.error)));
 
   if (looksDisconnected) {
     const { loginSingleProvider } = await import('./tui/login-single');

@@ -1,7 +1,8 @@
 import { APP_NAME } from '../app-identity';
+import { cache } from '../cache';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
-import { cache } from '../cache';
+import { registerProvider } from './registry';
 import type { Provider, ProviderQuota, QuotaWindow } from './types';
 
 interface ClaudeCredentials {
@@ -51,7 +52,7 @@ export class ClaudeProvider implements Provider {
 
   async isAvailable(): Promise<boolean> {
     const file = Bun.file(CONFIG.paths.claude.credentials);
-    if (!await file.exists()) {
+    if (!(await file.exists())) {
       return false;
     }
 
@@ -72,7 +73,7 @@ export class ClaudeProvider implements Provider {
 
     // Check credentials
     const file = Bun.file(CONFIG.paths.claude.credentials);
-    if (!await file.exists()) {
+    if (!(await file.exists())) {
       return { ...base, error: `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.` };
     }
 
@@ -101,7 +102,7 @@ export class ClaudeProvider implements Provider {
 
           const response = await fetch(CONFIG.api.claude.usageUrl, {
             headers: {
-              'Authorization': `Bearer ${accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
               'anthropic-beta': CONFIG.api.claude.betaHeader,
             },
             signal: controller.signal,
@@ -116,7 +117,7 @@ export class ClaudeProvider implements Provider {
 
           return await response.json();
         },
-        CONFIG.cache.ttlMs
+        CONFIG.cache.ttlMs,
       );
 
       // Check for token expiration
@@ -148,7 +149,7 @@ export class ClaudeProvider implements Provider {
 
       if (usage.seven_day_opus) {
         const used = Math.round(usage.seven_day_opus.utilization);
-        weeklyModels['Opus'] = {
+        weeklyModels.Opus = {
           remaining: 100 - used,
           resetsAt: usage.seven_day_opus.resets_at || null,
         };
@@ -156,7 +157,7 @@ export class ClaudeProvider implements Provider {
 
       if (usage.seven_day_sonnet) {
         const used = Math.round(usage.seven_day_sonnet.utilization);
-        weeklyModels['Sonnet'] = {
+        weeklyModels.Sonnet = {
           remaining: 100 - used,
           resetsAt: usage.seven_day_sonnet.resets_at || null,
         };
@@ -164,7 +165,7 @@ export class ClaudeProvider implements Provider {
 
       if (usage.seven_day_cowork) {
         const used = Math.round(usage.seven_day_cowork.utilization);
-        weeklyModels['Cowork'] = {
+        weeklyModels.Cowork = {
           remaining: 100 - used,
           resetsAt: usage.seven_day_cowork.resets_at || null,
         };
@@ -201,7 +202,9 @@ export class ClaudeProvider implements Provider {
         return { ...base, plan, error: error.message };
       }
       logger.error('Claude API fetch error', { error });
-      return { ...base, plan, error: 'Failed to fetch usage' };
+      return { ...base, plan, error: 'Failed to fetch Claude usage' };
     }
   }
 }
+
+registerProvider(new ClaudeProvider());

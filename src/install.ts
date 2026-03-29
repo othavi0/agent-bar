@@ -1,6 +1,6 @@
-import * as p from '@clack/prompts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import * as p from '@clack/prompts';
 import { createSpinner } from './spinner';
 import { colorize, semantic } from './tui/colors';
 
@@ -11,10 +11,7 @@ export async function hasCmd(cmd: string): Promise<boolean> {
 
   const home = process.env.HOME ?? '';
 
-  const bunGlobalPaths = [
-    join(home, '.cache', '.bun', 'bin', cmd),
-    join(home, '.bun', 'bin', cmd),
-  ];
+  const bunGlobalPaths = [join(home, '.cache', '.bun', 'bin', cmd), join(home, '.bun', 'bin', cmd)];
 
   for (const p of bunGlobalPaths) {
     if (existsSync(p)) return true;
@@ -22,7 +19,7 @@ export async function hasCmd(cmd: string): Promise<boolean> {
 
   try {
     const proc = Bun.spawn(['which', cmd], { stdout: 'ignore', stderr: 'ignore' });
-    return await proc.exited === 0;
+    return (await proc.exited) === 0;
   } catch {
     return false;
   }
@@ -50,11 +47,7 @@ export async function ensureBun(): Promise<boolean> {
   return ensureCommand('bun', 'Install Bun first: https://bun.sh');
 }
 
-export async function ensureBunGlobalPackage(
-  pkg: string,
-  label?: string,
-  binName?: string,
-): Promise<boolean> {
+export async function ensureBunGlobalPackage(pkg: string, label?: string, binName?: string): Promise<boolean> {
   const bin = binName ?? pkg;
   if (await hasCmd(bin)) {
     return true;
