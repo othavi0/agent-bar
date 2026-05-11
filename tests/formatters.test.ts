@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { formatForTerminal } from '../src/formatters/terminal';
 import { formatForWaybar, formatProviderForWaybar } from '../src/formatters/waybar';
+import { toDisplay, toHealth, etaLabel } from '../src/formatters/shared';
 import type { AllQuotas, ProviderQuota } from '../src/providers/types';
 import { ANSI, BOX, ONE_DARK } from '../src/theme';
 
@@ -217,5 +218,31 @@ describe('formatProviderForWaybar', () => {
 
     expect(result.class).toContain('agent-bar-omarchy-claude');
     expect(result.tooltip).toContain('Claude');
+  });
+});
+
+describe('display mode helpers', () => {
+  it('toDisplay: remaining passes through', () => {
+    expect(toDisplay(80, 'remaining')).toBe(80);
+    expect(toDisplay(0, 'remaining')).toBe(0);
+    expect(toDisplay(null, 'remaining')).toBe(null);
+  });
+
+  it('toDisplay: used inverts', () => {
+    expect(toDisplay(80, 'used')).toBe(20);
+    expect(toDisplay(0, 'used')).toBe(100);
+    expect(toDisplay(100, 'used')).toBe(0);
+    expect(toDisplay(null, 'used')).toBe(null);
+  });
+
+  it('toHealth: roundtrips display value back to health', () => {
+    expect(toHealth(20, 'used')).toBe(80);
+    expect(toHealth(80, 'remaining')).toBe(80);
+    expect(toHealth(null, 'used')).toBe(null);
+  });
+
+  it('etaLabel: "Full in" when remaining, "Resets in" when used', () => {
+    expect(etaLabel('remaining')).toBe('Full in');
+    expect(etaLabel('used')).toBe('Resets in');
   });
 });

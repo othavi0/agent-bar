@@ -1,4 +1,20 @@
 import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
+import type { DisplayMode } from '../settings';
+export type { DisplayMode };
+
+export function toDisplay(remaining: number | null, mode: DisplayMode): number | null {
+  if (remaining === null) return null;
+  return mode === 'used' ? 100 - remaining : remaining;
+}
+
+export function toHealth(displayValue: number | null, mode: DisplayMode): number | null {
+  if (displayValue === null) return null;
+  return mode === 'used' ? 100 - displayValue : displayValue;
+}
+
+export function etaLabel(mode: DisplayMode): string {
+  return mode === 'used' ? 'Resets in' : 'Full in';
+}
 
 export type WindowKind = 'fiveHour' | 'sevenDay' | 'other';
 
