@@ -219,8 +219,8 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.modelsDetailed).toBeDefined();
-      const model = Object.values(q.modelsDetailed!)[0];
+      expect(q.extra?.modelsDetailed).toBeDefined();
+      const model = Object.values(q.extra?.modelsDetailed ?? {})[0];
       expect(model.fiveHour).toBeDefined();
       expect(model.fiveHour!.remaining).toBe(90);
     });
@@ -236,8 +236,8 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.modelsDetailed).toBeDefined();
-      const model = Object.values(q.modelsDetailed!)[0];
+      expect(q.extra?.modelsDetailed).toBeDefined();
+      const model = Object.values(q.extra?.modelsDetailed ?? {})[0];
       expect(model.sevenDay).toBeDefined();
       expect(model.sevenDay!.remaining).toBe(75);
     });
@@ -263,7 +263,7 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      const models = q.modelsDetailed!;
+      const models = q.extra?.modelsDetailed;
       for (const windows of Object.values(models)) {
         expect(windows.fiveHour).toBeDefined();
       }
@@ -289,7 +289,7 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      const models = q.modelsDetailed!;
+      const models = q.extra?.modelsDetailed;
       for (const windows of Object.values(models)) {
         expect(windows.sevenDay).toBeDefined();
       }
@@ -316,7 +316,7 @@ describe('CodexProvider', () => {
       // Both primary and secondary have unusual windows.
       // The fallback mapping assigns primary -> fiveHour and secondary -> sevenDay
       // because classifyWindow returns "other" for both, but fallback kicks in.
-      const model = Object.values(q.modelsDetailed!)[0];
+      const model = Object.values(q.extra?.modelsDetailed ?? {})[0];
       expect(model.fiveHour).toBeDefined();
       expect(model.sevenDay).toBeDefined();
     });
@@ -351,16 +351,16 @@ describe('CodexProvider', () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(true);
-      expect(q.modelsDetailed).toBeDefined();
-      const names = Object.keys(q.modelsDetailed!);
+      expect(q.extra?.modelsDetailed).toBeDefined();
+      const names = Object.keys(q.extra?.modelsDetailed ?? {});
       expect(names.length).toBe(2);
       expect(names).toContain('Codex Mini');
       expect(names).toContain('Codex Standard');
 
-      expect(q.modelsDetailed!['Codex Mini'].fiveHour?.remaining).toBe(70);
-      expect(q.modelsDetailed!['Codex Mini'].sevenDay?.remaining).toBe(85);
-      expect(q.modelsDetailed!['Codex Standard'].fiveHour?.remaining).toBe(40);
-      expect(q.modelsDetailed!['Codex Standard'].sevenDay?.remaining).toBe(55);
+      expect(q.extra?.modelsDetailed?.['Codex Mini'].fiveHour?.remaining).toBe(70);
+      expect(q.extra?.modelsDetailed?.['Codex Mini'].sevenDay?.remaining).toBe(85);
+      expect(q.extra?.modelsDetailed?.['Codex Standard'].fiveHour?.remaining).toBe(40);
+      expect(q.extra?.modelsDetailed?.['Codex Standard'].sevenDay?.remaining).toBe(55);
     });
 
     it('uses limit_id when limit_name is null', async () => {
@@ -381,7 +381,7 @@ describe('CodexProvider', () => {
       const q = await p.getQuota();
 
       // limit_id "my_custom_limit" -> "My Custom Limit" (underscore to space, title case)
-      const names = Object.keys(q.modelsDetailed!);
+      const names = Object.keys(q.extra?.modelsDetailed ?? {});
       expect(names.length).toBe(1);
       expect(names[0]).toBe('My Custom Limit');
     });
@@ -430,7 +430,7 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      const names = Object.keys(q.modelsDetailed!);
+      const names = Object.keys(q.extra?.modelsDetailed ?? {});
       expect(names.length).toBe(2);
       expect(names).toContain('Codex');
       expect(names).toContain('Codex (2)');
@@ -453,10 +453,10 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.modelsDetailed).toBeDefined();
-      expect(Object.keys(q.modelsDetailed!)).toEqual(['Codex']);
-      expect(q.modelsDetailed!.Codex.fiveHour?.remaining).toBe(65);
-      expect(q.modelsDetailed!.Codex.sevenDay?.remaining).toBe(45);
+      expect(q.extra?.modelsDetailed).toBeDefined();
+      expect(Object.keys(q.extra?.modelsDetailed ?? {})).toEqual(['Codex']);
+      expect(q.extra?.modelsDetailed?.Codex.fiveHour?.remaining).toBe(65);
+      expect(q.extra?.modelsDetailed?.Codex.sevenDay?.remaining).toBe(45);
     });
   });
 
@@ -544,11 +544,11 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.extraUsage).toBeDefined();
-      expect(q.extraUsage!.enabled).toBe(true);
-      expect(q.extraUsage!.remaining).toBe(11); // Math.min(100, Math.round(10.50))
-      expect(q.extraUsage!.limit).toBe(0);
-      expect(q.extraUsage!.used).toBe(0);
+      expect(q.extra?.extraUsage).toBeDefined();
+      expect(q.extra?.extraUsage.enabled).toBe(true);
+      expect(q.extra?.extraUsage.remaining).toBe(11); // Math.min(100, Math.round(10.50))
+      expect(q.extra?.extraUsage.limit).toBe(0);
+      expect(q.extra?.extraUsage.used).toBe(0);
     });
 
     it('caps remaining at 100 for large balances', async () => {
@@ -563,7 +563,7 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.extraUsage!.remaining).toBe(100);
+      expect(q.extra?.extraUsage.remaining).toBe(100);
     });
 
     it('sets remaining 100 and limit -1 for unlimited credits', async () => {
@@ -578,9 +578,9 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.extraUsage).toBeDefined();
-      expect(q.extraUsage!.remaining).toBe(100);
-      expect(q.extraUsage!.limit).toBe(-1);
+      expect(q.extra?.extraUsage).toBeDefined();
+      expect(q.extra?.extraUsage.remaining).toBe(100);
+      expect(q.extra?.extraUsage.limit).toBe(-1);
     });
 
     it('sets extraUsage when balance > 0 even if has_credits is false', async () => {
@@ -595,9 +595,9 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.extraUsage).toBeDefined();
-      expect(q.extraUsage!.enabled).toBe(true);
-      expect(q.extraUsage!.remaining).toBe(5);
+      expect(q.extra?.extraUsage).toBeDefined();
+      expect(q.extra?.extraUsage.enabled).toBe(true);
+      expect(q.extra?.extraUsage.remaining).toBe(5);
     });
 
     it('omits extraUsage when no credits data', async () => {
@@ -611,7 +611,7 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.extraUsage).toBeUndefined();
+      expect(q.extra?.extraUsage).toBeUndefined();
     });
 
     it("omits extraUsage when has_credits false and balance is '0'", async () => {
@@ -626,7 +626,7 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      expect(q.extraUsage).toBeUndefined();
+      expect(q.extra?.extraUsage).toBeUndefined();
     });
   });
 
@@ -833,7 +833,7 @@ describe('CodexProvider', () => {
       const p = await createProvider();
       const q = await p.getQuota();
 
-      const names = Object.keys(q.modelsDetailed!);
+      const names = Object.keys(q.extra?.modelsDetailed ?? {});
       // "empty" bucket should be skipped as it has no windows
       expect(names).toContain('Valid Bucket');
     });

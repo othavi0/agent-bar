@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { formatForTerminal } from '../src/formatters/terminal';
 import { formatForWaybar, formatProviderForWaybar } from '../src/formatters/waybar';
-import type { AllQuotas, ProviderQuota } from '../src/providers/types';
+import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota } from '../src/providers/types';
 
 // ---------------------------------------------------------------------------
 // Sanitize dynamic values so snapshots remain stable across runs.
@@ -35,7 +35,7 @@ const FIXED_RESET = '2026-03-28T14:00:00.000Z';
 // Mock data factories (deterministic)
 // ---------------------------------------------------------------------------
 
-function claudeHealthy(): ProviderQuota {
+function claudeHealthy(): ClaudeQuota {
   return {
     provider: 'claude',
     displayName: 'Claude',
@@ -46,7 +46,7 @@ function claudeHealthy(): ProviderQuota {
   };
 }
 
-function claudeError(): ProviderQuota {
+function claudeError(): ClaudeQuota {
   return {
     provider: 'claude',
     displayName: 'Claude',
@@ -55,7 +55,7 @@ function claudeError(): ProviderQuota {
   };
 }
 
-function codexHealthy(): ProviderQuota {
+function codexHealthy(): CodexQuota {
   return {
     provider: 'codex',
     displayName: 'Codex',
@@ -64,10 +64,12 @@ function codexHealthy(): ProviderQuota {
     planType: 'pro',
     primary: { remaining: 60, resetsAt: FIXED_RESET, windowMinutes: 300 },
     secondary: { remaining: 85, resetsAt: FIXED_RESET, windowMinutes: 10080 },
-    modelsDetailed: {
-      Codex: {
-        fiveHour: { remaining: 60, resetsAt: FIXED_RESET, windowMinutes: 300 },
-        sevenDay: { remaining: 85, resetsAt: FIXED_RESET, windowMinutes: 10080 },
+    extra: {
+      modelsDetailed: {
+        Codex: {
+          fiveHour: { remaining: 60, resetsAt: FIXED_RESET, windowMinutes: 300 },
+          sevenDay: { remaining: 85, resetsAt: FIXED_RESET, windowMinutes: 10080 },
+        },
       },
     },
     models: {
@@ -76,7 +78,7 @@ function codexHealthy(): ProviderQuota {
   };
 }
 
-function codexError(): ProviderQuota {
+function codexError(): CodexQuota {
   return {
     provider: 'codex',
     displayName: 'Codex',
@@ -85,7 +87,7 @@ function codexError(): ProviderQuota {
   };
 }
 
-function ampHealthy(): ProviderQuota {
+function ampHealthy(): AmpQuota {
   return {
     provider: 'amp',
     displayName: 'Amp',
@@ -94,15 +96,17 @@ function ampHealthy(): ProviderQuota {
     models: {
       'Free Tier': { remaining: 70, resetsAt: FIXED_RESET },
     },
-    meta: {
-      freeRemaining: '$3.50',
-      freeTotal: '$5.00',
-      replenishRate: '+$0.25/hr',
+    extra: {
+      meta: {
+        freeRemaining: '$3.50',
+        freeTotal: '$5.00',
+        replenishRate: '+$0.25/hr',
+      },
     },
   };
 }
 
-function ampError(): ProviderQuota {
+function ampError(): AmpQuota {
   return {
     provider: 'amp',
     displayName: 'Amp',

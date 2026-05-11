@@ -1,6 +1,13 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getStatusForPercent } from '../config';
-import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
+import type {
+  AllQuotas,
+  AmpQuotaExtra,
+  ClaudeQuotaExtra,
+  CodexQuotaExtra,
+  ProviderQuota,
+  QuotaWindow,
+} from '../providers/types';
 import { type DisplayMode, loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
 import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
@@ -158,10 +165,11 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mod
     }
 
     // Per-model weekly quotas (when API provides them)
-    if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
+    const weeklyModels = p.provider === 'claude' ? p.extra?.weeklyModels : undefined;
+    if (weeklyModels && Object.keys(weeklyModels).length > 0) {
       lines.push(v);
       lines.push(label('Weekly per model', vc));
-      const entries = Object.entries(p.weeklyModels);
+      const entries = Object.entries(weeklyModels);
       const wMaxLen = Math.max(...entries.map(([name]) => name.length), 20);
 
       for (const [name, window] of entries) {
@@ -191,8 +199,9 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mod
       lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${etaS}`);
     }
 
-    if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
-      const { remaining, used, limit } = p.extraUsage;
+    const _claudeExtra = p.provider === 'claude' ? (p.extra as ClaudeQuotaExtra | undefined) : undefined;
+    if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
+      const { remaining, used, limit } = _claudeExtra.extraUsage;
       const disp = toDisplay(remaining, mode);
       lines.push(v);
       lines.push(label('Extra Usage', vc));
@@ -254,15 +263,17 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
       }
     }
 
-    if (p.extraUsage?.enabled) {
-      const rem = p.extraUsage.remaining;
+    const _codexExtra = p.provider === 'codex' ? (p.extra as CodexQuotaExtra | undefined) : undefined;
+    if (_codexExtra?.extraUsage?.enabled) {
+      const codexExtraUsage = _codexExtra.extraUsage;
+      const rem = codexExtraUsage.remaining;
       const disp = toDisplay(rem, mode);
       lines.push(v);
       lines.push(label('Credits', vc));
       const name = s(ONE_DARK.textBright, 'Balance'.padEnd(20));
       const b = bar(disp, mode);
       const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-      const limitS = p.extraUsage.limit === -1 ? s(ONE_DARK.cyan, 'Unlimited') : s(ONE_DARK.cyan, 'Balance');
+      const limitS = codexExtraUsage.limit === -1 ? s(ONE_DARK.cyan, 'Unlimited') : s(ONE_DARK.cyan, 'Balance');
       lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${limitS}`);
     }
   }
@@ -280,7 +291,9 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: 
   const lines: string[] = [];
   const vc = PROVIDER_HEX.amp;
   const v = s(vc, BOX.v);
-  const m = p.meta ?? {};
+  const _ampMeta: Record<string, string> | undefined =
+    p.provider === 'amp' ? (p.extra as AmpQuotaExtra | undefined)?.meta : undefined;
+  const m: Record<string, string> = _ampMeta !== undefined ? _ampMeta : {};
 
   // Account goes in header for better hierarchy
   const accountShort = p.account ? escapeXml(p.account) : undefined;

@@ -6,7 +6,7 @@ import { CONFIG } from '../config';
 import { classifyWindow, normalizePlan } from '../formatters/shared';
 import { logger } from '../logger';
 import { registerProvider } from './registry';
-import type { ModelWindows, Provider, ProviderQuota, QuotaWindow } from './types';
+import type { CodexQuota, ModelWindows, Provider, QuotaWindow } from './types';
 
 interface CodexWindowRaw {
   used_percent: number;
@@ -439,9 +439,9 @@ export class CodexProvider implements Provider {
     });
   }
 
-  async getQuota(): Promise<ProviderQuota> {
-    const base: ProviderQuota = {
-      provider: this.id,
+  async getQuota(): Promise<CodexQuota> {
+    const base: CodexQuota = {
+      provider: 'codex',
       displayName: this.name,
       available: false,
     };
@@ -481,7 +481,7 @@ export class CodexProvider implements Provider {
       return { ...base, error: 'No quota windows found' };
     }
 
-    let codexCredits: ProviderQuota['extraUsage'] | undefined;
+    let codexCredits: import('./types').CodexQuotaExtra['extraUsage'] | undefined;
     if (limits.credits?.has_credits || parseFloat(limits.credits?.balance || '0') > 0) {
       const balance = parseFloat(limits.credits!.balance);
       codexCredits = {
@@ -492,16 +492,19 @@ export class CodexProvider implements Provider {
       };
     }
 
+    const extra: import('./types').CodexQuotaExtra = {};
+    if (Object.keys(modelsDetailed).length > 0) extra.modelsDetailed = modelsDetailed;
+    if (codexCredits) extra.extraUsage = codexCredits;
+
     return {
       ...base,
       available: true,
       ...(primary ? { primary } : {}),
       ...(secondary ? { secondary } : {}),
       ...(Object.keys(models).length > 0 ? { models } : {}),
-      ...(Object.keys(modelsDetailed).length > 0 ? { modelsDetailed } : {}),
       ...(limits.plan_type ? { planType: limits.plan_type } : {}),
       ...(normalizePlan(limits.plan_type) ? { plan: normalizePlan(limits.plan_type) } : {}),
-      ...(codexCredits ? { extraUsage: codexCredits } : {}),
+      ...(Object.keys(extra).length > 0 ? { extra } : {}),
     };
   }
 }

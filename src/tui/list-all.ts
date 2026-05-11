@@ -2,7 +2,7 @@ import * as p from '@clack/prompts';
 import { applyCodexModelFilter, codexModelsFromQuota } from '../formatters/codex-helpers';
 import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
 import { getAllQuotas } from '../providers';
-import type { ProviderQuota, QuotaWindow } from '../providers/types';
+import type { ClaudeQuotaExtra, CodexQuotaExtra, ProviderQuota, QuotaWindow } from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX as B } from '../theme';
 import { colorize, getQuotaColor, oneDark, semantic } from './colors';
@@ -67,10 +67,12 @@ function buildClaude(p: ProviderQuota): string[] {
       }
     }
 
-    if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
+    const _claudeExtra = p.provider === 'claude' ? (p.extra as ClaudeQuotaExtra | undefined) : undefined;
+    const weeklyModels = _claudeExtra?.weeklyModels;
+    if (weeklyModels && Object.keys(weeklyModels).length > 0) {
       lines.push(v(vc));
       lines.push(label('Weekly limit', vc));
-      const entries = Object.entries(p.weeklyModels);
+      const entries = Object.entries(weeklyModels);
       const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
       for (const [name, window] of entries) {
         lines.push(modelLine(name, window, maxLenWeekly, vc));
@@ -81,8 +83,8 @@ function buildClaude(p: ProviderQuota): string[] {
       lines.push(modelLine('All Models', p.secondary, maxLen, vc));
     }
 
-    if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
-      const { remaining, used, limit } = p.extraUsage;
+    if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
+      const { remaining, used, limit } = _claudeExtra.extraUsage;
       lines.push(v(vc));
       lines.push(label('Extra Usage', vc));
       const nameS = colorize('Budget'.padEnd(maxLen), oneDark.textBright);
@@ -142,14 +144,20 @@ function buildCodex(p: ProviderQuota): string[] {
       }
     }
 
-    if (p.extraUsage?.enabled) {
+    const _codexExtra = p.provider === 'codex' ? (p.extra as CodexQuotaExtra | undefined) : undefined;
+    if (_codexExtra?.extraUsage?.enabled) {
+      const codexExtraUsage = _codexExtra.extraUsage;
       lines.push(v(vc));
       lines.push(label('Credits', vc));
       const nameS = colorize('Balance'.padEnd(maxLen), oneDark.textBright);
-      const barS = bar(p.extraUsage.remaining);
-      const pctS = colorize(formatPercent(p.extraUsage.remaining).padStart(4), getQuotaColor(p.extraUsage.remaining));
-      const infoS = p.extraUsage.limit === -1 ? colorize('Unlimited', oneDark.cyan) : colorize('Balance', oneDark.cyan);
-      lines.push(`${v(vc)}  ${indicator(p.extraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`);
+      const barS = bar(codexExtraUsage.remaining);
+      const pctS = colorize(
+        formatPercent(codexExtraUsage.remaining).padStart(4),
+        getQuotaColor(codexExtraUsage.remaining),
+      );
+      const infoS =
+        codexExtraUsage.limit === -1 ? colorize('Unlimited', oneDark.cyan) : colorize('Balance', oneDark.cyan);
+      lines.push(`${v(vc)}  ${indicator(codexExtraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`);
     }
   }
 

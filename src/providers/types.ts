@@ -21,11 +21,9 @@ export interface ModelWindows {
 }
 
 /**
- * Full quota data from a provider
+ * Core quota fields shared by all providers
  */
-export interface ProviderQuota {
-  /** Provider identifier */
-  provider: string;
+interface QuotaCore {
   /** Display name for UI */
   displayName: string;
   /** Whether the provider is authenticated/available */
@@ -42,22 +40,60 @@ export interface ProviderQuota {
   primary?: QuotaWindow;
   /** Secondary quota window (usually weekly/7d) */
   secondary?: QuotaWindow;
-  /** Per-model weekly quotas (Claude Pro feature) */
-  weeklyModels?: Record<string, QuotaWindow>;
   /** Additional quota windows (for providers with multiple models) */
   models?: Record<string, QuotaWindow>;
-  /** Multi-window model data (5h/7d/other) */
-  modelsDetailed?: Record<string, ModelWindows>;
-  /** Extra Usage (Claude Pro feature) */
+}
+
+export interface ClaudeQuotaExtra {
+  /** Per-model weekly quotas (Claude Pro feature) */
+  weeklyModels?: Record<string, QuotaWindow>;
+  /** Extra Usage / additional budget (Claude Pro feature) */
   extraUsage?: {
     enabled: boolean;
     remaining: number;
     limit: number;
     used: number;
   };
+}
+
+export interface CodexQuotaExtra {
+  /** Multi-window model data (5h/7d/other) */
+  modelsDetailed?: Record<string, ModelWindows>;
+  /** Credits / extra usage data */
+  extraUsage?: {
+    enabled: boolean;
+    remaining: number;
+    limit: number;
+    used: number;
+  };
+}
+
+export interface AmpQuotaExtra {
   /** Arbitrary key-value metadata for provider-specific display */
   meta?: Record<string, string>;
 }
+
+export interface ClaudeQuota extends QuotaCore {
+  provider: 'claude';
+  extra?: ClaudeQuotaExtra;
+}
+
+export interface CodexQuota extends QuotaCore {
+  provider: 'codex';
+  extra?: CodexQuotaExtra;
+}
+
+export interface AmpQuota extends QuotaCore {
+  provider: 'amp';
+  extra?: AmpQuotaExtra;
+}
+
+export interface GenericQuota extends QuotaCore {
+  provider: string;
+  extra?: Record<string, unknown>;
+}
+
+export type ProviderQuota = ClaudeQuota | CodexQuota | AmpQuota | GenericQuota;
 
 /**
  * Provider interface - all providers must implement this

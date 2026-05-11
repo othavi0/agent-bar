@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import { classifyWindow, normalizePlanLabel } from '../formatters/shared';
 import { providers } from '../providers';
-import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
+import type { CodexQuotaExtra, ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
 import { loadSettings, saveSettings, type WindowPolicy } from '../settings';
 import { colorize, oneDark, semantic } from './colors';
 
@@ -16,8 +16,10 @@ interface ProviderOption {
 function getModelWindowsMap(quota: ProviderQuota): Record<string, ModelWindows> {
   const result: Record<string, ModelWindows> = {};
 
-  if (quota.modelsDetailed) {
-    for (const [name, windows] of Object.entries(quota.modelsDetailed)) {
+  const modelsDetailed =
+    quota.provider === 'codex' ? (quota.extra as CodexQuotaExtra | undefined)?.modelsDetailed : undefined;
+  if (modelsDetailed) {
+    for (const [name, windows] of Object.entries(modelsDetailed)) {
       result[name] = windows;
     }
   }

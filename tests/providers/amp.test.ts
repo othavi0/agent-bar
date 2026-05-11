@@ -210,17 +210,16 @@ describe('AmpProvider', () => {
     });
 
     it('populates meta fields', () => {
-      expect(result.meta).toBeDefined();
-      expect(result.meta!.freeRemaining).toBe('$3.5');
-      expect(result.meta!.freeTotal).toBe('$5');
-      expect(result.meta!.replenishRate).toBe('+$0.25/hr');
-      expect(result.meta!.bonus).toBe('+20% (5d)');
+      expect(result.extra?.meta).toBeDefined();
+      expect(result.extra?.meta?.freeRemaining).toBe('$3.5');
+      expect(result.extra?.meta?.freeTotal).toBe('$5');
+      expect(result.extra?.meta?.replenishRate).toBe('+$0.25/hr');
+      expect(result.extra?.meta?.bonus).toBe('+20% (5d)');
     });
 
-    it('sets extraUsage.enabled when credits > 0', () => {
-      expect(result.extraUsage).toBeDefined();
-      expect(result.extraUsage!.enabled).toBe(true);
-      expect(result.extraUsage!.remaining).toBe(100);
+    it('sets models["Credits"] when credits > 0', () => {
+      expect(result.models!.Credits).toBeDefined();
+      expect(result.models!.Credits.remaining).toBe(100);
     });
 
     it('populates models["Credits"]', () => {
@@ -229,7 +228,7 @@ describe('AmpProvider', () => {
     });
 
     it('populates meta creditsBalance', () => {
-      expect(result.meta!.creditsBalance).toBe('$10');
+      expect(result.extra?.meta?.creditsBalance).toBe('$10');
     });
   });
 
@@ -250,15 +249,15 @@ describe('AmpProvider', () => {
     });
 
     it('meta does not contain bonus', () => {
-      expect(result.meta!.bonus).toBeUndefined();
+      expect(result.extra?.meta?.bonus).toBeUndefined();
     });
 
     it('still has replenishRate', () => {
-      expect(result.meta!.replenishRate).toBe('+$0.25/hr');
+      expect(result.extra?.meta?.replenishRate).toBe('+$0.25/hr');
     });
 
-    it('does not include extraUsage when no credits line', () => {
-      expect(result.extraUsage).toBeUndefined();
+    it('does not include models["Credits"] when no credits line', () => {
+      expect(result.models?.Credits).toBeUndefined();
     });
 
     it('ETA is calculated without bonus multiplier', () => {
@@ -288,11 +287,11 @@ describe('AmpProvider', () => {
     });
 
     it('meta does not contain replenishRate', () => {
-      expect(result.meta!.replenishRate).toBeUndefined();
+      expect(result.extra?.meta?.replenishRate).toBeUndefined();
     });
 
     it('meta does not contain bonus', () => {
-      expect(result.meta!.bonus).toBeUndefined();
+      expect(result.extra?.meta?.bonus).toBeUndefined();
     });
 
     it('primary.resetsAt is null (no ETA without replenish)', () => {
@@ -305,26 +304,26 @@ describe('AmpProvider', () => {
   // -----------------------------------------------------------------------
 
   describe('credits parsing', () => {
-    it('sets extraUsage.enabled when credits > 0', async () => {
+    it('sets models["Credits"] when credits > 0', async () => {
       spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(FULL_OUTPUT, 0) as any);
 
       const result = await provider.getQuota();
-      expect(result.extraUsage).toBeDefined();
-      expect(result.extraUsage!.enabled).toBe(true);
+      expect(result.models?.Credits).toBeDefined();
+      expect(result.models!.Credits.remaining).toBe(100);
     });
 
-    it('does not set extraUsage when no credits line', async () => {
+    it('does not set models["Credits"] when no credits line', async () => {
       spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_NO_BONUS, 0) as any);
 
       const result = await provider.getQuota();
-      expect(result.extraUsage).toBeUndefined();
+      expect(result.models?.Credits).toBeUndefined();
     });
 
-    it('does not set extraUsage when credits balance is $0.00', async () => {
+    it('sets models["Credits"] with remaining 0 when credits balance is $0.00', async () => {
       spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_ZERO_CREDITS, 0) as any);
 
       const result = await provider.getQuota();
-      expect(result.extraUsage).toBeUndefined();
+      expect(result.models!.Credits.remaining).toBe(0);
     });
 
     it('models["Credits"] has remaining 0 when balance is $0.00', async () => {

@@ -3,7 +3,7 @@ import { cache } from '../cache';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { registerProvider } from './registry';
-import type { Provider, ProviderQuota, QuotaWindow } from './types';
+import type { ClaudeQuota, Provider, QuotaWindow } from './types';
 
 interface ClaudeCredentials {
   claudeAiOauth?: {
@@ -64,9 +64,9 @@ export class ClaudeProvider implements Provider {
     }
   }
 
-  async getQuota(): Promise<ProviderQuota> {
-    const base: ProviderQuota = {
-      provider: this.id,
+  async getQuota(): Promise<ClaudeQuota> {
+    const base: ClaudeQuota = {
+      provider: 'claude',
       displayName: this.name,
       available: false,
     };
@@ -182,14 +182,17 @@ export class ClaudeProvider implements Provider {
         };
       }
 
+      const extra: import('./types').ClaudeQuotaExtra = {};
+      if (Object.keys(weeklyModels).length > 0) extra.weeklyModels = weeklyModels;
+      if (extraUsage) extra.extraUsage = extraUsage;
+
       return {
         ...base,
         available: true,
         plan,
         primary,
         secondary,
-        weeklyModels: Object.keys(weeklyModels).length > 0 ? weeklyModels : undefined,
-        extraUsage,
+        ...(Object.keys(extra).length > 0 ? { extra } : {}),
       };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

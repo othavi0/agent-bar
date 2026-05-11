@@ -1,4 +1,11 @@
-import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
+import type {
+  AllQuotas,
+  AmpQuotaExtra,
+  ClaudeQuotaExtra,
+  CodexQuotaExtra,
+  ProviderQuota,
+  QuotaWindow,
+} from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
 import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
@@ -103,10 +110,11 @@ function buildClaude(p: ProviderQuota, mode: DisplayMode): string[] {
     }
 
     // Per-model weekly quotas (when API provides them)
-    if (p.weeklyModels && Object.keys(p.weeklyModels).length > 0) {
+    const weeklyModels = p.provider === 'claude' ? p.extra?.weeklyModels : undefined;
+    if (weeklyModels && Object.keys(weeklyModels).length > 0) {
       lines.push(v(vc));
       lines.push(label('Weekly per model', vc));
-      const entries = Object.entries(p.weeklyModels);
+      const entries = Object.entries(weeklyModels);
       const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
       for (const [name, window] of entries) {
         lines.push(modelLine(name, window, maxLenWeekly, vc, mode));
@@ -120,8 +128,9 @@ function buildClaude(p: ProviderQuota, mode: DisplayMode): string[] {
       lines.push(modelLine('All Models', p.secondary, maxLen, vc, mode));
     }
 
-    if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
-      const { remaining, used, limit } = p.extraUsage;
+    const _claudeExtra = p.provider === 'claude' ? (p.extra as ClaudeQuotaExtra | undefined) : undefined;
+    if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
+      const { remaining, used, limit } = _claudeExtra.extraUsage;
       const disp = toDisplay(remaining, mode);
       lines.push(v(vc));
       lines.push(label('Extra Usage', vc));
@@ -184,15 +193,17 @@ function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
       }
     }
 
-    if (p.extraUsage?.enabled) {
-      const disp = toDisplay(p.extraUsage.remaining, mode);
+    const _codexExtra = p.provider === 'codex' ? (p.extra as CodexQuotaExtra | undefined) : undefined;
+    if (_codexExtra?.extraUsage?.enabled) {
+      const codexExtraUsage = _codexExtra.extraUsage;
+      const disp = toDisplay(codexExtraUsage.remaining, mode);
       lines.push(v(vc));
       lines.push(label('Credits', vc));
       const nameS = `${ANSI.textBright}${'Balance'.padEnd(maxLen)}${ANSI.reset}`;
       const barS = bar(disp, mode);
       const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
       const infoS =
-        p.extraUsage.limit === -1 ? `${ANSI.cyan}Unlimited${ANSI.reset}` : `${ANSI.cyan}Balance${ANSI.reset}`;
+        codexExtraUsage.limit === -1 ? `${ANSI.cyan}Unlimited${ANSI.reset}` : `${ANSI.cyan}Balance${ANSI.reset}`;
       lines.push(`${v(vc)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${infoS}`);
     }
   }
@@ -206,7 +217,9 @@ function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
 function buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
   const lines: string[] = [];
   const vc = PROVIDER_ANSI.amp;
-  const m = p.meta ?? {};
+  const _ampMeta: Record<string, string> | undefined =
+    p.provider === 'amp' ? (p.extra as AmpQuotaExtra | undefined)?.meta : undefined;
+  const m: Record<string, string> = _ampMeta !== undefined ? _ampMeta : {};
 
   lines.push(
     `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Amp${ANSI.reset} ${vc}${BOX.h.repeat(53)}${ANSI.reset}`,

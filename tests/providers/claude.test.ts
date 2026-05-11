@@ -239,10 +239,10 @@ describe('ClaudeProvider', () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(true);
-      expect(q.weeklyModels).toBeDefined();
-      expect(q.weeklyModels!.Opus.remaining).toBe(50);
-      expect(q.weeklyModels!.Sonnet.remaining).toBe(75);
-      expect(q.weeklyModels!.Cowork.remaining).toBe(20);
+      expect(q.extra?.weeklyModels).toBeDefined();
+      expect(q.extra?.weeklyModels?.Opus.remaining).toBe(50);
+      expect(q.extra?.weeklyModels?.Sonnet.remaining).toBe(75);
+      expect(q.extra?.weeklyModels?.Cowork.remaining).toBe(20);
     });
 
     it('ignores null weekly model fields', async () => {
@@ -256,7 +256,7 @@ describe('ClaudeProvider', () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(true);
-      expect(q.weeklyModels).toBeUndefined();
+      expect(q.extra?.weeklyModels).toBeUndefined();
     });
 
     it('parses extra_usage when enabled', async () => {
@@ -273,11 +273,11 @@ describe('ClaudeProvider', () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(true);
-      expect(q.extraUsage).toBeDefined();
-      expect(q.extraUsage!.enabled).toBe(true);
-      expect(q.extraUsage!.remaining).toBe(63);
-      expect(q.extraUsage!.limit).toBe(100);
-      expect(q.extraUsage!.used).toBe(38); // Math.round(37.5)
+      expect(q.extra?.extraUsage).toBeDefined();
+      expect(q.extra?.extraUsage?.enabled).toBe(true);
+      expect(q.extra?.extraUsage?.remaining).toBe(63);
+      expect(q.extra?.extraUsage?.limit).toBe(100);
+      expect(q.extra?.extraUsage?.used).toBe(38); // Math.round(37.5)
     });
 
     it('ignores extra_usage when not enabled', async () => {
@@ -294,7 +294,7 @@ describe('ClaudeProvider', () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(true);
-      expect(q.extraUsage).toBeUndefined();
+      expect(q.extra?.extraUsage).toBeUndefined();
     });
 
     it('includes plan from subscriptionType', async () => {

@@ -10,8 +10,9 @@ export interface CodexModelEntry {
 export function codexModelsFromQuota(p: ProviderQuota): CodexModelEntry[] {
   const models: Record<string, ModelWindows> = {};
 
-  if (p.modelsDetailed) {
-    for (const [name, windows] of Object.entries(p.modelsDetailed)) {
+  const modelsDetailed = p.provider === 'codex' ? p.extra?.modelsDetailed : undefined;
+  if (modelsDetailed) {
+    for (const [name, windows] of Object.entries(modelsDetailed)) {
       models[name] = windows;
     }
   }

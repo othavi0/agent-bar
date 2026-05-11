@@ -4,7 +4,7 @@ import { cache } from '../cache';
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { registerProvider } from './registry';
-import type { Provider, ProviderQuota, QuotaWindow } from './types';
+import type { AmpQuota, Provider, QuotaWindow } from './types';
 
 export class AmpProvider implements Provider {
   readonly id = 'amp';
@@ -15,9 +15,9 @@ export class AmpProvider implements Provider {
     return findAmpBin() !== null;
   }
 
-  async getQuota(): Promise<ProviderQuota> {
-    const base: ProviderQuota = {
-      provider: this.id,
+  async getQuota(): Promise<AmpQuota> {
+    const base: AmpQuota = {
+      provider: 'amp',
       displayName: this.name,
       available: false,
     };
@@ -28,7 +28,7 @@ export class AmpProvider implements Provider {
     }
 
     try {
-      return await cache.getOrFetch<ProviderQuota>(
+      return await cache.getOrFetch<AmpQuota>(
         'amp-quota',
         async () => await this.fetchUsage(base, bin),
         CONFIG.cache.ttlMs,
@@ -39,7 +39,7 @@ export class AmpProvider implements Provider {
     }
   }
 
-  private async fetchUsage(base: ProviderQuota, bin: string): Promise<ProviderQuota> {
+  private async fetchUsage(base: AmpQuota, bin: string): Promise<AmpQuota> {
     try {
       const proc = Bun.spawn([bin, 'usage'], {
         stdout: 'pipe',
@@ -93,22 +93,10 @@ export class AmpProvider implements Provider {
       }
 
       const creditsMatch = stdout.match(/Individual credits:\s*\$([0-9.]+)\s*remaining/);
-      let extraUsage: ProviderQuota['extraUsage'] | undefined;
-
-      if (creditsMatch) {
-        const balance = parseFloat(creditsMatch[1]);
-        if (balance > 0) {
-          extraUsage = {
-            enabled: true,
-            remaining: 100,
-            limit: 0,
-            used: 0,
-          };
-        }
-      }
 
       const models: Record<string, QuotaWindow> = {};
       const meta: Record<string, string> = {};
+      const extra: import('./types').AmpQuotaExtra = {};
 
       if (freeMatch) {
         const remaining = parseFloat(freeMatch[1]);
@@ -128,14 +116,15 @@ export class AmpProvider implements Provider {
         meta.creditsBalance = `$${balance}`;
       }
 
+      if (Object.keys(meta).length > 0) extra.meta = meta;
+
       return {
         ...base,
         available: true,
         account,
         primary,
-        extraUsage,
         models,
-        meta,
+        ...(Object.keys(extra).length > 0 ? { extra } : {}),
       };
     } catch (error) {
       logger.error('Amp usage parse error', { error });

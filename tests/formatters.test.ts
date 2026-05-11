@@ -2,12 +2,13 @@ import { describe, expect, it } from 'bun:test';
 import { etaLabel, toDisplay, toHealth } from '../src/formatters/shared';
 import { formatForTerminal } from '../src/formatters/terminal';
 import { formatForWaybar, formatProviderForWaybar } from '../src/formatters/waybar';
-import type { AllQuotas, ProviderQuota } from '../src/providers/types';
+import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota, ProviderQuota } from '../src/providers/types';
 import { ANSI, BOX, ONE_DARK } from '../src/theme';
 
-function mockClaudeQuota(remaining: number): ProviderQuota {
+function mockClaudeQuota(remaining: number): ClaudeQuota {
   return {
     provider: 'claude',
+    displayName: 'Claude',
     available: true,
     primary: {
       remaining,
@@ -19,9 +20,10 @@ function mockClaudeQuota(remaining: number): ProviderQuota {
   };
 }
 
-function mockCodexQuota(remaining: number): ProviderQuota {
+function mockCodexQuota(remaining: number): CodexQuota {
   return {
     provider: 'codex',
+    displayName: 'Codex',
     available: true,
     primary: {
       remaining,
@@ -33,9 +35,10 @@ function mockCodexQuota(remaining: number): ProviderQuota {
   };
 }
 
-function mockAmpQuota(): ProviderQuota {
+function mockAmpQuota(): AmpQuota {
   return {
     provider: 'amp',
+    displayName: 'Amp',
     available: true,
     models: {
       'Free Tier': {
