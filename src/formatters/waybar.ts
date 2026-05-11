@@ -1,5 +1,5 @@
 import { APP_BASE_CLASS } from '../app-identity';
-import { getColorForPercent } from '../config';
+import { getColorForPercent, getStatusForPercent, type HealthStatus } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 import { type DisplayMode, loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
@@ -75,10 +75,14 @@ function bar(display: number | null, mode: DisplayMode): string {
 function indicator(display: number | null, mode: DisplayMode): string {
   const health = toHealth(display, mode);
   if (health === null) return s(ONE_DARK.comment, BOX.dotO);
-  if (health < 10) return s(ONE_DARK.red, BOX.dot);
-  if (health < 30) return s(ONE_DARK.orange, BOX.dot);
-  if (health < 60) return s(ONE_DARK.yellow, BOX.dot);
-  return s(ONE_DARK.green, BOX.dot);
+  const status = getStatusForPercent(health);
+  const colorByStatus: Record<HealthStatus, string> = {
+    critical: ONE_DARK.red,
+    warn: ONE_DARK.orange,
+    low: ONE_DARK.yellow,
+    ok: ONE_DARK.green,
+  };
+  return s(colorByStatus[status], BOX.dot);
 }
 
 function codexModelLine(
@@ -426,10 +430,7 @@ function getClass(quotas: AllQuotas): string {
   for (const p of quotas.providers) {
     if (!p.available) continue;
     const val = p.primary?.remaining ?? 100;
-    let status = 'ok';
-    if (val < 10) status = 'critical';
-    else if (val < 30) status = 'warn';
-    else if (val < 60) status = 'low';
+    const status = getStatusForPercent(val);
     classes.push(`${p.provider}-${status}`);
   }
 
@@ -462,10 +463,7 @@ export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode 
   const disp = toDisplay(rem, mode);
   // class based on health (raw remaining), not display value
   const health = rem ?? 100;
-  let status = 'ok';
-  if (health < 10) status = 'critical';
-  else if (health < 30) status = 'warn';
-  else if (health < 60) status = 'low';
+  const status = getStatusForPercent(health);
 
   return {
     text: pctColored(disp, mode),

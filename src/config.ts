@@ -74,3 +74,14 @@ export function getColorForPercent(pct: number | null): string {
   if (pct >= CONFIG.thresholds.orange) return CONFIG.colors.orange;
   return CONFIG.colors.red;
 }
+
+/** Status bucket derived from health percentage (0-100). Matches `CONFIG.thresholds`. */
+export type HealthStatus = 'ok' | 'low' | 'warn' | 'critical';
+
+export function getStatusForPercent(pct: number | null): HealthStatus {
+  if (pct === null) return 'ok';
+  if (pct < CONFIG.thresholds.orange) return 'critical';
+  if (pct < CONFIG.thresholds.yellow) return 'warn';
+  if (pct < CONFIG.thresholds.green) return 'low';
+  return 'ok';
+}
