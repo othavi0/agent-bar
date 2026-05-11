@@ -146,6 +146,14 @@ describe('formatForTerminal', () => {
     expect(result).toContain('698 / 300 used');
   });
 
+  it('renders Copilot over-quota usage above 100% in used mode', () => {
+    const quotas = mockAllQuotas([mockCopilotQuota()]);
+    const result = formatForTerminal(quotas, 'used');
+
+    expect(result).toContain('233%');
+    expect(result).toContain('698 / 300 used');
+  });
+
   it('renders multiple providers separated by double newline', () => {
     const quotas = mockAllQuotas([mockClaudeQuota(80), mockCodexQuota(45)]);
     const result = formatForTerminal(quotas);
@@ -258,6 +266,15 @@ describe('formatForWaybar', () => {
     expect(result.tooltip).toContain('raw -132.8%');
   });
 
+  it('shows Copilot over-quota usage above 100% in used mode', () => {
+    const quotas = mockAllQuotas([mockCopilotQuota()]);
+    const result = formatForWaybar(quotas, 'used');
+
+    expect(result.text).toContain('233%');
+    expect(result.tooltip).toContain('233%');
+    expect(result.class).toContain('copilot-critical');
+  });
+
   it("shows 'No Providers' when empty", () => {
     const quotas = mockAllQuotas([]);
     const result = formatForWaybar(quotas);
@@ -332,6 +349,12 @@ describe('formatForWaybar displayMode=used', () => {
   it('formatProviderForWaybar respects mode', () => {
     const result = formatProviderForWaybar(mockClaudeQuota(80), 'used');
     expect(result.text).toContain('20%');
+  });
+
+  it('formatProviderForWaybar shows Copilot over-quota raw usage in used mode', () => {
+    const result = formatProviderForWaybar(mockCopilotQuota(), 'used');
+    expect(result.text).toContain('233%');
+    expect(result.class).toContain('critical');
   });
 
   it('default arg keeps remaining behavior', () => {

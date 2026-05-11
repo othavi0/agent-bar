@@ -312,6 +312,30 @@ function formatRawPercent(value: number): string {
   return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
 }
 
+function boundedPercent(value: number | null): number | null {
+  if (value === null) return null;
+  return Math.max(0, Math.min(100, value));
+}
+
+function copilotUsedPercent(snapshot: CopilotQuotaSnapshot | undefined): number | null {
+  if (!snapshot || snapshot.isUnlimitedEntitlement || snapshot.entitlementRequests <= 0) {
+    return null;
+  }
+  return (snapshot.usedRequests / snapshot.entitlementRequests) * 100;
+}
+
+function copilotDisplayValue(
+  snapshot: CopilotQuotaSnapshot | undefined,
+  remaining: number | null,
+  mode: DisplayMode,
+): number | null {
+  if (mode === 'used') {
+    const used = copilotUsedPercent(snapshot);
+    if (used !== null) return used;
+  }
+  return toDisplay(remaining, mode);
+}
+
 function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
   const parts: string[] = [];
 
@@ -372,9 +396,9 @@ function buildCopilot(p: ProviderQuota, mode: DisplayMode): string[] {
         const snapshot = snapshots[bucket];
         const window = p.models?.[name];
         const rem = window?.remaining ?? null;
-        const disp = toDisplay(rem, mode);
+        const disp = copilotDisplayValue(snapshot, rem, mode);
         const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
-        const barS = bar(disp, mode);
+        const barS = bar(boundedPercent(disp), mode);
         const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
         const etaS = window?.resetsAt
           ? `${ANSI.cyan}→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}${ANSI.reset}`

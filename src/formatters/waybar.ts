@@ -376,6 +376,38 @@ function formatRawPercent(value: number): string {
   return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
 }
 
+function boundedPercent(value: number | null): number | null {
+  if (value === null) return null;
+  return Math.max(0, Math.min(100, value));
+}
+
+function copilotUsedPercent(snapshot: CopilotQuotaSnapshot | undefined): number | null {
+  if (!snapshot || snapshot.isUnlimitedEntitlement || snapshot.entitlementRequests <= 0) {
+    return null;
+  }
+  return (snapshot.usedRequests / snapshot.entitlementRequests) * 100;
+}
+
+function copilotDisplayValue(
+  snapshot: CopilotQuotaSnapshot | undefined,
+  remaining: number | null,
+  mode: DisplayMode,
+): number | null {
+  if (mode === 'used') {
+    const used = copilotUsedPercent(snapshot);
+    if (used !== null) return used;
+  }
+  return toDisplay(remaining, mode);
+}
+
+function copilotPrimaryDisplayValue(p: ProviderQuota, mode: DisplayMode): number | null {
+  const snapshot =
+    p.provider === 'copilot'
+      ? (p.extra as CopilotQuotaExtra | undefined)?.quotaSnapshots?.premium_interactions
+      : undefined;
+  return copilotDisplayValue(snapshot, p.primary?.remaining ?? null, mode);
+}
+
 function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
   const parts: string[] = [];
 
@@ -436,9 +468,9 @@ function buildCopilotTooltip(p: ProviderQuota, fetchedAt: string | undefined, mo
         const snapshot = snapshots[bucket];
         const window = p.models?.[name];
         const rem = window?.remaining ?? null;
-        const disp = toDisplay(rem, mode);
+        const disp = copilotDisplayValue(snapshot, rem, mode);
         const nameS = s(ONE_DARK.textBright, name.padEnd(maxLen));
-        const b = bar(disp, mode);
+        const b = bar(boundedPercent(disp), mode);
         const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
         const etaS = window?.resetsAt
           ? s(ONE_DARK.cyan, `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`)
@@ -512,7 +544,7 @@ function buildText(quotas: AllQuotas, mode: DisplayMode): string {
   for (const p of quotas.providers) {
     if (!p.available) continue;
     const rem = p.primary?.remaining ?? null;
-    const disp = toDisplay(rem, mode);
+    const disp = p.provider === 'copilot' ? copilotPrimaryDisplayValue(p, mode) : toDisplay(rem, mode);
     parts.push(pctColored(disp, mode));
   }
 
@@ -556,7 +588,7 @@ export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode 
   }
 
   const rem = quota.primary?.remaining ?? null;
-  const disp = toDisplay(rem, mode);
+  const disp = quota.provider === 'copilot' ? copilotPrimaryDisplayValue(quota, mode) : toDisplay(rem, mode);
   // class based on health (raw remaining), not display value
   const health = rem ?? 100;
   const status = getStatusForPercent(health);
