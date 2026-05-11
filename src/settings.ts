@@ -12,6 +12,13 @@ const CURRENT_VERSION = 1;
 const VALID_SEPARATORS = ['pill', 'gap', 'bare', 'glass', 'shadow', 'none'] as const;
 type SeparatorStyle = (typeof VALID_SEPARATORS)[number];
 
+export type DisplayMode = 'remaining' | 'used';
+const VALID_DISPLAY_MODES = ['remaining', 'used'] as const;
+
+function isValidDisplayMode(value: unknown): value is DisplayMode {
+  return typeof value === 'string' && (VALID_DISPLAY_MODES as readonly string[]).includes(value);
+}
+
 const VALID_WINDOW_POLICIES = ['both', 'five_hour', 'seven_day'] as const;
 
 interface SettingsPaths {
@@ -70,6 +77,7 @@ export interface Settings {
     showPercentage: boolean;
     separators: SeparatorStyle;
     providerOrder: string[];
+    displayMode: DisplayMode;
   };
   tooltip: Record<string, never>;
   /** Per-provider model visibility. Key = provider id, value = array of model names to show. Empty array = show all. */
@@ -85,6 +93,7 @@ const DEFAULT_SETTINGS: Settings = {
     showPercentage: true,
     separators: 'gap',
     providerOrder: ['claude', 'codex', 'amp'],
+    displayMode: 'remaining',
   },
   tooltip: {},
   models: {},
@@ -126,6 +135,11 @@ function normalizeSettings(data: Partial<Settings> | undefined): Settings {
   // Validate separators
   if (!isValidSeparator(merged.waybar.separators)) {
     merged.waybar.separators = DEFAULT_SETTINGS.waybar.separators;
+  }
+
+  // Validate displayMode
+  if (!isValidDisplayMode(merged.waybar.displayMode)) {
+    merged.waybar.displayMode = DEFAULT_SETTINGS.waybar.displayMode;
   }
 
   // Validate window policies

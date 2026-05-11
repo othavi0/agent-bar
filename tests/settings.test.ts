@@ -94,6 +94,33 @@ describe('settings', () => {
       });
   });
 
+  describe('Settings displayMode', () => {
+    it('default is "remaining" when not set', async () => {
+      const { loadSettings } = await import('../src/settings');
+      const s = await loadSettings();
+      expect(s.waybar.displayMode).toBe('remaining');
+    });
+
+    it('rejects invalid value, falls back to "remaining"', async () => {
+      const { loadSettings, saveSettings } = await import('../src/settings');
+      const s = await loadSettings();
+      // @ts-expect-error testando valor inválido
+      s.waybar.displayMode = 'bogus';
+      await saveSettings(s);
+      const reloaded = await loadSettings();
+      expect(reloaded.waybar.displayMode).toBe('remaining');
+    });
+
+    it('persists "used" value round-trip', async () => {
+      const { loadSettings, saveSettings } = await import('../src/settings');
+      const s = await loadSettings();
+      s.waybar.displayMode = 'used';
+      await saveSettings(s);
+      const reloaded = await loadSettings();
+      expect(reloaded.waybar.displayMode).toBe('used');
+    });
+  });
+
   it('does not overwrite existing new settings when a legacy directory still exists', async () => {
     const newDir = join(testRoot, 'agent-bar-omarchy');
     const legacyDir = join(testRoot, 'qbar');
