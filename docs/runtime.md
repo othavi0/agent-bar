@@ -38,7 +38,7 @@ The supported provider set is:
 
 - Primary cache path: `~/.cache/agent-bar-omarchy`
 - Default TTL: 5 minutes
-- Legacy cache under `~/.config/waybar/agent-bar-omarchy/cache` is cleaned on uninstall/remove.
+- Legacy caches under `~/.cache/qbar` and `~/.config/waybar/qbar/cache` are migrated/cleaned by current runtime cleanup paths.
 
 ## Related Docs
 

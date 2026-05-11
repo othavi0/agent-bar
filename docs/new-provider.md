@@ -23,6 +23,7 @@ O retorno de `getQuota()` segue o contrato `ProviderQuota`. Os campos obrigatori
 import { CONFIG } from '../config';
 import { logger } from '../logger';
 import { cache } from '../cache';
+import { registerProvider } from './registry';
 import type { Provider, ProviderQuota } from './types';
 
 export class MyProvider implements Provider {
@@ -80,6 +81,8 @@ export class MyProvider implements Provider {
     }
   }
 }
+
+registerProvider(new MyProvider());
 ```
 
 ---
@@ -87,18 +90,14 @@ export class MyProvider implements Provider {
 ## Checklist de integracao
 
 1. **Criar `src/providers/<name>.ts`** implementando a interface `Provider`
-2. **Registrar em `src/providers/index.ts`** — adicionar import e incluir no array `providers`:
+2. **Registrar por side effect** — exportar a classe e adicionar o import em `src/providers/index.ts`:
    ```typescript
-   import { MyProvider } from './my-provider';
-   // ...
-   export const providers: Provider[] = [
-     new ClaudeProvider(),
-     new CodexProvider(),
-     new AmpProvider(),
-     new MyProvider(),  // <-- novo
-   ];
+   export { MyProvider } from './my-provider';
+
+   // Side-effect imports: each provider self-registers via registerProvider()
+   import './my-provider';
    ```
-3. **Adicionar icon** em `icons/<name>-icon.svg` (ou `.png`) — 16x16 ou 24x24. Referenciado automaticamente pelo CSS do Waybar
+3. **Adicionar icon** em `icons/<name>-icon.svg` (ou `.png`) — 16x16 ou 24x24. Referenciado pela regra CSS do Waybar
 4. **Adicionar ao Waybar contract** em `src/waybar-contract.ts`:
    - Incluir o id na const `WAYBAR_PROVIDERS`:
      ```typescript
@@ -108,8 +107,8 @@ export class MyProvider implements Provider {
      ```typescript
      `#custom-agent-bar-omarchy-my-provider { background-image: url("${iconRef("my-provider-icon.svg")}"); }`
      ```
-5. **Adicionar ao TUI login flow** em `src/tui/login.ts` — adicionar um `case` no `switch(choice)` com as instrucoes de login do provider
-6. **Adicionar paths de credenciais** a `CONFIG.paths` em `src/config.ts`:
+5. **Revisar todas as superficies provider-specific**: `src/index.ts`, `src/theme.ts`, `src/formatters/waybar.ts`, `src/formatters/terminal.ts`, `src/tui/login.ts`, `src/tui/login-single.ts`, `src/tui/list-all.ts` e `src/tui/configure-layout.ts`
+6. **Adicionar paths de credenciais** a `CONFIG.paths` em `src/config.ts`, quando o provider precisar de arquivos locais:
    ```typescript
    myProvider: {
      credentials: join(homedir(), '.my-provider', 'auth.json'),
@@ -129,7 +128,7 @@ export class MyProvider implements Provider {
 
 - O `cacheKey` **deve ser unico** entre todos os providers. Usar o formato `<name>-quota` (ex: `claude-usage`, `codex-quota`, `amp-quota`)
 - Chaves de cache so aceitam `[a-zA-Z0-9_-]` — a classe `Cache` rejeita caracteres fora desse range
-- Usar `cache.getOrFetch()` para o padrao get-or-fetch com TTL automatico. Para controle manual (como Codex faz), usar `cache.get()` + `cache.set()` separadamente
+- Usar `cache.getOrFetch()` para o padrao get-or-fetch com TTL automatico. Use `cache.get()` + `cache.set()` separadamente apenas quando houver necessidade real de controle manual.
 
 ### Disponibilidade
 
@@ -175,7 +174,7 @@ Os tres providers existentes ilustram padroes diferentes:
 ### Codex (`src/providers/codex.ts`) — CLI spawn + file parsing
 
 - Estrategia em duas camadas: tenta `codex app-server` (stdio JSON-RPC) primeiro, faz fallback para parse de session logs (`.jsonl`)
-- Usa `cache.get()` + `cache.set()` manualmente para controle fino
+- Usa `cache.getOrFetch()` com TTL padrao
 - Dados ricos em `modelsDetailed` com multiplos buckets de limites
 - Exemplo de como lidar com protocolos mais complexos
 
