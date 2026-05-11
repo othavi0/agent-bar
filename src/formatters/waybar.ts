@@ -23,6 +23,16 @@ let settingsCache: {
   expiresAt: number;
 } | null = null;
 
+/**
+ * Cached settings loader for the Waybar hot path.
+ *
+ * Waybar invokes `agent-bar-omarchy` on a tight polling interval (default a few
+ * seconds), so reading settings.json from disk every call adds up. `SETTINGS_CACHE_TTL_MS`
+ * makes hot runs O(1).
+ *
+ * Other entry points (refresh, action-right, index) are one-shot per invocation
+ * and intentionally use `loadSettingsSync` directly — caching there is YAGNI.
+ */
 function loadSettingsCached(): ReturnType<typeof loadSettingsSync> {
   const now = Date.now();
   if (settingsCache && settingsCache.expiresAt > now) {
