@@ -1,12 +1,6 @@
 import * as p from '@clack/prompts';
-import {
-  applyCodexModelFilter,
-  codexModelsFromQuota,
-  formatEta,
-  formatPercent,
-  formatResetTime,
-  normalizePlanLabel,
-} from '../formatters/shared';
+import { applyCodexModelFilter, codexModelsFromQuota } from '../formatters/codex-helpers';
+import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
 import { getAllQuotas } from '../providers';
 import type { ProviderQuota, QuotaWindow } from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';

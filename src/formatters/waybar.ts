@@ -3,17 +3,8 @@ import { getColorForPercent, getStatusForPercent, type HealthStatus } from '../c
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 import { type DisplayMode, loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
-import {
-  applyCodexModelFilter,
-  codexModelsFromQuota,
-  etaLabel,
-  formatEta,
-  formatPercent,
-  formatResetTime,
-  normalizePlanLabel,
-  toDisplay,
-  toHealth,
-} from './shared';
+import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
+import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay, toHealth } from './shared';
 
 // Uniform tooltip width — all 3 cards share the same border
 const TOOLTIP_BORDER = 56; // total visual chars per line (┗ + 55 ━)

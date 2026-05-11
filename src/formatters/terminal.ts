@@ -2,9 +2,8 @@ import { CONFIG } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
+import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
 import {
-  applyCodexModelFilter,
-  codexModelsFromQuota,
   type DisplayMode,
   etaLabel,
   formatEta,
