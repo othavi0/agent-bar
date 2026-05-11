@@ -340,29 +340,16 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: 
 }
 
 // ---------------------------------------------------------------------------
-// Tooltip builder registry — eliminates switch statements for extensibility.
-// New providers register their tooltip builder here.
+// Tooltip builder registry
 // ---------------------------------------------------------------------------
 
 type TooltipBuilder = (p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode) => string;
 
-const tooltipBuilders = new Map<string, TooltipBuilder>([
-  ['claude', buildClaudeTooltip],
-  ['codex', buildCodexTooltip],
-  ['amp', buildAmpTooltip],
-]);
-
-/**
- * Register a tooltip builder for a provider. Used by new providers to plug
- * into the Waybar formatter without touching existing switch statements.
- */
-export function registerTooltipBuilder(
-  providerId: string,
-  builder: (p: ProviderQuota, fetchedAt?: string) => string,
-): void {
-  // Wrap legacy builders (no mode param) to match internal signature
-  tooltipBuilders.set(providerId, (p, fetchedAt, _mode) => builder(p, fetchedAt));
-}
+const TOOLTIP_BUILDERS: Record<string, TooltipBuilder> = {
+  claude: buildClaudeTooltip,
+  codex: buildCodexTooltip,
+  amp: buildAmpTooltip,
+};
 
 function buildGenericTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const color = ONE_DARK.text;
@@ -384,7 +371,7 @@ function buildGenericTooltip(p: ProviderQuota, fetchedAt: string | undefined, mo
 }
 
 function buildProviderTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const builder = tooltipBuilders.get(p.provider);
+  const builder = TOOLTIP_BUILDERS[p.provider];
   if (builder) return builder(p, fetchedAt, mode);
   return buildGenericTooltip(p, fetchedAt, mode);
 }

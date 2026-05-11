@@ -284,24 +284,16 @@ function buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Terminal builder registry — eliminates switch statements for extensibility.
+// Terminal builder registry
 // ---------------------------------------------------------------------------
 
 type TerminalBuilder = (p: ProviderQuota, mode: DisplayMode) => string[];
 
-const terminalBuilders = new Map<string, TerminalBuilder>([
-  ['claude', buildClaude],
-  ['codex', buildCodex],
-  ['amp', buildAmp],
-]);
-
-/**
- * Register a terminal builder for a provider. Used by new providers to plug
- * into the terminal formatter without touching existing switch statements.
- */
-export function registerTerminalBuilder(providerId: string, builder: TerminalBuilder): void {
-  terminalBuilders.set(providerId, builder);
-}
+const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
+  claude: buildClaude,
+  codex: buildCodex,
+  amp: buildAmp,
+};
 
 function buildGenericTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
   const vc = ANSI.text;
@@ -332,7 +324,7 @@ export function formatForTerminal(quotas: AllQuotas, mode: DisplayMode = 'remain
 
   for (const p of quotas.providers) {
     if (!p.available && !p.error) continue;
-    const builder = terminalBuilders.get(p.provider);
+    const builder = TERMINAL_BUILDERS[p.provider];
     sections.push(builder ? builder(p, mode) : buildGenericTerminal(p, mode));
   }
 
