@@ -242,3 +242,53 @@ describe('formatProviderForWaybar snapshots', () => {
     expect(out.class).toMatchSnapshot();
   });
 });
+
+// ---------------------------------------------------------------------------
+// displayMode='used' snapshots
+// ---------------------------------------------------------------------------
+
+describe('Terminal formatter snapshots — displayMode=used', () => {
+  it('renders Claude healthy as used', () => {
+    const result = sanitize(formatForTerminal(wrap(claudeHealthy()), 'used'));
+    expect(result).toMatchSnapshot();
+  });
+
+  it('renders Codex healthy as used', () => {
+    const result = sanitize(formatForTerminal(wrap(codexHealthy()), 'used'));
+    expect(result).toMatchSnapshot();
+  });
+
+  it('renders Amp healthy as used', () => {
+    const result = sanitize(formatForTerminal(wrap(ampHealthy()), 'used'));
+    expect(result).toMatchSnapshot();
+  });
+
+  it('renders all providers combined as used', () => {
+    const result = sanitize(formatForTerminal(wrap(claudeHealthy(), codexHealthy(), ampHealthy()), 'used'));
+    expect(result).toMatchSnapshot();
+  });
+});
+
+describe('Waybar formatter snapshots — displayMode=used', () => {
+  it('renders Claude healthy as used', () => {
+    const out = formatForWaybar(wrap(claudeHealthy()), 'used');
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Codex healthy as used', () => {
+    const out = formatForWaybar(wrap(codexHealthy()), 'used');
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Amp healthy as used (tooltip contains "Resets in")', () => {
+    const out = formatForWaybar(wrap(ampHealthy()), 'used');
+    expect(out.tooltip).toContain('Resets in');
+    expect(out.tooltip).not.toContain('Full in');
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+  });
+});
