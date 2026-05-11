@@ -143,6 +143,28 @@ export async function configureLayout(): Promise<boolean> {
 
   const newSeparator = sepResult as typeof currentSep;
 
+  // --- Step 4: Display mode ---
+  const currentMode = settings.waybar.displayMode;
+  const modeResult = await p.select({
+    message: colorize('Display mode', semantic.title),
+    options: [
+      {
+        value: 'remaining' as const,
+        label: colorize('Remaining', currentMode === 'remaining' ? oneDark.green : oneDark.text),
+        hint: colorize('100% = quota cheia, 0% = esgotado (default)', semantic.muted),
+      },
+      {
+        value: 'used' as const,
+        label: colorize('Used', currentMode === 'used' ? oneDark.green : oneDark.text),
+        hint: colorize('0% = nada usado, 100% = esgotado', semantic.muted),
+      },
+    ],
+    initialValue: currentMode,
+  });
+
+  if (p.isCancel(modeResult)) return false;
+  const newDisplayMode = modeResult as typeof currentMode;
+
   // --- Apply ---
   const s = p.spinner();
   s.start('Applying changes...');
@@ -150,6 +172,7 @@ export async function configureLayout(): Promise<boolean> {
   settings.waybar.providers = selectedProviders;
   settings.waybar.providerOrder = newOrder;
   settings.waybar.separators = newSeparator;
+  settings.waybar.displayMode = newDisplayMode;
   await saveSettings(settings);
 
   try {
@@ -173,6 +196,7 @@ export async function configureLayout(): Promise<boolean> {
     .join(colorize(' → ', semantic.muted));
   p.log.info(`${colorize('Providers:', semantic.subtitle)} ${orderSummary}`);
   p.log.info(`${colorize('Style:', semantic.subtitle)} ${colorize(newSeparator, oneDark.green)}`);
+  p.log.info(`${colorize('Mode:', semantic.subtitle)} ${colorize(newDisplayMode, oneDark.green)}`);
   p.log.info(colorize(`If changes didn't take effect, run \`${APP_NAME} apply-local\` to refresh.`, semantic.muted));
 
   return true;
