@@ -12,12 +12,8 @@ const CURRENT_VERSION = 1;
 const VALID_SEPARATORS = ['pill', 'gap', 'bare', 'glass', 'shadow', 'none'] as const;
 type SeparatorStyle = (typeof VALID_SEPARATORS)[number];
 
-export type DisplayMode = 'remaining' | 'used';
 const VALID_DISPLAY_MODES = ['remaining', 'used'] as const;
-
-function isValidDisplayMode(value: unknown): value is DisplayMode {
-  return typeof value === 'string' && (VALID_DISPLAY_MODES as readonly string[]).includes(value);
-}
+export type DisplayMode = (typeof VALID_DISPLAY_MODES)[number];
 
 const VALID_WINDOW_POLICIES = ['both', 'five_hour', 'seven_day'] as const;
 
@@ -107,6 +103,10 @@ function migrateSettings(data: Record<string, unknown>, _fromVersion: number): R
   // Future migrations go here:
   // if (fromVersion < 2) { /* migrate v1 → v2 */ }
   return data;
+}
+
+function isValidDisplayMode(value: unknown): value is DisplayMode {
+  return typeof value === 'string' && (VALID_DISPLAY_MODES as readonly string[]).includes(value);
 }
 
 function isValidSeparator(value: unknown): value is SeparatorStyle {
