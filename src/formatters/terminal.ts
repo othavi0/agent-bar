@@ -23,7 +23,9 @@ const ANSI_BY_TOKEN: Record<ColorToken, string> = {
 };
 
 function renderAnsi(segs: Segment[]): string {
-  return segs.map((s) => `${ANSI_BY_TOKEN[s.color]}${s.bold ? ANSI.bold : ''}${s.text}${ANSI.reset}`).join('');
+  if (segs.length === 0) return '';
+  const body = segs.map((s) => `${ANSI_BY_TOKEN[s.color]}${s.bold ? ANSI.bold : ''}${s.text}`).join('');
+  return `${body}${ANSI.reset}`;
 }
 
 function getColor(display: number | null, mode: DisplayMode): string {
@@ -31,11 +33,7 @@ function getColor(display: number | null, mode: DisplayMode): string {
 }
 
 function bar(display: number | null, mode: DisplayMode): string {
-  const segs = barSegments(display, mode);
-  if (segs.length === 1) return renderAnsi(segs);
-  // Two-segment bar: filled + empty — join without intermediate reset to match original format
-  const [filled, empty] = segs;
-  return `${ANSI_BY_TOKEN[filled.color]}${filled.text}${ANSI_BY_TOKEN[empty.color]}${empty.text}${ANSI.reset}`;
+  return renderAnsi(barSegments(display, mode));
 }
 
 function indicator(display: number | null, mode: DisplayMode): string {
