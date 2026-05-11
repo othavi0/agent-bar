@@ -244,6 +244,28 @@ describe('formatForTerminal displayMode=used', () => {
   });
 });
 
+describe('formatForWaybar displayMode=used', () => {
+  it('text shows used (100 - remaining)', () => {
+    const result = formatForWaybar(mockAllQuotas([mockClaudeQuota(80)]), 'used');
+    expect(result.text).toContain('20%');
+  });
+
+  it('class still uses health thresholds', () => {
+    const result = formatForWaybar(mockAllQuotas([mockClaudeQuota(5)]), 'used');
+    expect(result.class).toContain('claude-critical');
+  });
+
+  it('formatProviderForWaybar respects mode', () => {
+    const result = formatProviderForWaybar(mockClaudeQuota(80), 'used');
+    expect(result.text).toContain('20%');
+  });
+
+  it('default arg keeps remaining behavior', () => {
+    const result = formatForWaybar(mockAllQuotas([mockClaudeQuota(80)]));
+    expect(result.text).toContain('80%');
+  });
+});
+
 describe('display mode helpers', () => {
   it('toDisplay: remaining passes through', () => {
     expect(toDisplay(80, 'remaining')).toBe(80);

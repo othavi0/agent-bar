@@ -1,15 +1,18 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getColorForPercent } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
-import { loadSettingsSync, type WindowPolicy } from '../settings';
+import { loadSettingsSync, type DisplayMode, type WindowPolicy } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
 import {
   applyCodexModelFilter,
   codexModelsFromQuota,
+  etaLabel,
   formatEta,
   formatPercent,
   formatResetTime,
   normalizePlanLabel,
+  toDisplay,
+  toHealth,
 } from './shared';
 
 // Uniform tooltip width — all 3 cards share the same border
@@ -54,33 +57,46 @@ function escapeXml(str: string): string {
 const s = (color: string, text: string, bold = false) =>
   `<span foreground='${color}'${bold ? " weight='bold'" : ''}>${text}</span>`;
 
-function pctColored(val: number | null): string {
-  return s(getColorForPercent(val), formatPercent(val));
+/** Map display value back to health (remaining), then get color */
+function colorFor(display: number | null, mode: DisplayMode): string {
+  return getColorForPercent(toHealth(display, mode));
 }
 
-function bar(val: number | null): string {
-  if (val === null) return s(ONE_DARK.comment, '░'.repeat(20));
-  const filled = Math.floor(val / 5);
-  return s(getColorForPercent(val), '█'.repeat(filled)) + s(ONE_DARK.comment, '░'.repeat(20 - filled));
+function pctColored(display: number | null, mode: DisplayMode): string {
+  return s(colorFor(display, mode), formatPercent(display));
 }
 
-function indicator(val: number | null): string {
-  if (val === null) return s(ONE_DARK.comment, BOX.dotO);
-  if (val < 10) return s(ONE_DARK.red, BOX.dot);
-  if (val < 30) return s(ONE_DARK.orange, BOX.dot);
-  if (val < 60) return s(ONE_DARK.yellow, BOX.dot);
+function bar(display: number | null, mode: DisplayMode): string {
+  if (display === null) return s(ONE_DARK.comment, '░'.repeat(20));
+  const filled = Math.floor(display / 5);
+  return s(colorFor(display, mode), '█'.repeat(filled)) + s(ONE_DARK.comment, '░'.repeat(20 - filled));
+}
+
+function indicator(display: number | null, mode: DisplayMode): string {
+  const health = toHealth(display, mode);
+  if (health === null) return s(ONE_DARK.comment, BOX.dotO);
+  if (health < 10) return s(ONE_DARK.red, BOX.dot);
+  if (health < 30) return s(ONE_DARK.orange, BOX.dot);
+  if (health < 60) return s(ONE_DARK.yellow, BOX.dot);
   return s(ONE_DARK.green, BOX.dot);
 }
 
-function codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: number, v: string): string {
+function codexModelLine(
+  name: string,
+  window: QuotaWindow | undefined,
+  maxLen: number,
+  v: string,
+  mode: DisplayMode,
+): string {
   const rem = window?.remaining ?? null;
+  const disp = toDisplay(rem, mode);
   const nameS = s(ONE_DARK.textBright, name.padEnd(maxLen));
-  const b = bar(rem);
-  const pctS = s(getColorForPercent(rem), formatPercent(rem).padStart(4));
+  const b = bar(disp, mode);
+  const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
   const etaS = window?.resetsAt
     ? s(ONE_DARK.cyan, `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`)
     : s(ONE_DARK.cyan, '→ N/A');
-  return `${v}  ${indicator(rem)} ${nameS} ${b} ${pctS} ${etaS}`;
+  return `${v}  ${indicator(disp, mode)} ${nameS} ${b} ${pctS} ${etaS}`;
 }
 
 // Section label with connecting line: ┣━ ◆ Label (uses provider color)
@@ -116,7 +132,7 @@ function buildFooter(color: string, fetchedAt?: string): string {
 /**
  * Build Claude tooltip
  */
-function buildClaudeTooltip(p: ProviderQuota, fetchedAt?: string): string {
+function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const lines: string[] = [];
   const vc = PROVIDER_HEX.claude;
   const v = s(vc, BOX.v);
@@ -132,14 +148,16 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt?: string): string {
 
     if (p.primary) {
       lines.push(label('5-hour limit (shared)', vc));
+      const rem = p.primary.remaining;
+      const disp = toDisplay(rem, mode);
       const name = s(ONE_DARK.textBright, 'All Models'.padEnd(maxLen));
-      const b = bar(p.primary.remaining);
-      const pctS = s(getColorForPercent(p.primary.remaining), formatPercent(p.primary.remaining).padStart(4));
+      const b = bar(disp, mode);
+      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
       const etaS = s(
         ONE_DARK.cyan,
-        `→ ${formatEta(p.primary.resetsAt, p.primary.remaining)} ${formatResetTime(p.primary.resetsAt, p.primary.remaining)}`,
+        `→ ${formatEta(p.primary.resetsAt, rem)} ${formatResetTime(p.primary.resetsAt, rem)}`,
       );
-      lines.push(`${v}  ${indicator(p.primary.remaining)} ${name} ${b} ${pctS} ${etaS}`);
+      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${etaS}`);
     }
 
     // Per-model weekly quotas (when API provides them)
@@ -150,14 +168,16 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt?: string): string {
       const wMaxLen = Math.max(...entries.map(([name]) => name.length), 20);
 
       for (const [name, window] of entries) {
+        const rem = window.remaining;
+        const disp = toDisplay(rem, mode);
         const nameS = s(ONE_DARK.textBright, name.padEnd(wMaxLen));
-        const b = bar(window.remaining);
-        const pctS = s(getColorForPercent(window.remaining), formatPercent(window.remaining).padStart(4));
+        const b = bar(disp, mode);
+        const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
         const etaS = s(
           ONE_DARK.cyan,
-          `→ ${formatEta(window.resetsAt, window.remaining)} ${formatResetTime(window.resetsAt, window.remaining)}`,
+          `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`,
         );
-        lines.push(`${v}  ${indicator(window.remaining)} ${nameS} ${b} ${pctS} ${etaS}`);
+        lines.push(`${v}  ${indicator(disp, mode)} ${nameS} ${b} ${pctS} ${etaS}`);
       }
     }
 
@@ -165,25 +185,28 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt?: string): string {
     if (p.secondary) {
       lines.push(v);
       lines.push(label('Weekly limit (shared)', vc));
+      const rem = p.secondary.remaining;
+      const disp = toDisplay(rem, mode);
       const name = s(ONE_DARK.textBright, 'All Models'.padEnd(20));
-      const b = bar(p.secondary.remaining);
-      const pctS = s(getColorForPercent(p.secondary.remaining), formatPercent(p.secondary.remaining).padStart(4));
+      const b = bar(disp, mode);
+      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
       const etaS = s(
         ONE_DARK.cyan,
-        `→ ${formatEta(p.secondary.resetsAt, p.secondary.remaining)} ${formatResetTime(p.secondary.resetsAt, p.secondary.remaining)}`,
+        `→ ${formatEta(p.secondary.resetsAt, rem)} ${formatResetTime(p.secondary.resetsAt, rem)}`,
       );
-      lines.push(`${v}  ${indicator(p.secondary.remaining)} ${name} ${b} ${pctS} ${etaS}`);
+      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${etaS}`);
     }
 
     if (p.extraUsage?.enabled && p.extraUsage.limit > 0) {
       const { remaining, used, limit } = p.extraUsage;
+      const disp = toDisplay(remaining, mode);
       lines.push(v);
       lines.push(label('Extra Usage', vc));
       const name = s(ONE_DARK.textBright, 'Budget'.padEnd(20));
-      const b = bar(remaining);
-      const pctS = s(getColorForPercent(remaining), formatPercent(remaining).padStart(4));
+      const b = bar(disp, mode);
+      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
       const usedS = s(ONE_DARK.cyan, `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`);
-      lines.push(`${v}  ${indicator(remaining)} ${name} ${b} ${pctS} ${usedS}`);
+      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${usedS}`);
     }
   }
 
@@ -196,7 +219,7 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt?: string): string {
 /**
  * Build Codex tooltip
  */
-function buildCodexTooltip(p: ProviderQuota, fetchedAt?: string): string {
+function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const lines: string[] = [];
   const vc = PROVIDER_HEX.codex;
   const v = s(vc, BOX.v);
@@ -224,7 +247,7 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt?: string): string {
         lines.push(v);
         lines.push(label('5-hour limit', vc));
         for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.fiveHour, maxLen, v));
+          lines.push(codexModelLine(model.name, model.windows.fiveHour, maxLen, v, mode));
         }
       }
 
@@ -232,19 +255,21 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt?: string): string {
         lines.push(v);
         lines.push(label('7-day limit', vc));
         for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.sevenDay, maxLen, v));
+          lines.push(codexModelLine(model.name, model.windows.sevenDay, maxLen, v, mode));
         }
       }
     }
 
     if (p.extraUsage?.enabled) {
+      const rem = p.extraUsage.remaining;
+      const disp = toDisplay(rem, mode);
       lines.push(v);
       lines.push(label('Credits', vc));
       const name = s(ONE_DARK.textBright, 'Balance'.padEnd(20));
-      const b = bar(p.extraUsage.remaining);
-      const pctS = s(getColorForPercent(p.extraUsage.remaining), formatPercent(p.extraUsage.remaining).padStart(4));
+      const b = bar(disp, mode);
+      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
       const limitS = p.extraUsage.limit === -1 ? s(ONE_DARK.cyan, 'Unlimited') : s(ONE_DARK.cyan, 'Balance');
-      lines.push(`${v}  ${indicator(p.extraUsage.remaining)} ${name} ${b} ${pctS} ${limitS}`);
+      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${limitS}`);
     }
   }
 
@@ -257,7 +282,7 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt?: string): string {
 /**
  * Build Amp tooltip
  */
-function buildAmpTooltip(p: ProviderQuota, fetchedAt?: string): string {
+function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const lines: string[] = [];
   const vc = PROVIDER_HEX.amp;
   const v = s(vc, BOX.v);
@@ -274,23 +299,25 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt?: string): string {
     // --- Free Tier ---
     const free = p.models?.['Free Tier'];
     if (free) {
-      const b = bar(free.remaining);
-      const pctS = s(getColorForPercent(free.remaining), formatPercent(free.remaining).padStart(4));
+      const rem = free.remaining;
+      const disp = toDisplay(rem, mode);
+      const b = bar(disp, mode);
+      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
 
       // ETA inline with bar (same style as Claude/Codex)
       const etaParts: string[] = [];
-      if (free.resetsAt && free.remaining !== 100) {
+      if (free.resetsAt && rem !== 100) {
         etaParts.push(
           s(
             ONE_DARK.cyan,
-            `→ Full in ${formatEta(free.resetsAt, free.remaining)} ${formatResetTime(free.resetsAt, free.remaining)}`,
+            `→ ${etaLabel(mode)} ${formatEta(free.resetsAt, rem)} ${formatResetTime(free.resetsAt, rem)}`,
           ),
         );
       }
       const etaS = etaParts.length > 0 ? `  ${etaParts[0]}` : '';
 
       lines.push(label('Free Tier', vc));
-      lines.push(`${v}  ${indicator(free.remaining)} ${b} ${pctS}${etaS}`);
+      lines.push(`${v}  ${indicator(disp, mode)} ${b} ${pctS}${etaS}`);
 
       // Rate / balance info on second line with ○ indicator
       const infoParts: string[] = [];
@@ -310,7 +337,7 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt?: string): string {
       const balance = m.creditsBalance ?? '$0';
       const color = credits.remaining > 0 ? ONE_DARK.green : ONE_DARK.comment;
       lines.push(label('Credits', vc));
-      lines.push(`${v}  ${indicator(credits.remaining)} ${s(color, `${balance} remaining`)}`);
+      lines.push(`${v}  ${indicator(toDisplay(credits.remaining, mode), mode)} ${s(color, `${balance} remaining`)}`);
     }
   }
 
@@ -325,7 +352,7 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt?: string): string {
 // New providers register their tooltip builder here.
 // ---------------------------------------------------------------------------
 
-type TooltipBuilder = (p: ProviderQuota, fetchedAt?: string) => string;
+type TooltipBuilder = (p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode) => string;
 
 const tooltipBuilders = new Map<string, TooltipBuilder>([
   ['claude', buildClaudeTooltip],
@@ -337,11 +364,15 @@ const tooltipBuilders = new Map<string, TooltipBuilder>([
  * Register a tooltip builder for a provider. Used by new providers to plug
  * into the Waybar formatter without touching existing switch statements.
  */
-export function registerTooltipBuilder(providerId: string, builder: TooltipBuilder): void {
-  tooltipBuilders.set(providerId, builder);
+export function registerTooltipBuilder(
+  providerId: string,
+  builder: (p: ProviderQuota, fetchedAt?: string) => string,
+): void {
+  // Wrap legacy builders (no mode param) to match internal signature
+  tooltipBuilders.set(providerId, (p, fetchedAt, _mode) => builder(p, fetchedAt));
 }
 
-function buildGenericTooltip(p: ProviderQuota, fetchedAt?: string): string {
+function buildGenericTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const color = ONE_DARK.text;
   const v = s(color, BOX.v);
   const lines: string[] = [];
@@ -352,38 +383,40 @@ function buildGenericTooltip(p: ProviderQuota, fetchedAt?: string): string {
     lines.push(`${v}  ${s(ONE_DARK.red, p.error)}`);
   } else if (p.primary) {
     const rem = p.primary.remaining;
-    lines.push(`${v}  ${indicator(rem)} ${bar(rem)} ${s(getColorForPercent(rem), formatPercent(rem))}`);
+    const disp = toDisplay(rem, mode);
+    lines.push(`${v}  ${indicator(disp, mode)} ${bar(disp, mode)} ${s(colorFor(disp, mode), formatPercent(disp))}`);
   }
 
   lines.push(buildFooter(color, fetchedAt));
   return lines.join('\n');
 }
 
-function buildProviderTooltip(p: ProviderQuota, fetchedAt?: string): string {
+function buildProviderTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const builder = tooltipBuilders.get(p.provider);
-  if (builder) return builder(p, fetchedAt);
-  return buildGenericTooltip(p, fetchedAt);
+  if (builder) return builder(p, fetchedAt, mode);
+  return buildGenericTooltip(p, fetchedAt, mode);
 }
 
-function buildTooltip(quotas: AllQuotas): string {
+function buildTooltip(quotas: AllQuotas, mode: DisplayMode): string {
   const sections: string[] = [];
   const fetchedAt = quotas.fetchedAt;
 
   for (const p of quotas.providers) {
     if (!p.available && !p.error) continue;
-    sections.push(buildProviderTooltip(p, fetchedAt));
+    sections.push(buildProviderTooltip(p, fetchedAt, mode));
   }
 
   return sections.join('\n\n');
 }
 
-function buildText(quotas: AllQuotas): string {
+function buildText(quotas: AllQuotas, mode: DisplayMode): string {
   const parts: string[] = [];
 
   for (const p of quotas.providers) {
     if (!p.available) continue;
-    const val = p.primary?.remaining ?? null;
-    parts.push(pctColored(val));
+    const rem = p.primary?.remaining ?? null;
+    const disp = toDisplay(rem, mode);
+    parts.push(pctColored(disp, mode));
   }
 
   if (parts.length === 0) return s(ONE_DARK.comment, 'No Providers');
@@ -406,41 +439,40 @@ function getClass(quotas: AllQuotas): string {
   return classes.join(' ');
 }
 
-export function formatForWaybar(quotas: AllQuotas): WaybarOutput {
+export function formatForWaybar(quotas: AllQuotas, mode: DisplayMode = 'remaining'): WaybarOutput {
   return {
-    text: buildText(quotas),
-    tooltip: buildTooltip(quotas),
+    text: buildText(quotas, mode),
+    tooltip: buildTooltip(quotas, mode),
     class: getClass(quotas),
   };
 }
 
-export function outputWaybar(quotas: AllQuotas): void {
-  console.log(JSON.stringify(formatForWaybar(quotas)));
+export function outputWaybar(quotas: AllQuotas, mode: DisplayMode = 'remaining'): void {
+  console.log(JSON.stringify(formatForWaybar(quotas, mode)));
 }
 
-export function formatProviderForWaybar(quota: ProviderQuota): WaybarOutput {
+export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode = 'remaining'): WaybarOutput {
   // Check if disconnected (not available or has error)
   if (!quota.available || quota.error) {
     return {
       text: `<span foreground='${ONE_DARK.red}'>󱘖</span>`,
-      tooltip: buildProviderTooltip(quota),
+      tooltip: buildProviderTooltip(quota, undefined, mode),
       class: `${APP_BASE_CLASS}-${quota.provider} disconnected`,
     };
   }
 
-  const val = quota.primary?.remaining ?? null;
+  const rem = quota.primary?.remaining ?? null;
+  const disp = toDisplay(rem, mode);
+  // class based on health (raw remaining), not display value
+  const health = rem ?? 100;
   let status = 'ok';
-  if (val !== null) {
-    if (val < 10) status = 'critical';
-    else if (val < 30) status = 'warn';
-    else if (val < 60) status = 'low';
-  }
-
-  const tooltip = buildProviderTooltip(quota);
+  if (health < 10) status = 'critical';
+  else if (health < 30) status = 'warn';
+  else if (health < 60) status = 'low';
 
   return {
-    text: pctColored(val),
-    tooltip,
+    text: pctColored(disp, mode),
+    tooltip: buildProviderTooltip(quota, undefined, mode),
     class: `${APP_BASE_CLASS}-${quota.provider} ${status}`,
   };
 }
