@@ -16,6 +16,7 @@
 agent-bar-omarchy status --refresh
 agent-bar-omarchy --provider claude
 agent-bar-omarchy --provider codex
+agent-bar-omarchy --provider copilot
 agent-bar-omarchy --provider amp
 ```
 
@@ -56,6 +57,16 @@ curl -fsSL https://ampcode.com/install.sh | bash
 ```
 
 After install, run `amp login` or right-click the Amp module again. If Waybar still looks stale, reload it manually with `pkill -SIGUSR2 waybar`.
+
+### Copilot is missing or not logged in
+
+The Copilot provider expects the GitHub Copilot CLI binary:
+
+```bash
+copilot login
+```
+
+It reads usage through the local CLI account quota endpoint. If you have multiple Copilot licenses, the active `copilot` CLI account determines which usage appears in Waybar.
 
 ### Uninstall removed agent-bar-omarchy but Waybar still references agent-bar-omarchy modules
 

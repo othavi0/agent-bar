@@ -2,7 +2,14 @@ import * as p from '@clack/prompts';
 import { applyCodexModelFilter, codexModelsFromQuota } from '../formatters/codex-helpers';
 import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
 import { getAllQuotas } from '../providers';
-import type { ClaudeQuotaExtra, CodexQuotaExtra, ProviderQuota, QuotaWindow } from '../providers/types';
+import type {
+  ClaudeQuotaExtra,
+  CodexQuotaExtra,
+  CopilotQuotaExtra,
+  CopilotQuotaSnapshot,
+  ProviderQuota,
+  QuotaWindow,
+} from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX as B } from '../theme';
 import { colorize, getQuotaColor, oneDark, semantic } from './colors';
@@ -202,6 +209,98 @@ function buildAmp(p: ProviderQuota): string[] {
   return lines;
 }
 
+function formatCount(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
+}
+
+function formatRawPercent(value: number): string {
+  if (!Number.isFinite(value)) return '0%';
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+}
+
+function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
+  const parts: string[] = [];
+
+  if (snapshot.isUnlimitedEntitlement) {
+    parts.push(colorize('Unlimited', oneDark.cyan));
+  } else {
+    parts.push(
+      colorize(
+        `${formatCount(snapshot.usedRequests)} / ${formatCount(snapshot.entitlementRequests)} used`,
+        oneDark.text,
+      ),
+    );
+    parts.push(colorize(`raw ${formatRawPercent(snapshot.remainingPercentage)}`, semantic.muted));
+  }
+
+  if (snapshot.overage > 0) {
+    parts.push(colorize(`${formatCount(snapshot.overage)} overage`, oneDark.orange));
+  }
+
+  if (snapshot.usageAllowedWithExhaustedQuota || snapshot.overageAllowedWithExhaustedQuota) {
+    parts.push(colorize('usage allowed', oneDark.cyan));
+  }
+
+  return parts.join(colorize('  |  ', semantic.muted));
+}
+
+function buildCopilot(p: ProviderQuota): string[] {
+  const lines: string[] = [];
+  const vc = oneDark.brightBlue;
+  const extra = p.provider === 'copilot' ? (p.extra as CopilotQuotaExtra | undefined) : undefined;
+  const snapshots = extra?.quotaSnapshots ?? {};
+
+  lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Copilot', vc, true)} ${colorize(B.h.repeat(49), vc)}`);
+  lines.push(v(vc));
+
+  if (p.error) {
+    lines.push(`${v(vc)}  ${colorize(`⚠️ ${p.error}`, oneDark.red)}`);
+  } else if (Object.keys(snapshots).length === 0) {
+    lines.push(`${v(vc)}  ${colorize('No usage data', semantic.muted)}`);
+  } else {
+    const orderedBuckets = [
+      ...['premium_interactions', 'chat', 'completions'].filter((bucket) => snapshots[bucket]),
+      ...Object.keys(snapshots).filter((bucket) => !['premium_interactions', 'chat', 'completions'].includes(bucket)),
+    ];
+    const labels = orderedBuckets.map((bucket) => {
+      if (bucket === 'premium_interactions') return 'Premium requests';
+      if (bucket === 'chat') return 'Chat';
+      if (bucket === 'completions') return 'Completions';
+      return bucket.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+    });
+    const maxLen = Math.max(...labels.map((name) => name.length), 20);
+
+    lines.push(label('Usage', vc));
+    for (let i = 0; i < orderedBuckets.length; i++) {
+      const bucket = orderedBuckets[i];
+      const name = labels[i];
+      const snapshot = snapshots[bucket];
+      const window = p.models?.[name];
+      const rem = window?.remaining ?? null;
+      const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
+      const barS = bar(rem);
+      const pctS = colorize(formatPercent(rem).padStart(4), getQuotaColor(rem));
+      const etaS = window?.resetsAt
+        ? colorize(`→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`, oneDark.cyan)
+        : colorize('→ N/A', oneDark.cyan);
+
+      lines.push(`${v(vc)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`);
+      lines.push(`${v(vc)}  ${colorize(B.dotO, semantic.muted)} ${copilotSnapshotDetail(snapshot)}`);
+    }
+  }
+
+  if (p.account) {
+    lines.push(v(vc));
+    lines.push(`${v(vc)}  ${colorize(`Account: ${p.account}`, semantic.muted)}`);
+  }
+
+  lines.push(v(vc));
+  lines.push(colorize(B.bl + B.h.repeat(55), vc));
+
+  return lines;
+}
+
 export async function showListAll(): Promise<void> {
   const s = p.spinner();
   s.start('Loading quotas...');
@@ -222,6 +321,9 @@ export async function showListAll(): Promise<void> {
         break;
       case 'codex':
         sections.push(buildCodex(provider));
+        break;
+      case 'copilot':
+        sections.push(buildCopilot(provider));
         break;
       case 'amp':
         sections.push(buildAmp(provider));

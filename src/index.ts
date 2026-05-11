@@ -15,6 +15,7 @@ import {
   exportWaybarModules,
   getDefaultWaybarAssetPaths,
   installWaybarAssets,
+  type WaybarProviderId,
 } from './waybar-contract';
 
 // Graceful shutdown
@@ -84,7 +85,7 @@ async function main() {
             appBin: options.appBin ?? defaults.appBin,
             terminalScript: options.terminalScript ?? defaults.terminalScript,
           },
-          settings.waybar.providerOrder as ('claude' | 'codex' | 'amp')[],
+          settings.waybar.providerOrder as WaybarProviderId[],
         ),
         null,
         2,
@@ -100,7 +101,7 @@ async function main() {
       JSON.stringify(
         exportWaybarCss({
           iconsDir: options.iconsDir ?? defaults.iconsDir,
-          providerOrder: settings.waybar.providerOrder as ('claude' | 'codex' | 'amp')[],
+          providerOrder: settings.waybar.providerOrder as WaybarProviderId[],
           separators: settings.waybar.separators,
         }),
         null,
@@ -132,7 +133,7 @@ async function main() {
 
   // Handle cache refresh
   if (options.refresh) {
-    const toInvalidate = options.provider ? [options.provider] : ['claude', 'codex', 'amp'];
+    const toInvalidate = options.provider ? [options.provider] : ['claude', 'codex', 'copilot', 'amp'];
 
     for (const id of toInvalidate) {
       const prov = getProvider(id);

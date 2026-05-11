@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { etaLabel, toDisplay, toHealth } from '../src/formatters/shared';
 import { formatForTerminal } from '../src/formatters/terminal';
 import { formatForWaybar, formatProviderForWaybar } from '../src/formatters/waybar';
-import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota, ProviderQuota } from '../src/providers/types';
+import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota, CopilotQuota, ProviderQuota } from '../src/providers/types';
 import { ANSI, BOX, ONE_DARK } from '../src/theme';
 
 function mockClaudeQuota(remaining: number): ClaudeQuota {
@@ -52,6 +52,52 @@ function mockAmpQuota(): AmpQuota {
   };
 }
 
+function mockCopilotQuota(): CopilotQuota {
+  return {
+    provider: 'copilot',
+    displayName: 'Copilot',
+    available: true,
+    primary: {
+      remaining: 0,
+      resetsAt: new Date(Date.now() + 3600000).toISOString(),
+    },
+    models: {
+      'Premium requests': {
+        remaining: 0,
+        resetsAt: new Date(Date.now() + 3600000).toISOString(),
+      },
+      Chat: {
+        remaining: 100,
+        resetsAt: null,
+      },
+    },
+    extra: {
+      quotaSnapshots: {
+        premium_interactions: {
+          isUnlimitedEntitlement: false,
+          entitlementRequests: 300,
+          usedRequests: 698,
+          usageAllowedWithExhaustedQuota: true,
+          overage: 0,
+          overageAllowedWithExhaustedQuota: true,
+          remainingPercentage: -132.8,
+          resetDate: new Date(Date.now() + 3600000).toISOString(),
+        },
+        chat: {
+          isUnlimitedEntitlement: true,
+          entitlementRequests: 0,
+          usedRequests: 0,
+          usageAllowedWithExhaustedQuota: false,
+          overage: 0,
+          overageAllowedWithExhaustedQuota: false,
+          remainingPercentage: 100,
+          resetDate: null,
+        },
+      },
+    },
+  };
+}
+
 function mockAllQuotas(providers: ProviderQuota[]): AllQuotas {
   return {
     providers,
@@ -89,6 +135,15 @@ describe('formatForTerminal', () => {
 
     expect(result).toContain('Amp');
     expect(result).toContain('Free Tier');
+  });
+
+  it('renders Copilot section', () => {
+    const quotas = mockAllQuotas([mockCopilotQuota()]);
+    const result = formatForTerminal(quotas);
+
+    expect(result).toContain('Copilot');
+    expect(result).toContain('Premium requests');
+    expect(result).toContain('698 / 300 used');
   });
 
   it('renders multiple providers separated by double newline', () => {
@@ -195,6 +250,14 @@ describe('formatForWaybar', () => {
     expect(result.class).toContain('claude-warn');
   });
 
+  it('sets critical class for exhausted Copilot quota', () => {
+    const quotas = mockAllQuotas([mockCopilotQuota()]);
+    const result = formatForWaybar(quotas);
+
+    expect(result.class).toContain('copilot-critical');
+    expect(result.tooltip).toContain('raw -132.8%');
+  });
+
   it("shows 'No Providers' when empty", () => {
     const quotas = mockAllQuotas([]);
     const result = formatForWaybar(quotas);
@@ -221,6 +284,14 @@ describe('formatProviderForWaybar', () => {
 
     expect(result.class).toContain('agent-bar-omarchy-claude');
     expect(result.tooltip).toContain('Claude');
+  });
+
+  it('returns Copilot percentage and critical state for exhausted quota', () => {
+    const result = formatProviderForWaybar(mockCopilotQuota());
+
+    expect(result.class).toContain('agent-bar-omarchy-copilot');
+    expect(result.class).toContain('critical');
+    expect(result.text).toContain('0%');
   });
 });
 

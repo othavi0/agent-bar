@@ -15,7 +15,7 @@ import {
 import { getRegisteredProviderIds } from './providers/registry';
 import { ONE_DARK } from './theme';
 
-export const WAYBAR_PROVIDERS = ['claude', 'codex', 'amp'] as const;
+export const WAYBAR_PROVIDERS = ['claude', 'codex', 'copilot', 'amp'] as const;
 export type WaybarProviderId = (typeof WAYBAR_PROVIDERS)[number];
 
 /**
@@ -269,6 +269,7 @@ export function exportWaybarCss(options: WaybarCssExportOptions): { css: string 
       '',
       `${WAYBAR_SELECTOR_PREFIX}claude { background-image: url("${iconRef('claude-code-icon.png')}"); }`,
       `${WAYBAR_SELECTOR_PREFIX}codex { background-image: url("${iconRef('codex-icon.png')}"); }`,
+      `${WAYBAR_SELECTOR_PREFIX}copilot { background-image: url("${iconRef('github-copilot-white-icon.webp')}"); }`,
       `${WAYBAR_SELECTOR_PREFIX}amp { background-image: url("${iconRef('amp-icon.svg')}"); }`,
       '',
       `${stateSelectors('ok')} { color: ${ONE_DARK.green}; }`,

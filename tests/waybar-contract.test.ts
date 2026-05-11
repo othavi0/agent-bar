@@ -17,13 +17,16 @@ describe('exportWaybarModules', () => {
         appBin: '$HOME/.local/bin/agent-bar-omarchy',
         terminalScript: '$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal',
       },
-      ['claude', 'codex', 'amp'],
+      ['claude', 'codex', 'copilot', 'amp'],
     );
 
     expect(result.modules['custom/agent-bar-omarchy-claude']['on-click']).toBe(
       '$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy menu',
     );
     expect(result.modules['custom/agent-bar-omarchy-codex']['exec-on-event']).toBe(true);
+    expect(result.modules['custom/agent-bar-omarchy-copilot'].exec).toBe(
+      '$HOME/.local/bin/agent-bar-omarchy --provider copilot',
+    );
     expect(result.modules['custom/agent-bar-omarchy-amp']['on-click-right']).toBe(
       '$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy action-right amp',
     );
@@ -63,15 +66,18 @@ describe('normalizeProviderSelection', () => {
   });
 
   it('respects providerOrder for ordering', () => {
-    const result = normalizeProviderSelection(['claude', 'codex', 'amp'], ['amp', 'claude', 'codex']);
+    const result = normalizeProviderSelection(
+      ['claude', 'codex', 'copilot', 'amp'],
+      ['amp', 'claude', 'copilot', 'codex'],
+    );
 
-    expect(result.providerOrder).toEqual(['amp', 'claude', 'codex']);
+    expect(result.providerOrder).toEqual(['amp', 'claude', 'copilot', 'codex']);
   });
 
   it('adds providers missing from providerOrder to the end', () => {
-    const result = normalizeProviderSelection(['claude', 'codex', 'amp'], ['codex']);
+    const result = normalizeProviderSelection(['claude', 'codex', 'copilot', 'amp'], ['codex']);
 
-    expect(result.providerOrder).toEqual(['codex', 'claude', 'amp']);
+    expect(result.providerOrder).toEqual(['codex', 'claude', 'copilot', 'amp']);
   });
 
   it('filters providerOrder entries not in enabled providers', () => {
@@ -95,7 +101,7 @@ describe('normalizeProviderSelection', () => {
 describe('exportWaybarCss', () => {
   const defaultOpts: WaybarCssExportOptions = {
     iconsDir: '/home/user/.config/waybar/agent-bar-omarchy/icons',
-    providerOrder: ['claude', 'codex', 'amp'],
+    providerOrder: ['claude', 'codex', 'copilot', 'amp'],
     separators: 'gap',
   };
 
@@ -107,6 +113,7 @@ describe('exportWaybarCss', () => {
     const css = cssFor('gap');
     expect(css).toContain('#custom-agent-bar-omarchy-claude');
     expect(css).toContain('#custom-agent-bar-omarchy-codex');
+    expect(css).toContain('#custom-agent-bar-omarchy-copilot');
     expect(css).toContain('#custom-agent-bar-omarchy-amp');
   });
 
@@ -114,6 +121,7 @@ describe('exportWaybarCss', () => {
     const css = cssFor('gap');
     expect(css).toContain('claude-code-icon.png');
     expect(css).toContain('codex-icon.png');
+    expect(css).toContain('github-copilot-white-icon.webp');
     expect(css).toContain('amp-icon.svg');
   });
 

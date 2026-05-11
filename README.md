@@ -1,6 +1,6 @@
 # agent-bar-omarchy
 
-`agent-bar-omarchy` shows Claude, Codex, and Amp quota state in Waybar.
+`agent-bar-omarchy` shows Claude, Codex, GitHub Copilot, and Amp quota state in Waybar.
 
 agent-bar-omarchy is now fully theme-agnostic. It owns its own Waybar integration and no longer depends on external theme repositories.
 

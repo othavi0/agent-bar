@@ -32,6 +32,7 @@ The supported provider set is:
 
 - `claude`
 - `codex`
+- `copilot`
 - `amp`
 
 ## Cache Behavior

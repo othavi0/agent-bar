@@ -73,6 +73,35 @@ export interface AmpQuotaExtra {
   meta?: Record<string, string>;
 }
 
+export interface CopilotQuotaSnapshot {
+  /** Whether this quota bucket is unlimited for the active account */
+  isUnlimitedEntitlement: boolean;
+  /** Included request allowance for this bucket */
+  entitlementRequests: number;
+  /** Requests consumed in the current billing/reset window */
+  usedRequests: number;
+  /** Whether Copilot still allows usage after this bucket is exhausted */
+  usageAllowedWithExhaustedQuota: boolean;
+  /** Billed/overage request count when provided by Copilot */
+  overage: number;
+  /** Whether overage is allowed after the quota is exhausted */
+  overageAllowedWithExhaustedQuota: boolean;
+  /** Raw remaining percentage as returned by Copilot. Can be negative. */
+  remainingPercentage: number;
+  /** Copilot reset timestamp for this bucket */
+  resetDate: string | null;
+  /** Extra flags exposed by the CLI when present */
+  hasQuota?: boolean;
+  tokenBasedBilling?: boolean;
+}
+
+export interface CopilotQuotaExtra {
+  /** Arbitrary key-value metadata for provider-specific display */
+  meta?: Record<string, string>;
+  /** Raw quota snapshots keyed by Copilot bucket, e.g. premium_interactions */
+  quotaSnapshots?: Record<string, CopilotQuotaSnapshot>;
+}
+
 export interface ClaudeQuota extends QuotaCore {
   provider: 'claude';
   extra?: ClaudeQuotaExtra;
@@ -88,12 +117,17 @@ export interface AmpQuota extends QuotaCore {
   extra?: AmpQuotaExtra;
 }
 
+export interface CopilotQuota extends QuotaCore {
+  provider: 'copilot';
+  extra?: CopilotQuotaExtra;
+}
+
 export interface GenericQuota extends QuotaCore {
   provider: string;
   extra?: Record<string, unknown>;
 }
 
-export type ProviderQuota = ClaudeQuota | CodexQuota | AmpQuota | GenericQuota;
+export type ProviderQuota = ClaudeQuota | CodexQuota | AmpQuota | CopilotQuota | GenericQuota;
 
 /**
  * Provider interface - all providers must implement this

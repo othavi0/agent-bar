@@ -1,7 +1,7 @@
 {
   "name": "agent-bar-omarchy",
   "version": "3.0.0",
-  "description": "LLM quota monitor for Waybar - Claude, Codex, Amp",
+  "description": "LLM quota monitor for Waybar - Claude, Codex, Copilot, Amp",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
@@ -20,6 +20,7 @@
     "waybar",
     "claude",
     "codex",
+    "copilot",
     "llm",
     "quota"
   ],

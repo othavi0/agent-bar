@@ -3,6 +3,8 @@ import type {
   AmpQuotaExtra,
   ClaudeQuotaExtra,
   CodexQuotaExtra,
+  CopilotQuotaExtra,
+  CopilotQuotaSnapshot,
   ProviderQuota,
   QuotaWindow,
 } from '../providers/types';
@@ -300,6 +302,101 @@ function buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
   return lines;
 }
 
+function formatCount(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
+}
+
+function formatRawPercent(value: number): string {
+  if (!Number.isFinite(value)) return '0%';
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+}
+
+function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
+  const parts: string[] = [];
+
+  if (snapshot.isUnlimitedEntitlement) {
+    parts.push(`${ANSI.cyan}Unlimited${ANSI.reset}`);
+  } else {
+    parts.push(
+      `${ANSI.text}${formatCount(snapshot.usedRequests)} / ${formatCount(snapshot.entitlementRequests)} used${ANSI.reset}`,
+    );
+    parts.push(`${ANSI.comment}raw ${formatRawPercent(snapshot.remainingPercentage)}${ANSI.reset}`);
+  }
+
+  if (snapshot.overage > 0) {
+    parts.push(`${ANSI.orange}${formatCount(snapshot.overage)} overage${ANSI.reset}`);
+  }
+
+  if (snapshot.usageAllowedWithExhaustedQuota || snapshot.overageAllowedWithExhaustedQuota) {
+    parts.push(`${ANSI.cyan}usage allowed${ANSI.reset}`);
+  }
+
+  return parts.join(`${ANSI.comment}  |  ${ANSI.reset}`);
+}
+
+function buildCopilot(p: ProviderQuota, mode: DisplayMode): string[] {
+  const lines: string[] = [];
+  const vc = PROVIDER_ANSI.copilot;
+  const extra = p.provider === 'copilot' ? (p.extra as CopilotQuotaExtra | undefined) : undefined;
+  const snapshots = extra?.quotaSnapshots ?? {};
+
+  lines.push(
+    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Copilot${ANSI.reset} ${vc}${BOX.h.repeat(49)}${ANSI.reset}`,
+  );
+  lines.push(v(vc));
+
+  if (p.error) {
+    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
+  } else {
+    const orderedBuckets = [
+      ...['premium_interactions', 'chat', 'completions'].filter((bucket) => snapshots[bucket]),
+      ...Object.keys(snapshots).filter((bucket) => !['premium_interactions', 'chat', 'completions'].includes(bucket)),
+    ];
+
+    if (orderedBuckets.length === 0) {
+      lines.push(`${v(vc)}  ${ANSI.comment}No usage data${ANSI.reset}`);
+    } else {
+      const labels = orderedBuckets.map((bucket) => {
+        if (bucket === 'premium_interactions') return 'Premium requests';
+        if (bucket === 'chat') return 'Chat';
+        if (bucket === 'completions') return 'Completions';
+        return bucket.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+      });
+      const maxLen = Math.max(...labels.map((name) => name.length), 20);
+
+      lines.push(label('Usage', vc));
+      for (let i = 0; i < orderedBuckets.length; i++) {
+        const bucket = orderedBuckets[i];
+        const name = labels[i];
+        const snapshot = snapshots[bucket];
+        const window = p.models?.[name];
+        const rem = window?.remaining ?? null;
+        const disp = toDisplay(rem, mode);
+        const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
+        const barS = bar(disp, mode);
+        const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
+        const etaS = window?.resetsAt
+          ? `${ANSI.cyan}→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}${ANSI.reset}`
+          : `${ANSI.cyan}→ N/A${ANSI.reset}`;
+
+        lines.push(`${v(vc)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${etaS}`);
+        lines.push(`${v(vc)}  ${ANSI.comment}${BOX.dotO}${ANSI.reset} ${copilotSnapshotDetail(snapshot)}`);
+      }
+    }
+  }
+
+  if (p.account) {
+    lines.push(v(vc));
+    lines.push(`${v(vc)}  ${ANSI.comment}Account: ${p.account}${ANSI.reset}`);
+  }
+
+  lines.push(v(vc));
+  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
+
+  return lines;
+}
+
 // ---------------------------------------------------------------------------
 // Terminal builder registry
 // ---------------------------------------------------------------------------
@@ -309,6 +406,7 @@ type TerminalBuilder = (p: ProviderQuota, mode: DisplayMode) => string[];
 const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
   claude: buildClaude,
   codex: buildCodex,
+  copilot: buildCopilot,
   amp: buildAmp,
 };
 

@@ -5,6 +5,8 @@ import type {
   AmpQuotaExtra,
   ClaudeQuotaExtra,
   CodexQuotaExtra,
+  CopilotQuotaExtra,
+  CopilotQuotaSnapshot,
   ProviderQuota,
   QuotaWindow,
 } from '../providers/types';
@@ -364,6 +366,96 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: 
   return lines.join('\n');
 }
 
+function formatCount(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
+}
+
+function formatRawPercent(value: number): string {
+  if (!Number.isFinite(value)) return '0%';
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+}
+
+function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
+  const parts: string[] = [];
+
+  if (snapshot.isUnlimitedEntitlement) {
+    parts.push(s(ONE_DARK.cyan, 'Unlimited'));
+  } else {
+    parts.push(
+      s(ONE_DARK.text, `${formatCount(snapshot.usedRequests)} / ${formatCount(snapshot.entitlementRequests)} used`),
+    );
+    parts.push(s(ONE_DARK.comment, `raw ${formatRawPercent(snapshot.remainingPercentage)}`));
+  }
+
+  if (snapshot.overage > 0) {
+    parts.push(s(ONE_DARK.orange, `${formatCount(snapshot.overage)} overage`));
+  }
+
+  if (snapshot.usageAllowedWithExhaustedQuota || snapshot.overageAllowedWithExhaustedQuota) {
+    parts.push(s(ONE_DARK.cyan, 'usage allowed'));
+  }
+
+  return parts.join(s(ONE_DARK.comment, '  |  '));
+}
+
+function buildCopilotTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
+  const lines: string[] = [];
+  const vc = PROVIDER_HEX.copilot;
+  const v = s(vc, BOX.v);
+  const extra = p.provider === 'copilot' ? (p.extra as CopilotQuotaExtra | undefined) : undefined;
+  const snapshots = extra?.quotaSnapshots ?? {};
+  const account = p.account ? escapeXml(p.account) : undefined;
+
+  lines.push(buildHeader('Copilot', account, vc));
+  lines.push(v);
+
+  if (p.error) {
+    lines.push(`${v}  ${s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`)}`);
+  } else {
+    const orderedBuckets = [
+      ...['premium_interactions', 'chat', 'completions'].filter((bucket) => snapshots[bucket]),
+      ...Object.keys(snapshots).filter((bucket) => !['premium_interactions', 'chat', 'completions'].includes(bucket)),
+    ];
+
+    if (orderedBuckets.length === 0) {
+      lines.push(`${v}  ${s(ONE_DARK.comment, 'No usage data')}`);
+    } else {
+      lines.push(label('Usage', vc));
+      const labels = orderedBuckets.map((bucket) => {
+        if (bucket === 'premium_interactions') return 'Premium requests';
+        if (bucket === 'chat') return 'Chat';
+        if (bucket === 'completions') return 'Completions';
+        return bucket.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+      });
+      const maxLen = Math.max(...labels.map((name) => name.length), 20);
+
+      for (let i = 0; i < orderedBuckets.length; i++) {
+        const bucket = orderedBuckets[i];
+        const name = labels[i];
+        const snapshot = snapshots[bucket];
+        const window = p.models?.[name];
+        const rem = window?.remaining ?? null;
+        const disp = toDisplay(rem, mode);
+        const nameS = s(ONE_DARK.textBright, name.padEnd(maxLen));
+        const b = bar(disp, mode);
+        const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
+        const etaS = window?.resetsAt
+          ? s(ONE_DARK.cyan, `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`)
+          : s(ONE_DARK.cyan, '→ N/A');
+
+        lines.push(`${v}  ${indicator(disp, mode)} ${nameS} ${b} ${pctS} ${etaS}`);
+        lines.push(`${v}  ${s(ONE_DARK.comment, BOX.dotO)} ${copilotSnapshotDetail(snapshot)}`);
+      }
+    }
+  }
+
+  lines.push(v);
+  lines.push(buildFooter(vc, fetchedAt));
+
+  return lines.join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Tooltip builder registry
 // ---------------------------------------------------------------------------
@@ -373,6 +465,7 @@ type TooltipBuilder = (p: ProviderQuota, fetchedAt: string | undefined, mode: Di
 const TOOLTIP_BUILDERS: Record<string, TooltipBuilder> = {
   claude: buildClaudeTooltip,
   codex: buildCodexTooltip,
+  copilot: buildCopilotTooltip,
   amp: buildAmpTooltip,
 };
 

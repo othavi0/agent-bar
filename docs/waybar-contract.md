@@ -28,6 +28,7 @@ Current module ids:
 
 - `custom/agent-bar-omarchy-claude`
 - `custom/agent-bar-omarchy-codex`
+- `custom/agent-bar-omarchy-copilot`
 - `custom/agent-bar-omarchy-amp`
 
 Each module definition includes:
@@ -48,7 +49,7 @@ agent-bar-omarchy export waybar-css --icons-dir <path>
 This prints JSON with a single `css` field. The CSS:
 
 - resolves icon URLs from the provided icon directory
-- emits provider-specific selectors for `claude`, `codex`, and `amp`
+- emits provider-specific selectors for `claude`, `codex`, `copilot`, and `amp`
 - emits separator styling based on current settings
 - includes agent-bar-omarchy base module styling and status classes
 

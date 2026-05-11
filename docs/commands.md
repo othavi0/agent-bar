@@ -21,7 +21,7 @@
 | Flag | Meaning |
 | --- | --- |
 | `-t`, `--terminal` | Force terminal output mode. |
-| `-p`, `--provider <id>` | Limit output to `claude`, `codex`, or `amp`. |
+| `-p`, `--provider <id>` | Limit output to `claude`, `codex`, `copilot`, or `amp`. |
 | `-r`, `--refresh` | Force a refresh instead of relying on cache. |
 | `-h`, `--help` | Print CLI help. |
 
@@ -36,6 +36,7 @@
 ```bash
 agent-bar-omarchy
 agent-bar-omarchy status --provider codex
+agent-bar-omarchy --provider copilot
 agent-bar-omarchy menu
 agent-bar-omarchy setup
 agent-bar-omarchy apply-local

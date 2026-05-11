@@ -16,6 +16,7 @@ const VALID_DISPLAY_MODES = ['remaining', 'used'] as const;
 export type DisplayMode = (typeof VALID_DISPLAY_MODES)[number];
 
 const VALID_WINDOW_POLICIES = ['both', 'five_hour', 'seven_day'] as const;
+const LEGACY_DEFAULT_PROVIDERS = ['claude', 'codex', 'amp'] as const;
 
 interface SettingsPaths {
   settingsDir: string;
@@ -85,10 +86,10 @@ export interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   version: CURRENT_VERSION,
   waybar: {
-    providers: ['claude', 'codex', 'amp'],
+    providers: ['claude', 'codex', 'copilot', 'amp'],
     showPercentage: true,
     separators: 'gap',
-    providerOrder: ['claude', 'codex', 'amp'],
+    providerOrder: ['claude', 'codex', 'copilot', 'amp'],
     displayMode: 'remaining',
   },
   tooltip: {},
@@ -117,6 +118,38 @@ function isValidWindowPolicy(value: unknown): value is WindowPolicy {
   return typeof value === 'string' && (VALID_WINDOW_POLICIES as readonly string[]).includes(value);
 }
 
+function isExactStringArray(value: unknown, expected: readonly string[]): boolean {
+  return (
+    Array.isArray(value) && value.length === expected.length && value.every((item, index) => item === expected[index])
+  );
+}
+
+function withCopilotAfterCodex(providers: string[]): string[] {
+  if (providers.includes('copilot')) {
+    return providers;
+  }
+
+  const next = [...providers];
+  const codexIndex = next.indexOf('codex');
+  next.splice(codexIndex >= 0 ? codexIndex + 1 : next.length, 0, 'copilot');
+  return next;
+}
+
+function upgradeLegacyDefaultProviders(settings: Settings, raw: Partial<Settings> | undefined): void {
+  if (!isExactStringArray(raw?.waybar?.providers, LEGACY_DEFAULT_PROVIDERS)) {
+    return;
+  }
+
+  settings.waybar.providers = withCopilotAfterCodex(settings.waybar.providers);
+
+  if (
+    raw?.waybar?.providerOrder === undefined ||
+    isExactStringArray(raw.waybar.providerOrder, LEGACY_DEFAULT_PROVIDERS)
+  ) {
+    settings.waybar.providerOrder = withCopilotAfterCodex(settings.waybar.providerOrder);
+  }
+}
+
 function normalizeSettings(data: Partial<Settings> | undefined): Settings {
   // Handle version migration
   const version = (data as Record<string, unknown>)?.version;
@@ -131,6 +164,8 @@ function normalizeSettings(data: Partial<Settings> | undefined): Settings {
     models: { ...DEFAULT_SETTINGS.models, ...data?.models },
     windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data?.windowPolicy },
   };
+
+  upgradeLegacyDefaultProviders(merged, data);
 
   // Validate separators
   if (!isValidSeparator(merged.waybar.separators)) {

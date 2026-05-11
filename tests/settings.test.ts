@@ -29,8 +29,8 @@ describe('settings', () => {
     const settings = loadSettingsSync();
 
     expect(settings.version).toBe(1);
-    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'amp']);
-    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'amp']);
+    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
+    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'copilot', 'amp']);
     expect(settings.waybar.separators).toBe('gap');
     expect(getSettingsPath()).toBe(join(testRoot, 'agent-bar-omarchy', 'settings.json'));
   });
@@ -60,6 +60,62 @@ describe('settings', () => {
 
     const onDisk = JSON.parse(await readFile(settingsPath, 'utf8'));
     expect(onDisk.waybar.providers).toEqual(['codex', 'claude']);
+  });
+
+  it('adds Copilot to legacy default provider settings', async () => {
+    const settingsDir = join(testRoot, 'agent-bar-omarchy');
+    const settingsFile = join(settingsDir, 'settings.json');
+    await mkdir(settingsDir, { recursive: true });
+    await writeFile(
+      settingsFile,
+      JSON.stringify({
+        version: 1,
+        waybar: {
+          providers: ['claude', 'codex', 'amp'],
+          showPercentage: true,
+          separators: 'bare',
+          providerOrder: ['claude', 'codex', 'amp'],
+        },
+        tooltip: {},
+        models: {},
+        windowPolicy: { codex: 'both' },
+      }),
+    );
+
+    const settings = await loadSettings();
+
+    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
+    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'copilot', 'amp']);
+    expect(settings.waybar.separators).toBe('bare');
+
+    const onDisk = JSON.parse(await readFile(settingsFile, 'utf8'));
+    expect(onDisk.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
+  });
+
+  it('does not add Copilot when providers were manually customized', async () => {
+    const settingsDir = join(testRoot, 'agent-bar-omarchy');
+    const settingsFile = join(settingsDir, 'settings.json');
+    await mkdir(settingsDir, { recursive: true });
+    await writeFile(
+      settingsFile,
+      JSON.stringify({
+        version: 1,
+        waybar: {
+          providers: ['claude', 'amp'],
+          showPercentage: true,
+          separators: 'gap',
+          providerOrder: ['amp', 'claude'],
+        },
+        tooltip: {},
+        models: {},
+        windowPolicy: {},
+      }),
+    );
+
+    const settings = await loadSettings();
+
+    expect(settings.waybar.providers).toEqual(['claude', 'amp']);
+    expect(settings.waybar.providerOrder).toEqual(['amp', 'claude']);
   });
 
   it('moves legacy qbar settings into the new namespace', () => {
