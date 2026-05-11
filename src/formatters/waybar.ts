@@ -449,7 +449,7 @@ export function outputWaybar(quotas: AllQuotas, mode: DisplayMode = 'remaining')
 }
 
 export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode = 'remaining'): WaybarOutput {
-  // Check if disconnected (not available or has error)
+  // Disconnected is a terminal status — class omits health prefix and `mode` only affects tooltip.
   if (!quota.available || quota.error) {
     return {
       text: `<span foreground='${ONE_DARK.red}'>󱘖</span>`,

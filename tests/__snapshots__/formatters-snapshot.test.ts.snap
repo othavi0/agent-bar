@@ -4,10 +4,10 @@ exports[`Terminal formatter snapshots renders Claude healthy 1`] = `
 "\x1B[38;2;209;154;102m┏━\x1B[0m \x1B[38;2;209;154;102m\x1B[1mClaude\x1B[0m \x1B[38;2;209;154;102m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m███████████████\x1B[38;2;106;116;133m░░░░░\x1B[0m \x1B[38;2;152;195;121m 75%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m███████████████\x1B[38;2;106;116;133m░░░░░\x1B[0m \x1B[38;2;152;195;121m 75%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Weekly limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██████████████████\x1B[38;2;106;116;133m░░\x1B[0m \x1B[38;2;152;195;121m 90%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██████████████████\x1B[38;2;106;116;133m░░\x1B[0m \x1B[38;2;152;195;121m 90%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -26,10 +26,10 @@ exports[`Terminal formatter snapshots renders Codex healthy 1`] = `
 \x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;151;161;174mPlan: Pro\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████████\x1B[38;2;106;116;133m░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 60%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████████\x1B[38;2;106;116;133m░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 60%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 7-day limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m█████████████████\x1B[38;2;106;116;133m░░░\x1B[0m \x1B[38;2;152;195;121m 85%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m█████████████████\x1B[38;2;106;116;133m░░░\x1B[0m \x1B[38;2;152;195;121m 85%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -48,7 +48,7 @@ exports[`Terminal formatter snapshots renders Amp healthy 1`] = `
 \x1B[38;2;198;120;221m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Free Tier\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;152;195;121m██████████████\x1B[38;2;106;116;133m░░░░░░\x1B[0m \x1B[38;2;152;195;121m 70%\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m├─\x1B[0m \x1B[38;2;86;182;194m+$0.25/hr\x1B[0m  \x1B[38;2;192;201;212m( $3.50 / $5.00 )\x1B[0m
-\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mFull in 0m  (__:__)\x1B[0m
+\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mFull in __HM__  (__:__)\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m
 \x1B[38;2;198;120;221m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -65,10 +65,10 @@ exports[`Terminal formatter snapshots renders all providers combined 1`] = `
 "\x1B[38;2;209;154;102m┏━\x1B[0m \x1B[38;2;209;154;102m\x1B[1mClaude\x1B[0m \x1B[38;2;209;154;102m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m███████████████\x1B[38;2;106;116;133m░░░░░\x1B[0m \x1B[38;2;152;195;121m 75%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m███████████████\x1B[38;2;106;116;133m░░░░░\x1B[0m \x1B[38;2;152;195;121m 75%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Weekly limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██████████████████\x1B[38;2;106;116;133m░░\x1B[0m \x1B[38;2;152;195;121m 90%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██████████████████\x1B[38;2;106;116;133m░░\x1B[0m \x1B[38;2;152;195;121m 90%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 
@@ -77,10 +77,10 @@ exports[`Terminal formatter snapshots renders all providers combined 1`] = `
 \x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;151;161;174mPlan: Pro\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████████\x1B[38;2;106;116;133m░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 60%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████████\x1B[38;2;106;116;133m░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 60%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 7-day limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m█████████████████\x1B[38;2;106;116;133m░░░\x1B[0m \x1B[38;2;152;195;121m 85%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m█████████████████\x1B[38;2;106;116;133m░░░\x1B[0m \x1B[38;2;152;195;121m 85%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 
@@ -89,7 +89,7 @@ exports[`Terminal formatter snapshots renders all providers combined 1`] = `
 \x1B[38;2;198;120;221m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Free Tier\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;152;195;121m██████████████\x1B[38;2;106;116;133m░░░░░░\x1B[0m \x1B[38;2;152;195;121m 70%\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m├─\x1B[0m \x1B[38;2;86;182;194m+$0.25/hr\x1B[0m  \x1B[38;2;192;201;212m( $3.50 / $5.00 )\x1B[0m
-\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mFull in 0m  (__:__)\x1B[0m
+\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mFull in __HM__  (__:__)\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m
 \x1B[38;2;198;120;221m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -102,10 +102,10 @@ exports[`Waybar formatter snapshots renders Claude healthy 2`] = `
 "<span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>"
 `;
@@ -131,10 +131,10 @@ exports[`Waybar formatter snapshots renders Codex healthy 2`] = `
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>"
 `;
@@ -147,7 +147,7 @@ exports[`Waybar formatter snapshots renders Amp healthy 2`] = `
 "<span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in 0m (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
 <span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>"
@@ -161,10 +161,10 @@ exports[`Waybar formatter snapshots renders all providers combined 2`] = `
 "<span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>
 
@@ -172,17 +172,17 @@ exports[`Waybar formatter snapshots renders all providers combined 2`] = `
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>
 
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in 0m (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
 <span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>"
@@ -202,10 +202,10 @@ exports[`formatProviderForWaybar snapshots renders Claude healthy 2`] = `
 "<span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
 `;
@@ -231,10 +231,10 @@ exports[`formatProviderForWaybar snapshots renders Codex healthy 2`] = `
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
 `;
@@ -247,7 +247,7 @@ exports[`formatProviderForWaybar snapshots renders Amp healthy 2`] = `
 "<span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in 0m (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
 <span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
@@ -259,10 +259,10 @@ exports[`Terminal formatter snapshots — displayMode=used renders Claude health
 "\x1B[38;2;209;154;102m┏━\x1B[0m \x1B[38;2;209;154;102m\x1B[1mClaude\x1B[0m \x1B[38;2;209;154;102m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m█████\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 25%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m█████\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 25%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Weekly limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 10%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 10%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -273,10 +273,10 @@ exports[`Terminal formatter snapshots — displayMode=used renders Codex healthy
 \x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;151;161;174mPlan: Pro\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████\x1B[38;2;106;116;133m░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 40%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████\x1B[38;2;106;116;133m░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 40%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 7-day limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m███\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 15%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m███\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 15%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -287,7 +287,7 @@ exports[`Terminal formatter snapshots — displayMode=used renders Amp healthy a
 \x1B[38;2;198;120;221m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Free Tier\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;152;195;121m██████\x1B[38;2;106;116;133m░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 30%\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m├─\x1B[0m \x1B[38;2;86;182;194m+$0.25/hr\x1B[0m  \x1B[38;2;192;201;212m( $3.50 / $5.00 )\x1B[0m
-\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mResets in 0m  (__:__)\x1B[0m
+\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mResets in __HM__  (__:__)\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m
 \x1B[38;2;198;120;221m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -296,10 +296,10 @@ exports[`Terminal formatter snapshots — displayMode=used renders all providers
 "\x1B[38;2;209;154;102m┏━\x1B[0m \x1B[38;2;209;154;102m\x1B[1mClaude\x1B[0m \x1B[38;2;209;154;102m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m█████\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 25%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m█████\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 25%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Weekly limit (shared)\x1B[0m
-\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 10%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;209;154;102m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mAll Models          \x1B[0m \x1B[38;2;152;195;121m██\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 10%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;209;154;102m┃\x1B[0m
 \x1B[38;2;209;154;102m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 
@@ -308,10 +308,10 @@ exports[`Terminal formatter snapshots — displayMode=used renders all providers
 \x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;151;161;174mPlan: Pro\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 5-hour limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████\x1B[38;2;106;116;133m░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 40%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m████████\x1B[38;2;106;116;133m░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 40%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ 7-day limit\x1B[0m
-\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m███\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 15%\x1B[0m \x1B[38;2;86;182;194m→ 0m (__:__)\x1B[0m
+\x1B[38;2;152;195;121m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;226;232;240mCodex               \x1B[0m \x1B[38;2;152;195;121m███\x1B[38;2;106;116;133m░░░░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 15%\x1B[0m \x1B[38;2;86;182;194m→ __HM__ (__:__)\x1B[0m
 \x1B[38;2;152;195;121m┃\x1B[0m
 \x1B[38;2;152;195;121m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m
 
@@ -320,7 +320,7 @@ exports[`Terminal formatter snapshots — displayMode=used renders all providers
 \x1B[38;2;198;120;221m┣━\x1B[0m \x1B[38;2;198;120;221m\x1B[1m◆ Free Tier\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;152;195;121m●\x1B[0m \x1B[38;2;152;195;121m██████\x1B[38;2;106;116;133m░░░░░░░░░░░░░░\x1B[0m \x1B[38;2;152;195;121m 30%\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m├─\x1B[0m \x1B[38;2;86;182;194m+$0.25/hr\x1B[0m  \x1B[38;2;192;201;212m( $3.50 / $5.00 )\x1B[0m
-\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mResets in 0m  (__:__)\x1B[0m
+\x1B[38;2;198;120;221m┃\x1B[0m  \x1B[38;2;106;116;133m└─\x1B[0m \x1B[38;2;86;182;194mResets in __HM__  (__:__)\x1B[0m
 \x1B[38;2;198;120;221m┃\x1B[0m
 \x1B[38;2;198;120;221m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1B[0m"
 `;
@@ -331,10 +331,10 @@ exports[`Waybar formatter snapshots — displayMode=used renders Claude healthy 
 "<span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>█████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 25%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>█████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 25%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 10%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 10%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>"
 `;
@@ -348,10 +348,10 @@ exports[`Waybar formatter snapshots — displayMode=used renders Codex healthy a
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████</span><span foreground='#6a7485'>░░░░░░░░░░░░</span> <span foreground='#98c379'> 40%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████</span><span foreground='#6a7485'>░░░░░░░░░░░░</span> <span foreground='#98c379'> 40%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>███</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 15%</span> <span foreground='#56b6c2'>→ 0m (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>███</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 15%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>"
 `;
@@ -364,7 +364,7 @@ exports[`Waybar formatter snapshots — displayMode=used renders Amp healthy as 
 "<span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 30%</span>  <span foreground='#56b6c2'>→ Resets in 0m (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 30%</span>  <span foreground='#56b6c2'>→ Resets in __HM__ (__:__)</span>
 <span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>"

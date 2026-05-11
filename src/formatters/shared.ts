@@ -27,7 +27,7 @@ export function formatEta(iso: string | null, remaining: number | null): string 
   if (remaining === 100) return 'Full';
   if (!iso) return '?';
   const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return '0m';
+  if (diff < 0) return '0h 00m';
   const d = Math.floor(diff / 86400000);
   const h = Math.floor((diff % 86400000) / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
