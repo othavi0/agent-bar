@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { etaLabel, toDisplay, toHealth } from '../src/formatters/shared';
 import { formatForTerminal } from '../src/formatters/terminal';
 import { formatForWaybar, formatProviderForWaybar } from '../src/formatters/waybar';
-import { toDisplay, toHealth, etaLabel } from '../src/formatters/shared';
 import type { AllQuotas, ProviderQuota } from '../src/providers/types';
 import { ANSI, BOX, ONE_DARK } from '../src/theme';
 

@@ -5,6 +5,7 @@ import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
 import {
   applyCodexModelFilter,
   codexModelsFromQuota,
+  type DisplayMode,
   etaLabel,
   formatEta,
   formatPercent,
@@ -12,7 +13,6 @@ import {
   normalizePlanLabel,
   toDisplay,
   toHealth,
-  type DisplayMode,
 } from './shared';
 
 function getColor(display: number | null, mode: DisplayMode): string {
@@ -45,7 +45,13 @@ const label = (text: string, color: string) =>
   `${color}${BOX.lt}${BOX.h}${ANSI.reset} ${ANSI.magenta}${ANSI.bold}${BOX.diamond} ${text}${ANSI.reset}`;
 
 // Model line
-function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string, mode: DisplayMode): string {
+function modelLine(
+  name: string,
+  window: QuotaWindow | undefined,
+  maxLen: number,
+  vColor: string,
+  mode: DisplayMode,
+): string {
   const rem = window?.remaining ?? null;
   const reset = window?.resetsAt ?? null;
   const disp = toDisplay(rem, mode);
@@ -56,7 +62,13 @@ function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number
   return `${v(vColor)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-function codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string, mode: DisplayMode): string {
+function codexModelLine(
+  name: string,
+  window: QuotaWindow | undefined,
+  maxLen: number,
+  vColor: string,
+  mode: DisplayMode,
+): string {
   const rem = window?.remaining ?? null;
   const disp = toDisplay(rem, mode);
   const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;

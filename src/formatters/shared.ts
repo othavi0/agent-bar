@@ -1,5 +1,6 @@
 import type { ModelWindows, ProviderQuota, QuotaWindow } from '../providers/types';
 import type { DisplayMode } from '../settings';
+
 export type { DisplayMode };
 
 export function toDisplay(remaining: number | null, mode: DisplayMode): number | null {

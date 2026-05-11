@@ -1,7 +1,7 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getColorForPercent } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
-import { loadSettingsSync, type DisplayMode, type WindowPolicy } from '../settings';
+import { type DisplayMode, loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
 import {
   applyCodexModelFilter,
@@ -173,10 +173,7 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mod
         const nameS = s(ONE_DARK.textBright, name.padEnd(wMaxLen));
         const b = bar(disp, mode);
         const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-        const etaS = s(
-          ONE_DARK.cyan,
-          `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`,
-        );
+        const etaS = s(ONE_DARK.cyan, `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`);
         lines.push(`${v}  ${indicator(disp, mode)} ${nameS} ${b} ${pctS} ${etaS}`);
       }
     }

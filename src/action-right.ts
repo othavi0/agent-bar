@@ -75,10 +75,13 @@ export async function handleActionRight(providerId: string): Promise<void> {
   const fresh = await getQuotaFor(providerId);
   if (fresh) {
     const mode = loadSettingsSync().waybar.displayMode;
-    outputTerminal({
-      providers: [fresh],
-      fetchedAt: new Date().toISOString(),
-    }, mode);
+    outputTerminal(
+      {
+        providers: [fresh],
+        fetchedAt: new Date().toISOString(),
+      },
+      mode,
+    );
   } else {
     p.log.error(colorize(`Failed to fetch ${provider.name} quota`, semantic.danger));
   }
