@@ -221,6 +221,29 @@ describe('formatProviderForWaybar', () => {
   });
 });
 
+describe('formatForTerminal displayMode=used', () => {
+  it('shows used percentage (100 - remaining)', () => {
+    const quotas = mockAllQuotas([mockClaudeQuota(80)]); // 20% used
+    const result = formatForTerminal(quotas, 'used');
+    expect(result).toContain('20%');
+    expect(result).not.toMatch(/\b80%\b/);
+  });
+
+  it('colors used=95 as red (low health) not green', () => {
+    const quotas = mockAllQuotas([mockClaudeQuota(5)]); // 5% remaining = 95% used → health=5 → red
+    const result = formatForTerminal(quotas, 'used');
+    if (!process.env.NO_COLOR) {
+      expect(result).toContain(ANSI.red);
+    }
+  });
+
+  it('default arg keeps remaining behavior', () => {
+    const quotas = mockAllQuotas([mockClaudeQuota(80)]);
+    const result = formatForTerminal(quotas);
+    expect(result).toContain('80%');
+  });
+});
+
 describe('display mode helpers', () => {
   it('toDisplay: remaining passes through', () => {
     expect(toDisplay(80, 'remaining')).toBe(80);
