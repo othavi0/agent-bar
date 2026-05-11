@@ -8,6 +8,7 @@
 import { cache } from './cache';
 import { outputTerminal } from './formatters/terminal';
 import { getAllQuotas, getProvider, getQuotaFor, providers } from './providers';
+import { loadSettingsSync } from './settings';
 import { createSpinner } from './spinner';
 import { ANSI } from './theme';
 
@@ -16,6 +17,8 @@ const provider = process.argv[2];
 async function refresh() {
   const spinner = createSpinner('Refreshing quotas...');
   spinner.start();
+
+  const mode = loadSettingsSync().waybar.displayMode;
 
   try {
     // Invalidate cache
@@ -34,14 +37,14 @@ async function refresh() {
       const quota = await getQuotaFor(provider);
       if (quota) {
         spinner.succeed(`${provider} refreshed!`);
-        outputTerminal({ providers: [quota], fetchedAt: new Date().toISOString() });
+        outputTerminal({ providers: [quota], fetchedAt: new Date().toISOString() }, mode);
       } else {
         spinner.fail(`Unknown provider: ${provider}`);
       }
     } else {
       const quotas = await getAllQuotas();
       spinner.succeed('All providers refreshed!');
-      outputTerminal(quotas);
+      outputTerminal(quotas, mode);
     }
   } catch (error) {
     spinner.fail('Refresh failed');

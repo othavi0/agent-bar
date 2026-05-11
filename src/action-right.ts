@@ -10,6 +10,7 @@ import * as p from '@clack/prompts';
 import { APP_NAME } from './app-identity';
 import { outputTerminal } from './formatters/terminal';
 import { getProvider, getQuotaFor } from './providers';
+import { loadSettingsSync } from './settings';
 import { colorize, semantic } from './tui/colors';
 
 async function waitEnter(): Promise<void> {
@@ -73,10 +74,11 @@ export async function handleActionRight(providerId: string): Promise<void> {
 
   const fresh = await getQuotaFor(providerId);
   if (fresh) {
+    const mode = loadSettingsSync().waybar.displayMode;
     outputTerminal({
       providers: [fresh],
       fetchedAt: new Date().toISOString(),
-    });
+    }, mode);
   } else {
     p.log.error(colorize(`Failed to fetch ${provider.name} quota`, semantic.danger));
   }

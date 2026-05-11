@@ -172,11 +172,13 @@ async function main() {
     }
   }
 
+  const mode = settings.waybar.displayMode;
+
   // Output
   switch (options.command) {
     case 'terminal':
     case 'status':
-      outputTerminal(quotas);
+      outputTerminal(quotas, mode);
       break;
     default:
       // If running in interactive terminal without explicit command, show help
@@ -187,9 +189,9 @@ async function main() {
 
       // If single provider requested, use individual format for separate modules
       if (options.provider && quotas.providers.length === 1) {
-        console.log(JSON.stringify(formatProviderForWaybar(quotas.providers[0])));
+        console.log(JSON.stringify(formatProviderForWaybar(quotas.providers[0], mode)));
       } else {
-        outputWaybar(quotas);
+        outputWaybar(quotas, mode);
       }
       break;
   }
