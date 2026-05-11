@@ -1,8 +1,8 @@
-import { CONFIG } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
 import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
+import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import {
   type DisplayMode,
   etaLabel,
@@ -11,29 +11,35 @@ import {
   formatResetTime,
   normalizePlanLabel,
   toDisplay,
-  toHealth,
 } from './shared';
 
+const ANSI_BY_TOKEN: Record<ColorToken, string> = {
+  green: ANSI.green,
+  yellow: ANSI.yellow,
+  orange: ANSI.orange,
+  red: ANSI.red,
+  comment: ANSI.comment,
+  text: ANSI.text,
+};
+
+function renderAnsi(segs: Segment[]): string {
+  return segs.map((s) => `${ANSI_BY_TOKEN[s.color]}${s.bold ? ANSI.bold : ''}${s.text}${ANSI.reset}`).join('');
+}
+
 function getColor(display: number | null, mode: DisplayMode): string {
-  const health = toHealth(display, mode);
-  if (health === null) return ANSI.text;
-  if (health >= CONFIG.thresholds.green) return ANSI.green;
-  if (health >= CONFIG.thresholds.yellow) return ANSI.yellow;
-  if (health >= CONFIG.thresholds.orange) return ANSI.orange;
-  return ANSI.red;
+  return ANSI_BY_TOKEN[colorForDisplay(display, mode)];
 }
 
 function bar(display: number | null, mode: DisplayMode): string {
-  if (display === null) return `${ANSI.comment}${'░'.repeat(20)}${ANSI.reset}`;
-  const filled = Math.floor(display / 5);
-  const color = getColor(display, mode);
-  return `${color}${'█'.repeat(filled)}${ANSI.comment}${'░'.repeat(20 - filled)}${ANSI.reset}`;
+  const segs = barSegments(display, mode);
+  if (segs.length === 1) return renderAnsi(segs);
+  // Two-segment bar: filled + empty — join without intermediate reset to match original format
+  const [filled, empty] = segs;
+  return `${ANSI_BY_TOKEN[filled.color]}${filled.text}${ANSI_BY_TOKEN[empty.color]}${empty.text}${ANSI.reset}`;
 }
 
 function indicator(display: number | null, mode: DisplayMode): string {
-  if (display === null) return `${ANSI.comment}${BOX.dotO}${ANSI.reset}`;
-  const color = getColor(display, mode);
-  return `${color}${BOX.dot}${ANSI.reset}`;
+  return renderAnsi(indicatorSegments(display, mode));
 }
 
 // Vertical bar with provider color

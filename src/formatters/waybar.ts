@@ -1,10 +1,11 @@
 import { APP_BASE_CLASS } from '../app-identity';
-import { getColorForPercent, getStatusForPercent, type HealthStatus } from '../config';
+import { getStatusForPercent } from '../config';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from '../providers/types';
 import { type DisplayMode, loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
 import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
-import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay, toHealth } from './shared';
+import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
+import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay } from './shared';
 
 // Uniform tooltip width — all 3 cards share the same border
 const TOOLTIP_BORDER = 56; // total visual chars per line (┗ + 55 ━)
@@ -48,9 +49,21 @@ function escapeXml(str: string): string {
 const s = (color: string, text: string, bold = false) =>
   `<span foreground='${color}'${bold ? " weight='bold'" : ''}>${text}</span>`;
 
-/** Map display value back to health (remaining), then get color */
+const HEX_BY_TOKEN: Record<ColorToken, string> = {
+  green: ONE_DARK.green,
+  yellow: ONE_DARK.yellow,
+  orange: ONE_DARK.orange,
+  red: ONE_DARK.red,
+  comment: ONE_DARK.comment,
+  text: ONE_DARK.text,
+};
+
+function renderPango(segs: Segment[]): string {
+  return segs.map((seg) => s(HEX_BY_TOKEN[seg.color], seg.text, seg.bold ?? false)).join('');
+}
+
 function colorFor(display: number | null, mode: DisplayMode): string {
-  return getColorForPercent(toHealth(display, mode));
+  return HEX_BY_TOKEN[colorForDisplay(display, mode)];
 }
 
 function pctColored(display: number | null, mode: DisplayMode): string {
@@ -58,22 +71,11 @@ function pctColored(display: number | null, mode: DisplayMode): string {
 }
 
 function bar(display: number | null, mode: DisplayMode): string {
-  if (display === null) return s(ONE_DARK.comment, '░'.repeat(20));
-  const filled = Math.floor(display / 5);
-  return s(colorFor(display, mode), '█'.repeat(filled)) + s(ONE_DARK.comment, '░'.repeat(20 - filled));
+  return renderPango(barSegments(display, mode));
 }
 
 function indicator(display: number | null, mode: DisplayMode): string {
-  const health = toHealth(display, mode);
-  if (health === null) return s(ONE_DARK.comment, BOX.dotO);
-  const status = getStatusForPercent(health);
-  const colorByStatus: Record<HealthStatus, string> = {
-    critical: ONE_DARK.red,
-    warn: ONE_DARK.orange,
-    low: ONE_DARK.yellow,
-    ok: ONE_DARK.green,
-  };
-  return s(colorByStatus[status], BOX.dot);
+  return renderPango(indicatorSegments(display, mode));
 }
 
 function codexModelLine(
