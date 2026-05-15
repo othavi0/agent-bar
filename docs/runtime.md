@@ -9,8 +9,8 @@
 | `~/.local/bin/agent-bar-omarchy` | Convenience symlink to the repo script. | `agent-bar-omarchy setup` |
 | `~/.config/waybar/agent-bar-omarchy/icons/` | Provider icons consumed by Waybar. | `agent-bar-omarchy assets install` |
 | `~/.config/waybar/scripts/agent-bar-omarchy-open-terminal` | Helper that opens the agent-bar-omarchy menu in a terminal. | `agent-bar-omarchy assets install` |
-| `~/.config/waybar/agent-bar-omarchy/modules.jsonc` | Generated Waybar module include file. | `agent-bar-omarchy setup` / `agent-bar-omarchy apply-local` |
-| `~/.config/waybar/agent-bar-omarchy/style.css` | Generated agent-bar-omarchy Waybar stylesheet. | `agent-bar-omarchy setup` / `agent-bar-omarchy apply-local` |
+| `~/.config/waybar/agent-bar-omarchy/modules.jsonc` | Generated Waybar module include file. | `agent-bar-omarchy setup` |
+| `~/.config/waybar/agent-bar-omarchy/style.css` | Generated agent-bar-omarchy Waybar stylesheet. | `agent-bar-omarchy setup` |
 
 ## Managed Entries In Live Waybar Files
 

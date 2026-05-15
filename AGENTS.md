@@ -8,7 +8,7 @@ These instructions are the canonical guidance for coding agents in this repo. `C
 
 - **Bun only.** Do not use Node, npm, pnpm, yarn, ts-node, or Deno for runtime/test workflows.
 - **Do not run `bun ./scripts/agent-bar-omarchy`.** That file is a Bash shim. Use `./scripts/agent-bar-omarchy` or `bun run start`.
-- **Do not mutate the user's live desktop as verification** unless explicitly requested. Avoid running `agent-bar-omarchy setup`, `agent-bar-omarchy apply-local`, `agent-bar-omarchy uninstall`, `agent-bar-omarchy remove`, `agent-bar-omarchy update`, `agent-bar-omarchy-refresh`, or the wrapper scripts for those commands without clear user approval. Run `assets install` only against temp/injected paths unless the user approves live paths.
+- **Do not mutate the user's live desktop as verification** unless explicitly requested. Avoid running `agent-bar-omarchy setup`, `agent-bar-omarchy uninstall`, `agent-bar-omarchy remove`, or `agent-bar-omarchy update` without clear user approval. Run `assets install` only against temp/injected paths unless the user approves live paths.
 - **Do not edit live `~/.config/waybar` / `~/.config/agent-bar-omarchy` manually for tests.** Use temp directories, injected paths, and XDG env overrides.
 - **Do not convert Bash shims in `scripts/` to TypeScript.** `scripts/agent-bar-omarchy` is the `bin` entrypoint and must remain a Bash wrapper.
 - **Keep stdout clean for Waybar JSON.** Diagnostics/logs belong on stderr unless a command is intentionally terminal/TUI output.
@@ -166,7 +166,7 @@ Waybar class contract:
 
 Integration rules:
 
-- `setup`/`apply-local` write generated `modules.jsonc` and `style.css` under `~/.config/waybar/agent-bar-omarchy/`.
+- `setup` writes generated `modules.jsonc` and `style.css` under `~/.config/waybar/agent-bar-omarchy/`.
 - Live `config.jsonc` is patched by adding/updating `include` and `modules-right`, not rewritten wholesale.
 - Live `style.css` receives exactly one managed import: `@import url("./agent-bar-omarchy/style.css");`.
 - Backups use `.<app-name>-backup` suffix and are created before first managed mutation.

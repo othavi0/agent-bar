@@ -187,7 +187,10 @@ export async function configureLayout(): Promise<boolean> {
   } catch {
     s.stop('Preferences saved');
     p.log.warn(
-      colorize(`Could not sync Waybar automatically. Run \`${APP_NAME} apply-local\` to update.`, semantic.muted),
+      colorize(
+        `Could not sync Waybar automatically. Run \`${APP_NAME} setup\` to reinstall the integration.`,
+        semantic.muted,
+      ),
     );
   }
 
@@ -201,7 +204,9 @@ export async function configureLayout(): Promise<boolean> {
   p.log.info(`${colorize('Providers:', semantic.subtitle)} ${orderSummary}`);
   p.log.info(`${colorize('Style:', semantic.subtitle)} ${colorize(newSeparator, oneDark.green)}`);
   p.log.info(`${colorize('Mode:', semantic.subtitle)} ${colorize(newDisplayMode, oneDark.green)}`);
-  p.log.info(colorize(`If changes didn't take effect, run \`${APP_NAME} apply-local\` to refresh.`, semantic.muted));
+  p.log.info(
+    colorize(`If changes didn't take effect, run \`${APP_NAME} setup\` to reinstall the integration.`, semantic.muted),
+  );
 
   return true;
 }

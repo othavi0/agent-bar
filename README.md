@@ -7,41 +7,24 @@ agent-bar-omarchy is now fully theme-agnostic. It owns its own Waybar integratio
 ## Quick Start
 
 ```bash
-bun install
-./scripts/agent-bar-omarchy setup
+git clone <repo-url> ~/Projects/agent-bar-omarchy
+cd ~/Projects/agent-bar-omarchy
+bun run setup
 ```
 
-`agent-bar-omarchy setup` now installs assets, wires `~/.config/waybar/config.jsonc` + `~/.config/waybar/style.css`, and reloads Waybar.
+`bun run setup` installs dependencies, assets, wires `~/.config/waybar/config.jsonc` + `~/.config/waybar/style.css`, and reloads Waybar.
 
 ## Commands
 
 ```bash
-agent-bar-omarchy
-agent-bar-omarchy status
-agent-bar-omarchy menu
-agent-bar-omarchy setup
-agent-bar-omarchy apply-local
-agent-bar-omarchy assets install --waybar-dir ~/.config/waybar/agent-bar-omarchy --scripts-dir ~/.config/waybar/scripts
-agent-bar-omarchy export waybar-modules --app-bin '$HOME/.local/bin/agent-bar-omarchy' --terminal-script ~/.config/waybar/scripts/agent-bar-omarchy-open-terminal
-agent-bar-omarchy export waybar-css --icons-dir ~/.config/waybar/agent-bar-omarchy/icons
-agent-bar-omarchy uninstall
-agent-bar-omarchy remove
-agent-bar-omarchy update
+agent-bar-omarchy                  # Waybar JSON (default)
+agent-bar-omarchy status           # Terminal quota display
+agent-bar-omarchy menu             # Interactive TUI menu
+agent-bar-omarchy setup            # Full install + Waybar wiring
+agent-bar-omarchy update           # Self-update via git
+agent-bar-omarchy uninstall        # Interactive removal
+agent-bar-omarchy remove           # Forced removal (no prompt)
 ```
-
-## Setup Scripts
-
-```bash
-./scripts/agent-bar-omarchy-setup
-./scripts/agent-bar-omarchy-apply-local
-./scripts/agent-bar-omarchy-uninstall
-./scripts/agent-bar-omarchy-remove
-```
-
-- `agent-bar-omarchy-setup`: full install + live Waybar wiring.
-- `agent-bar-omarchy-apply-local`: re-apply project changes to your live Waybar.
-- `agent-bar-omarchy-uninstall`: interactive removal of integration and owned files.
-- `agent-bar-omarchy-remove`: forced removal without prompt.
 
 ## Docs
 

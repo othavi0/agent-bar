@@ -21,10 +21,6 @@ Your existing Waybar layout remains intact. agent-bar-omarchy patches only agent
 4. wire `config.jsonc` and `style.css`
 5. reload Waybar
 
-## Local Re-Apply
-
-Use `agent-bar-omarchy apply-local` when you are inside the project and want to re-sync live Waybar files with the current checkout.
-
 ## Removal
 
 - `agent-bar-omarchy uninstall`: interactive cleanup.

@@ -45,14 +45,6 @@ describe('parseArgs', () => {
       expect(parseArgs(['assets', 'install']).command).toBe('assets-install');
     });
 
-    it('parses apply-local (hyphenated)', () => {
-      expect(parseArgs(['apply-local']).command).toBe('apply-local');
-    });
-
-    it('parses apply local (space-separated)', () => {
-      expect(parseArgs(['apply', 'local']).command).toBe('apply-local');
-    });
-
     it('parses export waybar-modules', () => {
       expect(parseArgs(['export', 'waybar-modules']).command).toBe('export-waybar-modules');
     });

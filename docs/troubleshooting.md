@@ -29,7 +29,7 @@ If these fail outside Waybar, the issue is in `agent-bar-omarchy` or provider au
 Run:
 
 ```bash
-agent-bar-omarchy apply-local
+agent-bar-omarchy setup
 ```
 
 Then reload Waybar manually if needed: `pkill -SIGUSR2 waybar`.
@@ -41,7 +41,7 @@ Waybar uses GTK CSS, not browser CSS. Avoid unsupported constructs in manual int
 To reset agent-bar-omarchy-managed style wiring:
 
 ```bash
-agent-bar-omarchy apply-local
+agent-bar-omarchy setup
 ```
 
 ### Provider order looks wrong

@@ -13,7 +13,6 @@ export interface CliOptions {
     | 'action-right'
     | 'setup'
     | 'assets-install'
-    | 'apply-local'
     | 'export-waybar-modules'
     | 'export-waybar-css'
     | 'update'
@@ -68,7 +67,6 @@ export function showHelp(): void {
   console.log(cmdLine('menu', 'Interactive TUI menu'));
   console.log(cmdLine('status', 'Show quotas in terminal'));
   console.log(cmdLine('setup', `Install + wire ${APP_NAME} in Waybar`));
-  console.log(cmdLine('apply-local', 'Re-apply local repo changes'));
   console.log(cmdLine('assets install', 'Install icons/helper only'));
   console.log(cmdLine('export waybar-modules', 'Print Waybar JSON module contract'));
   console.log(cmdLine('export waybar-css', 'Print Waybar CSS JSON contract'));
@@ -113,8 +111,6 @@ const KNOWN_COMMANDS = [
   'status',
   'setup',
   'assets',
-  'apply',
-  'apply-local',
   'export',
   'update',
   'uninstall',
@@ -175,15 +171,6 @@ export function parseArgs(args: string[]): CliOptions {
           options.command = 'assets-install';
           i += 1;
         }
-        break;
-      case 'apply':
-        if (args[i + 1] === 'local') {
-          options.command = 'apply-local';
-          i += 1;
-        }
-        break;
-      case 'apply-local':
-        options.command = 'apply-local';
         break;
       case 'export':
         if (args[i + 1] === 'waybar-modules') {

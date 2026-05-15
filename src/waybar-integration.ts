@@ -18,7 +18,6 @@ import {
   exportWaybarModules,
   getDefaultWaybarAssetPaths,
   normalizeProviderSelection,
-  WAYBAR_PROVIDERS,
   type WaybarProviderId,
 } from './waybar-contract';
 

@@ -108,13 +108,8 @@ function migrateSettings(data: Record<string, unknown>, fromVersion: number): Re
       if (isExactStringArray(waybar.providers, LEGACY_DEFAULT_PROVIDERS)) {
         waybar.providers = withCopilotAfterCodex(waybar.providers as string[]);
       }
-      if (
-        waybar.providerOrder === undefined ||
-        isExactStringArray(waybar.providerOrder, LEGACY_DEFAULT_PROVIDERS)
-      ) {
-        waybar.providerOrder = withCopilotAfterCodex(
-          (waybar.providerOrder ?? waybar.providers) as string[],
-        );
+      if (waybar.providerOrder === undefined || isExactStringArray(waybar.providerOrder, LEGACY_DEFAULT_PROVIDERS)) {
+        waybar.providerOrder = withCopilotAfterCodex((waybar.providerOrder ?? waybar.providers) as string[]);
       }
     }
   }
@@ -148,21 +143,6 @@ function withCopilotAfterCodex(providers: string[]): string[] {
   const codexIndex = next.indexOf('codex');
   next.splice(codexIndex >= 0 ? codexIndex + 1 : next.length, 0, 'copilot');
   return next;
-}
-
-function upgradeLegacyDefaultProviders(settings: Settings, raw: Partial<Settings> | undefined): void {
-  if (!isExactStringArray(raw?.waybar?.providers, LEGACY_DEFAULT_PROVIDERS)) {
-    return;
-  }
-
-  settings.waybar.providers = withCopilotAfterCodex(settings.waybar.providers);
-
-  if (
-    raw?.waybar?.providerOrder === undefined ||
-    isExactStringArray(raw.waybar.providerOrder, LEGACY_DEFAULT_PROVIDERS)
-  ) {
-    settings.waybar.providerOrder = withCopilotAfterCodex(settings.waybar.providerOrder);
-  }
 }
 
 function normalizeSettings(data: Partial<Settings> | undefined): Settings {

@@ -1,6 +1,6 @@
 # Waybar Contract
 
-`agent-bar-omarchy` exposes a stable contract for module JSON and CSS generation. This same contract is used by `setup`/`apply-local` to wire live Waybar files.
+`agent-bar-omarchy` exposes a stable contract for module JSON and CSS generation. This same contract is used by `setup` to wire live Waybar files.
 
 ## Asset Install
 
