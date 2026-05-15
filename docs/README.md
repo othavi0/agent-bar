@@ -1,6 +1,6 @@
 # agent-bar-omarchy Docs
 
-`agent-bar-omarchy` provides quota runtime, assets, and native Waybar integration.
+Operational notes for the Waybar quota monitor.
 
 ## Read In This Order
 
@@ -12,7 +12,8 @@
 
 ## Model
 
-- `agent-bar-omarchy` owns providers, auth flow, settings, cache, icons, terminal helper, and Waybar wiring.
+- `agent-bar-omarchy` reads agent CLI usage/quota state and renders Waybar modules.
+- Provider credentials stay owned by each provider CLI/config.
 - `agent-bar-omarchy setup` installs and wires `config.jsonc` + `style.css` in an idempotent way.
 - `agent-bar-omarchy uninstall` and `agent-bar-omarchy remove` clean both integration and owned artifacts.
 
