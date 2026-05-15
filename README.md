@@ -1,6 +1,8 @@
-# agent-bar-omarchy
+<h1 align="center">Omarchy Agent Bar</h1>
 
-![Conceptual Agent Bar banner](docs/assets/agent-bar-banner.png)
+<p align="center">
+  <img src="docs/assets/agent-bar-banner.png" alt="Conceptual Agent Bar banner">
+</p>
 
 Waybar modules for watching agent CLI usage limits: remaining quota, used quota,
 reset windows, and login/error state.
