@@ -21,8 +21,8 @@ model window is low or reset.
 Requires Bun.
 
 ```bash
-git clone git@github.com:othavioquiliao/agent-bar-omarchy.git ~/Projects/agent-bar-omarchy
-cd ~/Projects/agent-bar-omarchy
+git clone git@github.com:othavioquiliao/agent-bar-omarchy.git ~/.agent-bar
+cd ~/.agent-bar
 bun run setup
 ```
 
@@ -62,11 +62,16 @@ agent-bar-omarchy status --refresh
 
 ```bash
 agent-bar-omarchy setup       # install/update Waybar integration
-agent-bar-omarchy update      # git pull + bun install
+agent-bar-omarchy update      # update the managed ~/.agent-bar install
 agent-bar-omarchy uninstall   # interactive removal
 agent-bar-omarchy remove      # non-interactive removal
 agent-bar-omarchy --help
 ```
+
+`agent-bar-omarchy update` is intentionally for the managed `~/.agent-bar`
+checkout. It discards local changes there, resets to upstream, installs
+dependencies when needed, and re-applies setup. Use a separate checkout for
+development work.
 
 Lower-level export commands exist for tests/manual integration:
 
@@ -82,6 +87,7 @@ Runtime files:
 
 - `~/.config/agent-bar-omarchy/settings.json`
 - `~/.cache/agent-bar-omarchy/`
+- `~/.agent-bar`
 - `~/.local/bin/agent-bar-omarchy`
 - `~/.config/waybar/agent-bar-omarchy/`
 - `~/.config/waybar/scripts/agent-bar-omarchy-open-terminal`

@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | `~/.config/agent-bar-omarchy/settings.json` | Persistent user settings. | `agent-bar-omarchy` |
 | `~/.cache/agent-bar-omarchy/` | Active quota cache. | `agent-bar-omarchy` |
+| `~/.agent-bar` | Managed local checkout used by install/update docs. | `agent-bar-omarchy update` |
 | `~/.local/bin/agent-bar-omarchy` | Convenience symlink to the repo script. | `agent-bar-omarchy setup` |
 | `~/.config/waybar/agent-bar-omarchy/icons/` | Provider icons consumed by Waybar. | `agent-bar-omarchy assets install` |
 | `~/.config/waybar/scripts/agent-bar-omarchy-open-terminal` | Helper that opens the agent-bar-omarchy menu in a terminal. | `agent-bar-omarchy assets install` |

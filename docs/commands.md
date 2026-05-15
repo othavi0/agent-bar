@@ -13,7 +13,7 @@
 | `agent-bar-omarchy export waybar-css --icons-dir <path>` | Prints the agent-bar-omarchy CSS contract. | No writes. |
 | `agent-bar-omarchy uninstall` | Interactive removal of agent-bar-omarchy integration + owned files. | agent-bar-omarchy-managed entries and agent-bar-omarchy-owned paths |
 | `agent-bar-omarchy remove` | Forced removal without prompt. | Same targets as uninstall |
-| `agent-bar-omarchy update` | Updates the local agent-bar-omarchy checkout. | Repo checkout and installed symlink target. |
+| `agent-bar-omarchy update` | Updates the managed `~/.agent-bar` checkout, discards local install edits, updates dependencies when needed, and re-runs setup. | `~/.agent-bar`, `~/.config/waybar/*`, `~/.local/bin/agent-bar-omarchy` |
 
 ## Common Flags
 
@@ -27,6 +27,7 @@
 ## Operational Notes
 
 - `agent-bar-omarchy setup` is idempotent.
+- `agent-bar-omarchy update` is destructive by design, but only for the managed `~/.agent-bar` install path.
 - agent-bar-omarchy uses managed include/import entries instead of replacing your entire Waybar files.
 - `agent-bar-omarchy remove` is intended for non-interactive cleanup scripts.
 
@@ -38,6 +39,7 @@ agent-bar-omarchy status --provider codex
 agent-bar-omarchy --provider copilot
 agent-bar-omarchy menu
 agent-bar-omarchy setup
+agent-bar-omarchy update
 agent-bar-omarchy assets install --waybar-dir ~/.config/waybar/agent-bar-omarchy --scripts-dir ~/.config/waybar/scripts
 agent-bar-omarchy export waybar-modules --app-bin '$HOME/.local/bin/agent-bar-omarchy' --terminal-script ~/.config/waybar/scripts/agent-bar-omarchy-open-terminal
 agent-bar-omarchy export waybar-css --icons-dir ~/.config/waybar/agent-bar-omarchy/icons

@@ -1,19 +1,74 @@
 #!/usr/bin/env bun
 
 /**
- * agent-bar-omarchy update - Update agent-bar-omarchy to latest version
+ * agent-bar-omarchy update - Update the managed ~/.agent-bar installation.
  */
 
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import { APP_NAME } from './app-identity';
-import { createSpinner } from './spinner';
-import { colorize, oneDark, semantic } from './tui/colors';
+import { colorize, semantic } from './tui/colors';
+import { printCommandHeader, printKeyValues, printWarning } from './tui/terminal-ui';
 
-// Get the repo root
 const REPO_ROOT = join(import.meta.dir, '..');
+const DEPENDENCY_FILES = ['package.json', 'bun.lock', 'bun.lockb'];
 
-async function runCmd(cmd: string, args: string[], cwd: string): Promise<{ ok: boolean; output: string }> {
+export interface CommandResult {
+  ok: boolean;
+  output: string;
+}
+
+export type CommandRunner = (cmd: string, args: string[], cwd: string) => Promise<CommandResult>;
+
+export interface UpdateSummary {
+  repoRoot: string;
+  installRoot: string;
+  currentCommit: string;
+  currentBranch: string;
+  upstream: string;
+  commits: string[];
+  localChanges: string[];
+  hasUpdates: boolean;
+  hasLocalChanges: boolean;
+  dependencyFilesChanged: boolean;
+  needsDependencyInstall: boolean;
+}
+
+export type ManagedUpdateStatus = 'wrong-root' | 'up-to-date' | 'cancelled' | 'updated';
+
+export interface ManagedUpdateResult {
+  status: ManagedUpdateStatus;
+  repoRoot: string;
+  installRoot: string;
+  summary?: UpdateSummary;
+  installedDependencies: boolean;
+}
+
+export type UpdateEvent =
+  | { type: 'step'; message: string }
+  | { type: 'info'; message: string }
+  | { type: 'success'; message: string };
+
+export interface ManagedUpdateOptions {
+  repoRoot?: string;
+  installRoot?: string;
+  runCommand?: CommandRunner;
+  runSetup: () => Promise<void>;
+  confirm: (summary: UpdateSummary) => Promise<boolean>;
+  onEvent?: (event: UpdateEvent) => void;
+}
+
+class UpdateCommandError extends Error {
+  constructor(
+    readonly step: string,
+    readonly output: string,
+  ) {
+    super(`${step} failed${output.trim() ? `: ${output.trim()}` : ''}`);
+  }
+}
+
+export async function runCmd(cmd: string, args: string[], cwd: string): Promise<CommandResult> {
   try {
     const proc = Bun.spawn([cmd, ...args], {
       cwd,
@@ -31,116 +86,242 @@ async function runCmd(cmd: string, args: string[], cwd: string): Promise<{ ok: b
   }
 }
 
-export async function main() {
-  console.clear();
+export function isManagedInstallRoot(repoRoot: string, installRoot: string = join(homedir(), '.agent-bar')): boolean {
+  return resolve(repoRoot) === resolve(installRoot);
+}
 
-  p.intro(colorize(`${APP_NAME} update`, oneDark.blue));
+async function requireCommand(
+  runCommand: CommandRunner,
+  cwd: string,
+  step: string,
+  cmd: string,
+  args: string[],
+): Promise<string> {
+  const result = await runCommand(cmd, args, cwd);
+  if (!result.ok) {
+    throw new UpdateCommandError(step, result.output);
+  }
+  return result.output.trim();
+}
 
-  // Check if we're in a git repo
-  const gitCheck = await runCmd('git', ['rev-parse', '--git-dir'], REPO_ROOT);
-  if (!gitCheck.ok) {
-    p.log.error(colorize('Not a git repository. Cannot update.', semantic.danger));
-    p.outro(colorize('Update failed', semantic.danger));
-    return;
+async function resolveUpstream(runCommand: CommandRunner, repoRoot: string): Promise<string> {
+  const configured = await runCommand('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], repoRoot);
+  if (configured.ok && configured.output.trim()) {
+    return configured.output.trim();
   }
 
-  // Get current version
-  const currentCommit = await runCmd('git', ['rev-parse', '--short', 'HEAD'], REPO_ROOT);
-  const currentBranch = await runCmd('git', ['branch', '--show-current'], REPO_ROOT);
+  return requireCommand(runCommand, repoRoot, 'Resolve origin/master', 'git', [
+    'rev-parse',
+    '--verify',
+    'origin/master',
+  ]);
+}
 
-  p.log.info(colorize(`Branch: ${currentBranch.output.trim()}`, semantic.subtitle));
-  p.log.info(colorize(`Current: ${currentCommit.output.trim()}`, semantic.subtitle));
+function splitLines(output: string): string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
-  // Fetch latest
-  const spinner = createSpinner('Fetching latest changes...');
-  spinner.start();
+export async function runManagedUpdate(options: ManagedUpdateOptions): Promise<ManagedUpdateResult> {
+  const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const installRoot = options.installRoot ?? join(homedir(), '.agent-bar');
+  const runCommand = options.runCommand ?? runCmd;
+  const onEvent = options.onEvent ?? (() => {});
 
-  const fetch = await runCmd('git', ['fetch', 'origin'], REPO_ROOT);
-  if (!fetch.ok) {
-    spinner.fail('Failed to fetch');
-    p.log.error(fetch.output);
-    return;
+  if (!isManagedInstallRoot(repoRoot, installRoot)) {
+    return { status: 'wrong-root', repoRoot, installRoot, installedDependencies: false };
   }
 
-  // Check if there are updates
-  const status = await runCmd('git', ['status', '-uno'], REPO_ROOT);
-  const behind = status.output.includes('behind');
+  onEvent({ type: 'step', message: 'Checking repository...' });
+  await requireCommand(runCommand, repoRoot, 'Check git repository', 'git', ['rev-parse', '--git-dir']);
+  const currentCommit = await requireCommand(runCommand, repoRoot, 'Read current commit', 'git', [
+    'rev-parse',
+    '--short',
+    'HEAD',
+  ]);
+  const currentBranch = await requireCommand(runCommand, repoRoot, 'Read current branch', 'git', [
+    'branch',
+    '--show-current',
+  ]);
 
-  if (!behind) {
-    spinner.succeed('Already up to date!');
-    p.outro(colorize('No updates available', semantic.subtitle));
-    return;
+  onEvent({ type: 'step', message: 'Fetching upstream...' });
+  await requireCommand(runCommand, repoRoot, 'Fetch origin', 'git', ['fetch', '--prune', 'origin']);
+  const upstream = await resolveUpstream(runCommand, repoRoot);
+
+  onEvent({ type: 'step', message: 'Inspecting changes...' });
+  const commits = splitLines(
+    await requireCommand(runCommand, repoRoot, 'List incoming commits', 'git', [
+      'log',
+      '--oneline',
+      `HEAD..${upstream}`,
+      '-10',
+    ]),
+  );
+  const localChanges = splitLines(
+    await requireCommand(runCommand, repoRoot, 'Read local changes', 'git', ['status', '--short']),
+  );
+  const dependencyFilesChanged = Boolean(
+    await requireCommand(runCommand, repoRoot, 'Check dependency changes', 'git', [
+      'diff',
+      '--name-only',
+      'HEAD',
+      upstream,
+      '--',
+      ...DEPENDENCY_FILES,
+    ]),
+  );
+  const needsDependencyInstall = dependencyFilesChanged || !existsSync(join(repoRoot, 'node_modules'));
+
+  const summary: UpdateSummary = {
+    repoRoot,
+    installRoot,
+    currentCommit,
+    currentBranch,
+    upstream,
+    commits,
+    localChanges,
+    hasUpdates: commits.length > 0,
+    hasLocalChanges: localChanges.length > 0,
+    dependencyFilesChanged,
+    needsDependencyInstall,
+  };
+
+  if (!summary.hasUpdates && !summary.hasLocalChanges) {
+    return { status: 'up-to-date', repoRoot, installRoot, summary, installedDependencies: false };
   }
 
-  spinner.succeed('Updates available');
+  const approved = await options.confirm(summary);
+  if (!approved) {
+    return { status: 'cancelled', repoRoot, installRoot, summary, installedDependencies: false };
+  }
 
-  // Show what's coming
-  const log = await runCmd('git', ['log', '--oneline', 'HEAD..origin/master', '-10'], REPO_ROOT);
-  if (log.ok && log.output.trim()) {
+  onEvent({ type: 'step', message: 'Discarding local install changes...' });
+  await requireCommand(runCommand, repoRoot, 'Reset install checkout', 'git', ['reset', '--hard', upstream]);
+  await requireCommand(runCommand, repoRoot, 'Clean install checkout', 'git', ['clean', '-fd']);
+
+  let installedDependencies = false;
+  if (needsDependencyInstall) {
+    onEvent({ type: 'step', message: 'Installing dependencies...' });
+    await requireCommand(runCommand, repoRoot, 'Install dependencies', 'bun', ['install']);
+    installedDependencies = true;
+  } else {
+    onEvent({ type: 'info', message: 'Dependencies unchanged; skipping bun install.' });
+  }
+
+  onEvent({ type: 'step', message: 'Re-applying Waybar integration...' });
+  await options.runSetup();
+  onEvent({ type: 'success', message: 'Managed install updated.' });
+
+  return { status: 'updated', repoRoot, installRoot, summary, installedDependencies };
+}
+
+function printSummary(summary: UpdateSummary): void {
+  printKeyValues('Install', [
+    ['Path', summary.repoRoot],
+    ['Branch', summary.currentBranch || '(detached)'],
+    ['Current', summary.currentCommit],
+    ['Upstream', summary.upstream],
+  ]);
+
+  if (summary.commits.length > 0) {
     p.note(
-      log.output
-        .trim()
-        .split('\n')
-        .map((l) => colorize(l, semantic.subtitle))
-        .join('\n'),
-      colorize('New commits', semantic.title),
+      summary.commits.map((line) => colorize(line, semantic.subtitle)).join('\n'),
+      colorize('Incoming', semantic.title),
     );
   }
 
-  const proceed = await p.confirm({
-    message: 'Apply update?',
-    initialValue: true,
-  });
-
-  if (p.isCancel(proceed) || !proceed) {
-    p.outro(colorize('Update cancelled', semantic.muted));
-    return;
+  if (summary.localChanges.length > 0) {
+    p.note(
+      summary.localChanges.map((line) => colorize(line, semantic.warning)).join('\n'),
+      colorize('Local changes to discard', semantic.warning),
+    );
   }
-
-  // Pull changes
-  spinner.text = 'Pulling changes...';
-  spinner.start();
-  const pull = await runCmd('git', ['pull', '--ff-only'], REPO_ROOT);
-
-  if (!pull.ok) {
-    spinner.fail('Pull failed');
-    p.log.error(pull.output);
-    p.log.warn(colorize('Try: git stash && git pull && git stash pop', semantic.warning));
-    return;
-  }
-
-  spinner.succeed('Code updated');
-
-  // Install dependencies
-  spinner.text = 'Installing dependencies...';
-  spinner.start();
-  const install = await runCmd('bun', ['install'], REPO_ROOT);
-
-  if (!install.ok) {
-    spinner.fail('Install failed');
-    p.log.error(install.output);
-    return;
-  }
-
-  spinner.succeed('Dependencies updated');
-
-  // Get new version
-  const newCommit = await runCmd('git', ['rev-parse', '--short', 'HEAD'], REPO_ROOT);
-
-  p.log.success(colorize(`Updated: ${currentCommit.output.trim()} → ${newCommit.output.trim()}`, semantic.good));
-
-  // Reload waybar
-  try {
-    Bun.spawn(['pkill', '-USR2', 'waybar']);
-  } catch {}
-
-  p.outro(colorize('Update complete!', semantic.good));
 }
 
-// Only auto-run when executed directly
+export async function main() {
+  console.clear();
+  printCommandHeader('update', 'Managed updater for ~/.agent-bar');
+
+  const spinner = p.spinner();
+  let spinnerActive = false;
+
+  const stopSpinner = (message: string) => {
+    if (spinnerActive) {
+      spinner.stop(message);
+      spinnerActive = false;
+    }
+  };
+
+  try {
+    const result = await runManagedUpdate({
+      onEvent: (event) => {
+        if (event.type === 'step') {
+          stopSpinner(event.message);
+          spinner.start(event.message);
+          spinnerActive = true;
+        } else if (event.type === 'info') {
+          stopSpinner(event.message);
+          p.log.info(colorize(event.message, semantic.muted));
+        } else if (event.type === 'success') {
+          stopSpinner(event.message);
+        }
+      },
+      runSetup: async () => {
+        const { runSetup } = await import('./setup');
+        await runSetup({ confirm: false, clearScreen: false });
+      },
+      confirm: async (summary) => {
+        stopSpinner('Checks complete');
+        printSummary(summary);
+        printWarning('Managed update', [
+          `This will discard local changes in ${summary.installRoot}.`,
+          'Use a separate checkout for development work.',
+        ]);
+
+        const proceed = await p.confirm({
+          message: 'Reset the managed install, pull upstream, and re-apply setup?',
+          initialValue: true,
+        });
+
+        return !p.isCancel(proceed) && proceed;
+      },
+    });
+
+    stopSpinner('Update checks complete');
+
+    if (result.status === 'wrong-root') {
+      p.log.error(colorize(`Managed updates only run from ${result.installRoot}`, semantic.danger));
+      p.log.info(colorize(`Current checkout: ${result.repoRoot}`, semantic.subtitle));
+      p.outro(colorize('Update aborted', semantic.muted));
+      return;
+    }
+
+    if (result.status === 'up-to-date') {
+      p.outro(colorize('Already up to date', semantic.good));
+      return;
+    }
+
+    if (result.status === 'cancelled') {
+      p.outro(colorize('Update cancelled', semantic.muted));
+      return;
+    }
+
+    const suffix = result.installedDependencies ? ' Dependencies updated.' : ' Dependencies unchanged.';
+    p.outro(colorize(`Update complete.${suffix}`, semantic.good));
+  } catch (error) {
+    stopSpinner('Update failed');
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.error(colorize(message, semantic.danger));
+    p.outro(colorize('Update failed', semantic.danger));
+    process.exit(1);
+  }
+}
+
 if (import.meta.main) {
-  main().catch((e) => {
-    console.error('Update failed:', e);
+  main().catch((error) => {
+    console.error('Update failed:', error);
     process.exit(1);
   });
 }

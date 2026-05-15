@@ -5,12 +5,18 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { APP_NAME, LEGACY_APP_NAME } from './app-identity';
-import { colorize, oneDark, semantic } from './tui/colors';
+import { colorize, semantic } from './tui/colors';
+import { printCommandHeader } from './tui/terminal-ui';
 import { getDefaultWaybarAssetPaths, installWaybarAssets } from './waybar-contract';
 import { applyWaybarIntegration, getDefaultWaybarIntegrationPaths } from './waybar-integration';
 
 const HOME = homedir();
 const REPO_ROOT = join(import.meta.dir, '..');
+
+export interface SetupOptions {
+  confirm?: boolean;
+  clearScreen?: boolean;
+}
 
 export function createSymlink(): string {
   const localBin = join(HOME, '.local', 'bin');
@@ -43,10 +49,15 @@ function reloadWaybar(): void {
   }
 }
 
-export async function main() {
-  console.clear();
+export async function runSetup(options: SetupOptions = {}): Promise<boolean> {
+  const shouldConfirm = options.confirm ?? true;
+  const shouldClearScreen = options.clearScreen ?? true;
 
-  p.intro(colorize(`${APP_NAME} setup`, oneDark.blue));
+  if (shouldClearScreen) {
+    console.clear();
+  }
+
+  printCommandHeader('setup');
 
   const defaults = getDefaultWaybarAssetPaths();
   const integrationPaths = getDefaultWaybarIntegrationPaths();
@@ -65,14 +76,16 @@ export async function main() {
     colorize('Setup', semantic.title),
   );
 
-  const proceed = await p.confirm({
-    message: `Apply ${APP_NAME} setup now?`,
-    initialValue: true,
-  });
+  if (shouldConfirm) {
+    const proceed = await p.confirm({
+      message: `Apply ${APP_NAME} setup now?`,
+      initialValue: true,
+    });
 
-  if (p.isCancel(proceed) || !proceed) {
-    p.outro(colorize('Setup cancelled', semantic.muted));
-    return;
+    if (p.isCancel(proceed) || !proceed) {
+      p.outro(colorize('Setup cancelled', semantic.muted));
+      return false;
+    }
   }
 
   try {
@@ -134,10 +147,15 @@ export async function main() {
     }
 
     p.outro(colorize('Setup complete', semantic.good));
+    return true;
   } catch (error) {
     p.outro(colorize(`Setup failed: ${error instanceof Error ? error.message : String(error)}`, semantic.danger));
-    process.exit(1);
+    throw error;
   }
+}
+
+export async function main() {
+  await runSetup({ confirm: true, clearScreen: true });
 }
 
 if (import.meta.main) {
