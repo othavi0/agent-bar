@@ -1,9 +1,10 @@
 import * as p from '@clack/prompts';
 import { buildClaude } from '../formatters/builders/claude';
+import { buildCodex as buildCodexLines } from '../formatters/builders/codex';
 import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
 import { resolveCodexViewModel } from '../formatters/view-model';
 import { getAllQuotas } from '../providers';
-import { getCodexExtra, getCopilotExtra } from '../providers/extras';
+import { getCopilotExtra } from '../providers/extras';
 import type { CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { BOX as B } from '../theme';
 import { colorize, getQuotaColor, oneDark, semantic } from './colors';
@@ -39,7 +40,7 @@ function _modelLine(name: string, window: QuotaWindow | undefined, maxLen: numbe
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-function codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
+function _codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
   const rem = window?.remaining ?? null;
   const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
   const barS = bar(rem);
@@ -63,66 +64,20 @@ function buildClaudeTui(provider: ProviderQuota): string[] {
   return rendered.split('\n');
 }
 
-function buildCodex(p: ProviderQuota): string[] {
-  const lines: string[] = [];
-  const vc = oneDark.green;
-  const { models, policy } = resolveCodexViewModel(p);
-  const planLabel = normalizePlanLabel(p);
-
-  lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Codex', vc, true)} ${colorize(B.h.repeat(51), vc)}`);
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${colorize(`⚠️ ${p.error}`, oneDark.red)}`);
-  } else {
-    const maxLen = 20;
-    lines.push(`${v(vc)}  ${colorize(`Plan: ${planLabel}`, semantic.muted)}`);
-
-    if (models.length === 0) {
-      lines.push(v(vc));
-      lines.push(label('Available Models', vc));
-      lines.push(`${v(vc)}  ${colorize('No models selected', semantic.muted)}`);
-    } else {
-      const modelLen = Math.max(...models.map((m) => m.name.length), maxLen);
-
-      if (policy !== 'seven_day') {
-        lines.push(v(vc));
-        lines.push(label('5-hour limit', vc));
-        for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.fiveHour, modelLen, vc));
-        }
-      }
-
-      if (policy !== 'five_hour') {
-        lines.push(v(vc));
-        lines.push(label('7-day limit', vc));
-        for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.sevenDay, modelLen, vc));
-        }
-      }
-    }
-
-    const _codexExtra = getCodexExtra(p);
-    if (_codexExtra?.extraUsage?.enabled) {
-      const codexExtraUsage = _codexExtra.extraUsage;
-      lines.push(v(vc));
-      lines.push(label('Credits', vc));
-      const nameS = colorize('Balance'.padEnd(maxLen), oneDark.textBright);
-      const barS = bar(codexExtraUsage.remaining);
-      const pctS = colorize(
-        formatPercent(codexExtraUsage.remaining).padStart(4),
-        getQuotaColor(codexExtraUsage.remaining),
-      );
-      const infoS =
-        codexExtraUsage.limit === -1 ? colorize('Unlimited', oneDark.cyan) : colorize('Balance', oneDark.cyan);
-      lines.push(`${v(vc)}  ${indicator(codexExtraUsage.remaining)} ${nameS} ${barS} ${pctS} ${infoS}`);
-    }
-  }
-
-  lines.push(v(vc));
-  lines.push(colorize(B.bl + B.h.repeat(55), vc));
-
-  return lines;
+function buildCodexTui(provider: ProviderQuota): string[] {
+  const viewModel = resolveCodexViewModel(provider);
+  const planLabel = normalizePlanLabel(provider);
+  const rendered = renderColorize(
+    buildCodexLines(provider, viewModel, {
+      mode: 'remaining',
+      headerTitle: 'Codex',
+      headerWidth: 56,
+      labelColor: 'blue',
+      planLabel,
+      footer: undefined,
+    }),
+  );
+  return rendered.split('\n');
 }
 
 function buildAmp(p: ProviderQuota): string[] {
@@ -271,7 +226,7 @@ export async function showListAll(): Promise<void> {
         sections.push(buildClaudeTui(provider));
         break;
       case 'codex':
-        sections.push(buildCodex(provider));
+        sections.push(buildCodexTui(provider));
         break;
       case 'copilot':
         sections.push(buildCopilot(provider));

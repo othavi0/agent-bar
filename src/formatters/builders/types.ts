@@ -24,4 +24,10 @@ export interface BuildOptions {
    * When provided and fetchedAt is set, the footer includes a cached stamp.
    */
   footer?: { fetchedAt?: string };
+  /**
+   * Plan label string for providers that emit a separate "Plan: X" row
+   * (e.g. Codex in terminal/TUI). When undefined the row is omitted.
+   * Waybar embeds the plan into headerTitle instead and leaves this unset.
+   */
+  planLabel?: string;
 }

@@ -1,7 +1,8 @@
-import { getAmpExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import { getAmpExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
 import { buildClaude } from './builders/claude';
+import { buildCodex as buildCodexLines } from './builders/codex';
 import { renderAnsi as renderAnsiLines } from './render-ansi';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import {
@@ -73,7 +74,7 @@ function _modelLine(
   return `${v(vColor)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-function codexModelLine(
+function _codexModelLine(
   name: string,
   window: QuotaWindow | undefined,
   maxLen: number,
@@ -104,66 +105,20 @@ function buildClaudeTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
   return rendered.split('\n');
 }
 
-function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
-  const lines: string[] = [];
-  const vc = PROVIDER_ANSI.codex;
-  const { models, policy } = resolveCodexViewModel(p);
+function buildCodexTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
+  const viewModel = resolveCodexViewModel(p);
   const planLabel = normalizePlanLabel(p);
-
-  lines.push(
-    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Codex${ANSI.reset} ${vc}${BOX.h.repeat(51)}${ANSI.reset}`,
+  const rendered = renderAnsiLines(
+    buildCodexLines(p, viewModel, {
+      mode,
+      headerTitle: 'Codex',
+      headerWidth: 56,
+      labelColor: 'magenta',
+      planLabel,
+      footer: undefined,
+    }),
   );
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
-  } else {
-    const maxLen = 20;
-    lines.push(`${v(vc)}  ${ANSI.muted}Plan: ${planLabel}${ANSI.reset}`);
-
-    if (models.length === 0) {
-      lines.push(v(vc));
-      lines.push(label('Available Models', vc));
-      lines.push(`${v(vc)}  ${ANSI.comment}No models selected${ANSI.reset}`);
-    } else {
-      const modelLen = Math.max(...models.map((m) => m.name.length), maxLen);
-
-      if (policy !== 'seven_day') {
-        lines.push(v(vc));
-        lines.push(label('5-hour limit', vc));
-        for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.fiveHour, modelLen, vc, mode));
-        }
-      }
-
-      if (policy !== 'five_hour') {
-        lines.push(v(vc));
-        lines.push(label('7-day limit', vc));
-        for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.sevenDay, modelLen, vc, mode));
-        }
-      }
-    }
-
-    const _codexExtra = getCodexExtra(p);
-    if (_codexExtra?.extraUsage?.enabled) {
-      const codexExtraUsage = _codexExtra.extraUsage;
-      const disp = toDisplay(codexExtraUsage.remaining, mode);
-      lines.push(v(vc));
-      lines.push(label('Credits', vc));
-      const nameS = `${ANSI.textBright}${'Balance'.padEnd(maxLen)}${ANSI.reset}`;
-      const barS = bar(disp, mode);
-      const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
-      const infoS =
-        codexExtraUsage.limit === -1 ? `${ANSI.cyan}Unlimited${ANSI.reset}` : `${ANSI.cyan}Balance${ANSI.reset}`;
-      lines.push(`${v(vc)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${infoS}`);
-    }
-  }
-
-  lines.push(v(vc));
-  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
-
-  return lines;
+  return rendered.split('\n');
 }
 
 function buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
@@ -378,7 +333,7 @@ type TerminalBuilder = (p: ProviderQuota, mode: DisplayMode) => string[];
 
 const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
   claude: buildClaudeTerminal,
-  codex: buildCodex,
+  codex: buildCodexTerminal,
   copilot: buildCopilot,
   amp: buildAmp,
 };

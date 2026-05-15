@@ -1,10 +1,11 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getStatusForPercent } from '../config';
-import { getAmpExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import { getAmpExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { type DisplayMode, loadSettingsSync } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
 import { buildClaude } from './builders/claude';
+import { buildCodex as buildCodexLines } from './builders/codex';
 import { renderPango as renderPangoLines } from './render-pango';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay } from './shared';
@@ -108,7 +109,7 @@ function indicator(display: number | null, mode: DisplayMode): string {
   return renderPango(indicatorSegments(display, mode));
 }
 
-function codexModelLine(
+function _codexModelLine(
   name: string,
   window: QuotaWindow | undefined,
   maxLen: number,
@@ -179,61 +180,20 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mod
  * Build Codex tooltip
  */
 function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const lines: string[] = [];
-  const vc = PROVIDER_HEX.codex;
-  const v = s(vc, BOX.v);
-  const { models, policy } = resolveCodexViewModelCached(p);
+  const viewModel = resolveCodexViewModelCached(p);
   const planLabel = normalizePlanLabel(p);
+  const subtitle = planLabel !== 'Unknown' ? planLabel : undefined;
+  const headerTitle = subtitle ? `Codex · ${subtitle}` : 'Codex';
 
-  lines.push(buildHeader('Codex', planLabel !== 'Unknown' ? planLabel : undefined, vc));
-  lines.push(v);
-
-  if (p.error) {
-    lines.push(`${v}  ${s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`)}`);
-  } else {
-    if (models.length === 0) {
-      lines.push(v);
-      lines.push(label('Available Models', vc));
-      lines.push(`${v}  ${s(ONE_DARK.comment, 'No models selected')}`);
-    } else {
-      const maxLen = Math.max(...models.map((m) => m.name.length), 20);
-
-      if (policy !== 'seven_day') {
-        lines.push(v);
-        lines.push(label('5-hour limit', vc));
-        for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.fiveHour, maxLen, v, mode));
-        }
-      }
-
-      if (policy !== 'five_hour') {
-        lines.push(v);
-        lines.push(label('7-day limit', vc));
-        for (const model of models) {
-          lines.push(codexModelLine(model.name, model.windows.sevenDay, maxLen, v, mode));
-        }
-      }
-    }
-
-    const _codexExtra = getCodexExtra(p);
-    if (_codexExtra?.extraUsage?.enabled) {
-      const codexExtraUsage = _codexExtra.extraUsage;
-      const rem = codexExtraUsage.remaining;
-      const disp = toDisplay(rem, mode);
-      lines.push(v);
-      lines.push(label('Credits', vc));
-      const name = s(ONE_DARK.textBright, 'Balance'.padEnd(20));
-      const b = bar(disp, mode);
-      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-      const limitS = codexExtraUsage.limit === -1 ? s(ONE_DARK.cyan, 'Unlimited') : s(ONE_DARK.cyan, 'Balance');
-      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${limitS}`);
-    }
-  }
-
-  lines.push(v);
-  lines.push(buildFooter(vc, fetchedAt));
-
-  return lines.join('\n');
+  return renderPangoLines(
+    buildCodexLines(p, viewModel, {
+      mode,
+      headerTitle,
+      headerWidth: TOOLTIP_BORDER - 4,
+      labelColor: 'green',
+      footer: { fetchedAt },
+    }),
+  );
 }
 
 /**
