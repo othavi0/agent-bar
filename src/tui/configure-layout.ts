@@ -192,9 +192,12 @@ export async function configureLayout(): Promise<boolean> {
   }
 
   // Show summary
-  const orderSummary = newOrder
-    .map((id) => colorize(PROVIDER_NAMES[id] ?? id, PROVIDER_COLORS[id] ?? oneDark.text))
-    .join(colorize(' → ', semantic.muted));
+  const orderSummary =
+    newOrder.length > 0
+      ? newOrder
+          .map((id) => colorize(PROVIDER_NAMES[id] ?? id, PROVIDER_COLORS[id] ?? oneDark.text))
+          .join(colorize(' → ', semantic.muted))
+      : colorize('None', semantic.muted);
   p.log.info(`${colorize('Providers:', semantic.subtitle)} ${orderSummary}`);
   p.log.info(`${colorize('Style:', semantic.subtitle)} ${colorize(newSeparator, oneDark.green)}`);
   p.log.info(`${colorize('Mode:', semantic.subtitle)} ${colorize(newDisplayMode, oneDark.green)}`);

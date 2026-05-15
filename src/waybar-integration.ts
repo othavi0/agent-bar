@@ -319,11 +319,7 @@ function resolveProviderOrder(): WaybarProviderId[] {
     return normalized.providerOrder;
   }
 
-  if (normalized.providers.length > 0) {
-    return normalized.providers;
-  }
-
-  return [...WAYBAR_PROVIDERS];
+  return normalized.providers;
 }
 
 export function getDefaultWaybarIntegrationPaths(): WaybarIntegrationPaths {

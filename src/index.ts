@@ -6,7 +6,7 @@ import { parseArgs, showHelp } from './cli';
 import { outputTerminal } from './formatters/terminal';
 import { formatProviderForWaybar, outputWaybar } from './formatters/waybar';
 import { logger } from './logger';
-import { getAllQuotas, getProvider, getQuotaFor } from './providers';
+import { getAllQuotas, getProvider, getQuotaFor, getRegisteredProviderIds } from './providers';
 import type { AllQuotas } from './providers/types';
 import { loadSettings } from './settings';
 import { runTui } from './tui';
@@ -133,7 +133,7 @@ async function main() {
 
   // Handle cache refresh
   if (options.refresh) {
-    const toInvalidate = options.provider ? [options.provider] : ['claude', 'codex', 'copilot', 'amp'];
+    const toInvalidate = options.provider ? [options.provider] : getRegisteredProviderIds();
 
     for (const id of toInvalidate) {
       const prov = getProvider(id);

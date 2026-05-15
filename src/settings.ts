@@ -7,7 +7,7 @@ import { normalizeProviderSelection } from './waybar-contract';
 
 export type WindowPolicy = 'both' | 'five_hour' | 'seven_day';
 
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 const VALID_SEPARATORS = ['pill', 'gap', 'bare', 'glass', 'shadow', 'none'] as const;
 type SeparatorStyle = (typeof VALID_SEPARATORS)[number];
@@ -99,10 +99,25 @@ const DEFAULT_SETTINGS: Settings = {
   },
 };
 
-/** Migrate settings from older schema versions. Currently a noop (v1 is the first version). */
-function migrateSettings(data: Record<string, unknown>, _fromVersion: number): Record<string, unknown> {
-  // Future migrations go here:
-  // if (fromVersion < 2) { /* migrate v1 → v2 */ }
+/** Migrate settings from older schema versions. */
+function migrateSettings(data: Record<string, unknown>, fromVersion: number): Record<string, unknown> {
+  if (fromVersion < 2) {
+    // v1 → v2: Add Copilot to legacy default provider lists (one-shot migration).
+    const waybar = data.waybar as Record<string, unknown> | undefined;
+    if (waybar) {
+      if (isExactStringArray(waybar.providers, LEGACY_DEFAULT_PROVIDERS)) {
+        waybar.providers = withCopilotAfterCodex(waybar.providers as string[]);
+      }
+      if (
+        waybar.providerOrder === undefined ||
+        isExactStringArray(waybar.providerOrder, LEGACY_DEFAULT_PROVIDERS)
+      ) {
+        waybar.providerOrder = withCopilotAfterCodex(
+          (waybar.providerOrder ?? waybar.providers) as string[],
+        );
+      }
+    }
+  }
   return data;
 }
 
@@ -164,8 +179,6 @@ function normalizeSettings(data: Partial<Settings> | undefined): Settings {
     models: { ...DEFAULT_SETTINGS.models, ...data?.models },
     windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data?.windowPolicy },
   };
-
-  upgradeLegacyDefaultProviders(merged, data);
 
   // Validate separators
   if (!isValidSeparator(merged.waybar.separators)) {

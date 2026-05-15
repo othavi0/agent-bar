@@ -28,10 +28,28 @@ async function ensureCopilotCli(): Promise<boolean> {
 async function activateProvider(providerId: string): Promise<void> {
   const settings = await loadSettings();
 
-  if (!settings.waybar.providers.includes(providerId)) {
-    settings.waybar.providers.push(providerId);
+  if (settings.waybar.providers.includes(providerId)) {
+    return;
   }
+
+  const providerName = providerId.charAt(0).toUpperCase() + providerId.slice(1);
+  const enable = await p.confirm({
+    message: colorize(`Enable ${providerName} in Waybar?`, semantic.title),
+    initialValue: true,
+  });
+
+  if (p.isCancel(enable) || !enable) return;
+
+  settings.waybar.providers.push(providerId);
   await saveSettings(settings);
+
+  try {
+    const { applyWaybarIntegration } = await import('../waybar-integration');
+    applyWaybarIntegration();
+    Bun.spawn(['pkill', '-SIGUSR2', 'waybar'], { stdout: 'ignore', stderr: 'ignore' });
+  } catch {
+    /* best effort */
+  }
 }
 
 async function waitEnter(): Promise<void> {

@@ -28,7 +28,7 @@ describe('settings', () => {
   it('returns normalized defaults when no file exists', () => {
     const settings = loadSettingsSync();
 
-    expect(settings.version).toBe(1);
+    expect(settings.version).toBe(2);
     expect(settings.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
     expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'copilot', 'amp']);
     expect(settings.waybar.separators).toBe('gap');
@@ -90,6 +90,41 @@ describe('settings', () => {
 
     const onDisk = JSON.parse(await readFile(settingsFile, 'utf8'));
     expect(onDisk.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
+  });
+
+  it('does not re-add Copilot after user removes it (v2 settings)', async () => {
+    const settingsDir = join(testRoot, 'agent-bar-omarchy');
+    const settingsFile = join(settingsDir, 'settings.json');
+    await mkdir(settingsDir, { recursive: true });
+    await writeFile(
+      settingsFile,
+      JSON.stringify({
+        version: 2,
+        waybar: {
+          providers: ['claude', 'codex', 'amp'],
+          showPercentage: true,
+          separators: 'gap',
+          providerOrder: ['claude', 'codex', 'amp'],
+          displayMode: 'remaining',
+        },
+        tooltip: {},
+        models: {},
+        windowPolicy: { codex: 'both' },
+      }),
+    );
+
+    const settings = await loadSettings();
+    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'amp']);
+    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'amp']);
+
+    // Save and reload — must still stay without Copilot
+    await saveSettings(settings);
+    const reloaded = await loadSettings();
+    expect(reloaded.waybar.providers).toEqual(['claude', 'codex', 'amp']);
+    expect(reloaded.waybar.providerOrder).toEqual(['claude', 'codex', 'amp']);
+
+    const onDisk = JSON.parse(await readFile(settingsFile, 'utf8'));
+    expect(onDisk.waybar.providers).toEqual(['claude', 'codex', 'amp']);
   });
 
   it('does not add Copilot when providers were manually customized', async () => {
