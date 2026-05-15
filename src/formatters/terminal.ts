@@ -1,8 +1,6 @@
 import { getAmpExtra, getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
-import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
-import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import {
   type DisplayMode,
@@ -13,6 +11,7 @@ import {
   normalizePlanLabel,
   toDisplay,
 } from './shared';
+import { resolveCodexViewModel } from './view-model';
 
 const ANSI_BY_TOKEN: Record<ColorToken, string> = {
   green: ANSI.green,
@@ -145,8 +144,7 @@ function buildClaude(p: ProviderQuota, mode: DisplayMode): string[] {
 function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
   const lines: string[] = [];
   const vc = PROVIDER_ANSI.codex;
-  const settings = loadSettingsSync();
-  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? 'both';
+  const { models, policy } = resolveCodexViewModel(p);
   const planLabel = normalizePlanLabel(p);
 
   lines.push(
@@ -159,9 +157,6 @@ function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
   } else {
     const maxLen = 20;
     lines.push(`${v(vc)}  ${ANSI.muted}Plan: ${planLabel}${ANSI.reset}`);
-
-    let models = codexModelsFromQuota(p);
-    models = applyCodexModelFilter(models, settings.models?.[p.provider]);
 
     if (models.length === 0) {
       lines.push(v(vc));

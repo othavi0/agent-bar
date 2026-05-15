@@ -1,10 +1,9 @@
 import * as p from '@clack/prompts';
-import { applyCodexModelFilter, codexModelsFromQuota } from '../formatters/codex-helpers';
 import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
+import { resolveCodexViewModel } from '../formatters/view-model';
 import { getAllQuotas } from '../providers';
 import { getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
 import type { CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
-import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX as B } from '../theme';
 import { colorize, getQuotaColor, oneDark, semantic } from './colors';
 
@@ -105,8 +104,7 @@ function buildClaude(p: ProviderQuota): string[] {
 function buildCodex(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = oneDark.green;
-  const settings = loadSettingsSync();
-  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? 'both';
+  const { models, policy } = resolveCodexViewModel(p);
   const planLabel = normalizePlanLabel(p);
 
   lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Codex', vc, true)} ${colorize(B.h.repeat(51), vc)}`);
@@ -117,9 +115,6 @@ function buildCodex(p: ProviderQuota): string[] {
   } else {
     const maxLen = 20;
     lines.push(`${v(vc)}  ${colorize(`Plan: ${planLabel}`, semantic.muted)}`);
-
-    let models = codexModelsFromQuota(p);
-    models = applyCodexModelFilter(models, settings.models?.[p.provider]);
 
     if (models.length === 0) {
       lines.push(v(vc));

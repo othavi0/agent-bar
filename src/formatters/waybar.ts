@@ -2,11 +2,11 @@ import { APP_BASE_CLASS } from '../app-identity';
 import { getStatusForPercent } from '../config';
 import { getAmpExtra, getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
-import { type DisplayMode, loadSettingsSync, type WindowPolicy } from '../settings';
+import { type DisplayMode, loadSettingsSync } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
-import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay } from './shared';
+import { type CodexViewModel, resolveCodexViewModelFrom } from './view-model';
 
 // Uniform tooltip width — all 3 cards share the same border
 const TOOLTIP_BORDER = 56; // total visual chars per line (┗ + 55 ━)
@@ -39,6 +39,17 @@ function loadSettingsCached(): ReturnType<typeof loadSettingsSync> {
     expiresAt: now + SETTINGS_CACHE_TTL_MS,
   };
   return value;
+}
+
+/**
+ * Cached Codex view-model resolver for the Waybar hot path.
+ *
+ * Derives the view model via `resolveCodexViewModelFrom`, fed by the 5s-TTL
+ * `loadSettingsCached`, so settings are read from disk at most once per cache
+ * window regardless of how many times Waybar polls.
+ */
+function resolveCodexViewModelCached(p: ProviderQuota): CodexViewModel {
+  return resolveCodexViewModelFrom(loadSettingsCached(), p);
 }
 
 interface WaybarOutput {
@@ -230,8 +241,7 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
   const lines: string[] = [];
   const vc = PROVIDER_HEX.codex;
   const v = s(vc, BOX.v);
-  const settings = loadSettingsCached();
-  const policy: WindowPolicy = settings.windowPolicy?.[p.provider] ?? 'both';
+  const { models, policy } = resolveCodexViewModelCached(p);
   const planLabel = normalizePlanLabel(p);
 
   lines.push(buildHeader('Codex', planLabel !== 'Unknown' ? planLabel : undefined, vc));
@@ -240,9 +250,6 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
   if (p.error) {
     lines.push(`${v}  ${s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`)}`);
   } else {
-    let models = codexModelsFromQuota(p);
-    models = applyCodexModelFilter(models, settings.models?.[p.provider]);
-
     if (models.length === 0) {
       lines.push(v);
       lines.push(label('Available Models', vc));
