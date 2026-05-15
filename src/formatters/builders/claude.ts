@@ -1,47 +1,14 @@
 import { getClaudeExtra } from '../../providers/extras';
-import type { ProviderQuota, QuotaWindow } from '../../providers/types';
+import type { ProviderQuota } from '../../providers/types';
 import { BOX } from '../../theme';
-import { barSegments, colorForDisplay, indicatorSegments, type Line, type Segment } from '../segments';
-import { formatEta, formatPercent, formatResetTime, toDisplay } from '../shared';
+import { barSegments, colorForDisplay, indicatorSegments, type Line } from '../segments';
+import { formatPercent, toDisplay } from '../shared';
+import { buildFooterLine, labelLine, modelLine, raw } from './shared';
 import type { BuildOptions } from './types';
 
-const TOOLTIP_BORDER = 56;
-
 // ---------------------------------------------------------------------------
-// Segment helpers
+// Segment helpers — Claude provider color is 'orange'
 // ---------------------------------------------------------------------------
-
-/** Literal (uncolored) connector text — raw segment skips span/ANSI wrapping. */
-const raw = (text: string): Segment => ({ text, color: 'text', raw: true });
-
-/** A full model line (vertical bar + padding + indicator + name + bar + pct + eta). */
-function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, mode: BuildOptions['mode']): Line {
-  const rem = window?.remaining ?? null;
-  const reset = window?.resetsAt ?? null;
-  const disp = toDisplay(rem, mode);
-  return [
-    { text: BOX.v, color: 'orange' },
-    raw('  '),
-    ...indicatorSegments(disp, mode),
-    raw(' '),
-    { text: name.padEnd(maxLen), color: 'textBright' },
-    raw(' '),
-    ...barSegments(disp, mode),
-    raw(' '),
-    { text: formatPercent(disp).padStart(4), color: colorForDisplay(disp, mode) },
-    raw(' '),
-    { text: `→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}`, color: 'cyan' },
-  ];
-}
-
-/** Section label line: ┣━ ◆ Label */
-function labelLine(text: string, labelColor: BuildOptions['labelColor']): Line {
-  return [
-    { text: BOX.lt + BOX.h, color: 'orange' },
-    raw(' '),
-    { text: `${BOX.diamond} ${text}`, color: labelColor, bold: true },
-  ];
-}
 
 /** Vertical bar line (empty row with provider border). */
 const vLine = (): Line => [{ text: BOX.v, color: 'orange' }];
@@ -67,36 +34,6 @@ function extraUsageLine(
     raw(' '),
     { text: usedStr, color: 'cyan' },
   ];
-}
-
-// ---------------------------------------------------------------------------
-// Footer helpers
-// ---------------------------------------------------------------------------
-
-function formatAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  if (diffMs < 60000) return 'just now';
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  return `${Math.floor(mins / 60)}h ago`;
-}
-
-function buildFooterLine(footer: BuildOptions['footer']): Line {
-  const fetchedAt = footer?.fetchedAt;
-  if (fetchedAt) {
-    const ago = formatAgo(fetchedAt);
-    const stamp = ` cached · ${ago} `;
-    const totalDashes = TOOLTIP_BORDER - 1 - stamp.length;
-    const left = Math.max(1, Math.floor(totalDashes / 2));
-    const right = Math.max(1, totalDashes - left);
-    return [
-      { text: BOX.bl + BOX.h.repeat(left), color: 'orange' },
-      { text: stamp, color: 'comment' },
-      { text: BOX.h.repeat(right), color: 'orange' },
-    ];
-  }
-  // Plain footer (terminal / TUI / waybar without fetchedAt)
-  return [{ text: BOX.bl + BOX.h.repeat(55), color: 'orange' }];
 }
 
 // ---------------------------------------------------------------------------
@@ -130,8 +67,8 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
     const maxLen = 20;
 
     if (p.primary) {
-      lines.push(labelLine('5-hour limit (shared)', labelColor));
-      lines.push(modelLine('All Models', p.primary, maxLen, mode));
+      lines.push(labelLine('5-hour limit (shared)', labelColor, 'orange'));
+      lines.push(modelLine('All Models', p.primary, maxLen, mode, 'orange'));
     }
 
     // Per-model weekly quotas (when API provides them)
@@ -139,26 +76,26 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
     const weeklyModels = claudeExtra?.weeklyModels;
     if (weeklyModels && Object.keys(weeklyModels).length > 0) {
       lines.push(vLine());
-      lines.push(labelLine('Weekly per model', labelColor));
+      lines.push(labelLine('Weekly per model', labelColor, 'orange'));
       const entries = Object.entries(weeklyModels);
       const wMaxLen = Math.max(...entries.map(([name]) => name.length), maxLen);
       for (const [name, window] of entries) {
-        lines.push(modelLine(name, window, wMaxLen, mode));
+        lines.push(modelLine(name, window, wMaxLen, mode, 'orange'));
       }
     }
 
     // Generic weekly (shared)
     if (p.secondary) {
       lines.push(vLine());
-      lines.push(labelLine('Weekly limit (shared)', labelColor));
-      lines.push(modelLine('All Models', p.secondary, maxLen, mode));
+      lines.push(labelLine('Weekly limit (shared)', labelColor, 'orange'));
+      lines.push(modelLine('All Models', p.secondary, maxLen, mode, 'orange'));
     }
 
     if (claudeExtra?.extraUsage?.enabled && claudeExtra.extraUsage.limit > 0) {
       const { remaining, used, limit } = claudeExtra.extraUsage;
       const disp = toDisplay(remaining, mode);
       lines.push(vLine());
-      lines.push(labelLine('Extra Usage', labelColor));
+      lines.push(labelLine('Extra Usage', labelColor, 'orange'));
       lines.push(
         extraUsageLine('Budget', maxLen, disp, mode, `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`),
       );
@@ -166,7 +103,7 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
   }
 
   lines.push(vLine());
-  lines.push(buildFooterLine(footer));
+  lines.push(buildFooterLine(footer, 'orange'));
 
   return lines;
 }
