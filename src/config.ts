@@ -1,6 +1,6 @@
 import { homedir } from 'os';
 import { join } from 'path';
-import { APP_NAME, LEGACY_APP_NAME, QBAR_LEGACY_APP_NAME } from './app-identity';
+import { APP_NAME } from './app-identity';
 import { ONE_DARK } from './theme';
 
 // XDG Base Directory paths
@@ -12,13 +12,7 @@ export const CONFIG = {
   // Paths
   paths: {
     cache: join(XDG_CACHE_HOME, APP_NAME),
-    legacyCache: join(XDG_CACHE_HOME, LEGACY_APP_NAME),
-    qbarLegacyCache: join(XDG_CACHE_HOME, QBAR_LEGACY_APP_NAME),
-    waybarLegacyCache: join(XDG_CONFIG_HOME, 'waybar', LEGACY_APP_NAME, 'cache'),
-    waybarQbarLegacyCache: join(XDG_CONFIG_HOME, 'waybar', QBAR_LEGACY_APP_NAME, 'cache'),
     config: join(XDG_CONFIG_HOME, APP_NAME),
-    legacyConfig: join(XDG_CONFIG_HOME, LEGACY_APP_NAME),
-    qbarLegacyConfig: join(XDG_CONFIG_HOME, QBAR_LEGACY_APP_NAME),
 
     // Provider credential paths
     claude: {
