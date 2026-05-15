@@ -12,7 +12,7 @@ const LOGO_ANIM_FRAME_MS = 12;
 
 type MenuAction = 'list' | 'layout' | 'models' | 'login';
 
-// Block-style logo inspired by Omarchy branding
+// Block-style logo
 const LOGO_LINES = [
   '         █████    ████   █████  ',
   '  ████   ██  ██  ██  ██  ██  ██ ',
