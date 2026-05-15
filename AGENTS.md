@@ -51,7 +51,6 @@ The app owns these paths at runtime:
 | `~/.cache/agent-bar/` | Provider quota cache |
 | `~/.agent-bar` | Managed install checkout used by README install/update flow |
 | `~/.local/bin/agent-bar` | Symlink created by setup |
-| `~/.local/bin/agent-bar-omarchy` | Compatibility symlink created by setup |
 | `~/.config/waybar/agent-bar/icons/` | Installed provider icons |
 | `~/.config/waybar/agent-bar/modules.jsonc` | Generated Waybar module include |
 | `~/.config/waybar/agent-bar/style.css` | Generated Waybar stylesheet |
@@ -69,10 +68,10 @@ Provider credentials are external and only read/used by providers:
 - `src/index.ts` — main CLI dispatcher. Parses args, configures logging, dynamically imports TUI/setup/update/uninstall paths, fetches quotas, and chooses terminal vs Waybar output.
 - `src/cli.ts` — argument parser and help UI. Unknown commands warn/suggest; default command is Waybar JSON.
 - `src/action-right.ts` — Waybar right-click flow. Disconnected/expired providers open single-provider login; connected providers refresh cache and show terminal output.
-- `src/app-identity.ts` — single source for app name, legacy name, Waybar namespace, CSS/module prefixes, helper names, and backup suffixes.
+- `src/app-identity.ts` — single source for app name, Waybar namespace, CSS/module prefixes, helper names, and backup suffixes.
 - `src/config.ts` — XDG paths, provider credential locations, cache TTL, API timeout, colors, and thresholds.
-- `src/cache.ts` — file cache with safe key validation, TTL, in-flight fetch deduplication, and legacy cache migration.
-- `src/settings.ts` — settings schema v1, default values, validation, legacy settings migration, normalize-on-load, and atomic writes.
+- `src/cache.ts` — file cache with safe key validation, TTL, and in-flight fetch deduplication.
+- `src/settings.ts` — settings schema, default values, validation, normalize-on-load, and atomic writes.
 - `src/providers/` — provider implementations plus registry/orchestration.
 - `src/formatters/` — terminal and Waybar rendering; shared quota formatting helpers.
 - `src/tui/` — clack/prompts menu, login flows, model configuration, layout/provider ordering, and color helpers.
@@ -80,7 +79,6 @@ Provider credentials are external and only read/used by providers:
 - `src/waybar-integration.ts` — safe-ish live Waybar patching for include/import/modules-right while preserving unrelated config.
 - `scripts/` — Bash wrappers and terminal launcher.
 - `docs/` — operational documentation only.
-- `snippets/` — reference/manual Waybar snippets only. Normal setup uses generated contract + integration code.
 
 ## Provider Contract
 
@@ -150,7 +148,6 @@ Validation/normalization rules:
 - Cache keys must match `/^[a-zA-Z0-9_-]+$/`; traversal, spaces, dots, and slashes are rejected.
 - `getOrFetch()` deduplicates concurrent misses for the same key.
 - Failed fetches must not poison the cache.
-- Legacy cache migration exists only to move old runtime state into `~/.cache/agent-bar`.
 
 ## Waybar Contract and Integration
 
@@ -188,15 +185,14 @@ Integration rules:
 
 ## Legacy Policy
 
-The current product name and public namespace is **`agent-bar`**.
+The product name and public namespace is **`agent-bar`**. The previous names
+`agent-bar-omarchy` and `qbar` were fully removed in `4.0.0` — do not reintroduce
+them as commands, module IDs, CSS selectors, settings paths, symlinks, or cache
+keys. Historical `CHANGELOG.md` entries that mention them are fine.
 
-`agent-bar-omarchy` is compatibility for the previous public name. `qbar` is older legacy compatibility only:
-
-- Allowed in `LEGACY_*`/`QBAR_LEGACY_*` constants, migration/removal code, compatibility wrappers, and tests that prove legacy state is migrated or cleaned.
-- Allowed in historical changelog entries.
-- Not allowed for new user-facing commands, new docs examples, new Waybar module IDs, new CSS selectors, new settings paths, new symlinks, or new cache keys.
-
-Also do not reintroduce removed/old surfaces such as Antigravity, `llm-usage`, external theme-repo dependencies, or Omarchy theme coupling. The app is theme-agnostic and owns its generated Waybar integration.
+Also do not reintroduce other removed surfaces such as Antigravity, `llm-usage`,
+external theme-repo dependencies, or Omarchy theme coupling. The app is
+theme-agnostic and owns its generated Waybar integration.
 
 ## Code Style
 
@@ -236,7 +232,6 @@ Use current operational docs as references:
 Treat these as non-operational or historical unless explicitly editing them:
 
 - old `CHANGELOG.md` release notes
-- `snippets/**` manual integration examples
 
 ## Safe Development Workflow
 

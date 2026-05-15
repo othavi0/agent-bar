@@ -1,11 +1,11 @@
 # Changelog
 
-All notable changes to agent-bar-omarchy will be documented in this file.
+All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [4.0.0] - 2026-05-15
 
 ### Added
 
@@ -13,10 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Renamed the project from `qbar` to `agent-bar-omarchy`
-- Migrated runtime state from `~/.config/qbar` and `~/.cache/qbar` to `~/.config/agent-bar-omarchy` and `~/.cache/agent-bar-omarchy`
-- Migrated Waybar assets and module IDs from the `qbar` namespace to `agent-bar-omarchy`
-- Removed the legacy `qbar` CLI entrypoint in favor of `agent-bar-omarchy`
+- Renamed the project to `agent-bar` (previously `qbar`, then `agent-bar-omarchy`). Runtime state now lives under `~/.config/agent-bar` and `~/.cache/agent-bar`; Waybar module IDs use the `agent-bar` namespace.
+
+### Removed
+
+- Removed the `qbar` and `agent-bar-omarchy` compatibility layer entirely:
+  legacy identity constants, settings/cache path migration, Waybar legacy-asset
+  cleanup, the `agent-bar-omarchy` CLI symlink and `bin` alias, and the `snippets/`
+  manual examples.
+
+### Breaking
+
+- The `agent-bar-omarchy` command no longer exists. Installations still using the
+  old name must reinstall as `agent-bar`; old settings/cache under the previous
+  names are not migrated.
 
 ## [3.0.0] - 2026-03-27
 

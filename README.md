@@ -1,4 +1,4 @@
-<h1 align="center">Agent Bar Omarchy</h1>
+<h1 align="center">Agent Bar</h1>
 
 <p align="center">
   <img src="docs/assets/agent-bar-banner.png" alt="Conceptual Agent Bar banner">

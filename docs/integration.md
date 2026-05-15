@@ -14,10 +14,6 @@
 Setup is idempotent. It updates managed entries and leaves unrelated Waybar
 content alone.
 
-During the rename from `agent-bar-omarchy`, setup also replaces old generated
-Waybar modules/imports with the new `agent-bar` namespace and keeps a legacy
-`agent-bar-omarchy` CLI alias for existing shell usage.
-
 ## Update
 
 `agent-bar update` is the managed-install updater for `~/.agent-bar`.
