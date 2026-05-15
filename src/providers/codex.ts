@@ -67,6 +67,16 @@ interface CodexSessionEvent {
   };
 }
 
+interface CodexAppServerResponse {
+  id?: number | string;
+  result?: unknown;
+  error?: { message?: string } | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 export class CodexProvider implements Provider {
   readonly id = 'codex';
   readonly name = 'Codex';
@@ -397,23 +407,23 @@ export class CodexProvider implements Provider {
 
       rl.on('line', (line: string) => {
         try {
-          const msg = JSON.parse(line) as any;
+          const msg = JSON.parse(line) as CodexAppServerResponse;
 
-          if (msg?.id === 0 && msg?.result) {
+          if (msg?.id === 0 && msg.result) {
             send({ method: 'initialized', params: {} });
             send({ method: 'account/read', id: 1, params: { refreshToken: false } });
             send({ method: 'account/rateLimits/read', id: 2, params: {} });
             return;
           }
 
-          if (msg?.id === 1 && msg?.result) {
+          if (msg?.id === 1 && msg.result) {
             const accountResult = msg.result as CodexAppServerAccountReadResult;
             accountPlanType = accountResult.account?.planType ?? null;
             if (rateLimitsResult) tryResolve();
             return;
           }
 
-          if (msg?.id === 2 && msg?.result && (msg.result.rateLimits || msg.result.rateLimitsByLimitId)) {
+          if (msg?.id === 2 && isRecord(msg.result) && (msg.result.rateLimits || msg.result.rateLimitsByLimitId)) {
             rateLimitsResult = msg.result as CodexAppServerRateLimitsReadResult;
             if (accountPlanType !== undefined) {
               tryResolve();
@@ -484,12 +494,13 @@ export class CodexProvider implements Provider {
     }
 
     let codexCredits: import('./types').CodexQuotaExtra['extraUsage'] | undefined;
-    if (limits.credits?.has_credits || parseFloat(limits.credits?.balance || '0') > 0) {
-      const balance = parseFloat(limits.credits!.balance);
+    const credits = limits.credits;
+    if (credits && (credits.has_credits || parseFloat(credits.balance || '0') > 0)) {
+      const balance = parseFloat(credits.balance);
       codexCredits = {
         enabled: true,
-        remaining: limits.credits!.unlimited ? 100 : Math.min(100, Math.round(balance)),
-        limit: limits.credits!.unlimited ? -1 : 0,
+        remaining: credits.unlimited ? 100 : Math.min(100, Math.round(balance)),
+        limit: credits.unlimited ? -1 : 0,
         used: 0,
       };
     }
