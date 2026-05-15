@@ -5,10 +5,6 @@ import { pathToFileURL } from 'node:url';
 import {
   APP_HIDDEN_CLASS,
   APP_NAME,
-  LEGACY_TERMINAL_HELPER_NAME,
-  LEGACY_WAYBAR_NAMESPACE,
-  QBAR_LEGACY_TERMINAL_HELPER_NAME,
-  QBAR_LEGACY_WAYBAR_NAMESPACE,
   TERMINAL_HELPER_NAME,
   WAYBAR_MODULE_PREFIX,
   WAYBAR_NAMESPACE,
@@ -171,43 +167,6 @@ export function getDefaultWaybarAssetPaths() {
     terminalScript: join(waybarRoot, 'scripts', TERMINAL_HELPER_NAME),
     appBin: `$HOME/.local/bin/${APP_NAME}`,
   };
-}
-
-export function getLegacyWaybarAssetPaths(waybarRoot = join(HOME, '.config', 'waybar')) {
-  return {
-    waybarDir: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE),
-    scriptsDir: join(waybarRoot, 'scripts'),
-    iconsDir: join(waybarRoot, LEGACY_WAYBAR_NAMESPACE, 'icons'),
-    terminalScript: join(waybarRoot, 'scripts', LEGACY_TERMINAL_HELPER_NAME),
-    appBin: `$HOME/.local/bin/${LEGACY_WAYBAR_NAMESPACE}`,
-  };
-}
-
-export function getQbarLegacyWaybarAssetPaths(waybarRoot = join(HOME, '.config', 'waybar')) {
-  return {
-    waybarDir: join(waybarRoot, QBAR_LEGACY_WAYBAR_NAMESPACE),
-    scriptsDir: join(waybarRoot, 'scripts'),
-    iconsDir: join(waybarRoot, QBAR_LEGACY_WAYBAR_NAMESPACE, 'icons'),
-    terminalScript: join(waybarRoot, 'scripts', QBAR_LEGACY_TERMINAL_HELPER_NAME),
-    appBin: `$HOME/.local/bin/${QBAR_LEGACY_WAYBAR_NAMESPACE}`,
-  };
-}
-
-export function cleanupLegacyWaybarAssets(waybarRoot: string): string[] {
-  const legacy = getLegacyWaybarAssetPaths(waybarRoot);
-  const qbarLegacy = getQbarLegacyWaybarAssetPaths(waybarRoot);
-  const removed: string[] = [];
-
-  for (const path of [legacy.waybarDir, legacy.terminalScript, qbarLegacy.waybarDir, qbarLegacy.terminalScript]) {
-    if (!existsSync(path)) {
-      continue;
-    }
-
-    rmSync(path, { recursive: true, force: true });
-    removed.push(path);
-  }
-
-  return removed;
 }
 
 export function normalizeProviderSelection(
