@@ -2,14 +2,8 @@ import * as p from '@clack/prompts';
 import { applyCodexModelFilter, codexModelsFromQuota } from '../formatters/codex-helpers';
 import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
 import { getAllQuotas } from '../providers';
-import type {
-  ClaudeQuotaExtra,
-  CodexQuotaExtra,
-  CopilotQuotaExtra,
-  CopilotQuotaSnapshot,
-  ProviderQuota,
-  QuotaWindow,
-} from '../providers/types';
+import { getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import type { CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX as B } from '../theme';
 import { colorize, getQuotaColor, oneDark, semantic } from './colors';
@@ -74,7 +68,7 @@ function buildClaude(p: ProviderQuota): string[] {
       }
     }
 
-    const _claudeExtra = p.provider === 'claude' ? (p.extra as ClaudeQuotaExtra | undefined) : undefined;
+    const _claudeExtra = getClaudeExtra(p);
     const weeklyModels = _claudeExtra?.weeklyModels;
     if (weeklyModels && Object.keys(weeklyModels).length > 0) {
       lines.push(v(vc));
@@ -151,7 +145,7 @@ function buildCodex(p: ProviderQuota): string[] {
       }
     }
 
-    const _codexExtra = p.provider === 'codex' ? (p.extra as CodexQuotaExtra | undefined) : undefined;
+    const _codexExtra = getCodexExtra(p);
     if (_codexExtra?.extraUsage?.enabled) {
       const codexExtraUsage = _codexExtra.extraUsage;
       lines.push(v(vc));
@@ -248,7 +242,7 @@ function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
 function buildCopilot(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = oneDark.brightBlue;
-  const extra = p.provider === 'copilot' ? (p.extra as CopilotQuotaExtra | undefined) : undefined;
+  const extra = getCopilotExtra(p);
   const snapshots = extra?.quotaSnapshots ?? {};
 
   lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Copilot', vc, true)} ${colorize(B.h.repeat(49), vc)}`);

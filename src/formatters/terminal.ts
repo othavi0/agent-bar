@@ -1,13 +1,5 @@
-import type {
-  AllQuotas,
-  AmpQuotaExtra,
-  ClaudeQuotaExtra,
-  CodexQuotaExtra,
-  CopilotQuotaExtra,
-  CopilotQuotaSnapshot,
-  ProviderQuota,
-  QuotaWindow,
-} from '../providers/types';
+import { getAmpExtra, getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { loadSettingsSync, type WindowPolicy } from '../settings';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
 import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
@@ -130,7 +122,7 @@ function buildClaude(p: ProviderQuota, mode: DisplayMode): string[] {
       lines.push(modelLine('All Models', p.secondary, maxLen, vc, mode));
     }
 
-    const _claudeExtra = p.provider === 'claude' ? (p.extra as ClaudeQuotaExtra | undefined) : undefined;
+    const _claudeExtra = getClaudeExtra(p);
     if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
       const { remaining, used, limit } = _claudeExtra.extraUsage;
       const disp = toDisplay(remaining, mode);
@@ -195,7 +187,7 @@ function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
       }
     }
 
-    const _codexExtra = p.provider === 'codex' ? (p.extra as CodexQuotaExtra | undefined) : undefined;
+    const _codexExtra = getCodexExtra(p);
     if (_codexExtra?.extraUsage?.enabled) {
       const codexExtraUsage = _codexExtra.extraUsage;
       const disp = toDisplay(codexExtraUsage.remaining, mode);
@@ -219,8 +211,7 @@ function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
 function buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
   const lines: string[] = [];
   const vc = PROVIDER_ANSI.amp;
-  const _ampMeta: Record<string, string> | undefined =
-    p.provider === 'amp' ? (p.extra as AmpQuotaExtra | undefined)?.meta : undefined;
+  const _ampMeta: Record<string, string> | undefined = getAmpExtra(p)?.meta;
   const m: Record<string, string> = _ampMeta !== undefined ? _ampMeta : {};
 
   lines.push(
@@ -362,7 +353,7 @@ function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
 function buildCopilot(p: ProviderQuota, mode: DisplayMode): string[] {
   const lines: string[] = [];
   const vc = PROVIDER_ANSI.copilot;
-  const extra = p.provider === 'copilot' ? (p.extra as CopilotQuotaExtra | undefined) : undefined;
+  const extra = getCopilotExtra(p);
   const snapshots = extra?.quotaSnapshots ?? {};
 
   lines.push(

@@ -1,15 +1,7 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getStatusForPercent } from '../config';
-import type {
-  AllQuotas,
-  AmpQuotaExtra,
-  ClaudeQuotaExtra,
-  CodexQuotaExtra,
-  CopilotQuotaExtra,
-  CopilotQuotaSnapshot,
-  ProviderQuota,
-  QuotaWindow,
-} from '../providers/types';
+import { getAmpExtra, getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { type DisplayMode, loadSettingsSync, type WindowPolicy } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
 import { applyCodexModelFilter, codexModelsFromQuota } from './codex-helpers';
@@ -211,7 +203,7 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mod
       lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${etaS}`);
     }
 
-    const _claudeExtra = p.provider === 'claude' ? (p.extra as ClaudeQuotaExtra | undefined) : undefined;
+    const _claudeExtra = getClaudeExtra(p);
     if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
       const { remaining, used, limit } = _claudeExtra.extraUsage;
       const disp = toDisplay(remaining, mode);
@@ -275,7 +267,7 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
       }
     }
 
-    const _codexExtra = p.provider === 'codex' ? (p.extra as CodexQuotaExtra | undefined) : undefined;
+    const _codexExtra = getCodexExtra(p);
     if (_codexExtra?.extraUsage?.enabled) {
       const codexExtraUsage = _codexExtra.extraUsage;
       const rem = codexExtraUsage.remaining;
@@ -303,8 +295,7 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: 
   const lines: string[] = [];
   const vc = PROVIDER_HEX.amp;
   const v = s(vc, BOX.v);
-  const _ampMeta: Record<string, string> | undefined =
-    p.provider === 'amp' ? (p.extra as AmpQuotaExtra | undefined)?.meta : undefined;
+  const _ampMeta: Record<string, string> | undefined = getAmpExtra(p)?.meta;
   const m: Record<string, string> = _ampMeta !== undefined ? _ampMeta : {};
 
   // Account goes in header for better hierarchy
@@ -401,10 +392,7 @@ function copilotDisplayValue(
 }
 
 function copilotPrimaryDisplayValue(p: ProviderQuota, mode: DisplayMode): number | null {
-  const snapshot =
-    p.provider === 'copilot'
-      ? (p.extra as CopilotQuotaExtra | undefined)?.quotaSnapshots?.premium_interactions
-      : undefined;
+  const snapshot = getCopilotExtra(p)?.quotaSnapshots?.premium_interactions;
   return copilotDisplayValue(snapshot, p.primary?.remaining ?? null, mode);
 }
 
@@ -435,7 +423,7 @@ function buildCopilotTooltip(p: ProviderQuota, fetchedAt: string | undefined, mo
   const lines: string[] = [];
   const vc = PROVIDER_HEX.copilot;
   const v = s(vc, BOX.v);
-  const extra = p.provider === 'copilot' ? (p.extra as CopilotQuotaExtra | undefined) : undefined;
+  const extra = getCopilotExtra(p);
   const snapshots = extra?.quotaSnapshots ?? {};
   const account = p.account ? escapeXml(p.account) : undefined;
 
