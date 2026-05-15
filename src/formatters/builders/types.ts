@@ -30,4 +30,17 @@ export interface BuildOptions {
    * Waybar embeds the plan into headerTitle instead and leaves this unset.
    */
   planLabel?: string;
+  /**
+   * Controls how Amp renders the Free Tier section.
+   *
+   * - 'sublines'  — Terminal: bar + tree-connector sub-lines (├─/└─) for
+   *                 dollar info and ETA. No inline ETA on the bar line.
+   * - 'inline'    — Waybar: bar + inline ETA on the bar line + a dot (○) line
+   *                 for dollar info. No tree connectors.
+   * - 'generic'   — TUI: simplified generic model loop (no Free Tier special
+   *                 handling; iterates all models with name+bar+pct).
+   *
+   * When undefined, defaults to 'inline'.
+   */
+  ampFreeTierLayout?: 'sublines' | 'inline' | 'generic';
 }

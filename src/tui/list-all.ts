@@ -1,4 +1,5 @@
 import * as p from '@clack/prompts';
+import { buildAmp as buildAmpLines } from '../formatters/builders/amp';
 import { buildClaude } from '../formatters/builders/claude';
 import { buildCodex as buildCodexLines } from '../formatters/builders/codex';
 import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
@@ -80,7 +81,21 @@ function buildCodexTui(provider: ProviderQuota): string[] {
   return rendered.split('\n');
 }
 
-function buildAmp(p: ProviderQuota): string[] {
+function buildAmpTui(provider: ProviderQuota): string[] {
+  const rendered = renderColorize(
+    buildAmpLines(provider, {
+      mode: 'remaining',
+      headerTitle: 'Amp',
+      headerWidth: 56,
+      labelColor: 'blue',
+      ampFreeTierLayout: 'generic',
+      footer: undefined,
+    }),
+  );
+  return rendered.split('\n');
+}
+
+function _buildAmp(p: ProviderQuota): string[] {
   const lines: string[] = [];
   const vc = oneDark.magenta;
 
@@ -232,7 +247,7 @@ export async function showListAll(): Promise<void> {
         sections.push(buildCopilot(provider));
         break;
       case 'amp':
-        sections.push(buildAmp(provider));
+        sections.push(buildAmpTui(provider));
         break;
     }
   }

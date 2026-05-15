@@ -4,15 +4,8 @@ import { BOX } from '../../theme';
 import { barSegments, colorForDisplay, indicatorSegments, type Line } from '../segments';
 import { formatPercent, toDisplay } from '../shared';
 import type { CodexViewModel } from '../view-model';
-import { buildFooterLine, labelLine, modelLine, raw } from './shared';
+import { buildFooterLine, labelLine, modelLine, raw, vLine } from './shared';
 import type { BuildOptions } from './types';
-
-// ---------------------------------------------------------------------------
-// Segment helpers — Codex provider color is 'green'
-// ---------------------------------------------------------------------------
-
-/** Vertical bar line (Codex green border). */
-const vLine = (): Line => [{ text: BOX.v, color: 'green' }];
 
 // ---------------------------------------------------------------------------
 // Main builder
@@ -46,7 +39,7 @@ export function buildCodex(p: ProviderQuota, viewModel: CodexViewModel, options:
     raw(' '),
     { text: BOX.h.repeat(headerFill), color: 'green' },
   ]);
-  lines.push(vLine());
+  lines.push(vLine('green'));
 
   if (p.error) {
     lines.push([{ text: BOX.v, color: 'green' }, raw('  '), { text: `⚠️ ${p.error}`, color: 'red' }]);
@@ -60,14 +53,14 @@ export function buildCodex(p: ProviderQuota, viewModel: CodexViewModel, options:
     }
 
     if (models.length === 0) {
-      lines.push(vLine());
+      lines.push(vLine('green'));
       lines.push(labelLine('Available Models', labelColor, 'green'));
       lines.push([{ text: BOX.v, color: 'green' }, raw('  '), { text: 'No models selected', color: 'comment' }]);
     } else {
       const modelLen = Math.max(...models.map((m) => m.name.length), maxLen);
 
       if (policy !== 'seven_day') {
-        lines.push(vLine());
+        lines.push(vLine('green'));
         lines.push(labelLine('5-hour limit', labelColor, 'green'));
         for (const model of models) {
           lines.push(modelLine(model.name, model.windows.fiveHour, modelLen, mode, 'green', 'N/A'));
@@ -75,7 +68,7 @@ export function buildCodex(p: ProviderQuota, viewModel: CodexViewModel, options:
       }
 
       if (policy !== 'five_hour') {
-        lines.push(vLine());
+        lines.push(vLine('green'));
         lines.push(labelLine('7-day limit', labelColor, 'green'));
         for (const model of models) {
           lines.push(modelLine(model.name, model.windows.sevenDay, modelLen, mode, 'green', 'N/A'));
@@ -87,7 +80,7 @@ export function buildCodex(p: ProviderQuota, viewModel: CodexViewModel, options:
     if (codexExtra?.extraUsage?.enabled) {
       const { remaining, limit } = codexExtra.extraUsage;
       const disp = toDisplay(remaining, mode);
-      lines.push(vLine());
+      lines.push(vLine('green'));
       lines.push(labelLine('Credits', labelColor, 'green'));
       const limitText = limit === -1 ? 'Unlimited' : 'Balance';
       lines.push([
@@ -106,7 +99,7 @@ export function buildCodex(p: ProviderQuota, viewModel: CodexViewModel, options:
     }
   }
 
-  lines.push(vLine());
+  lines.push(vLine('green'));
   lines.push(buildFooterLine(footer, 'green'));
 
   return lines;

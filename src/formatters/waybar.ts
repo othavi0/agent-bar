@@ -4,6 +4,7 @@ import { getAmpExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { type DisplayMode, loadSettingsSync } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
+import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
 import { renderPango as renderPangoLines } from './render-pango';
@@ -197,9 +198,28 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
 }
 
 /**
- * Build Amp tooltip
+ * Build Amp tooltip (pipeline version)
  */
-function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
+function buildAmpTooltipNew(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
+  const subtitle = p.account ? escapeXml(p.account) : undefined;
+  const headerTitle = subtitle ? `Amp · ${subtitle}` : 'Amp';
+
+  return renderPangoLines(
+    buildAmpLines(p, {
+      mode,
+      headerTitle,
+      headerWidth: TOOLTIP_BORDER - 4,
+      labelColor: 'magenta',
+      ampFreeTierLayout: 'inline',
+      footer: { fetchedAt },
+    }),
+  );
+}
+
+/**
+ * Build Amp tooltip (old — kept until Task 8 removes it)
+ */
+function _buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const lines: string[] = [];
   const vc = PROVIDER_HEX.amp;
   const v = s(vc, BOX.v);
@@ -394,7 +414,7 @@ const TOOLTIP_BUILDERS: Record<string, TooltipBuilder> = {
   claude: buildClaudeTooltip,
   codex: buildCodexTooltip,
   copilot: buildCopilotTooltip,
-  amp: buildAmpTooltip,
+  amp: buildAmpTooltipNew,
 };
 
 function buildGenericTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {

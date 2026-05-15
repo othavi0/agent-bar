@@ -4,6 +4,18 @@ import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type 
 import { formatEta, formatPercent, formatResetTime, toDisplay } from '../shared';
 import type { BuildOptions } from './types';
 
+// ---------------------------------------------------------------------------
+// Vertical bar line
+// ---------------------------------------------------------------------------
+
+/**
+ * A single empty row with the provider's border character.
+ * `color` is the provider accent color (e.g. 'orange', 'green', 'magenta').
+ */
+export function vLine(color: ColorToken): Line {
+  return [{ text: BOX.v, color }];
+}
+
 export const TOOLTIP_BORDER = 56;
 
 // ---------------------------------------------------------------------------

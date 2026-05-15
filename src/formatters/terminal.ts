@@ -1,6 +1,7 @@
 import { getAmpExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
+import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
 import { renderAnsi as renderAnsiLines } from './render-ansi';
@@ -121,7 +122,21 @@ function buildCodexTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
   return rendered.split('\n');
 }
 
-function buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
+function buildAmpTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
+  const rendered = renderAnsiLines(
+    buildAmpLines(p, {
+      mode,
+      headerTitle: 'Amp',
+      headerWidth: 56,
+      labelColor: 'magenta',
+      ampFreeTierLayout: 'sublines',
+      footer: undefined,
+    }),
+  );
+  return rendered.split('\n');
+}
+
+function _buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
   const lines: string[] = [];
   const vc = PROVIDER_ANSI.amp;
   const _ampMeta: Record<string, string> | undefined = getAmpExtra(p)?.meta;
@@ -335,7 +350,7 @@ const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
   claude: buildClaudeTerminal,
   codex: buildCodexTerminal,
   copilot: buildCopilot,
-  amp: buildAmp,
+  amp: buildAmpTerminal,
 };
 
 function buildGenericTerminal(p: ProviderQuota, mode: DisplayMode): string[] {

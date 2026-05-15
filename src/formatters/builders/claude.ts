@@ -3,15 +3,12 @@ import type { ProviderQuota } from '../../providers/types';
 import { BOX } from '../../theme';
 import { barSegments, colorForDisplay, indicatorSegments, type Line } from '../segments';
 import { formatPercent, toDisplay } from '../shared';
-import { buildFooterLine, labelLine, modelLine, raw } from './shared';
+import { buildFooterLine, labelLine, modelLine, raw, vLine } from './shared';
 import type { BuildOptions } from './types';
 
 // ---------------------------------------------------------------------------
 // Segment helpers — Claude provider color is 'orange'
 // ---------------------------------------------------------------------------
-
-/** Vertical bar line (empty row with provider border). */
-const vLine = (): Line => [{ text: BOX.v, color: 'orange' }];
 
 /** Extra Usage row. */
 function extraUsageLine(
@@ -59,7 +56,7 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
     raw(' '),
     { text: BOX.h.repeat(headerFill), color: 'orange' },
   ]);
-  lines.push(vLine());
+  lines.push(vLine('orange'));
 
   if (p.error) {
     lines.push([{ text: BOX.v, color: 'orange' }, raw('  '), { text: `⚠️ ${p.error}`, color: 'red' }]);
@@ -75,7 +72,7 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
     const claudeExtra = getClaudeExtra(p);
     const weeklyModels = claudeExtra?.weeklyModels;
     if (weeklyModels && Object.keys(weeklyModels).length > 0) {
-      lines.push(vLine());
+      lines.push(vLine('orange'));
       lines.push(labelLine('Weekly per model', labelColor, 'orange'));
       const entries = Object.entries(weeklyModels);
       const wMaxLen = Math.max(...entries.map(([name]) => name.length), maxLen);
@@ -86,7 +83,7 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
 
     // Generic weekly (shared)
     if (p.secondary) {
-      lines.push(vLine());
+      lines.push(vLine('orange'));
       lines.push(labelLine('Weekly limit (shared)', labelColor, 'orange'));
       lines.push(modelLine('All Models', p.secondary, maxLen, mode, 'orange'));
     }
@@ -94,7 +91,7 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
     if (claudeExtra?.extraUsage?.enabled && claudeExtra.extraUsage.limit > 0) {
       const { remaining, used, limit } = claudeExtra.extraUsage;
       const disp = toDisplay(remaining, mode);
-      lines.push(vLine());
+      lines.push(vLine('orange'));
       lines.push(labelLine('Extra Usage', labelColor, 'orange'));
       lines.push(
         extraUsageLine('Budget', maxLen, disp, mode, `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`),
@@ -102,7 +99,7 @@ export function buildClaude(p: ProviderQuota, options: BuildOptions): Line[] {
     }
   }
 
-  lines.push(vLine());
+  lines.push(vLine('orange'));
   lines.push(buildFooterLine(footer, 'orange'));
 
   return lines;
