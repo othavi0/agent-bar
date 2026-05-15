@@ -1,12 +1,12 @@
 import { AMP_MISSING_ERROR, findAmpBin } from '../amp-cli';
 import { APP_NAME } from '../app-identity';
-import { cache } from '../cache';
-import { CONFIG } from '../config';
 import { logger } from '../logger';
+import type { QuotaBase } from './base';
+import { BaseProvider } from './base';
 import { registerProvider } from './registry';
-import type { AmpQuota, Provider, QuotaWindow } from './types';
+import type { AmpQuota, ProviderQuota, QuotaWindow } from './types';
 
-export class AmpProvider implements Provider {
+export class AmpProvider extends BaseProvider {
   readonly id = 'amp';
   readonly name = 'Amp';
   readonly cacheKey = 'amp-quota';
@@ -15,28 +15,26 @@ export class AmpProvider implements Provider {
     return findAmpBin() !== null;
   }
 
-  async getQuota(): Promise<AmpQuota> {
+  protected unavailableError(): string {
+    return AMP_MISSING_ERROR;
+  }
+
+  protected toUserFacingError(_error: unknown): string {
+    return 'Failed to fetch Amp usage';
+  }
+
+  protected async fetchRaw(): Promise<unknown> {
+    const bin = findAmpBin()!;
     const base: AmpQuota = {
-      provider: 'amp',
+      provider: this.id,
       displayName: this.name,
       available: false,
     };
+    return this.fetchUsage(base, bin);
+  }
 
-    const bin = findAmpBin();
-    if (!bin) {
-      return { ...base, error: AMP_MISSING_ERROR };
-    }
-
-    try {
-      return await cache.getOrFetch<AmpQuota>(
-        'amp-quota',
-        async () => await this.fetchUsage(base, bin),
-        CONFIG.cache.ttlMs,
-      );
-    } catch (error) {
-      logger.error('Amp quota fetch error', { error });
-      return { ...base, error: 'Failed to fetch Amp usage' };
-    }
+  protected buildQuota(raw: unknown, base: QuotaBase): ProviderQuota {
+    return { ...base, ...(raw as AmpQuota) } as ProviderQuota;
   }
 
   private async fetchUsage(base: AmpQuota, bin: string): Promise<AmpQuota> {
