@@ -20,6 +20,12 @@ export interface Segment {
   text: string;
   color: ColorToken;
   bold?: boolean;
+  /**
+   * When true, renderers emit the text verbatim (no color, no span wrapper).
+   * Used for literal connector text (spaces, separators) between styled segments.
+   * `color` is still required by the type but ignored at render time.
+   */
+  raw?: boolean;
 }
 
 const STATUS_TO_COLOR: Record<HealthStatus, ColorToken> = {

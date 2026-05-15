@@ -1,11 +1,13 @@
 import * as p from '@clack/prompts';
+import { buildClaude } from '../formatters/builders/claude';
 import { formatEta, formatPercent, formatResetTime, normalizePlanLabel } from '../formatters/shared';
 import { resolveCodexViewModel } from '../formatters/view-model';
 import { getAllQuotas } from '../providers';
-import { getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import { getCodexExtra, getCopilotExtra } from '../providers/extras';
 import type { CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { BOX as B } from '../theme';
 import { colorize, getQuotaColor, oneDark, semantic } from './colors';
+import { renderColorize } from './render-colorize';
 
 function bar(pct: number | null): string {
   if (pct === null) return colorize('░'.repeat(20), semantic.muted);
@@ -26,8 +28,8 @@ const v = (color: string) => colorize(B.v, color);
 const label = (text: string, providerColor: string) =>
   `${colorize(B.lt + B.h, providerColor)} ${colorize(`${B.diamond} ${text}`, oneDark.blue, true)}`;
 
-// Model line
-function modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
+// Model line (kept for reference; no longer called after Claude migration — Task 8 removes it)
+function _modelLine(name: string, window: QuotaWindow | undefined, maxLen: number, vColor: string): string {
   const rem = window?.remaining ?? null;
   const reset = window?.resetsAt ?? null;
   const nameS = colorize(name.padEnd(maxLen), oneDark.textBright);
@@ -48,57 +50,17 @@ function codexModelLine(name: string, window: QuotaWindow | undefined, maxLen: n
   return `${v(vColor)}  ${indicator(rem)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-function buildClaude(p: ProviderQuota): string[] {
-  const lines: string[] = [];
-  const vc = oneDark.orange;
-
-  lines.push(`${colorize(B.tl + B.h, vc)} ${colorize('Claude', vc, true)} ${colorize(B.h.repeat(50), vc)}`);
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${colorize(`⚠️ ${p.error}`, oneDark.red)}`);
-  } else {
-    const maxLen = 20;
-
-    if (p.primary) {
-      lines.push(label('5-hour limit', vc));
-      for (const m of ['Opus', 'Sonnet', 'Haiku']) {
-        lines.push(modelLine(m, p.primary, maxLen, vc));
-      }
-    }
-
-    const _claudeExtra = getClaudeExtra(p);
-    const weeklyModels = _claudeExtra?.weeklyModels;
-    if (weeklyModels && Object.keys(weeklyModels).length > 0) {
-      lines.push(v(vc));
-      lines.push(label('Weekly limit', vc));
-      const entries = Object.entries(weeklyModels);
-      const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
-      for (const [name, window] of entries) {
-        lines.push(modelLine(name, window, maxLenWeekly, vc));
-      }
-    } else if (p.secondary) {
-      lines.push(v(vc));
-      lines.push(label('Weekly limit', vc));
-      lines.push(modelLine('All Models', p.secondary, maxLen, vc));
-    }
-
-    if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
-      const { remaining, used, limit } = _claudeExtra.extraUsage;
-      lines.push(v(vc));
-      lines.push(label('Extra Usage', vc));
-      const nameS = colorize('Budget'.padEnd(maxLen), oneDark.textBright);
-      const barS = bar(remaining);
-      const pctS = colorize(formatPercent(remaining).padStart(4), getQuotaColor(remaining));
-      const usedS = colorize(`$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`, oneDark.cyan);
-      lines.push(`${v(vc)}  ${indicator(remaining)} ${nameS} ${barS} ${pctS} ${usedS}`);
-    }
-  }
-
-  lines.push(v(vc));
-  lines.push(colorize(B.bl + B.h.repeat(55), vc));
-
-  return lines;
+function buildClaudeTui(provider: ProviderQuota): string[] {
+  const rendered = renderColorize(
+    buildClaude(provider, {
+      mode: 'remaining',
+      headerTitle: 'Claude',
+      headerWidth: 56,
+      labelColor: 'blue',
+      footer: undefined,
+    }),
+  );
+  return rendered.split('\n');
 }
 
 function buildCodex(p: ProviderQuota): string[] {
@@ -306,7 +268,7 @@ export async function showListAll(): Promise<void> {
 
     switch (provider.provider) {
       case 'claude':
-        sections.push(buildClaude(provider));
+        sections.push(buildClaudeTui(provider));
         break;
       case 'codex':
         sections.push(buildCodex(provider));

@@ -1,9 +1,11 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getStatusForPercent } from '../config';
-import { getAmpExtra, getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import { getAmpExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { type DisplayMode, loadSettingsSync } from '../settings';
 import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
+import { buildClaude } from './builders/claude';
+import { renderPango as renderPangoLines } from './render-pango';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay } from './shared';
 import { type CodexViewModel, resolveCodexViewModelFrom } from './view-model';
@@ -158,86 +160,19 @@ function buildFooter(color: string, fetchedAt?: string): string {
  * Build Claude tooltip
  */
 function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const lines: string[] = [];
-  const vc = PROVIDER_HEX.claude;
-  const v = s(vc, BOX.v);
   const planLabel = normalizePlanLabel(p);
+  const subtitle = planLabel !== 'Unknown' ? planLabel : undefined;
+  const headerTitle = subtitle ? `Claude · ${subtitle}` : 'Claude';
 
-  lines.push(buildHeader('Claude', planLabel !== 'Unknown' ? planLabel : undefined, vc));
-  lines.push(v);
-
-  if (p.error) {
-    lines.push(`${v}  ${s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`)}`);
-  } else {
-    const maxLen = 20;
-
-    if (p.primary) {
-      lines.push(label('5-hour limit (shared)', vc));
-      const rem = p.primary.remaining;
-      const disp = toDisplay(rem, mode);
-      const name = s(ONE_DARK.textBright, 'All Models'.padEnd(maxLen));
-      const b = bar(disp, mode);
-      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-      const etaS = s(
-        ONE_DARK.cyan,
-        `→ ${formatEta(p.primary.resetsAt, rem)} ${formatResetTime(p.primary.resetsAt, rem)}`,
-      );
-      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${etaS}`);
-    }
-
-    // Per-model weekly quotas (when API provides them)
-    const weeklyModels = p.provider === 'claude' ? p.extra?.weeklyModels : undefined;
-    if (weeklyModels && Object.keys(weeklyModels).length > 0) {
-      lines.push(v);
-      lines.push(label('Weekly per model', vc));
-      const entries = Object.entries(weeklyModels);
-      const wMaxLen = Math.max(...entries.map(([name]) => name.length), 20);
-
-      for (const [name, window] of entries) {
-        const rem = window.remaining;
-        const disp = toDisplay(rem, mode);
-        const nameS = s(ONE_DARK.textBright, name.padEnd(wMaxLen));
-        const b = bar(disp, mode);
-        const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-        const etaS = s(ONE_DARK.cyan, `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`);
-        lines.push(`${v}  ${indicator(disp, mode)} ${nameS} ${b} ${pctS} ${etaS}`);
-      }
-    }
-
-    // Generic weekly (shared)
-    if (p.secondary) {
-      lines.push(v);
-      lines.push(label('Weekly limit (shared)', vc));
-      const rem = p.secondary.remaining;
-      const disp = toDisplay(rem, mode);
-      const name = s(ONE_DARK.textBright, 'All Models'.padEnd(20));
-      const b = bar(disp, mode);
-      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-      const etaS = s(
-        ONE_DARK.cyan,
-        `→ ${formatEta(p.secondary.resetsAt, rem)} ${formatResetTime(p.secondary.resetsAt, rem)}`,
-      );
-      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${etaS}`);
-    }
-
-    const _claudeExtra = getClaudeExtra(p);
-    if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
-      const { remaining, used, limit } = _claudeExtra.extraUsage;
-      const disp = toDisplay(remaining, mode);
-      lines.push(v);
-      lines.push(label('Extra Usage', vc));
-      const name = s(ONE_DARK.textBright, 'Budget'.padEnd(20));
-      const b = bar(disp, mode);
-      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-      const usedS = s(ONE_DARK.cyan, `$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}`);
-      lines.push(`${v}  ${indicator(disp, mode)} ${name} ${b} ${pctS} ${usedS}`);
-    }
-  }
-
-  lines.push(v);
-  lines.push(buildFooter(vc, fetchedAt));
-
-  return lines.join('\n');
+  return renderPangoLines(
+    buildClaude(p, {
+      mode,
+      headerTitle,
+      headerWidth: TOOLTIP_BORDER - 4,
+      labelColor: 'orange',
+      footer: { fetchedAt },
+    }),
+  );
 }
 
 /**

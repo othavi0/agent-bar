@@ -1,6 +1,8 @@
-import { getAmpExtra, getClaudeExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
+import { getAmpExtra, getCodexExtra, getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
 import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
+import { buildClaude } from './builders/claude';
+import { renderAnsi as renderAnsiLines } from './render-ansi';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import {
   type DisplayMode,
@@ -53,8 +55,8 @@ const v = (color: string) => `${color}${BOX.v}${ANSI.reset}`;
 const label = (text: string, color: string) =>
   `${color}${BOX.lt}${BOX.h}${ANSI.reset} ${ANSI.magenta}${ANSI.bold}${BOX.diamond} ${text}${ANSI.reset}`;
 
-// Model line
-function modelLine(
+// Model line (kept for reference; no longer called after Claude migration — Task 8 removes it)
+function _modelLine(
   name: string,
   window: QuotaWindow | undefined,
   maxLen: number,
@@ -89,62 +91,17 @@ function codexModelLine(
   return `${v(vColor)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${etaS}`;
 }
 
-function buildClaude(p: ProviderQuota, mode: DisplayMode): string[] {
-  const lines: string[] = [];
-  const vc = PROVIDER_ANSI.claude;
-
-  lines.push(
-    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Claude${ANSI.reset} ${vc}${BOX.h.repeat(50)}${ANSI.reset}`,
+function buildClaudeTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
+  const rendered = renderAnsiLines(
+    buildClaude(p, {
+      mode,
+      headerTitle: 'Claude',
+      headerWidth: 56,
+      labelColor: 'magenta',
+      footer: undefined,
+    }),
   );
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
-  } else {
-    const maxLen = 20;
-
-    if (p.primary) {
-      lines.push(label('5-hour limit (shared)', vc));
-      lines.push(modelLine('All Models', p.primary, maxLen, vc, mode));
-    }
-
-    // Per-model weekly quotas (when API provides them)
-    const weeklyModels = p.provider === 'claude' ? p.extra?.weeklyModels : undefined;
-    if (weeklyModels && Object.keys(weeklyModels).length > 0) {
-      lines.push(v(vc));
-      lines.push(label('Weekly per model', vc));
-      const entries = Object.entries(weeklyModels);
-      const maxLenWeekly = Math.max(...entries.map(([name]) => name.length), maxLen);
-      for (const [name, window] of entries) {
-        lines.push(modelLine(name, window, maxLenWeekly, vc, mode));
-      }
-    }
-
-    // Generic weekly (shared)
-    if (p.secondary) {
-      lines.push(v(vc));
-      lines.push(label('Weekly limit (shared)', vc));
-      lines.push(modelLine('All Models', p.secondary, maxLen, vc, mode));
-    }
-
-    const _claudeExtra = getClaudeExtra(p);
-    if (_claudeExtra?.extraUsage?.enabled && _claudeExtra.extraUsage.limit > 0) {
-      const { remaining, used, limit } = _claudeExtra.extraUsage;
-      const disp = toDisplay(remaining, mode);
-      lines.push(v(vc));
-      lines.push(label('Extra Usage', vc));
-      const nameS = `${ANSI.textBright}${'Budget'.padEnd(maxLen)}${ANSI.reset}`;
-      const barS = bar(disp, mode);
-      const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
-      const usedS = `${ANSI.cyan}$${(used / 100).toFixed(2)}/$${(limit / 100).toFixed(2)}${ANSI.reset}`;
-      lines.push(`${v(vc)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${usedS}`);
-    }
-  }
-
-  lines.push(v(vc));
-  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
-
-  return lines;
+  return rendered.split('\n');
 }
 
 function buildCodex(p: ProviderQuota, mode: DisplayMode): string[] {
@@ -420,7 +377,7 @@ function buildCopilot(p: ProviderQuota, mode: DisplayMode): string[] {
 type TerminalBuilder = (p: ProviderQuota, mode: DisplayMode) => string[];
 
 const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
-  claude: buildClaude,
+  claude: buildClaudeTerminal,
   codex: buildCodex,
   copilot: buildCopilot,
   amp: buildAmp,
