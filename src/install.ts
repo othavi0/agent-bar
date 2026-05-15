@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as p from '@clack/prompts';
-import { createSpinner } from './spinner';
 import { colorize, semantic } from './tui/colors';
 
 export async function hasCmd(cmd: string): Promise<boolean> {
@@ -56,20 +55,20 @@ export async function ensureBunGlobalPackage(pkg: string, label?: string, binNam
   const ok = await ensureBun();
   if (!ok) return false;
 
-  const spinner = createSpinner(`Installing ${label ?? pkg}...`);
-  spinner.start();
+  const spinner = p.spinner();
+  spinner.start(`Installing ${label ?? pkg}...`);
 
   try {
     const code = await runInteractive('bun', ['add', '-g', pkg]);
     if (code === 0 && (await hasCmd(bin))) {
-      spinner.succeed(`${label ?? pkg} ready`);
+      spinner.stop(`${label ?? pkg} ready`);
       return true;
     }
 
-    spinner.fail(`Failed to install ${label ?? pkg}`);
+    spinner.error(`Failed to install ${label ?? pkg}`);
     return false;
   } catch {
-    spinner.fail(`Failed to install ${label ?? pkg}`);
+    spinner.error(`Failed to install ${label ?? pkg}`);
     return false;
   }
 }
