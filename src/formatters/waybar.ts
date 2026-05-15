@@ -78,6 +78,12 @@ const HEX_BY_TOKEN: Record<ColorToken, string> = {
   red: ONE_DARK.red,
   comment: ONE_DARK.comment,
   text: ONE_DARK.text,
+  textBright: ONE_DARK.textBright,
+  muted: ONE_DARK.muted,
+  magenta: ONE_DARK.magenta,
+  cyan: ONE_DARK.cyan,
+  blue: ONE_DARK.blue,
+  brightBlue: ONE_DARK.brightBlue,
 };
 
 function renderPango(segs: Segment[]): string {

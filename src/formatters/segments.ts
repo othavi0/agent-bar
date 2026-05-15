@@ -1,8 +1,20 @@
 import { getStatusForPercent, type HealthStatus } from '../config';
 import { type DisplayMode, toHealth } from './shared';
 
-/** Theme-neutral color token. Renderers map this to ANSI or hex. */
-export type ColorToken = 'green' | 'yellow' | 'orange' | 'red' | 'comment' | 'text';
+/** Theme-neutral color token. Renderers map this to ANSI or Pango hex. */
+export type ColorToken =
+  | 'green'
+  | 'yellow'
+  | 'orange'
+  | 'red'
+  | 'comment'
+  | 'text'
+  | 'textBright'
+  | 'muted'
+  | 'magenta'
+  | 'cyan'
+  | 'blue'
+  | 'brightBlue';
 
 export interface Segment {
   text: string;
@@ -38,3 +50,6 @@ export function indicatorSegments(display: number | null, mode: DisplayMode): Se
   if (display === null) return [{ text: '○', color: 'comment' }];
   return [{ text: '●', color: colorForDisplay(display, mode) }];
 }
+
+/** A single rendered line: an ordered list of colored text segments. */
+export type Line = Segment[];

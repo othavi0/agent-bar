@@ -20,6 +20,12 @@ const ANSI_BY_TOKEN: Record<ColorToken, string> = {
   red: ANSI.red,
   comment: ANSI.comment,
   text: ANSI.text,
+  textBright: ANSI.textBright,
+  muted: ANSI.muted,
+  magenta: ANSI.magenta,
+  cyan: ANSI.cyan,
+  blue: ANSI.blue,
+  brightBlue: ANSI.brightBlue,
 };
 
 function renderAnsi(segs: Segment[]): string {
