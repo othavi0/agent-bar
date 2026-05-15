@@ -112,7 +112,7 @@ function bucketLabel(bucket: string): string {
  *   Terminal → 'magenta', Waybar → 'brightBlue', TUI → 'blue'
  */
 export function buildCopilot(p: ProviderQuota, options: BuildOptions): Line[] {
-  const { mode, headerTitle, headerWidth, labelColor, footer } = options;
+  const { mode, headerTitle, headerWidth, labelColor, footer, accountInHeader } = options;
   const headerFill = Math.max(1, headerWidth - headerTitle.length);
   const lines: Line[] = [];
 
@@ -186,8 +186,8 @@ export function buildCopilot(p: ProviderQuota, options: BuildOptions): Line[] {
     }
   }
 
-  // Account line
-  if (p.account) {
+  // Account line — omitted when the surface already shows the account in the header
+  if (p.account && !accountInHeader) {
     lines.push(vLine('brightBlue'));
     lines.push([{ text: BOX.v, color: 'brightBlue' }, raw('  '), { text: `Account: ${p.account}`, color: 'comment' }]);
   }

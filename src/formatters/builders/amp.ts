@@ -55,7 +55,7 @@ function freeTierBarLine(disp: number | null, mode: BuildOptions['mode'], etaSeg
  *   Terminal → 'magenta', Waybar → 'magenta', TUI → 'blue'
  */
 export function buildAmp(p: ProviderQuota, options: BuildOptions): Line[] {
-  const { mode, headerTitle, headerWidth, labelColor, footer, ampFreeTierLayout = 'inline' } = options;
+  const { mode, headerTitle, headerWidth, labelColor, footer, ampFreeTierLayout = 'inline', accountInHeader } = options;
   const headerFill = Math.max(1, headerWidth - headerTitle.length);
   const lines: Line[] = [];
 
@@ -233,8 +233,8 @@ export function buildAmp(p: ProviderQuota, options: BuildOptions): Line[] {
     }
   }
 
-  // Account line (all layouts)
-  if (p.account) {
+  // Account line — omitted when the surface already shows the account in the header
+  if (p.account && !accountInHeader) {
     lines.push(vLine('magenta'));
     lines.push([{ text: BOX.v, color: 'magenta' }, raw('  '), { text: `Account: ${p.account}`, color: 'comment' }]);
   }

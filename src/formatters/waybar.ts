@@ -211,6 +211,7 @@ function buildCopilotTooltipNew(p: ProviderQuota, fetchedAt: string | undefined,
       headerWidth: TOOLTIP_BORDER - 4,
       labelColor: 'brightBlue',
       footer: { fetchedAt },
+      accountInHeader: true,
     }),
   );
 }
@@ -230,6 +231,7 @@ function buildAmpTooltipNew(p: ProviderQuota, fetchedAt: string | undefined, mod
       labelColor: 'magenta',
       ampFreeTierLayout: 'inline',
       footer: { fetchedAt },
+      accountInHeader: true,
     }),
   );
 }

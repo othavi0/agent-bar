@@ -43,4 +43,13 @@ export interface BuildOptions {
    * When undefined, defaults to 'inline'.
    */
   ampFreeTierLayout?: 'sublines' | 'inline' | 'generic';
+  /**
+   * When true, the surface already shows the account in the header, so the
+   * builder must NOT emit a bottom Account line (which would duplicate it).
+   *
+   * Set to true by the Waybar pipeline (headerTitle includes the account).
+   * Leave unset (undefined / falsy) for Terminal and TUI, which do not put
+   * the account in the header and therefore need the bottom Account line.
+   */
+  accountInHeader?: boolean;
 }
