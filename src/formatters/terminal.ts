@@ -4,6 +4,7 @@ import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
+import { buildCopilot as buildCopilotLines } from './builders/copilot';
 import { renderAnsi as renderAnsiLines } from './render-ansi';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import {
@@ -130,6 +131,19 @@ function buildAmpTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
       headerWidth: 56,
       labelColor: 'magenta',
       ampFreeTierLayout: 'sublines',
+      footer: undefined,
+    }),
+  );
+  return rendered.split('\n');
+}
+
+function buildCopilotTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
+  const rendered = renderAnsiLines(
+    buildCopilotLines(p, {
+      mode,
+      headerTitle: 'Copilot',
+      headerWidth: 56,
+      labelColor: 'magenta',
       footer: undefined,
     }),
   );
@@ -349,7 +363,7 @@ type TerminalBuilder = (p: ProviderQuota, mode: DisplayMode) => string[];
 const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
   claude: buildClaudeTerminal,
   codex: buildCodexTerminal,
-  copilot: buildCopilot,
+  copilot: buildCopilotTerminal,
   amp: buildAmpTerminal,
 };
 

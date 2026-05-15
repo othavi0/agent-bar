@@ -7,6 +7,7 @@ import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
+import { buildCopilot as buildCopilotLines } from './builders/copilot';
 import { renderPango as renderPangoLines } from './render-pango';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
 import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay } from './shared';
@@ -192,6 +193,23 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
       headerTitle,
       headerWidth: TOOLTIP_BORDER - 4,
       labelColor: 'green',
+      footer: { fetchedAt },
+    }),
+  );
+}
+
+/**
+ * Build Copilot tooltip (pipeline version)
+ */
+function buildCopilotTooltipNew(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
+  const headerTitle = p.account ? `Copilot · ${p.account}` : 'Copilot';
+
+  return renderPangoLines(
+    buildCopilotLines(p, {
+      mode,
+      headerTitle,
+      headerWidth: TOOLTIP_BORDER - 4,
+      labelColor: 'brightBlue',
       footer: { fetchedAt },
     }),
   );
@@ -413,7 +431,7 @@ type TooltipBuilder = (p: ProviderQuota, fetchedAt: string | undefined, mode: Di
 const TOOLTIP_BUILDERS: Record<string, TooltipBuilder> = {
   claude: buildClaudeTooltip,
   codex: buildCodexTooltip,
-  copilot: buildCopilotTooltip,
+  copilot: buildCopilotTooltipNew,
   amp: buildAmpTooltipNew,
 };
 
