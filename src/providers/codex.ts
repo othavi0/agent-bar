@@ -1,12 +1,13 @@
 import { join } from 'path';
 import pkg from '../../package.json';
 import { APP_NAME } from '../app-identity';
-import { cache } from '../cache';
 import { CONFIG } from '../config';
 import { classifyWindow, normalizePlan } from '../formatters/shared';
 import { logger } from '../logger';
+import type { QuotaBase } from './base';
+import { BaseProvider } from './base';
 import { registerProvider } from './registry';
-import type { CodexQuota, ModelWindows, Provider, QuotaWindow } from './types';
+import type { ModelWindows, ProviderQuota, QuotaWindow } from './types';
 
 interface CodexWindowRaw {
   used_percent: number;
@@ -77,7 +78,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export class CodexProvider implements Provider {
+export class CodexProvider extends BaseProvider {
   readonly id = 'codex';
   readonly name = 'Codex';
   readonly cacheKey = 'codex-quota';
@@ -451,38 +452,29 @@ export class CodexProvider implements Provider {
     });
   }
 
-  async getQuota(): Promise<CodexQuota> {
-    const base: CodexQuota = {
-      provider: 'codex',
-      displayName: this.name,
-      available: false,
-    };
+  protected unavailableError(): string {
+    return `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.`;
+  }
 
-    if (!(await this.isAvailable())) {
-      return { ...base, error: `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.` };
-    }
+  protected toUserFacingError(error: unknown): string {
+    return error instanceof Error ? error.message : 'Failed to fetch Codex usage';
+  }
 
-    let limits: CodexRateLimits;
-    try {
-      limits = await cache.getOrFetch<CodexRateLimits>(
-        'codex-quota',
-        async () => {
-          const appServerResult = await this.fetchRateLimitsViaAppServer();
-          if (appServerResult) return appServerResult;
+  protected async fetchRaw(): Promise<unknown> {
+    const appServerResult = await this.fetchRateLimitsViaAppServer();
+    if (appServerResult) return appServerResult;
 
-          logger.warn('Codex app-server unavailable, falling back to session log');
-          const sessionFile = await this.findLatestSessionFile();
-          if (!sessionFile) throw new Error('No session data found');
+    logger.warn('Codex app-server unavailable, falling back to session log');
+    const sessionFile = await this.findLatestSessionFile();
+    if (!sessionFile) throw new Error('No session data found');
 
-          const extracted = await this.extractRateLimits(sessionFile);
-          if (!extracted) throw new Error('No rate limit data found (app-server + session log)');
-          return extracted;
-        },
-        CONFIG.cache.ttlMs,
-      );
-    } catch (error) {
-      return { ...base, error: error instanceof Error ? error.message : 'Failed to fetch Codex usage' };
-    }
+    const extracted = await this.extractRateLimits(sessionFile);
+    if (!extracted) throw new Error('No rate limit data found (app-server + session log)');
+    return extracted;
+  }
+
+  protected buildQuota(raw: unknown, base: QuotaBase): ProviderQuota {
+    const limits = raw as CodexRateLimits;
 
     const modelsDetailed = this.buildModelWindows(limits);
     const models = this.flattenModels(modelsDetailed);
@@ -490,7 +482,7 @@ export class CodexProvider implements Provider {
     const secondary = this.pickSecondary(limits, modelsDetailed);
 
     if (!primary && !secondary && Object.keys(modelsDetailed).length === 0) {
-      return { ...base, error: 'No quota windows found' };
+      return { ...base, error: 'No quota windows found' } as ProviderQuota;
     }
 
     let codexCredits: import('./types').CodexQuotaExtra['extraUsage'] | undefined;
@@ -518,7 +510,7 @@ export class CodexProvider implements Provider {
       ...(limits.plan_type ? { planType: limits.plan_type } : {}),
       ...(normalizePlan(limits.plan_type) ? { plan: normalizePlan(limits.plan_type) } : {}),
       ...(Object.keys(extra).length > 0 ? { extra } : {}),
-    };
+    } as ProviderQuota;
   }
 }
 
