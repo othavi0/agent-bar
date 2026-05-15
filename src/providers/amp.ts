@@ -24,7 +24,10 @@ export class AmpProvider extends BaseProvider {
   }
 
   protected async fetchRaw(): Promise<unknown> {
-    const bin = findAmpBin()!;
+    const bin = findAmpBin();
+    if (!bin) {
+      throw new Error('Amp CLI not found');
+    }
     const base: AmpQuota = {
       provider: this.id,
       displayName: this.name,
@@ -33,8 +36,8 @@ export class AmpProvider extends BaseProvider {
     return this.fetchUsage(base, bin);
   }
 
-  protected buildQuota(raw: unknown, base: QuotaBase): ProviderQuota {
-    return { ...base, ...(raw as AmpQuota) } as ProviderQuota;
+  protected buildQuota(raw: unknown, _base: QuotaBase): ProviderQuota {
+    return raw as ProviderQuota;
   }
 
   private async fetchUsage(base: AmpQuota, bin: string): Promise<AmpQuota> {

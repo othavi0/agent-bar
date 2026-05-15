@@ -1,5 +1,6 @@
 import { cache } from '../cache';
 import { CONFIG } from '../config';
+import { logger } from '../logger';
 import type { Provider, ProviderQuota } from './types';
 
 /** The minimal quota shape available before a successful fetch. */
@@ -50,6 +51,7 @@ export abstract class BaseProvider implements Provider {
       const raw = await cache.getOrFetch(this.cacheKey, () => this.fetchRaw(), CONFIG.cache.ttlMs);
       return this.buildQuota(raw, base);
     } catch (error) {
+      logger.error('Provider quota fetch error', { provider: this.id, error });
       return { ...base, error: this.toUserFacingError(error) } as ProviderQuota;
     }
   }
