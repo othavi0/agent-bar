@@ -129,7 +129,9 @@ export class CodexProvider implements Provider {
           if (event.payload?.type === 'token_count' && event.payload.rate_limits) {
             return event.payload.rate_limits;
           }
-        } catch {}
+        } catch (error) {
+          logger.debug('Skipped unparseable Codex session line', { error, filePath });
+        }
       }
     } catch (error) {
       logger.error('Failed to read Codex session file', { error, filePath });
@@ -385,8 +387,8 @@ export class CodexProvider implements Provider {
       const send = (msg: unknown) => {
         try {
           proc.stdin.write(`${JSON.stringify(msg)}\n`);
-        } catch {
-          // ignore
+        } catch (error) {
+          logger.debug('Codex app-server stdin write failed', { error });
         }
       };
 
@@ -424,8 +426,8 @@ export class CodexProvider implements Provider {
               if (!finished) tryResolve();
             }, 200);
           }
-        } catch {
-          // ignore non-json / unrelated messages
+        } catch (error) {
+          logger.debug('Skipped non-JSON Codex app-server line', { error });
         }
       });
 
