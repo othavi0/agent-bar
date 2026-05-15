@@ -1,16 +1,16 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getStatusForPercent } from '../config';
-import { getAmpExtra, getCopilotExtra } from '../providers/extras';
-import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
+import { getCopilotExtra } from '../providers/extras';
+import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota } from '../providers/types';
 import { type DisplayMode, loadSettingsSync } from '../settings';
-import { BOX, ONE_DARK, PROVIDER_HEX } from '../theme';
+import { BOX, ONE_DARK } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
 import { buildCopilot as buildCopilotLines } from './builders/copilot';
-import { renderPango as renderPangoLines } from './render-pango';
+import { renderPango } from './render-pango';
 import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
-import { etaLabel, formatEta, formatPercent, formatResetTime, normalizePlanLabel, toDisplay } from './shared';
+import { formatPercent, normalizePlanLabel, toDisplay } from './shared';
 import { type CodexViewModel, resolveCodexViewModelFrom } from './view-model';
 
 // Uniform tooltip width — all 3 cards share the same border
@@ -91,7 +91,7 @@ const HEX_BY_TOKEN: Record<ColorToken, string> = {
   brightBlue: ONE_DARK.brightBlue,
 };
 
-function renderPango(segs: Segment[]): string {
+function renderPangoLocal(segs: Segment[]): string {
   return segs.map((seg) => s(HEX_BY_TOKEN[seg.color], seg.text, seg.bold ?? false)).join('');
 }
 
@@ -104,34 +104,12 @@ function pctColored(display: number | null, mode: DisplayMode): string {
 }
 
 function bar(display: number | null, mode: DisplayMode): string {
-  return renderPango(barSegments(display, mode));
+  return renderPangoLocal(barSegments(display, mode));
 }
 
 function indicator(display: number | null, mode: DisplayMode): string {
-  return renderPango(indicatorSegments(display, mode));
+  return renderPangoLocal(indicatorSegments(display, mode));
 }
-
-function _codexModelLine(
-  name: string,
-  window: QuotaWindow | undefined,
-  maxLen: number,
-  v: string,
-  mode: DisplayMode,
-): string {
-  const rem = window?.remaining ?? null;
-  const disp = toDisplay(rem, mode);
-  const nameS = s(ONE_DARK.textBright, name.padEnd(maxLen));
-  const b = bar(disp, mode);
-  const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-  const etaS = window?.resetsAt
-    ? s(ONE_DARK.cyan, `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`)
-    : s(ONE_DARK.cyan, '→ N/A');
-  return `${v}  ${indicator(disp, mode)} ${nameS} ${b} ${pctS} ${etaS}`;
-}
-
-// Section label with connecting line: ┣━ ◆ Label (uses provider color)
-const label = (text: string, color: string) =>
-  `${s(color, BOX.lt + BOX.h)} ${s(color, `${BOX.diamond} ${text}`, true)}`;
 
 function formatAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -167,7 +145,7 @@ function buildClaudeTooltip(p: ProviderQuota, fetchedAt: string | undefined, mod
   const subtitle = planLabel !== 'Unknown' ? planLabel : undefined;
   const headerTitle = subtitle ? `Claude · ${subtitle}` : 'Claude';
 
-  return renderPangoLines(
+  return renderPango(
     buildClaude(p, {
       mode,
       headerTitle,
@@ -187,7 +165,7 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
   const subtitle = planLabel !== 'Unknown' ? planLabel : undefined;
   const headerTitle = subtitle ? `Codex · ${subtitle}` : 'Codex';
 
-  return renderPangoLines(
+  return renderPango(
     buildCodexLines(p, viewModel, {
       mode,
       headerTitle,
@@ -199,12 +177,12 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
 }
 
 /**
- * Build Copilot tooltip (pipeline version)
+ * Build Copilot tooltip
  */
-function buildCopilotTooltipNew(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
+function buildCopilotTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const headerTitle = p.account ? `Copilot · ${p.account}` : 'Copilot';
 
-  return renderPangoLines(
+  return renderPango(
     buildCopilotLines(p, {
       mode,
       headerTitle,
@@ -217,13 +195,13 @@ function buildCopilotTooltipNew(p: ProviderQuota, fetchedAt: string | undefined,
 }
 
 /**
- * Build Amp tooltip (pipeline version)
+ * Build Amp tooltip
  */
-function buildAmpTooltipNew(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
+function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const subtitle = p.account ? escapeXml(p.account) : undefined;
   const headerTitle = subtitle ? `Amp · ${subtitle}` : 'Amp';
 
-  return renderPangoLines(
+  return renderPango(
     buildAmpLines(p, {
       mode,
       headerTitle,
@@ -234,90 +212,6 @@ function buildAmpTooltipNew(p: ProviderQuota, fetchedAt: string | undefined, mod
       accountInHeader: true,
     }),
   );
-}
-
-/**
- * Build Amp tooltip (old — kept until Task 8 removes it)
- */
-function _buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const lines: string[] = [];
-  const vc = PROVIDER_HEX.amp;
-  const v = s(vc, BOX.v);
-  const _ampMeta: Record<string, string> | undefined = getAmpExtra(p)?.meta;
-  const m: Record<string, string> = _ampMeta !== undefined ? _ampMeta : {};
-
-  // Account goes in header for better hierarchy
-  const accountShort = p.account ? escapeXml(p.account) : undefined;
-  lines.push(buildHeader('Amp', accountShort, vc));
-  lines.push(v);
-
-  if (p.error) {
-    lines.push(`${v}  ${s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`)}`);
-  } else {
-    // --- Free Tier ---
-    const free = p.models?.['Free Tier'];
-    if (free) {
-      const rem = free.remaining;
-      const disp = toDisplay(rem, mode);
-      const b = bar(disp, mode);
-      const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-
-      // ETA inline with bar (same style as Claude/Codex)
-      const etaParts: string[] = [];
-      if (free.resetsAt && rem !== 100) {
-        etaParts.push(
-          s(
-            ONE_DARK.cyan,
-            `→ ${etaLabel(mode)} ${formatEta(free.resetsAt, rem)} ${formatResetTime(free.resetsAt, rem)}`,
-          ),
-        );
-      }
-      const etaS = etaParts.length > 0 ? `  ${etaParts[0]}` : '';
-
-      lines.push(label('Free Tier', vc));
-      lines.push(`${v}  ${indicator(disp, mode)} ${b} ${pctS}${etaS}`);
-
-      // Rate / balance info on second line with ○ indicator
-      const infoParts: string[] = [];
-      if (m.replenishRate) infoParts.push(s(ONE_DARK.cyan, m.replenishRate));
-      const dollars = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
-      if (dollars) infoParts.push(s(ONE_DARK.text, dollars));
-      if (m.bonus) infoParts.push(s(ONE_DARK.cyan, m.bonus));
-      if (infoParts.length > 0) {
-        lines.push(`${v}  ${s(ONE_DARK.comment, BOX.dotO)} ${infoParts.join(s(ONE_DARK.comment, '  |  '))}`);
-      }
-    }
-
-    // --- Credits ---
-    const credits = p.models?.Credits;
-    if (credits) {
-      lines.push(v);
-      const balance = m.creditsBalance ?? '$0';
-      const color = credits.remaining > 0 ? ONE_DARK.green : ONE_DARK.comment;
-      lines.push(label('Credits', vc));
-      lines.push(`${v}  ${indicator(toDisplay(credits.remaining, mode), mode)} ${s(color, `${balance} remaining`)}`);
-    }
-  }
-
-  lines.push(v);
-  lines.push(buildFooter(vc, fetchedAt));
-
-  return lines.join('\n');
-}
-
-function formatCount(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
-}
-
-function formatRawPercent(value: number): string {
-  if (!Number.isFinite(value)) return '0%';
-  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
-}
-
-function boundedPercent(value: number | null): number | null {
-  if (value === null) return null;
-  return Math.max(0, Math.min(100, value));
 }
 
 function copilotUsedPercent(snapshot: CopilotQuotaSnapshot | undefined): number | null {
@@ -344,86 +238,6 @@ function copilotPrimaryDisplayValue(p: ProviderQuota, mode: DisplayMode): number
   return copilotDisplayValue(snapshot, p.primary?.remaining ?? null, mode);
 }
 
-function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
-  const parts: string[] = [];
-
-  if (snapshot.isUnlimitedEntitlement) {
-    parts.push(s(ONE_DARK.cyan, 'Unlimited'));
-  } else {
-    parts.push(
-      s(ONE_DARK.text, `${formatCount(snapshot.usedRequests)} / ${formatCount(snapshot.entitlementRequests)} used`),
-    );
-    parts.push(s(ONE_DARK.comment, `raw ${formatRawPercent(snapshot.remainingPercentage)}`));
-  }
-
-  if (snapshot.overage > 0) {
-    parts.push(s(ONE_DARK.orange, `${formatCount(snapshot.overage)} overage`));
-  }
-
-  if (snapshot.usageAllowedWithExhaustedQuota || snapshot.overageAllowedWithExhaustedQuota) {
-    parts.push(s(ONE_DARK.cyan, 'usage allowed'));
-  }
-
-  return parts.join(s(ONE_DARK.comment, '  |  '));
-}
-
-function buildCopilotTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const lines: string[] = [];
-  const vc = PROVIDER_HEX.copilot;
-  const v = s(vc, BOX.v);
-  const extra = getCopilotExtra(p);
-  const snapshots = extra?.quotaSnapshots ?? {};
-  const account = p.account ? escapeXml(p.account) : undefined;
-
-  lines.push(buildHeader('Copilot', account, vc));
-  lines.push(v);
-
-  if (p.error) {
-    lines.push(`${v}  ${s(ONE_DARK.red, `⚠️ ${escapeXml(p.error)}`)}`);
-  } else {
-    const orderedBuckets = [
-      ...['premium_interactions', 'chat', 'completions'].filter((bucket) => snapshots[bucket]),
-      ...Object.keys(snapshots).filter((bucket) => !['premium_interactions', 'chat', 'completions'].includes(bucket)),
-    ];
-
-    if (orderedBuckets.length === 0) {
-      lines.push(`${v}  ${s(ONE_DARK.comment, 'No usage data')}`);
-    } else {
-      lines.push(label('Usage', vc));
-      const labels = orderedBuckets.map((bucket) => {
-        if (bucket === 'premium_interactions') return 'Premium requests';
-        if (bucket === 'chat') return 'Chat';
-        if (bucket === 'completions') return 'Completions';
-        return bucket.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-      });
-      const maxLen = Math.max(...labels.map((name) => name.length), 20);
-
-      for (let i = 0; i < orderedBuckets.length; i++) {
-        const bucket = orderedBuckets[i];
-        const name = labels[i];
-        const snapshot = snapshots[bucket];
-        const window = p.models?.[name];
-        const rem = window?.remaining ?? null;
-        const disp = copilotDisplayValue(snapshot, rem, mode);
-        const nameS = s(ONE_DARK.textBright, name.padEnd(maxLen));
-        const b = bar(boundedPercent(disp), mode);
-        const pctS = s(colorFor(disp, mode), formatPercent(disp).padStart(4));
-        const etaS = window?.resetsAt
-          ? s(ONE_DARK.cyan, `→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}`)
-          : s(ONE_DARK.cyan, '→ N/A');
-
-        lines.push(`${v}  ${indicator(disp, mode)} ${nameS} ${b} ${pctS} ${etaS}`);
-        lines.push(`${v}  ${s(ONE_DARK.comment, BOX.dotO)} ${copilotSnapshotDetail(snapshot)}`);
-      }
-    }
-  }
-
-  lines.push(v);
-  lines.push(buildFooter(vc, fetchedAt));
-
-  return lines.join('\n');
-}
-
 // ---------------------------------------------------------------------------
 // Tooltip builder registry
 // ---------------------------------------------------------------------------
@@ -433,8 +247,8 @@ type TooltipBuilder = (p: ProviderQuota, fetchedAt: string | undefined, mode: Di
 const TOOLTIP_BUILDERS: Record<string, TooltipBuilder> = {
   claude: buildClaudeTooltip,
   codex: buildCodexTooltip,
-  copilot: buildCopilotTooltipNew,
-  amp: buildAmpTooltipNew,
+  copilot: buildCopilotTooltip,
+  amp: buildAmpTooltip,
 };
 
 function buildGenericTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {

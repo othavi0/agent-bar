@@ -1,21 +1,12 @@
-import { getAmpExtra, getCopilotExtra } from '../providers/extras';
-import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from '../providers/types';
-import { ANSI, BOX, PROVIDER_ANSI } from '../theme';
+import type { AllQuotas, ProviderQuota } from '../providers/types';
+import { ANSI, BOX } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
 import { buildCopilot as buildCopilotLines } from './builders/copilot';
-import { renderAnsi as renderAnsiLines } from './render-ansi';
-import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
-import {
-  type DisplayMode,
-  etaLabel,
-  formatEta,
-  formatPercent,
-  formatResetTime,
-  normalizePlanLabel,
-  toDisplay,
-} from './shared';
+import { renderAnsi } from './render-ansi';
+import { type ColorToken, colorForDisplay } from './segments';
+import { type DisplayMode, formatPercent, normalizePlanLabel, toDisplay } from './shared';
 import { resolveCodexViewModel } from './view-model';
 
 const ANSI_BY_TOKEN: Record<ColorToken, string> = {
@@ -33,69 +24,12 @@ const ANSI_BY_TOKEN: Record<ColorToken, string> = {
   brightBlue: ANSI.brightBlue,
 };
 
-function renderAnsi(segs: Segment[]): string {
-  if (segs.length === 0) return '';
-  const body = segs.map((s) => `${ANSI_BY_TOKEN[s.color]}${s.bold ? ANSI.bold : ''}${s.text}`).join('');
-  return `${body}${ANSI.reset}`;
-}
-
 function getColor(display: number | null, mode: DisplayMode): string {
   return ANSI_BY_TOKEN[colorForDisplay(display, mode)];
 }
 
-function bar(display: number | null, mode: DisplayMode): string {
-  return renderAnsi(barSegments(display, mode));
-}
-
-function indicator(display: number | null, mode: DisplayMode): string {
-  return renderAnsi(indicatorSegments(display, mode));
-}
-
-// Vertical bar with provider color
-const v = (color: string) => `${color}${BOX.v}${ANSI.reset}`;
-
-// Section label: ┣━ ◆ Label
-const label = (text: string, color: string) =>
-  `${color}${BOX.lt}${BOX.h}${ANSI.reset} ${ANSI.magenta}${ANSI.bold}${BOX.diamond} ${text}${ANSI.reset}`;
-
-// Model line (kept for reference; no longer called after Claude migration — Task 8 removes it)
-function _modelLine(
-  name: string,
-  window: QuotaWindow | undefined,
-  maxLen: number,
-  vColor: string,
-  mode: DisplayMode,
-): string {
-  const rem = window?.remaining ?? null;
-  const reset = window?.resetsAt ?? null;
-  const disp = toDisplay(rem, mode);
-  const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
-  const barS = bar(disp, mode);
-  const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
-  const etaS = `${ANSI.cyan}→ ${formatEta(reset, rem)} ${formatResetTime(reset, rem)}${ANSI.reset}`;
-  return `${v(vColor)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${etaS}`;
-}
-
-function _codexModelLine(
-  name: string,
-  window: QuotaWindow | undefined,
-  maxLen: number,
-  vColor: string,
-  mode: DisplayMode,
-): string {
-  const rem = window?.remaining ?? null;
-  const disp = toDisplay(rem, mode);
-  const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
-  const barS = bar(disp, mode);
-  const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
-  const etaS = window?.resetsAt
-    ? `${ANSI.cyan}→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}${ANSI.reset}`
-    : `${ANSI.cyan}→ N/A${ANSI.reset}`;
-  return `${v(vColor)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${etaS}`;
-}
-
 function buildClaudeTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
-  const rendered = renderAnsiLines(
+  const rendered = renderAnsi(
     buildClaude(p, {
       mode,
       headerTitle: 'Claude',
@@ -110,7 +44,7 @@ function buildClaudeTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
 function buildCodexTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
   const viewModel = resolveCodexViewModel(p);
   const planLabel = normalizePlanLabel(p);
-  const rendered = renderAnsiLines(
+  const rendered = renderAnsi(
     buildCodexLines(p, viewModel, {
       mode,
       headerTitle: 'Codex',
@@ -124,7 +58,7 @@ function buildCodexTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
 }
 
 function buildAmpTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
-  const rendered = renderAnsiLines(
+  const rendered = renderAnsi(
     buildAmpLines(p, {
       mode,
       headerTitle: 'Amp',
@@ -138,7 +72,7 @@ function buildAmpTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
 }
 
 function buildCopilotTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
-  const rendered = renderAnsiLines(
+  const rendered = renderAnsi(
     buildCopilotLines(p, {
       mode,
       headerTitle: 'Copilot',
@@ -148,210 +82,6 @@ function buildCopilotTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
     }),
   );
   return rendered.split('\n');
-}
-
-function _buildAmp(p: ProviderQuota, mode: DisplayMode): string[] {
-  const lines: string[] = [];
-  const vc = PROVIDER_ANSI.amp;
-  const _ampMeta: Record<string, string> | undefined = getAmpExtra(p)?.meta;
-  const m: Record<string, string> = _ampMeta !== undefined ? _ampMeta : {};
-
-  lines.push(
-    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Amp${ANSI.reset} ${vc}${BOX.h.repeat(53)}${ANSI.reset}`,
-  );
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
-  } else {
-    // Thin tree connectors
-    const tee = `${ANSI.comment}├─${ANSI.reset}`;
-    const end = `${ANSI.comment}└─${ANSI.reset}`;
-
-    // Free Tier
-    const free = p.models?.['Free Tier'];
-    if (free) {
-      const disp = toDisplay(free.remaining, mode);
-      lines.push(label('Free Tier', vc));
-      const barS = bar(disp, mode);
-      const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
-      lines.push(`${v(vc)}  ${indicator(disp, mode)} ${barS} ${pctS}`);
-
-      // Build sub-details
-      const subs: string[] = [];
-
-      const dollarParts: string[] = [];
-      if (m.replenishRate) dollarParts.push(`${ANSI.cyan}${m.replenishRate}${ANSI.reset}`);
-      const dollars = [m.freeRemaining, m.freeTotal].filter(Boolean).join(' / ');
-      if (dollars) dollarParts.push(`${ANSI.text}( ${dollars} )${ANSI.reset}`);
-      if (m.bonus) dollarParts.push(`${ANSI.cyan}${m.bonus}${ANSI.reset}`);
-      if (dollarParts.length > 0) subs.push(dollarParts.join('  '));
-
-      if (free.resetsAt && free.remaining !== 100) {
-        subs.push(
-          `${ANSI.cyan}${etaLabel(mode)} ${formatEta(free.resetsAt, free.remaining)}  ${formatResetTime(free.resetsAt, free.remaining)}${ANSI.reset}`,
-        );
-      }
-
-      for (let i = 0; i < subs.length; i++) {
-        const conn = i === subs.length - 1 ? end : tee;
-        lines.push(`${v(vc)}  ${conn} ${subs[i]}`);
-      }
-    }
-
-    // Credits
-    const credits = p.models?.Credits;
-    if (credits) {
-      lines.push(v(vc));
-      const balance = m.creditsBalance ?? '$0';
-      const color = credits.remaining > 0 ? ANSI.green : ANSI.comment;
-      lines.push(label('Credits', vc));
-      lines.push(`${v(vc)}  ${indicator(toDisplay(credits.remaining, mode), mode)} ${color}${balance}${ANSI.reset}`);
-    }
-
-    // Fallback for unknown models
-    if (!free && !credits && p.models && Object.keys(p.models).length > 0) {
-      const entries = Object.entries(p.models);
-      const maxLen = Math.max(...entries.map(([name]) => name.length), 20);
-      lines.push(label('Usage', vc));
-      for (const [name, window] of entries) {
-        const disp = toDisplay(window.remaining, mode);
-        const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
-        const barS = bar(disp, mode);
-        const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
-        lines.push(`${v(vc)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS}`);
-      }
-    }
-  }
-
-  if (p.account) {
-    lines.push(v(vc));
-    lines.push(`${v(vc)}  ${ANSI.comment}Account: ${p.account}${ANSI.reset}`);
-  }
-
-  lines.push(v(vc));
-  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
-
-  return lines;
-}
-
-function formatCount(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
-}
-
-function formatRawPercent(value: number): string {
-  if (!Number.isFinite(value)) return '0%';
-  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
-}
-
-function boundedPercent(value: number | null): number | null {
-  if (value === null) return null;
-  return Math.max(0, Math.min(100, value));
-}
-
-function copilotUsedPercent(snapshot: CopilotQuotaSnapshot | undefined): number | null {
-  if (!snapshot || snapshot.isUnlimitedEntitlement || snapshot.entitlementRequests <= 0) {
-    return null;
-  }
-  return (snapshot.usedRequests / snapshot.entitlementRequests) * 100;
-}
-
-function copilotDisplayValue(
-  snapshot: CopilotQuotaSnapshot | undefined,
-  remaining: number | null,
-  mode: DisplayMode,
-): number | null {
-  if (mode === 'used') {
-    const used = copilotUsedPercent(snapshot);
-    if (used !== null) return used;
-  }
-  return toDisplay(remaining, mode);
-}
-
-function copilotSnapshotDetail(snapshot: CopilotQuotaSnapshot): string {
-  const parts: string[] = [];
-
-  if (snapshot.isUnlimitedEntitlement) {
-    parts.push(`${ANSI.cyan}Unlimited${ANSI.reset}`);
-  } else {
-    parts.push(
-      `${ANSI.text}${formatCount(snapshot.usedRequests)} / ${formatCount(snapshot.entitlementRequests)} used${ANSI.reset}`,
-    );
-    parts.push(`${ANSI.comment}raw ${formatRawPercent(snapshot.remainingPercentage)}${ANSI.reset}`);
-  }
-
-  if (snapshot.overage > 0) {
-    parts.push(`${ANSI.orange}${formatCount(snapshot.overage)} overage${ANSI.reset}`);
-  }
-
-  if (snapshot.usageAllowedWithExhaustedQuota || snapshot.overageAllowedWithExhaustedQuota) {
-    parts.push(`${ANSI.cyan}usage allowed${ANSI.reset}`);
-  }
-
-  return parts.join(`${ANSI.comment}  |  ${ANSI.reset}`);
-}
-
-function buildCopilot(p: ProviderQuota, mode: DisplayMode): string[] {
-  const lines: string[] = [];
-  const vc = PROVIDER_ANSI.copilot;
-  const extra = getCopilotExtra(p);
-  const snapshots = extra?.quotaSnapshots ?? {};
-
-  lines.push(
-    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${ANSI.bold}Copilot${ANSI.reset} ${vc}${BOX.h.repeat(49)}${ANSI.reset}`,
-  );
-  lines.push(v(vc));
-
-  if (p.error) {
-    lines.push(`${v(vc)}  ${ANSI.red}⚠️ ${p.error}${ANSI.reset}`);
-  } else {
-    const orderedBuckets = [
-      ...['premium_interactions', 'chat', 'completions'].filter((bucket) => snapshots[bucket]),
-      ...Object.keys(snapshots).filter((bucket) => !['premium_interactions', 'chat', 'completions'].includes(bucket)),
-    ];
-
-    if (orderedBuckets.length === 0) {
-      lines.push(`${v(vc)}  ${ANSI.comment}No usage data${ANSI.reset}`);
-    } else {
-      const labels = orderedBuckets.map((bucket) => {
-        if (bucket === 'premium_interactions') return 'Premium requests';
-        if (bucket === 'chat') return 'Chat';
-        if (bucket === 'completions') return 'Completions';
-        return bucket.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-      });
-      const maxLen = Math.max(...labels.map((name) => name.length), 20);
-
-      lines.push(label('Usage', vc));
-      for (let i = 0; i < orderedBuckets.length; i++) {
-        const bucket = orderedBuckets[i];
-        const name = labels[i];
-        const snapshot = snapshots[bucket];
-        const window = p.models?.[name];
-        const rem = window?.remaining ?? null;
-        const disp = copilotDisplayValue(snapshot, rem, mode);
-        const nameS = `${ANSI.textBright}${name.padEnd(maxLen)}${ANSI.reset}`;
-        const barS = bar(boundedPercent(disp), mode);
-        const pctS = `${getColor(disp, mode)}${formatPercent(disp).padStart(4)}${ANSI.reset}`;
-        const etaS = window?.resetsAt
-          ? `${ANSI.cyan}→ ${formatEta(window.resetsAt, rem)} ${formatResetTime(window.resetsAt, rem)}${ANSI.reset}`
-          : `${ANSI.cyan}→ N/A${ANSI.reset}`;
-
-        lines.push(`${v(vc)}  ${indicator(disp, mode)} ${nameS} ${barS} ${pctS} ${etaS}`);
-        lines.push(`${v(vc)}  ${ANSI.comment}${BOX.dotO}${ANSI.reset} ${copilotSnapshotDetail(snapshot)}`);
-      }
-    }
-  }
-
-  if (p.account) {
-    lines.push(v(vc));
-    lines.push(`${v(vc)}  ${ANSI.comment}Account: ${p.account}${ANSI.reset}`);
-  }
-
-  lines.push(v(vc));
-  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
-
-  return lines;
 }
 
 // ---------------------------------------------------------------------------
