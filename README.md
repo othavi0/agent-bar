@@ -1,10 +1,9 @@
 # agent-bar-omarchy
 
-Waybar modules for watching agent CLI usage limits.
+![Conceptual Agent Bar banner](docs/assets/agent-bar-banner.png)
 
-It reads quota/usage data from local agent tools and shows the useful bits in
-Waybar: remaining percentage, used percentage, reset times, provider state, and
-errors when a provider is not logged in.
+Waybar modules for watching agent CLI usage limits: remaining quota, used quota,
+reset windows, and login/error state.
 
 Supported providers:
 
@@ -12,9 +11,6 @@ Supported providers:
 - OpenAI Codex
 - GitHub Copilot
 - Amp
-
-It is a small status tool for people who run agent CLIs and want to know when a
-model window is low or reset.
 
 ## Install
 
@@ -26,106 +22,30 @@ cd ~/.agent-bar
 bun run setup
 ```
 
-`bun run setup` installs dependencies, creates the `agent-bar-omarchy` symlink,
-writes the generated Waybar include/CSS, installs icons and the terminal helper,
-then reloads Waybar.
-
-The setup is idempotent. Running it again should update the managed files without
-rewriting your full Waybar config.
-
-## Use
-
-```bash
-agent-bar-omarchy
-agent-bar-omarchy status
-agent-bar-omarchy menu
-```
-
-- `agent-bar-omarchy` prints Waybar JSON. Waybar calls this.
-- `agent-bar-omarchy status` prints the same provider state in the terminal.
-- `agent-bar-omarchy menu` opens provider login and layout/model settings.
-
-Filter one provider:
-
-```bash
-agent-bar-omarchy status --provider codex
-agent-bar-omarchy --provider claude
-```
-
-Force a fresh fetch instead of using the cache:
-
-```bash
-agent-bar-omarchy status --refresh
-```
+`setup` installs the Waybar modules, CSS, provider icons, terminal helper, and
+`~/.local/bin/agent-bar-omarchy` symlink.
 
 ## Commands
 
 ```bash
-agent-bar-omarchy setup       # install/update Waybar integration
-agent-bar-omarchy update      # update the managed ~/.agent-bar install
-agent-bar-omarchy uninstall   # interactive removal
-agent-bar-omarchy remove      # non-interactive removal
-agent-bar-omarchy --help
+agent-bar-omarchy             # Waybar JSON
+agent-bar-omarchy status      # Terminal quota view
+agent-bar-omarchy menu        # Login and layout TUI
+agent-bar-omarchy update      # Update managed ~/.agent-bar install
+agent-bar-omarchy setup       # Re-apply Waybar integration
+agent-bar-omarchy uninstall   # Interactive removal
+agent-bar-omarchy remove      # Forced removal
 ```
 
-`agent-bar-omarchy update` is intentionally for the managed `~/.agent-bar`
-checkout. It discards local changes there, resets to upstream, installs
-dependencies when needed, and re-applies setup. Use a separate checkout for
-development work.
-
-Lower-level export commands exist for tests/manual integration:
-
-```bash
-agent-bar-omarchy assets install
-agent-bar-omarchy export waybar-modules
-agent-bar-omarchy export waybar-css
-```
-
-## What It Owns
-
-Runtime files:
-
-- `~/.config/agent-bar-omarchy/settings.json`
-- `~/.cache/agent-bar-omarchy/`
-- `~/.agent-bar`
-- `~/.local/bin/agent-bar-omarchy`
-- `~/.config/waybar/agent-bar-omarchy/`
-- `~/.config/waybar/scripts/agent-bar-omarchy-open-terminal`
-
-Waybar files it patches:
-
-- `~/.config/waybar/config.jsonc`
-- `~/.config/waybar/style.css`
-
-It adds managed include/import entries and generated `custom/agent-bar-omarchy-*`
-modules. It should not replace unrelated Waybar config.
-
-## Provider Credentials
-
-The tool does not own provider credentials. It only reads or invokes the provider
-CLIs/files they already use:
-
-- Claude: `~/.claude/.credentials.json`
-- Codex: `~/.codex/auth.json` and recent Codex session data
-- Copilot: official Copilot CLI/config
-- Amp: official `amp` CLI
-
-## Development
-
-```bash
-bun install
-bun test
-bun run typecheck
-bun run lint
-```
-
-Do not run live-mutating setup/remove commands as tests unless you actually want
-to change your current Waybar setup.
+`update` is for the managed `~/.agent-bar` checkout. It discards local changes
+there, resets to upstream, installs dependencies when needed, and re-runs setup.
 
 ## Docs
 
+- [Docs index](docs/README.md)
 - [Commands](docs/commands.md)
-- [Runtime paths](docs/runtime.md)
+- [Runtime](docs/runtime.md)
+- [Waybar integration](docs/integration.md)
 - [Waybar contract](docs/waybar-contract.md)
-- [Integration behavior](docs/integration.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [New provider guide](docs/new-provider.md)

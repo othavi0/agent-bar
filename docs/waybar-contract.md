@@ -1,40 +1,46 @@
 # Waybar Contract
 
-`agent-bar-omarchy` exposes a stable contract for module JSON and CSS generation. This same contract is used by `setup` to wire live Waybar files.
+This is the generated contract used by setup and by the export commands.
 
-## Asset Install
+## Providers
 
-```bash
-agent-bar-omarchy assets install --waybar-dir <path> --scripts-dir <path>
-```
+Built-in Waybar providers:
 
-This copies:
+- `claude`
+- `codex`
+- `copilot`
+- `amp`
 
-- provider icons into `<waybar-dir>/icons`
-- `agent-bar-omarchy-open-terminal` into `<scripts-dir>/agent-bar-omarchy-open-terminal`
-
-## Module Export
-
-```bash
-agent-bar-omarchy export waybar-modules --app-bin <path> --terminal-script <path>
-```
-
-This prints JSON with:
-
-- `providers`: normalized provider ids in render order
-- `modules`: a map of Waybar module definitions
-
-Current module ids:
+Generated module IDs:
 
 - `custom/agent-bar-omarchy-claude`
 - `custom/agent-bar-omarchy-codex`
 - `custom/agent-bar-omarchy-copilot`
 - `custom/agent-bar-omarchy-amp`
 
-Each module definition includes:
+CSS selectors use:
+
+```text
+#custom-agent-bar-omarchy-<provider>
+```
+
+## Module Export
+
+```bash
+agent-bar-omarchy export waybar-modules \
+  --app-bin '$HOME/.local/bin/agent-bar-omarchy' \
+  --terminal-script ~/.config/waybar/scripts/agent-bar-omarchy-open-terminal
+```
+
+The JSON contains:
+
+- `providers`: normalized provider IDs in render order
+- `modules`: Waybar module definitions keyed by module ID
+
+Each module includes:
 
 - `exec`
-- `return-type`
+- `return-type: json`
 - `interval`
 - `tooltip`
 - `on-click`
@@ -43,25 +49,58 @@ Each module definition includes:
 ## CSS Export
 
 ```bash
-agent-bar-omarchy export waybar-css --icons-dir <path>
+agent-bar-omarchy export waybar-css \
+  --icons-dir ~/.config/waybar/agent-bar-omarchy/icons
 ```
 
-This prints JSON with a single `css` field. The CSS:
+The JSON contains one `css` field. Generated CSS includes:
 
-- resolves icon URLs from the provided icon directory
-- emits provider-specific selectors for `claude`, `codex`, `copilot`, and `amp`
-- emits separator styling based on current settings
-- includes agent-bar-omarchy base module styling and status classes
+- base module styling
+- provider icon backgrounds
+- provider state colors
+- separator style from settings
+- hidden-module styling for disabled single-provider modules
 
-## Returned Classes
+## Classes
 
-The Waybar modules can emit these classes:
+Single-provider output starts with:
+
+```text
+agent-bar-omarchy-<provider>
+```
+
+and adds one state class:
 
 - `ok`
 - `low`
 - `warn`
 - `critical`
 - `disconnected`
-- `agent-bar-omarchy-hidden`
 
-`agent-bar-omarchy-hidden` is intended for consumers that collapse disabled providers without removing the module shell.
+Disabled single-provider modules use:
+
+```text
+agent-bar-omarchy-hidden
+```
+
+Aggregate output starts with:
+
+```text
+agent-bar-omarchy
+```
+
+and adds provider-scoped classes such as `claude-ok`, `codex-warn`, or
+`amp-critical`.
+
+## Asset Install
+
+```bash
+agent-bar-omarchy assets install \
+  --waybar-dir ~/.config/waybar/agent-bar-omarchy \
+  --scripts-dir ~/.config/waybar/scripts
+```
+
+This copies:
+
+- provider icons into `<waybar-dir>/icons`
+- terminal helper into `<scripts-dir>/agent-bar-omarchy-open-terminal`

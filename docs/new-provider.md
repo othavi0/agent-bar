@@ -1,186 +1,80 @@
-# Adicionando um novo Provider
+# New Provider Guide
 
-## Overview
+A provider is one source of quota/usage data. It usually reads a local auth file,
+calls a provider CLI, parses local session data, or fetches an API.
 
-Um **provider** em agent-bar-omarchy representa uma fonte de dados de quota de LLM. Cada provider implementa a interface `Provider` definida em `src/providers/types.ts`, que exige:
+## Contract
 
-| Campo/Metodo     | Tipo                          | Descricao                                     |
-|------------------|-------------------------------|-----------------------------------------------|
-| `id`             | `readonly string`             | Identificador unico (ex: `"claude"`, `"amp"`) |
-| `name`           | `readonly string`             | Nome para exibicao no TUI e Waybar            |
-| `cacheKey`       | `readonly string`             | Chave de cache (formato `<name>-quota`)        |
-| `isAvailable()`  | `() => Promise<boolean>`      | Verifica se credenciais existem (rapido, sem fetch) |
-| `getQuota()`     | `() => Promise<ProviderQuota>`| Busca e retorna os dados de quota              |
+Implement `Provider` from `src/providers/types.ts`:
 
-O retorno de `getQuota()` segue o contrato `ProviderQuota`. Os campos obrigatorios sao `provider`, `displayName` e `available`. O campo `primary` e o valor principal exibido no modulo Waybar.
+| Field | Purpose |
+| --- | --- |
+| `id` | stable lowercase identifier, for example `claude` |
+| `name` | display name |
+| `cacheKey` | unique cache key using only letters, numbers, `_`, and `-` |
+| `isAvailable()` | fast local availability check, no network and no expensive work |
+| `getQuota()` | returns `ProviderQuota` |
 
----
+`getQuota()` should normally return errors in the `error` field instead of
+throwing. Keep messages stable; tests assert exact strings in several places.
 
-## Template de codigo
+## Add A Provider
 
-```typescript
-// src/providers/<name>.ts
-import { CONFIG } from '../config';
-import { logger } from '../logger';
-import { cache } from '../cache';
-import { registerProvider } from './registry';
-import type { Provider, ProviderQuota } from './types';
+1. Create `src/providers/<name>.ts`.
+2. Register it at module scope with `registerProvider(new <Name>Provider())`.
+3. Export and side-effect import it from `src/providers/index.ts`.
+4. Add an icon under `icons/`.
+5. Add the provider ID to `WAYBAR_PROVIDERS` in `src/waybar-contract.ts`.
+6. Add provider styling/icon CSS in `exportWaybarCss()`.
+7. Add provider color entries in `src/theme.ts` when needed.
+8. Check TUI surfaces:
+   - `src/tui/login.ts`
+   - `src/tui/login-single.ts`
+   - `src/tui/list-all.ts`
+   - `src/tui/configure-layout.ts`
+9. Check terminal and Waybar formatters.
+10. Add tests in `tests/providers/<name>.test.ts`.
 
-export class MyProvider implements Provider {
-  readonly id = 'my-provider';
-  readonly name = 'My Provider';
-  readonly cacheKey = 'my-provider-quota';
+## Data Rules
 
-  async isAvailable(): Promise<boolean> {
-    // Verificar se credenciais/binario existem no filesystem.
-    // NAO fazer fetch — deve ser rapido.
-    const file = Bun.file(CONFIG.paths.myProvider.credentials);
-    return await file.exists();
-  }
+- percentages are remaining values from `0` to `100`
+- `primary` drives the compact Waybar module
+- `secondary` is for additional windows in tooltips
+- `models` is the legacy/simple per-model map
+- `modelsDetailed` is the canonical multi-window model structure
+- `extraUsage` is for spend, credits, or budget-like data
+- `meta` is provider-specific string-only display data
+- `resetsAt` is ISO 8601 or `null`
 
-  async getQuota(): Promise<ProviderQuota> {
-    const base: ProviderQuota = {
-      provider: this.id,
-      displayName: this.name,
-      available: false,
-    };
+## Cache Rules
 
-    if (!await this.isAvailable()) {
-      return { ...base, error: 'Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.' };
-    }
+- use `cache.getOrFetch()` unless the provider needs finer control
+- default TTL is `CONFIG.cache.ttlMs`
+- failed fetches must not poison the cache
+- cache keys cannot contain dots, spaces, slashes, or traversal characters
 
-    try {
-      return await cache.getOrFetch<ProviderQuota>(
-        this.cacheKey,
-        async () => {
-          // --- Buscar dados de quota aqui ---
-          // Use AbortController para timeouts:
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), CONFIG.api.timeoutMs);
+## Availability Rules
 
-          try {
-            // fetch / spawn / parse — depende do provider
-            const remaining = 75; // exemplo
-            return {
-              ...base,
-              available: true,
-              primary: {
-                remaining,
-                resetsAt: new Date(Date.now() + 3_600_000).toISOString(),
-              },
-            };
-          } finally {
-            clearTimeout(timeout);
-          }
-        },
-        CONFIG.cache.ttlMs,
-      );
-    } catch (error) {
-      logger.error('MyProvider quota fetch error', { error });
-      return { ...base, error: 'Failed to fetch usage' };
-    }
-  }
-}
+`isAvailable()` should be cheap:
 
-registerProvider(new MyProvider());
+- file existence and small JSON checks are fine
+- `command -v` style binary checks are fine
+- network requests are not fine
+- long-running CLI calls are not fine
+
+## Current Provider Patterns
+
+| Provider | Pattern |
+| --- | --- |
+| Claude | reads Claude Code OAuth credentials and fetches Anthropic usage API |
+| Codex | prefers `codex app-server`, falls back to recent session `.jsonl` rate-limit events |
+| Copilot | uses the official Copilot CLI account quota endpoint |
+| Amp | runs `amp usage` and parses stdout |
+
+## Standard Not Logged In Message
+
+Use this when a provider exists but auth is missing:
+
+```text
+Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.
 ```
-
----
-
-## Checklist de integracao
-
-1. **Criar `src/providers/<name>.ts`** implementando a interface `Provider`
-2. **Registrar por side effect** — exportar a classe e adicionar o import em `src/providers/index.ts`:
-   ```typescript
-   export { MyProvider } from './my-provider';
-
-   // Side-effect imports: each provider self-registers via registerProvider()
-   import './my-provider';
-   ```
-3. **Adicionar icon** em `icons/<name>-icon.svg` (ou `.png`) — 16x16 ou 24x24. Referenciado pela regra CSS do Waybar
-4. **Adicionar ao Waybar contract** em `src/waybar-contract.ts`:
-   - Incluir o id na const `WAYBAR_PROVIDERS`:
-     ```typescript
-     export const WAYBAR_PROVIDERS = ["claude", "codex", "amp", "my-provider"] as const;
-     ```
-   - Adicionar a regra CSS de icone na funcao `exportWaybarCss`:
-     ```typescript
-     `#custom-agent-bar-omarchy-my-provider { background-image: url("${iconRef("my-provider-icon.svg")}"); }`
-     ```
-5. **Revisar todas as superficies provider-specific**: `src/index.ts`, `src/theme.ts`, `src/formatters/waybar.ts`, `src/formatters/terminal.ts`, `src/tui/login.ts`, `src/tui/login-single.ts`, `src/tui/list-all.ts` e `src/tui/configure-layout.ts`
-6. **Adicionar paths de credenciais** a `CONFIG.paths` em `src/config.ts`, quando o provider precisar de arquivos locais:
-   ```typescript
-   myProvider: {
-     credentials: join(homedir(), '.my-provider', 'auth.json'),
-   },
-   ```
-7. **Criar testes** em `tests/providers/<name>.test.ts` cobrindo:
-   - `isAvailable()` com e sem credenciais
-   - `getQuota()` com resposta valida
-   - `getQuota()` com erros (timeout, credenciais invalidas, API indisponivel)
-   - Validacao dos campos de `ProviderQuota` retornados
-
----
-
-## Convencoes
-
-### Cache
-
-- O `cacheKey` **deve ser unico** entre todos os providers. Usar o formato `<name>-quota` (ex: `claude-usage`, `codex-quota`, `amp-quota`)
-- Chaves de cache so aceitam `[a-zA-Z0-9_-]` — a classe `Cache` rejeita caracteres fora desse range
-- Usar `cache.getOrFetch()` para o padrao get-or-fetch com TTL automatico. Use `cache.get()` + `cache.set()` separadamente apenas quando houver necessidade real de controle manual.
-
-### Disponibilidade
-
-- `isAvailable()` deve ser **rapido**: verificar existencia de arquivo ou binario, nunca fazer HTTP request ou spawn de processo
-- Exemplos reais: Claude verifica se `~/.claude/.credentials.json` existe e tem `accessToken`; Codex verifica se `~/.codex/auth.json` existe; Amp verifica se o binario `amp` esta no PATH
-
-### Tratamento de erros
-
-- `getQuota()` **nunca deve lançar excecao** para o chamador. Erros devem ser retornados no campo `error`:
-  ```typescript
-  return { ...base, available: false, error: 'Descricao do problema' };
-  ```
-- A camada de orquestracao em `src/providers/index.ts` ja faz catch de excecoes nao tratadas, mas o provider deve lidar com seus proprios erros para dar mensagens uteis
-
-### Timeouts
-
-- Usar `AbortController` para HTTP requests (como Claude faz)
-- Usar timeout explicito para CLI spawns (como Codex faz com `setTimeout`)
-- O timeout padrao da API esta em `CONFIG.api.timeoutMs` (5s). A orquestracao aplica um timeout global de 10s por provider
-
-### Dados de quota
-
-- `primary` e o valor exibido no modulo Waybar (barra principal). Use-o para a janela mais relevante
-- `secondary` e a janela secundaria (exibida no tooltip)
-- `models` e `modelsDetailed` sao para providers com multiplos limites por modelo
-- `meta` aceita key-values arbitrarios para dados extras especificos do provider (ex: Amp usa para `freeRemaining`, `replenishRate`)
-- Todos os valores de `remaining` sao **percentuais de 0 a 100**
-- `resetsAt` deve ser um **ISO 8601 timestamp** ou `null`
-
----
-
-## Exemplos reais
-
-Os tres providers existentes ilustram padroes diferentes:
-
-### Claude (`src/providers/claude.ts`) — API fetch
-
-- Busca quota via HTTP (`fetch`) na API da Anthropic
-- Usa `cache.getOrFetch()` com TTL padrao
-- Timeout via `AbortController` no request
-- Retorna `primary` (5h), `secondary` (7d), `weeklyModels`, e `extraUsage`
-
-### Codex (`src/providers/codex.ts`) — CLI spawn + file parsing
-
-- Estrategia em duas camadas: tenta `codex app-server` (stdio JSON-RPC) primeiro, faz fallback para parse de session logs (`.jsonl`)
-- Usa `cache.getOrFetch()` com TTL padrao
-- Dados ricos em `modelsDetailed` com multiplos buckets de limites
-- Exemplo de como lidar com protocolos mais complexos
-
-### Amp (`src/providers/amp.ts`) — CLI spawn + stdout parsing
-
-- Executa `amp usage` e faz parse do texto de saida com regex
-- Usa `cache.getOrFetch()` encapsulando todo o fetch
-- Calcula `resetsAt` estimado a partir da taxa de reposicao
-- Popula `models` e `meta` com dados extras (free tier, credits)

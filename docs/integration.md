@@ -1,39 +1,50 @@
-# Integration
+# Waybar Integration
 
-## Ownership Model
+## Setup
 
-agent-bar-omarchy owns both runtime and Waybar integration.
+`agent-bar-omarchy setup` performs one managed install pass:
 
-- agent-bar-omarchy installs assets under `~/.config/waybar/agent-bar-omarchy`
-- agent-bar-omarchy injects module references into `modules-right`
-- agent-bar-omarchy injects a managed `include` entry for module definitions
-- agent-bar-omarchy injects a managed CSS `@import` for agent-bar-omarchy styles
+1. copy provider icons to `~/.config/waybar/agent-bar-omarchy/icons`
+2. copy the terminal helper to `~/.config/waybar/scripts`
+3. create `~/.local/bin/agent-bar-omarchy`
+4. write generated `modules.jsonc` and `style.css`
+5. patch Waybar `config.jsonc` and `style.css`
+6. reload Waybar with `SIGUSR2`
 
-Your existing Waybar layout remains intact. agent-bar-omarchy patches only agent-bar-omarchy-specific entries.
+Setup is idempotent. It updates managed entries and leaves unrelated Waybar
+content alone.
 
-## Setup Flow
+## Update
 
-`agent-bar-omarchy setup` performs:
+`agent-bar-omarchy update` is the managed-install updater for `~/.agent-bar`.
 
-1. install icons to `~/.config/waybar/agent-bar-omarchy/icons`
-2. install `agent-bar-omarchy-open-terminal` to `~/.config/waybar/scripts`
-3. create `~/.local/bin/agent-bar-omarchy` symlink
-4. wire `config.jsonc` and `style.css`
-5. reload Waybar
+It discards local changes in that checkout after confirmation, resets to
+upstream, installs dependencies when needed, and then runs setup without a second
+prompt.
+
+The command aborts outside `~/.agent-bar` so development checkouts are not reset
+by accident.
 
 ## Removal
 
-- `agent-bar-omarchy uninstall`: interactive cleanup.
-- `agent-bar-omarchy remove`: force cleanup without prompt.
+- `agent-bar-omarchy uninstall`: interactive cleanup
+- `agent-bar-omarchy remove`: forced cleanup without prompt
 
-Both commands remove agent-bar-omarchy-managed config/style entries and agent-bar-omarchy-owned files.
+Both remove managed Waybar entries and owned files.
 
-## Snippets
+## Backups
 
-`snippets/` still exists as reference material, but is not required for normal setup.
+Before first live Waybar mutation, integration code creates backups using the
+project backup suffix. Repeated setup runs should update managed entries without
+creating duplicate include/import lines.
 
-Reference files:
+## Manual Integration
 
-- [`snippets/waybar-config.jsonc`](../snippets/waybar-config.jsonc)
-- [`snippets/waybar-modules.jsonc`](../snippets/waybar-modules.jsonc)
-- [`snippets/waybar-style.css`](../snippets/waybar-style.css)
+Normal users should use `setup`. The export commands exist for tests, packagers,
+or unusual manual wiring:
+
+```bash
+agent-bar-omarchy assets install --waybar-dir <path> --scripts-dir <path>
+agent-bar-omarchy export waybar-modules --app-bin <path> --terminal-script <path>
+agent-bar-omarchy export waybar-css --icons-dir <path>
+```

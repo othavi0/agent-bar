@@ -1,48 +1,52 @@
 # Commands
 
-## Public Commands
+## Primary Commands
 
-| Command | What it does | Writes where |
+| Command | Purpose | Writes |
 | --- | --- | --- |
-| `agent-bar-omarchy` | Prints Waybar JSON for one provider or the default surface. | No writes unless cache refresh runs. |
-| `agent-bar-omarchy status` | Prints quota status in the terminal. | Cache only. |
-| `agent-bar-omarchy menu` | Opens the TUI menu. | Settings and provider auth as needed. |
-| `agent-bar-omarchy setup` | Full setup. Installs assets, symlink, Waybar config wiring, and style import. | `~/.config/waybar/*`, `~/.local/bin/agent-bar-omarchy`, agent-bar-omarchy paths |
-| `agent-bar-omarchy assets install --waybar-dir <path> --scripts-dir <path>` | Installs icons and terminal helper into caller-selected paths. | Caller-selected asset paths only. |
-| `agent-bar-omarchy export waybar-modules --app-bin <path> --terminal-script <path>` | Prints the JSON module contract. | No writes. |
-| `agent-bar-omarchy export waybar-css --icons-dir <path>` | Prints the agent-bar-omarchy CSS contract. | No writes. |
-| `agent-bar-omarchy uninstall` | Interactive removal of agent-bar-omarchy integration + owned files. | agent-bar-omarchy-managed entries and agent-bar-omarchy-owned paths |
-| `agent-bar-omarchy remove` | Forced removal without prompt. | Same targets as uninstall |
-| `agent-bar-omarchy update` | Updates the managed `~/.agent-bar` checkout, discards local install edits, updates dependencies when needed, and re-runs setup. | `~/.agent-bar`, `~/.config/waybar/*`, `~/.local/bin/agent-bar-omarchy` |
+| `agent-bar-omarchy` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
+| `agent-bar-omarchy status` | Print the quota view in a terminal. | Cache only |
+| `agent-bar-omarchy menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
+| `agent-bar-omarchy update` | Update the managed `~/.agent-bar` checkout and re-run setup. | `~/.agent-bar`, managed Waybar files |
 
-## Common Flags
+## Install And Removal
 
-| Flag | Meaning |
+| Command | Purpose | Writes |
+| --- | --- | --- |
+| `agent-bar-omarchy setup` | Install assets, create symlink, patch Waybar, reload Waybar. | `~/.local/bin`, `~/.config/waybar` |
+| `agent-bar-omarchy uninstall` | Interactive removal of managed integration and owned files. | Removes managed files/entries |
+| `agent-bar-omarchy remove` | Non-interactive forced removal. | Same targets as uninstall |
+
+## Export And Assets
+
+These are mostly for tests, packagers, and manual integration.
+
+| Command | Purpose |
 | --- | --- |
-| `-t`, `--terminal` | Force terminal output mode. |
+| `agent-bar-omarchy assets install --waybar-dir <path> --scripts-dir <path>` | Copy icons and terminal helper into explicit paths. |
+| `agent-bar-omarchy export waybar-modules --app-bin <path> --terminal-script <path>` | Print generated Waybar module JSON. |
+| `agent-bar-omarchy export waybar-css --icons-dir <path>` | Print generated Waybar CSS JSON. |
+
+## Flags
+
+| Flag | Purpose |
+| --- | --- |
 | `-p`, `--provider <id>` | Limit output to `claude`, `codex`, `copilot`, or `amp`. |
-| `-r`, `--refresh` | Force a refresh instead of relying on cache. |
+| `-r`, `--refresh` | Ignore cache and fetch fresh provider data. |
+| `-t`, `--terminal` | Force terminal output mode. |
+| `-v`, `--verbose` | Enable diagnostic logging. |
 | `-h`, `--help` | Print CLI help. |
 
-## Operational Notes
+## Update Behavior
 
-- `agent-bar-omarchy setup` is idempotent.
-- `agent-bar-omarchy update` is destructive by design, but only for the managed `~/.agent-bar` install path.
-- agent-bar-omarchy uses managed include/import entries instead of replacing your entire Waybar files.
-- `agent-bar-omarchy remove` is intended for non-interactive cleanup scripts.
+`agent-bar-omarchy update` is intentionally destructive only for the managed
+install path:
 
-## Examples
+1. It must run from the `~/.agent-bar` checkout.
+2. It fetches upstream.
+3. It shows incoming commits and local changes.
+4. After confirmation, it runs `git reset --hard <upstream>` and `git clean -fd`.
+5. It runs `bun install` when dependency files changed or `node_modules` is missing.
+6. It re-runs setup without a second confirmation.
 
-```bash
-agent-bar-omarchy
-agent-bar-omarchy status --provider codex
-agent-bar-omarchy --provider copilot
-agent-bar-omarchy menu
-agent-bar-omarchy setup
-agent-bar-omarchy update
-agent-bar-omarchy assets install --waybar-dir ~/.config/waybar/agent-bar-omarchy --scripts-dir ~/.config/waybar/scripts
-agent-bar-omarchy export waybar-modules --app-bin '$HOME/.local/bin/agent-bar-omarchy' --terminal-script ~/.config/waybar/scripts/agent-bar-omarchy-open-terminal
-agent-bar-omarchy export waybar-css --icons-dir ~/.config/waybar/agent-bar-omarchy/icons
-agent-bar-omarchy uninstall
-agent-bar-omarchy remove
-```
+Use a separate checkout for development work.

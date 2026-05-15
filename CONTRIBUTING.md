@@ -81,6 +81,7 @@ src/
     index.ts            # Registry de providers
     claude.ts           # Provider: Claude
     codex.ts            # Provider: Codex
+    copilot.ts          # Provider: GitHub Copilot
     amp.ts              # Provider: Amp
   formatters/           # Formatacao de output (terminal e Waybar)
   tui/                  # Menus interativos e login flows (clack/prompts)

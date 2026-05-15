@@ -1,6 +1,6 @@
 # agent-bar-omarchy — Agent Instructions
 
-LLM quota monitor for Waybar. Tracks Claude, Codex, and Amp usage, exports Waybar modules/CSS, owns its runtime state, and provides an interactive TUI for provider login and layout/model configuration.
+LLM quota monitor for Waybar. Tracks Claude, Codex, GitHub Copilot, and Amp usage, exports Waybar modules/CSS, owns its runtime state, and provides an interactive TUI for provider login and layout/model configuration.
 
 These instructions are the canonical guidance for coding agents in this repo. `CLAUDE.md` intentionally delegates here to avoid duplicated, stale instructions.
 
@@ -49,6 +49,7 @@ The app owns these paths at runtime:
 | --- | --- |
 | `~/.config/agent-bar-omarchy/settings.json` | Versioned user settings; normalized on load; atomic tmp+rename writes |
 | `~/.cache/agent-bar-omarchy/` | Provider quota cache |
+| `~/.agent-bar` | Managed install checkout used by README install/update flow |
 | `~/.local/bin/agent-bar-omarchy` | Symlink created by setup |
 | `~/.config/waybar/agent-bar-omarchy/icons/` | Installed provider icons |
 | `~/.config/waybar/agent-bar-omarchy/modules.jsonc` | Generated Waybar module include |
@@ -59,6 +60,7 @@ Provider credentials are external and only read/used by providers:
 
 - Claude: `~/.claude/.credentials.json`
 - Codex: `~/.codex/auth.json`, `~/.codex/sessions/**`
+- Copilot: official Copilot CLI/config
 - Amp: `amp` binary from PATH or common install locations
 
 ## Architecture Map
@@ -76,7 +78,7 @@ Provider credentials are external and only read/used by providers:
 - `src/waybar-contract.ts` — stable generated Waybar module/CSS/assets contract.
 - `src/waybar-integration.ts` — safe-ish live Waybar patching for include/import/modules-right while preserving unrelated config.
 - `scripts/` — Bash wrappers and terminal launcher.
-- `docs/` — operational documentation. `docs/plans/` and `docs/superpowers/specs/` are historical, not current source of truth.
+- `docs/` — operational documentation only.
 - `snippets/` — reference/manual Waybar snippets only. Normal setup uses generated contract + integration code.
 
 ## Provider Contract
@@ -93,6 +95,7 @@ Current provider patterns:
 
 - Claude: reads Claude Code OAuth credentials, fetches Anthropic usage API with `AbortController`, caches successful API responses under `claude-usage`.
 - Codex: prefers `codex app-server` JSON-RPC-ish protocol via stdio; falls back to recent session `.jsonl` rate limit events; normalizes buckets into `modelsDetailed`; cache key `codex-quota`.
+- Copilot: uses the official Copilot CLI account quota endpoint; cache key `copilot-quota`.
 - Amp: locates official `amp` CLI, runs `amp usage`, parses stdout, computes free-tier refill ETA, cache key `amp-quota`.
 
 When adding/changing providers:
@@ -123,8 +126,8 @@ Settings are schema version `1` and live under `~/.config/agent-bar-omarchy/sett
 
 Defaults:
 
-- `waybar.providers`: `['claude', 'codex', 'amp']`
-- `waybar.providerOrder`: `['claude', 'codex', 'amp']`
+- `waybar.providers`: `['claude', 'codex', 'copilot', 'amp']`
+- `waybar.providerOrder`: `['claude', 'codex', 'copilot', 'amp']`
 - `waybar.showPercentage`: `true`
 - `waybar.separators`: `gap`
 - `windowPolicy.codex`: `both`
@@ -154,6 +157,7 @@ Module IDs:
 
 - `custom/agent-bar-omarchy-claude`
 - `custom/agent-bar-omarchy-codex`
+- `custom/agent-bar-omarchy-copilot`
 - `custom/agent-bar-omarchy-amp`
 
 CSS selectors use `#custom-agent-bar-omarchy-<provider>`.
@@ -188,7 +192,7 @@ The current product name and public namespace is **`agent-bar-omarchy`**.
 `qbar` is legacy compatibility only:
 
 - Allowed in `LEGACY_*` constants, migration/removal code, and tests that prove legacy state is migrated or cleaned.
-- Allowed in historical changelog entries and historical planning/spec files.
+- Allowed in historical changelog entries.
 - Not allowed for new user-facing commands, new docs examples, new Waybar module IDs, new CSS selectors, new settings paths, new symlinks, or new cache keys.
 
 Also do not reintroduce removed/old surfaces such as Antigravity, `llm-usage`, external theme-repo dependencies, or Omarchy theme coupling. The app is theme-agnostic and owns its generated Waybar integration.
@@ -225,13 +229,11 @@ Use current operational docs as references:
 - `docs/runtime.md` — owned paths/settings/cache behavior.
 - `docs/new-provider.md` — current provider extension checklist.
 - `docs/waybar-contract.md` — export/assets/CSS/module contract.
-- `docs/integration.md` — setup/apply/remove ownership model.
+- `docs/integration.md` — setup/update/remove ownership model.
 - `docs/troubleshooting.md` — runtime troubleshooting.
 
 Treat these as non-operational or historical unless explicitly editing them:
 
-- `docs/plans/**`
-- `docs/superpowers/specs/**`
 - old `CHANGELOG.md` release notes
 - `snippets/**` manual integration examples
 

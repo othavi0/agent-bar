@@ -1,22 +1,21 @@
-# agent-bar-omarchy Docs
+# Documentation
 
-Operational notes for the Waybar quota monitor.
+Operational docs for `agent-bar-omarchy`.
 
-## Read In This Order
+## User Docs
 
-1. [Commands](commands.md)
-2. [Runtime](runtime.md)
-3. [Waybar contract](waybar-contract.md)
-4. [Integration](integration.md)
-5. [Troubleshooting](troubleshooting.md)
+- [Commands](commands.md) — public CLI surface and flags.
+- [Runtime](runtime.md) — files, settings, cache, provider credentials.
+- [Integration](integration.md) — setup, update, removal, and Waybar ownership.
+- [Troubleshooting](troubleshooting.md) — common runtime and Waybar failures.
 
-## Model
+## Developer Docs
 
-- `agent-bar-omarchy` reads agent CLI usage/quota state and renders Waybar modules.
-- Provider credentials stay owned by each provider CLI/config.
-- `agent-bar-omarchy setup` installs and wires `config.jsonc` + `style.css` in an idempotent way.
-- `agent-bar-omarchy uninstall` and `agent-bar-omarchy remove` clean both integration and owned artifacts.
+- [Waybar contract](waybar-contract.md) — generated modules, CSS, assets, and classes.
+- [New provider guide](new-provider.md) — provider implementation checklist.
 
-## Historical Notes
+## Source Of Truth
 
-`docs/plans/` is historical planning material. It is not the operational source of truth.
+Runtime behavior lives in `src/`. These docs describe the current operational
+contract only. Historical planning notes were removed from `docs/` so they do
+not look like supported behavior.
