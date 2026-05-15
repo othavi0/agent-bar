@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 /**
- * agent-bar-omarchy update - Update the managed ~/.agent-bar installation.
+ * agent-bar update - Update the managed ~/.agent-bar installation.
  */
 
 import { existsSync } from 'node:fs';

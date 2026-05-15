@@ -4,19 +4,26 @@ import { existsSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import * as p from '@clack/prompts';
-import { APP_NAME, LEGACY_APP_NAME } from './app-identity';
+import { APP_NAME, LEGACY_APP_NAME, QBAR_LEGACY_APP_NAME } from './app-identity';
 import { CONFIG } from './config';
 import { colorize, oneDark, semantic } from './tui/colors';
-import { getDefaultWaybarAssetPaths, getLegacyWaybarAssetPaths } from './waybar-contract';
+import {
+  getDefaultWaybarAssetPaths,
+  getLegacyWaybarAssetPaths,
+  getQbarLegacyWaybarAssetPaths,
+} from './waybar-contract';
 import { getDefaultWaybarIntegrationPaths, removeWaybarIntegration } from './waybar-integration';
 
 const HOME = homedir();
 const defaults = getDefaultWaybarAssetPaths();
 const legacyDefaults = getLegacyWaybarAssetPaths(join(HOME, '.config', 'waybar'));
+const qbarLegacyDefaults = getQbarLegacyWaybarAssetPaths(join(HOME, '.config', 'waybar'));
 const SETTINGS_DIR = join(HOME, '.config', APP_NAME);
 const LEGACY_SETTINGS_DIR = join(HOME, '.config', LEGACY_APP_NAME);
+const QBAR_LEGACY_SETTINGS_DIR = join(HOME, '.config', QBAR_LEGACY_APP_NAME);
 const APP_SYMLINK = join(HOME, '.local', 'bin', APP_NAME);
 const LEGACY_SYMLINK = join(HOME, '.local', 'bin', LEGACY_APP_NAME);
+const QBAR_LEGACY_SYMLINK = join(HOME, '.local', 'bin', QBAR_LEGACY_APP_NAME);
 
 export interface UninstallOptions {
   force?: boolean;
@@ -57,7 +64,7 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
 
   p.note(
     [
-      `This removes ${APP_NAME} integration and owned paths, plus legacy ${LEGACY_APP_NAME} artifacts:`,
+      `This removes ${APP_NAME} integration and owned paths, plus legacy ${LEGACY_APP_NAME}/${QBAR_LEGACY_APP_NAME} artifacts:`,
       '',
       `  • ${integrationPaths.waybarConfigPath} (${APP_NAME} entries only)`,
       `  • ${integrationPaths.waybarStylePath} (${APP_NAME} import only)`,
@@ -67,13 +74,19 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
       `  • ${defaults.terminalScript}`,
       `  • ${legacyDefaults.waybarDir}`,
       `  • ${legacyDefaults.terminalScript}`,
+      `  • ${qbarLegacyDefaults.waybarDir}`,
+      `  • ${qbarLegacyDefaults.terminalScript}`,
       `  • ${SETTINGS_DIR}`,
       `  • ${LEGACY_SETTINGS_DIR}`,
+      `  • ${QBAR_LEGACY_SETTINGS_DIR}`,
       `  • ${CONFIG.paths.cache}`,
       `  • ${CONFIG.paths.legacyCache}`,
+      `  • ${CONFIG.paths.qbarLegacyCache}`,
       `  • ${CONFIG.paths.waybarLegacyCache}`,
+      `  • ${CONFIG.paths.waybarQbarLegacyCache}`,
       `  • ${APP_SYMLINK}`,
       `  • ${LEGACY_SYMLINK}`,
+      `  • ${QBAR_LEGACY_SYMLINK}`,
     ].join('\n'),
     colorize('What gets removed', semantic.title),
   );
@@ -103,13 +116,19 @@ export async function runUninstall(options: UninstallOptions = {}): Promise<void
   removePathIfExists(defaults.terminalScript, removed, failed);
   removePathIfExists(legacyDefaults.waybarDir, removed, failed);
   removePathIfExists(legacyDefaults.terminalScript, removed, failed);
+  removePathIfExists(qbarLegacyDefaults.waybarDir, removed, failed);
+  removePathIfExists(qbarLegacyDefaults.terminalScript, removed, failed);
   removePathIfExists(SETTINGS_DIR, removed, failed);
   removePathIfExists(LEGACY_SETTINGS_DIR, removed, failed);
+  removePathIfExists(QBAR_LEGACY_SETTINGS_DIR, removed, failed);
   removePathIfExists(CONFIG.paths.cache, removed, failed);
   removePathIfExists(CONFIG.paths.legacyCache, removed, failed);
+  removePathIfExists(CONFIG.paths.qbarLegacyCache, removed, failed);
   removePathIfExists(CONFIG.paths.waybarLegacyCache, removed, failed);
+  removePathIfExists(CONFIG.paths.waybarQbarLegacyCache, removed, failed);
   removePathIfExists(APP_SYMLINK, removed, failed);
   removePathIfExists(LEGACY_SYMLINK, removed, failed);
+  removePathIfExists(QBAR_LEGACY_SYMLINK, removed, failed);
   s.stop('Files cleaned up');
 
   if (integrationResult.configChanged) {

@@ -13,23 +13,23 @@ Built-in Waybar providers:
 
 Generated module IDs:
 
-- `custom/agent-bar-omarchy-claude`
-- `custom/agent-bar-omarchy-codex`
-- `custom/agent-bar-omarchy-copilot`
-- `custom/agent-bar-omarchy-amp`
+- `custom/agent-bar-claude`
+- `custom/agent-bar-codex`
+- `custom/agent-bar-copilot`
+- `custom/agent-bar-amp`
 
 CSS selectors use:
 
 ```text
-#custom-agent-bar-omarchy-<provider>
+#custom-agent-bar-<provider>
 ```
 
 ## Module Export
 
 ```bash
-agent-bar-omarchy export waybar-modules \
-  --app-bin '$HOME/.local/bin/agent-bar-omarchy' \
-  --terminal-script ~/.config/waybar/scripts/agent-bar-omarchy-open-terminal
+agent-bar export waybar-modules \
+  --app-bin '$HOME/.local/bin/agent-bar' \
+  --terminal-script ~/.config/waybar/scripts/agent-bar-open-terminal
 ```
 
 The JSON contains:
@@ -49,8 +49,8 @@ Each module includes:
 ## CSS Export
 
 ```bash
-agent-bar-omarchy export waybar-css \
-  --icons-dir ~/.config/waybar/agent-bar-omarchy/icons
+agent-bar export waybar-css \
+  --icons-dir ~/.config/waybar/agent-bar/icons
 ```
 
 The JSON contains one `css` field. Generated CSS includes:
@@ -66,7 +66,7 @@ The JSON contains one `css` field. Generated CSS includes:
 Single-provider output starts with:
 
 ```text
-agent-bar-omarchy-<provider>
+agent-bar-<provider>
 ```
 
 and adds one state class:
@@ -80,13 +80,13 @@ and adds one state class:
 Disabled single-provider modules use:
 
 ```text
-agent-bar-omarchy-hidden
+agent-bar-hidden
 ```
 
 Aggregate output starts with:
 
 ```text
-agent-bar-omarchy
+agent-bar
 ```
 
 and adds provider-scoped classes such as `claude-ok`, `codex-warn`, or
@@ -95,12 +95,12 @@ and adds provider-scoped classes such as `claude-ok`, `codex-warn`, or
 ## Asset Install
 
 ```bash
-agent-bar-omarchy assets install \
-  --waybar-dir ~/.config/waybar/agent-bar-omarchy \
+agent-bar assets install \
+  --waybar-dir ~/.config/waybar/agent-bar \
   --scripts-dir ~/.config/waybar/scripts
 ```
 
 This copies:
 
 - provider icons into `<waybar-dir>/icons`
-- terminal helper into `<scripts-dir>/agent-bar-omarchy-open-terminal`
+- terminal helper into `<scripts-dir>/agent-bar-open-terminal`

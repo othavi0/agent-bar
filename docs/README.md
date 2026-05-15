@@ -1,6 +1,6 @@
 # Documentation
 
-Operational docs for `agent-bar-omarchy`.
+Operational docs for `agent-bar`.
 
 ## User Docs
 

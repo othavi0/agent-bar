@@ -161,7 +161,7 @@ describe('CodexProvider app-server protocol', () => {
     const messages = fakeProc.getWrittenMessages() as any[];
     expect(messages[0].method).toBe('initialize');
     expect(messages[0].id).toBe(0);
-    expect(messages[0].params.clientInfo.name).toBe('agent-bar-omarchy');
+    expect(messages[0].params.clientInfo.name).toBe('agent-bar');
   });
 
   it('sends initialized + account/read + rateLimits/read after init response', async () => {

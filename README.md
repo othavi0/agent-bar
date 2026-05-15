@@ -19,24 +19,24 @@ Supported providers:
 Requires Bun.
 
 ```bash
-git clone git@github.com:othavioquiliao/agent-bar-omarchy.git ~/.agent-bar
+git clone git@github.com:othavioquiliao/agent-bar.git ~/.agent-bar
 cd ~/.agent-bar
 bun run setup
 ```
 
 `setup` installs the Waybar modules, CSS, provider icons, terminal helper, and
-`~/.local/bin/agent-bar-omarchy` symlink.
+`~/.local/bin/agent-bar` symlink.
 
 ## Commands
 
 ```bash
-agent-bar-omarchy             # Waybar JSON
-agent-bar-omarchy status      # Terminal quota view
-agent-bar-omarchy menu        # Login and layout TUI
-agent-bar-omarchy update      # Update managed ~/.agent-bar install
-agent-bar-omarchy setup       # Re-apply Waybar integration
-agent-bar-omarchy uninstall   # Interactive removal
-agent-bar-omarchy remove      # Forced removal
+agent-bar             # Waybar JSON
+agent-bar status      # Terminal quota view
+agent-bar menu        # Login and layout TUI
+agent-bar update      # Update managed ~/.agent-bar install
+agent-bar setup       # Re-apply Waybar integration
+agent-bar uninstall   # Interactive removal
+agent-bar remove      # Forced removal
 ```
 
 `update` is for the managed `~/.agent-bar` checkout. It discards local changes

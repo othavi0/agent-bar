@@ -15,7 +15,7 @@ exports[`Terminal formatter snapshots renders Claude healthy 1`] = `
 exports[`Terminal formatter snapshots renders Claude error 1`] = `
 "┏━ Claude ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ┃
-┃  ⚠️ Token expired. Open \`agent-bar-omarchy menu\` and choose Provider login.
+┃  ⚠️ Token expired. Open \`agent-bar menu\` and choose Provider login.
 ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 `;
@@ -110,19 +110,19 @@ exports[`Waybar formatter snapshots renders Claude healthy 2`] = `
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`Waybar formatter snapshots renders Claude healthy 3`] = `"agent-bar-omarchy claude-ok"`;
+exports[`Waybar formatter snapshots renders Claude healthy 3`] = `"agent-bar claude-ok"`;
 
 exports[`Waybar formatter snapshots renders Claude error 1`] = `"<span foreground='#6a7485'>No Providers</span>"`;
 
 exports[`Waybar formatter snapshots renders Claude error 2`] = `
 "<span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e06c75'>⚠️ Token expired. Open \`agent-bar-omarchy menu\` and choose Provider login.</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e06c75'>⚠️ Token expired. Open \`agent-bar menu\` and choose Provider login.</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`Waybar formatter snapshots renders Claude error 3`] = `"agent-bar-omarchy"`;
+exports[`Waybar formatter snapshots renders Claude error 3`] = `"agent-bar"`;
 
 exports[`Waybar formatter snapshots renders Codex healthy 1`] = `"<span foreground='#98c379'>60%</span>"`;
 
@@ -139,7 +139,7 @@ exports[`Waybar formatter snapshots renders Codex healthy 2`] = `
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`Waybar formatter snapshots renders Codex healthy 3`] = `"agent-bar-omarchy codex-ok"`;
+exports[`Waybar formatter snapshots renders Codex healthy 3`] = `"agent-bar codex-ok"`;
 
 exports[`Waybar formatter snapshots renders Amp healthy 1`] = `"<span foreground='#98c379'>70%</span>"`;
 
@@ -153,7 +153,7 @@ exports[`Waybar formatter snapshots renders Amp healthy 2`] = `
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`Waybar formatter snapshots renders Amp healthy 3`] = `"agent-bar-omarchy amp-ok"`;
+exports[`Waybar formatter snapshots renders Amp healthy 3`] = `"agent-bar amp-ok"`;
 
 exports[`Waybar formatter snapshots renders all providers combined 1`] = `"<span foreground='#98c379'>75%</span> <span foreground='#6a7485'>│</span> <span foreground='#98c379'>60%</span> <span foreground='#6a7485'>│</span> <span foreground='#98c379'>70%</span>"`;
 
@@ -188,13 +188,13 @@ exports[`Waybar formatter snapshots renders all providers combined 2`] = `
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`Waybar formatter snapshots renders all providers combined 3`] = `"agent-bar-omarchy claude-ok codex-ok amp-ok"`;
+exports[`Waybar formatter snapshots renders all providers combined 3`] = `"agent-bar claude-ok codex-ok amp-ok"`;
 
 exports[`Waybar formatter snapshots renders empty providers 1`] = `"<span foreground='#6a7485'>No Providers</span>"`;
 
 exports[`Waybar formatter snapshots renders empty providers 2`] = `""`;
 
-exports[`Waybar formatter snapshots renders empty providers 3`] = `"agent-bar-omarchy"`;
+exports[`Waybar formatter snapshots renders empty providers 3`] = `"agent-bar"`;
 
 exports[`formatProviderForWaybar snapshots renders Claude healthy 1`] = `"<span foreground='#98c379'>75%</span>"`;
 
@@ -210,19 +210,19 @@ exports[`formatProviderForWaybar snapshots renders Claude healthy 2`] = `
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`formatProviderForWaybar snapshots renders Claude healthy 3`] = `"agent-bar-omarchy-claude ok"`;
+exports[`formatProviderForWaybar snapshots renders Claude healthy 3`] = `"agent-bar-claude ok"`;
 
 exports[`formatProviderForWaybar snapshots renders Claude disconnected 1`] = `"<span foreground='#e06c75'>󱘖</span>"`;
 
 exports[`formatProviderForWaybar snapshots renders Claude disconnected 2`] = `
 "<span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e06c75'>⚠️ Token expired. Open \`agent-bar-omarchy menu\` and choose Provider login.</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e06c75'>⚠️ Token expired. Open \`agent-bar menu\` and choose Provider login.</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`formatProviderForWaybar snapshots renders Claude disconnected 3`] = `"agent-bar-omarchy-claude disconnected"`;
+exports[`formatProviderForWaybar snapshots renders Claude disconnected 3`] = `"agent-bar-claude disconnected"`;
 
 exports[`formatProviderForWaybar snapshots renders Codex healthy 1`] = `"<span foreground='#98c379'>60%</span>"`;
 
@@ -239,7 +239,7 @@ exports[`formatProviderForWaybar snapshots renders Codex healthy 2`] = `
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`formatProviderForWaybar snapshots renders Codex healthy 3`] = `"agent-bar-omarchy-codex ok"`;
+exports[`formatProviderForWaybar snapshots renders Codex healthy 3`] = `"agent-bar-codex ok"`;
 
 exports[`formatProviderForWaybar snapshots renders Amp healthy 1`] = `"<span foreground='#98c379'>70%</span>"`;
 
@@ -253,7 +253,7 @@ exports[`formatProviderForWaybar snapshots renders Amp healthy 2`] = `
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`formatProviderForWaybar snapshots renders Amp healthy 3`] = `"agent-bar-omarchy-amp ok"`;
+exports[`formatProviderForWaybar snapshots renders Amp healthy 3`] = `"agent-bar-amp ok"`;
 
 exports[`Terminal formatter snapshots — displayMode=used renders Claude healthy as used 1`] = `
 "┏━ Claude ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -339,7 +339,7 @@ exports[`Waybar formatter snapshots — displayMode=used renders Claude healthy 
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`Waybar formatter snapshots — displayMode=used renders Claude healthy as used 3`] = `"agent-bar-omarchy claude-ok"`;
+exports[`Waybar formatter snapshots — displayMode=used renders Claude healthy as used 3`] = `"agent-bar claude-ok"`;
 
 exports[`Waybar formatter snapshots — displayMode=used renders Codex healthy as used 1`] = `"<span foreground='#98c379'>40%</span>"`;
 
@@ -356,7 +356,7 @@ exports[`Waybar formatter snapshots — displayMode=used renders Codex healthy a
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>"
 `;
 
-exports[`Waybar formatter snapshots — displayMode=used renders Codex healthy as used 3`] = `"agent-bar-omarchy codex-ok"`;
+exports[`Waybar formatter snapshots — displayMode=used renders Codex healthy as used 3`] = `"agent-bar codex-ok"`;
 
 exports[`Waybar formatter snapshots — displayMode=used renders Amp healthy as used (tooltip contains "Resets in") 1`] = `"<span foreground='#98c379'>30%</span>"`;
 

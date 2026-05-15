@@ -76,5 +76,5 @@ throwing. Keep messages stable; tests assert exact strings in several places.
 Use this when a provider exists but auth is missing:
 
 ```text
-Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.
+Not logged in. Open `agent-bar menu` and choose Provider login.
 ```

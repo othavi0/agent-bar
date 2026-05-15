@@ -4,18 +4,18 @@
 
 | Command | Purpose | Writes |
 | --- | --- | --- |
-| `agent-bar-omarchy` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
-| `agent-bar-omarchy status` | Print the quota view in a terminal. | Cache only |
-| `agent-bar-omarchy menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
-| `agent-bar-omarchy update` | Update the managed `~/.agent-bar` checkout and re-run setup. | `~/.agent-bar`, managed Waybar files |
+| `agent-bar` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
+| `agent-bar status` | Print the quota view in a terminal. | Cache only |
+| `agent-bar menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
+| `agent-bar update` | Update the managed `~/.agent-bar` checkout and re-run setup. | `~/.agent-bar`, managed Waybar files |
 
 ## Install And Removal
 
 | Command | Purpose | Writes |
 | --- | --- | --- |
-| `agent-bar-omarchy setup` | Install assets, create symlink, patch Waybar, reload Waybar. | `~/.local/bin`, `~/.config/waybar` |
-| `agent-bar-omarchy uninstall` | Interactive removal of managed integration and owned files. | Removes managed files/entries |
-| `agent-bar-omarchy remove` | Non-interactive forced removal. | Same targets as uninstall |
+| `agent-bar setup` | Install assets, create symlink, patch Waybar, reload Waybar. | `~/.local/bin`, `~/.config/waybar` |
+| `agent-bar uninstall` | Interactive removal of managed integration and owned files. | Removes managed files/entries |
+| `agent-bar remove` | Non-interactive forced removal. | Same targets as uninstall |
 
 ## Export And Assets
 
@@ -23,9 +23,9 @@ These are mostly for tests, packagers, and manual integration.
 
 | Command | Purpose |
 | --- | --- |
-| `agent-bar-omarchy assets install --waybar-dir <path> --scripts-dir <path>` | Copy icons and terminal helper into explicit paths. |
-| `agent-bar-omarchy export waybar-modules --app-bin <path> --terminal-script <path>` | Print generated Waybar module JSON. |
-| `agent-bar-omarchy export waybar-css --icons-dir <path>` | Print generated Waybar CSS JSON. |
+| `agent-bar assets install --waybar-dir <path> --scripts-dir <path>` | Copy icons and terminal helper into explicit paths. |
+| `agent-bar export waybar-modules --app-bin <path> --terminal-script <path>` | Print generated Waybar module JSON. |
+| `agent-bar export waybar-css --icons-dir <path>` | Print generated Waybar CSS JSON. |
 
 ## Flags
 
@@ -39,7 +39,7 @@ These are mostly for tests, packagers, and manual integration.
 
 ## Update Behavior
 
-`agent-bar-omarchy update` is intentionally destructive only for the managed
+`agent-bar update` is intentionally destructive only for the managed
 install path:
 
 1. It must run from the `~/.agent-bar` checkout.

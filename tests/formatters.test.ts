@@ -240,7 +240,7 @@ describe('formatForWaybar', () => {
     const quotas = mockAllQuotas([mockClaudeQuota(80)]);
     const result = formatForWaybar(quotas);
 
-    expect(result.class).toContain('agent-bar-omarchy');
+    expect(result.class).toContain('agent-bar');
     expect(result.class).toContain('claude-ok');
   });
 
@@ -299,14 +299,14 @@ describe('formatProviderForWaybar', () => {
   it('returns percentage for available provider', () => {
     const result = formatProviderForWaybar(mockClaudeQuota(80));
 
-    expect(result.class).toContain('agent-bar-omarchy-claude');
+    expect(result.class).toContain('agent-bar-claude');
     expect(result.tooltip).toContain('Claude');
   });
 
   it('returns Copilot percentage and critical state for exhausted quota', () => {
     const result = formatProviderForWaybar(mockCopilotQuota());
 
-    expect(result.class).toContain('agent-bar-omarchy-copilot');
+    expect(result.class).toContain('agent-bar-copilot');
     expect(result.class).toContain('critical');
     expect(result.text).toContain('0%');
   });

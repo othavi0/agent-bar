@@ -8,6 +8,10 @@ import {
   LEGACY_BACKUP_SUFFIX,
   LEGACY_WAYBAR_MODULE_PREFIX,
   LEGACY_WAYBAR_NAMESPACE,
+  QBAR_LEGACY_APP_NAME,
+  QBAR_LEGACY_BACKUP_SUFFIX,
+  QBAR_LEGACY_WAYBAR_MODULE_PREFIX,
+  QBAR_LEGACY_WAYBAR_NAMESPACE,
   WAYBAR_MODULE_PREFIX,
   WAYBAR_NAMESPACE,
 } from './app-identity';
@@ -55,8 +59,9 @@ export interface RemoveWaybarIntegrationResult {
 
 export const APP_STYLE_IMPORT = `@import url("./${WAYBAR_NAMESPACE}/style.css");`;
 export const LEGACY_STYLE_IMPORT = `@import url("./${LEGACY_WAYBAR_NAMESPACE}/style.css");`;
+export const QBAR_LEGACY_STYLE_IMPORT = `@import url("./${QBAR_LEGACY_WAYBAR_NAMESPACE}/style.css");`;
 
-const MANAGED_MODULE_PREFIXES = [WAYBAR_MODULE_PREFIX, LEGACY_WAYBAR_MODULE_PREFIX];
+const MANAGED_MODULE_PREFIXES = [WAYBAR_MODULE_PREFIX, LEGACY_WAYBAR_MODULE_PREFIX, QBAR_LEGACY_WAYBAR_MODULE_PREFIX];
 
 function readText(path: string): string | null {
   if (!existsSync(path)) {
@@ -73,7 +78,12 @@ function writeText(path: string, content: string): void {
 
 function backupIfNeeded(path: string): void {
   const backupPath = `${path}${BACKUP_SUFFIX}`;
-  if (!existsSync(backupPath) && !existsSync(`${path}${LEGACY_BACKUP_SUFFIX}`) && existsSync(path)) {
+  if (
+    !existsSync(backupPath) &&
+    !existsSync(`${path}${LEGACY_BACKUP_SUFFIX}`) &&
+    !existsSync(`${path}${QBAR_LEGACY_BACKUP_SUFFIX}`) &&
+    existsSync(path)
+  ) {
     copyFileSync(path, backupPath);
   }
 }
@@ -185,6 +195,7 @@ function stripManagedStyleImports(content: string): string {
   return content
     .replace(new RegExp(`^\\s*\\/\\*\\s*${escapeRegex(APP_NAME)} managed import\\s*\\*\\/\\n?`, 'm'), '')
     .replace(new RegExp(`^\\s*\\/\\*\\s*${escapeRegex(LEGACY_APP_NAME)} managed import\\s*\\*\\/\\n?`, 'm'), '')
+    .replace(new RegExp(`^\\s*\\/\\*\\s*${escapeRegex(QBAR_LEGACY_APP_NAME)} managed import\\s*\\*\\/\\n?`, 'm'), '')
     .replace(
       new RegExp(`^\\s*@import\\s+url\\((['"])\\./${escapeRegex(WAYBAR_NAMESPACE)}/style\\.css\\1\\);?\\n?`, 'm'),
       '',
@@ -196,16 +207,24 @@ function stripManagedStyleImports(content: string): string {
       ),
       '',
     )
+    .replace(
+      new RegExp(
+        `^\\s*@import\\s+url\\((['"])\\./${escapeRegex(QBAR_LEGACY_WAYBAR_NAMESPACE)}/style\\.css\\1\\);?\\n?`,
+        'm',
+      ),
+      '',
+    )
     .replace(/^\s*\n/, '');
 }
 
 function ensureIncludePath(
   content: string,
   includePath: string,
-  legacyIncludePath: string,
+  legacyIncludePaths: string[],
 ): { content: string; changed: boolean } {
+  const legacyIncludePathSet = new Set(legacyIncludePaths);
   const rewriteResult = rewriteStringArrayProperty(content, 'include', (values) => {
-    const next = values.filter((value) => value !== legacyIncludePath);
+    const next = values.filter((value) => !legacyIncludePathSet.has(value));
     if (!next.includes(includePath)) {
       next.push(includePath);
     }
@@ -342,6 +361,17 @@ export function getLegacyWaybarIntegrationPaths(
   };
 }
 
+export function getQbarLegacyWaybarIntegrationPaths(
+  waybarRoot = join(homedir(), '.config', 'waybar'),
+): WaybarIntegrationPaths {
+  return {
+    waybarConfigPath: join(waybarRoot, 'config.jsonc'),
+    waybarStylePath: join(waybarRoot, 'style.css'),
+    modulesIncludePath: join(waybarRoot, QBAR_LEGACY_WAYBAR_NAMESPACE, 'modules.jsonc'),
+    styleIncludePath: join(waybarRoot, QBAR_LEGACY_WAYBAR_NAMESPACE, 'style.css'),
+  };
+}
+
 export function getAppModuleIDs(order: WaybarProviderId[]): string[] {
   return order.map((provider) => `${WAYBAR_MODULE_PREFIX}${provider}`);
 }
@@ -350,10 +380,15 @@ export function getLegacyModuleIDs(order: WaybarProviderId[]): string[] {
   return order.map((provider) => `${LEGACY_WAYBAR_MODULE_PREFIX}${provider}`);
 }
 
+export function getQbarLegacyModuleIDs(order: WaybarProviderId[]): string[] {
+  return order.map((provider) => `${QBAR_LEGACY_WAYBAR_MODULE_PREFIX}${provider}`);
+}
+
 export function applyWaybarIntegration(options: ApplyWaybarIntegrationOptions = {}): ApplyWaybarIntegrationResult {
   const paths = options.paths ?? getDefaultWaybarIntegrationPaths();
   const defaults = getDefaultWaybarAssetPaths();
   const legacyPaths = getLegacyWaybarIntegrationPaths(getManagedWaybarRoot(paths));
+  const qbarLegacyPaths = getQbarLegacyWaybarIntegrationPaths(getManagedWaybarRoot(paths));
 
   const providerOrder = resolveProviderOrder();
   const moduleIDs = getAppModuleIDs(providerOrder);
@@ -381,7 +416,10 @@ export function applyWaybarIntegration(options: ApplyWaybarIntegrationOptions = 
   if (currentConfig === null) {
     nextConfig = buildBootstrapConfig(moduleIDs, paths.modulesIncludePath);
   } else {
-    const includeResult = ensureIncludePath(currentConfig, paths.modulesIncludePath, legacyPaths.modulesIncludePath);
+    const includeResult = ensureIncludePath(currentConfig, paths.modulesIncludePath, [
+      legacyPaths.modulesIncludePath,
+      qbarLegacyPaths.modulesIncludePath,
+    ]);
     const modulesResult = ensureModulesRight(includeResult.content, moduleIDs);
     nextConfig = modulesResult.content;
   }
@@ -399,7 +437,12 @@ export function applyWaybarIntegration(options: ApplyWaybarIntegrationOptions = 
     writeText(paths.waybarStylePath, styleResult.content);
   }
 
-  for (const includePath of [legacyPaths.modulesIncludePath, legacyPaths.styleIncludePath]) {
+  for (const includePath of [
+    legacyPaths.modulesIncludePath,
+    legacyPaths.styleIncludePath,
+    qbarLegacyPaths.modulesIncludePath,
+    qbarLegacyPaths.styleIncludePath,
+  ]) {
     if (existsSync(includePath)) {
       rmSync(includePath, { force: true });
     }
@@ -418,12 +461,17 @@ export function applyWaybarIntegration(options: ApplyWaybarIntegrationOptions = 
 export function removeWaybarIntegration(options: RemoveWaybarIntegrationOptions = {}): RemoveWaybarIntegrationResult {
   const paths = options.paths ?? getDefaultWaybarIntegrationPaths();
   const legacyPaths = getLegacyWaybarIntegrationPaths(getManagedWaybarRoot(paths));
+  const qbarLegacyPaths = getQbarLegacyWaybarIntegrationPaths(getManagedWaybarRoot(paths));
 
   const currentConfig = readText(paths.waybarConfigPath);
   let configChanged = false;
 
   if (currentConfig !== null) {
-    const includeResult = removeIncludePaths(currentConfig, [paths.modulesIncludePath, legacyPaths.modulesIncludePath]);
+    const includeResult = removeIncludePaths(currentConfig, [
+      paths.modulesIncludePath,
+      legacyPaths.modulesIncludePath,
+      qbarLegacyPaths.modulesIncludePath,
+    ]);
     const modulesResult = removeModulesRight(includeResult.content);
     const nextConfig = modulesResult.content;
     configChanged = includeResult.changed || modulesResult.changed;
@@ -448,6 +496,8 @@ export function removeWaybarIntegration(options: RemoveWaybarIntegrationOptions 
     paths.styleIncludePath,
     legacyPaths.modulesIncludePath,
     legacyPaths.styleIncludePath,
+    qbarLegacyPaths.modulesIncludePath,
+    qbarLegacyPaths.styleIncludePath,
   ]) {
     if (existsSync(path)) {
       rmSync(path, { force: true });

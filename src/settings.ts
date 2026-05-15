@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
 import { mkdir, rename } from 'fs/promises';
 import { homedir } from 'os';
 import { join } from 'path';
-import { APP_NAME, LEGACY_APP_NAME } from './app-identity';
+import { APP_NAME, LEGACY_APP_NAME, QBAR_LEGACY_APP_NAME } from './app-identity';
 import { normalizeProviderSelection } from './waybar-contract';
 
 export type WindowPolicy = 'both' | 'five_hour' | 'seven_day';
@@ -23,6 +23,7 @@ interface SettingsPaths {
   settingsFile: string;
   legacySettingsDir: string;
   legacySettingsFile: string;
+  legacySettingsDirs: string[];
 }
 
 const attemptedSettingsMigrations = new Set<string>();
@@ -31,39 +32,48 @@ function getSettingsPaths(): SettingsPaths {
   const xdgConfigHome = process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
   const settingsDir = join(xdgConfigHome, APP_NAME);
   const legacySettingsDir = join(xdgConfigHome, LEGACY_APP_NAME);
+  const qbarLegacySettingsDir = join(xdgConfigHome, QBAR_LEGACY_APP_NAME);
 
   return {
     settingsDir,
     settingsFile: join(settingsDir, 'settings.json'),
     legacySettingsDir,
     legacySettingsFile: join(legacySettingsDir, 'settings.json'),
+    legacySettingsDirs: [legacySettingsDir, qbarLegacySettingsDir],
   };
 }
 
 function migrateLegacySettingsSync(): void {
   const paths = getSettingsPaths();
-  const migrationKey = `${paths.legacySettingsDir}->${paths.settingsDir}`;
+  const migrationKey = `${paths.legacySettingsDirs.join('|')}->${paths.settingsDir}`;
 
   if (attemptedSettingsMigrations.has(migrationKey)) {
     return;
   }
 
   attemptedSettingsMigrations.add(migrationKey);
-  if (!existsSync(paths.legacySettingsDir) || existsSync(paths.settingsDir)) {
+  if (existsSync(paths.settingsDir)) {
     return;
   }
 
-  try {
-    mkdirSync(join(paths.settingsDir, '..'), { recursive: true });
-    renameSync(paths.legacySettingsDir, paths.settingsDir);
-  } catch (err) {
-    const code = err instanceof Error && 'code' in err ? String((err as NodeJS.ErrnoException).code ?? '') : '';
-
-    if (code === 'EROFS' || code === 'EPERM' || code === 'EACCES') {
-      return;
+  for (const legacySettingsDir of paths.legacySettingsDirs) {
+    if (!existsSync(legacySettingsDir)) {
+      continue;
     }
 
-    process.stderr.write(`[${APP_NAME}] Settings migration skipped: ${String(err)}\n`);
+    try {
+      mkdirSync(join(paths.settingsDir, '..'), { recursive: true });
+      renameSync(legacySettingsDir, paths.settingsDir);
+      return;
+    } catch (err) {
+      const code = err instanceof Error && 'code' in err ? String((err as NodeJS.ErrnoException).code ?? '') : '';
+
+      if (code === 'EROFS' || code === 'EPERM' || code === 'EACCES') {
+        return;
+      }
+
+      process.stderr.write(`[${APP_NAME}] Settings migration skipped: ${String(err)}\n`);
+    }
   }
 }
 

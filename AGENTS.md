@@ -1,4 +1,4 @@
-# agent-bar-omarchy — Agent Instructions
+# agent-bar — Agent Instructions
 
 LLM quota monitor for Waybar. Tracks Claude, Codex, GitHub Copilot, and Amp usage, exports Waybar modules/CSS, owns its runtime state, and provides an interactive TUI for provider login and layout/model configuration.
 
@@ -7,10 +7,10 @@ These instructions are the canonical guidance for coding agents in this repo. `C
 ## Non-Negotiables
 
 - **Bun only.** Do not use Node, npm, pnpm, yarn, ts-node, or Deno for runtime/test workflows.
-- **Do not run `bun ./scripts/agent-bar-omarchy`.** That file is a Bash shim. Use `./scripts/agent-bar-omarchy` or `bun run start`.
-- **Do not mutate the user's live desktop as verification** unless explicitly requested. Avoid running `agent-bar-omarchy setup`, `agent-bar-omarchy uninstall`, `agent-bar-omarchy remove`, or `agent-bar-omarchy update` without clear user approval. Run `assets install` only against temp/injected paths unless the user approves live paths.
-- **Do not edit live `~/.config/waybar` / `~/.config/agent-bar-omarchy` manually for tests.** Use temp directories, injected paths, and XDG env overrides.
-- **Do not convert Bash shims in `scripts/` to TypeScript.** `scripts/agent-bar-omarchy` is the `bin` entrypoint and must remain a Bash wrapper.
+- **Do not run `bun ./scripts/agent-bar`.** That file is a Bash shim. Use `./scripts/agent-bar` or `bun run start`.
+- **Do not mutate the user's live desktop as verification** unless explicitly requested. Avoid running `agent-bar setup`, `agent-bar uninstall`, `agent-bar remove`, or `agent-bar update` without clear user approval. Run `assets install` only against temp/injected paths unless the user approves live paths.
+- **Do not edit live `~/.config/waybar` / `~/.config/agent-bar` manually for tests.** Use temp directories, injected paths, and XDG env overrides.
+- **Do not convert Bash shims in `scripts/` to TypeScript.** `scripts/agent-bar` is the `bin` entrypoint and must remain a Bash wrapper.
 - **Keep stdout clean for Waybar JSON.** Diagnostics/logs belong on stderr unless a command is intentionally terminal/TUI output.
 - **Preserve user changes.** If the worktree has unrelated modifications, do not revert or rewrite them.
 
@@ -18,8 +18,8 @@ These instructions are the canonical guidance for coding agents in this repo. `C
 
 ```bash
 bun install
-bun run start          # CLI entry, same app as ./scripts/agent-bar-omarchy
-./scripts/agent-bar-omarchy --help
+bun run start          # CLI entry, same app as ./scripts/agent-bar
+./scripts/agent-bar --help
 bun run dev            # watch mode
 bun test               # bun:test with coverage via bunfig.toml
 bun run typecheck      # tsc --noEmit
@@ -47,14 +47,15 @@ The app owns these paths at runtime:
 
 | Path | Purpose |
 | --- | --- |
-| `~/.config/agent-bar-omarchy/settings.json` | Versioned user settings; normalized on load; atomic tmp+rename writes |
-| `~/.cache/agent-bar-omarchy/` | Provider quota cache |
+| `~/.config/agent-bar/settings.json` | Versioned user settings; normalized on load; atomic tmp+rename writes |
+| `~/.cache/agent-bar/` | Provider quota cache |
 | `~/.agent-bar` | Managed install checkout used by README install/update flow |
-| `~/.local/bin/agent-bar-omarchy` | Symlink created by setup |
-| `~/.config/waybar/agent-bar-omarchy/icons/` | Installed provider icons |
-| `~/.config/waybar/agent-bar-omarchy/modules.jsonc` | Generated Waybar module include |
-| `~/.config/waybar/agent-bar-omarchy/style.css` | Generated Waybar stylesheet |
-| `~/.config/waybar/scripts/agent-bar-omarchy-open-terminal` | Terminal helper for click actions |
+| `~/.local/bin/agent-bar` | Symlink created by setup |
+| `~/.local/bin/agent-bar-omarchy` | Compatibility symlink created by setup |
+| `~/.config/waybar/agent-bar/icons/` | Installed provider icons |
+| `~/.config/waybar/agent-bar/modules.jsonc` | Generated Waybar module include |
+| `~/.config/waybar/agent-bar/style.css` | Generated Waybar stylesheet |
+| `~/.config/waybar/scripts/agent-bar-open-terminal` | Terminal helper for click actions |
 
 Provider credentials are external and only read/used by providers:
 
@@ -106,7 +107,7 @@ When adding/changing providers:
 4. Add the provider to `WAYBAR_PROVIDERS` in `src/waybar-contract.ts` if it should appear in Waybar settings/export.
 5. Check all current provider-specific surfaces, not only the registry: `src/index.ts`, `src/theme.ts`, `src/formatters/waybar.ts`, `src/formatters/terminal.ts`, `src/tui/login.ts`, `src/tui/login-single.ts`, `src/tui/list-all.ts`, and `src/tui/configure-layout.ts`.
 6. Add icon handling, provider color/theming, TUI login/config behavior, and tests.
-7. Keep the standard not-logged-in message when applicable: `Not logged in. Open \`agent-bar-omarchy menu\` and choose Provider login.`
+7. Keep the standard not-logged-in message when applicable: `Not logged in. Open \`agent-bar menu\` and choose Provider login.`
 
 ## Quota Data Conventions
 
@@ -122,7 +123,7 @@ When adding/changing providers:
 
 ## Settings Contract
 
-Settings are schema version `1` and live under `~/.config/agent-bar-omarchy/settings.json`.
+Settings are schema version `2` and live under `~/.config/agent-bar/settings.json`.
 
 Defaults:
 
@@ -149,30 +150,30 @@ Validation/normalization rules:
 - Cache keys must match `/^[a-zA-Z0-9_-]+$/`; traversal, spaces, dots, and slashes are rejected.
 - `getOrFetch()` deduplicates concurrent misses for the same key.
 - Failed fetches must not poison the cache.
-- Legacy cache migration exists only to move old runtime state into `~/.cache/agent-bar-omarchy`.
+- Legacy cache migration exists only to move old runtime state into `~/.cache/agent-bar`.
 
 ## Waybar Contract and Integration
 
 Module IDs:
 
-- `custom/agent-bar-omarchy-claude`
-- `custom/agent-bar-omarchy-codex`
-- `custom/agent-bar-omarchy-copilot`
-- `custom/agent-bar-omarchy-amp`
+- `custom/agent-bar-claude`
+- `custom/agent-bar-codex`
+- `custom/agent-bar-copilot`
+- `custom/agent-bar-amp`
 
-CSS selectors use `#custom-agent-bar-omarchy-<provider>`.
+CSS selectors use `#custom-agent-bar-<provider>`.
 
 Waybar class contract:
 
-- Aggregate output starts with `agent-bar-omarchy` and adds provider-scoped status classes such as `claude-ok`, `codex-warn`, or `amp-critical`.
-- Per-provider output starts with `agent-bar-omarchy-<provider>` and adds one plain status class: `ok`, `low`, `warn`, `critical`, or `disconnected`.
-- Disabled single-provider output uses `agent-bar-omarchy-hidden`.
+- Aggregate output starts with `agent-bar` and adds provider-scoped status classes such as `claude-ok`, `codex-warn`, or `amp-critical`.
+- Per-provider output starts with `agent-bar-<provider>` and adds one plain status class: `ok`, `low`, `warn`, `critical`, or `disconnected`.
+- Disabled single-provider output uses `agent-bar-hidden`.
 
 Integration rules:
 
-- `setup` writes generated `modules.jsonc` and `style.css` under `~/.config/waybar/agent-bar-omarchy/`.
+- `setup` writes generated `modules.jsonc` and `style.css` under `~/.config/waybar/agent-bar/`.
 - Live `config.jsonc` is patched by adding/updating `include` and `modules-right`, not rewritten wholesale.
-- Live `style.css` receives exactly one managed import: `@import url("./agent-bar-omarchy/style.css");`.
+- Live `style.css` receives exactly one managed import: `@import url("./agent-bar/style.css");`.
 - Backups use `.<app-name>-backup` suffix and are created before first managed mutation.
 - JSONC comments and unrelated Waybar entries should be preserved. Do not replace this with naive `JSON.parse`/`JSON.stringify` over live Waybar config.
 
@@ -187,11 +188,11 @@ Integration rules:
 
 ## Legacy Policy
 
-The current product name and public namespace is **`agent-bar-omarchy`**.
+The current product name and public namespace is **`agent-bar`**.
 
-`qbar` is legacy compatibility only:
+`agent-bar-omarchy` is compatibility for the previous public name. `qbar` is older legacy compatibility only:
 
-- Allowed in `LEGACY_*` constants, migration/removal code, and tests that prove legacy state is migrated or cleaned.
+- Allowed in `LEGACY_*`/`QBAR_LEGACY_*` constants, migration/removal code, compatibility wrappers, and tests that prove legacy state is migrated or cleaned.
 - Allowed in historical changelog entries.
 - Not allowed for new user-facing commands, new docs examples, new Waybar module IDs, new CSS selectors, new settings paths, new symlinks, or new cache keys.
 

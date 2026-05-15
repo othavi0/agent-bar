@@ -17,7 +17,12 @@ export class Cache {
 
   constructor(
     cacheDir: string = CONFIG.paths.cache,
-    legacyCacheDirs: string[] = [CONFIG.paths.legacyCache, CONFIG.paths.waybarLegacyCache],
+    legacyCacheDirs: string[] = [
+      CONFIG.paths.legacyCache,
+      CONFIG.paths.qbarLegacyCache,
+      CONFIG.paths.waybarLegacyCache,
+      CONFIG.paths.waybarQbarLegacyCache,
+    ],
   ) {
     this.cacheDir = cacheDir;
     this.legacyCacheDirs = legacyCacheDirs;

@@ -16,13 +16,13 @@ function repoRoot(): string {
 }
 
 describe('waybar integration flow', () => {
-  it('migrates legacy qbar wiring to agent-bar-omarchy and removes it cleanly', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'agent-bar-omarchy-waybar-test-'));
+  it('migrates legacy agent-bar-omarchy wiring to agent-bar and removes it cleanly', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'agent-bar-waybar-test-'));
     const waybarRoot = join(root, 'waybar');
     const configPath = join(waybarRoot, 'config.jsonc');
     const stylePath = join(waybarRoot, 'style.css');
-    const appDir = join(waybarRoot, 'agent-bar-omarchy');
-    const legacyDir = join(waybarRoot, 'qbar');
+    const appDir = join(waybarRoot, 'agent-bar');
+    const legacyDir = join(waybarRoot, 'agent-bar-omarchy');
     const scriptsDir = join(waybarRoot, 'scripts');
 
     await mkdir(waybarRoot, { recursive: true });
@@ -37,7 +37,7 @@ describe('waybar integration flow', () => {
     };
     const legacyModulesIncludePath = join(legacyDir, 'modules.jsonc');
     const legacyStyleIncludePath = join(legacyDir, 'style.css');
-    const legacyHelperPath = join(scriptsDir, 'qbar-open-terminal');
+    const legacyHelperPath = join(scriptsDir, 'agent-bar-omarchy-open-terminal');
 
     await writeFile(
       configPath,
@@ -45,7 +45,7 @@ describe('waybar integration flow', () => {
         {
           include: [legacyModulesIncludePath],
           'modules-left': ['clock'],
-          'modules-right': ['tray', 'custom/qbar-codex', 'custom/qbar-claude'],
+          'modules-right': ['tray', 'custom/agent-bar-omarchy-codex', 'custom/agent-bar-omarchy-claude'],
         },
         null,
         2,
@@ -54,7 +54,7 @@ describe('waybar integration flow', () => {
     );
     await writeFile(
       stylePath,
-      `/* qbar managed import */\n@import url("./qbar/style.css");\n\n#clock { color: #fff; }\n`,
+      `/* agent-bar-omarchy managed import */\n@import url("./agent-bar-omarchy/style.css");\n\n#clock { color: #fff; }\n`,
       'utf8',
     );
     await writeFile(legacyModulesIncludePath, '{}', 'utf8');
@@ -73,7 +73,7 @@ describe('waybar integration flow', () => {
     const applyResult = applyWaybarIntegration({
       paths,
       iconsDir: assets.iconsDir,
-      appBin: '$HOME/.local/bin/agent-bar-omarchy',
+      appBin: '$HOME/.local/bin/agent-bar',
       terminalScript: assets.terminalScript,
     });
 
@@ -84,19 +84,19 @@ describe('waybar integration flow', () => {
     const configAfterApply = await readFile(configPath, 'utf8');
     expect(configAfterApply).toContain(paths.modulesIncludePath);
     expect(configAfterApply).not.toContain(legacyModulesIncludePath);
-    expect(configAfterApply).not.toContain('custom/qbar-');
-    expect(configAfterApply).toContain('custom/agent-bar-omarchy-claude');
+    expect(configAfterApply).not.toContain('custom/agent-bar-omarchy-');
+    expect(configAfterApply).toContain('custom/agent-bar-claude');
 
     const styleAfterApply = await readFile(stylePath, 'utf8');
     expect(styleAfterApply).toContain(APP_STYLE_IMPORT);
-    expect(styleAfterApply).not.toContain('./qbar/style.css');
+    expect(styleAfterApply).not.toContain('./agent-bar-omarchy/style.css');
 
     const generatedModules = await readFile(paths.modulesIncludePath, 'utf8');
-    expect(generatedModules).toContain('custom/agent-bar-omarchy-');
+    expect(generatedModules).toContain('custom/agent-bar-');
     expect(generatedModules).toContain('"exec-on-event": true');
 
     const generatedStyle = await readFile(paths.styleIncludePath, 'utf8');
-    expect(generatedStyle).toContain('#custom-agent-bar-omarchy-claude');
+    expect(generatedStyle).toContain('#custom-agent-bar-claude');
 
     expect(existsSync(legacyDir)).toBe(false);
     expect(existsSync(legacyHelperPath)).toBe(false);
@@ -106,7 +106,7 @@ describe('waybar integration flow', () => {
 
     const configAfterRemove = await readFile(configPath, 'utf8');
     expect(configAfterRemove).not.toContain(paths.modulesIncludePath);
-    expect(configAfterRemove).not.toContain('custom/agent-bar-omarchy-');
+    expect(configAfterRemove).not.toContain('custom/agent-bar-');
 
     const styleAfterRemove = await readFile(stylePath, 'utf8');
     expect(styleAfterRemove).not.toContain(APP_STYLE_IMPORT);

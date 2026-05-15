@@ -14,36 +14,34 @@ describe('exportWaybarModules', () => {
   it('wires left and right click handlers through the terminal helper', () => {
     const result = exportWaybarModules(
       {
-        appBin: '$HOME/.local/bin/agent-bar-omarchy',
-        terminalScript: '$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal',
+        appBin: '$HOME/.local/bin/agent-bar',
+        terminalScript: '$HOME/.config/waybar/scripts/agent-bar-open-terminal',
       },
       ['claude', 'codex', 'copilot', 'amp'],
     );
 
-    expect(result.modules['custom/agent-bar-omarchy-claude']['on-click']).toBe(
-      '$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy menu',
+    expect(result.modules['custom/agent-bar-claude']['on-click']).toBe(
+      '$HOME/.config/waybar/scripts/agent-bar-open-terminal $HOME/.local/bin/agent-bar menu',
     );
-    expect(result.modules['custom/agent-bar-omarchy-codex']['exec-on-event']).toBe(true);
-    expect(result.modules['custom/agent-bar-omarchy-copilot'].exec).toBe(
-      '$HOME/.local/bin/agent-bar-omarchy --provider copilot',
-    );
-    expect(result.modules['custom/agent-bar-omarchy-amp']['on-click-right']).toBe(
-      '$HOME/.config/waybar/scripts/agent-bar-omarchy-open-terminal $HOME/.local/bin/agent-bar-omarchy action-right amp',
+    expect(result.modules['custom/agent-bar-codex']['exec-on-event']).toBe(true);
+    expect(result.modules['custom/agent-bar-copilot'].exec).toBe('$HOME/.local/bin/agent-bar --provider copilot');
+    expect(result.modules['custom/agent-bar-amp']['on-click-right']).toBe(
+      '$HOME/.config/waybar/scripts/agent-bar-open-terminal $HOME/.local/bin/agent-bar action-right amp',
     );
   });
 
   it('generates modules only for requested providers', () => {
     const result = exportWaybarModules(
       {
-        appBin: '/usr/bin/agent-bar-omarchy',
+        appBin: '/usr/bin/agent-bar',
         terminalScript: '/usr/bin/open-terminal',
       },
       ['claude'],
     );
 
     expect(Object.keys(result.modules)).toHaveLength(1);
-    expect(result.modules['custom/agent-bar-omarchy-claude']).toBeDefined();
-    expect(result.modules['custom/agent-bar-omarchy-codex']).toBeUndefined();
+    expect(result.modules['custom/agent-bar-claude']).toBeDefined();
+    expect(result.modules['custom/agent-bar-codex']).toBeUndefined();
   });
 });
 
@@ -100,7 +98,7 @@ describe('normalizeProviderSelection', () => {
 
 describe('exportWaybarCss', () => {
   const defaultOpts: WaybarCssExportOptions = {
-    iconsDir: '/home/user/.config/waybar/agent-bar-omarchy/icons',
+    iconsDir: '/home/user/.config/waybar/agent-bar/icons',
     providerOrder: ['claude', 'codex', 'copilot', 'amp'],
     separators: 'gap',
   };
@@ -111,10 +109,10 @@ describe('exportWaybarCss', () => {
 
   it('includes base provider styles', () => {
     const css = cssFor('gap');
-    expect(css).toContain('#custom-agent-bar-omarchy-claude');
-    expect(css).toContain('#custom-agent-bar-omarchy-codex');
-    expect(css).toContain('#custom-agent-bar-omarchy-copilot');
-    expect(css).toContain('#custom-agent-bar-omarchy-amp');
+    expect(css).toContain('#custom-agent-bar-claude');
+    expect(css).toContain('#custom-agent-bar-codex');
+    expect(css).toContain('#custom-agent-bar-copilot');
+    expect(css).toContain('#custom-agent-bar-amp');
   });
 
   it('includes provider icon references', () => {

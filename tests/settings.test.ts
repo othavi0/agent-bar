@@ -10,7 +10,7 @@ describe('settings', () => {
   let previousXdgConfigHome: string | undefined;
 
   beforeEach(async () => {
-    testRoot = await mkdtemp(join(tmpdir(), 'agent-bar-omarchy-settings-test-'));
+    testRoot = await mkdtemp(join(tmpdir(), 'agent-bar-settings-test-'));
     previousXdgConfigHome = process.env.XDG_CONFIG_HOME;
     process.env.XDG_CONFIG_HOME = testRoot;
   });
@@ -32,7 +32,7 @@ describe('settings', () => {
     expect(settings.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
     expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'copilot', 'amp']);
     expect(settings.waybar.separators).toBe('gap');
-    expect(getSettingsPath()).toBe(join(testRoot, 'agent-bar-omarchy', 'settings.json'));
+    expect(getSettingsPath()).toBe(join(testRoot, 'agent-bar', 'settings.json'));
   });
 
   it('saves and loads settings from the new namespace', async () => {
@@ -50,7 +50,7 @@ describe('settings', () => {
     });
 
     const settingsPath = getSettingsPath();
-    expect(settingsPath).toBe(join(testRoot, 'agent-bar-omarchy', 'settings.json'));
+    expect(settingsPath).toBe(join(testRoot, 'agent-bar', 'settings.json'));
     expect(existsSync(settingsPath)).toBe(true);
 
     const loaded = await loadSettings();
@@ -63,7 +63,7 @@ describe('settings', () => {
   });
 
   it('adds Copilot to legacy default provider settings', async () => {
-    const settingsDir = join(testRoot, 'agent-bar-omarchy');
+    const settingsDir = join(testRoot, 'agent-bar');
     const settingsFile = join(settingsDir, 'settings.json');
     await mkdir(settingsDir, { recursive: true });
     await writeFile(
@@ -93,7 +93,7 @@ describe('settings', () => {
   });
 
   it('does not re-add Copilot after user removes it (v2 settings)', async () => {
-    const settingsDir = join(testRoot, 'agent-bar-omarchy');
+    const settingsDir = join(testRoot, 'agent-bar');
     const settingsFile = join(settingsDir, 'settings.json');
     await mkdir(settingsDir, { recursive: true });
     await writeFile(
@@ -128,7 +128,7 @@ describe('settings', () => {
   });
 
   it('does not add Copilot when providers were manually customized', async () => {
-    const settingsDir = join(testRoot, 'agent-bar-omarchy');
+    const settingsDir = join(testRoot, 'agent-bar');
     const settingsFile = join(settingsDir, 'settings.json');
     await mkdir(settingsDir, { recursive: true });
     await writeFile(
@@ -153,8 +153,8 @@ describe('settings', () => {
     expect(settings.waybar.providerOrder).toEqual(['amp', 'claude']);
   });
 
-  it('moves legacy qbar settings into the new namespace', () => {
-    const legacyDir = join(testRoot, 'qbar');
+  it('moves agent-bar-omarchy settings into the new namespace', () => {
+    const legacyDir = join(testRoot, 'agent-bar-omarchy');
     const legacyFile = join(legacyDir, 'settings.json');
 
     return mkdir(legacyDir, { recursive: true })
@@ -177,12 +177,41 @@ describe('settings', () => {
       )
       .then(() => {
         const settings = loadSettingsSync();
-        const newFile = join(testRoot, 'agent-bar-omarchy', 'settings.json');
+        const newFile = join(testRoot, 'agent-bar', 'settings.json');
 
         expect(settings.waybar.providers).toEqual(['amp', 'claude']);
         expect(existsSync(newFile)).toBe(true);
         expect(existsSync(legacyFile)).toBe(false);
       });
+  });
+
+  it('still moves old qbar settings into the new namespace', async () => {
+    const legacyDir = join(testRoot, 'qbar');
+    const legacyFile = join(legacyDir, 'settings.json');
+
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      legacyFile,
+      JSON.stringify({
+        version: 1,
+        waybar: {
+          providers: ['claude'],
+          showPercentage: true,
+          separators: 'gap',
+          providerOrder: ['claude'],
+        },
+        tooltip: {},
+        models: {},
+        windowPolicy: {},
+      }),
+    );
+
+    const settings = loadSettingsSync();
+    const newFile = join(testRoot, 'agent-bar', 'settings.json');
+
+    expect(settings.waybar.providers).toEqual(['claude']);
+    expect(existsSync(newFile)).toBe(true);
+    expect(existsSync(legacyFile)).toBe(false);
   });
 
   describe('Settings displayMode', () => {
@@ -213,7 +242,7 @@ describe('settings', () => {
   });
 
   it('does not overwrite existing new settings when a legacy directory still exists', async () => {
-    const newDir = join(testRoot, 'agent-bar-omarchy');
+    const newDir = join(testRoot, 'agent-bar');
     const legacyDir = join(testRoot, 'qbar');
     const newFile = join(newDir, 'settings.json');
     const legacyFile = join(legacyDir, 'settings.json');

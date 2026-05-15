@@ -28,7 +28,7 @@ let settingsCache: {
 /**
  * Cached settings loader for the Waybar hot path.
  *
- * Waybar invokes `agent-bar-omarchy` on a tight polling interval (default a few
+ * Waybar invokes `agent-bar` on a tight polling interval (default a few
  * seconds), so reading settings.json from disk every call adds up. `SETTINGS_CACHE_TTL_MS`
  * makes hot runs O(1).
  *

@@ -4,8 +4,8 @@
 
 | Symptom | First check |
 | --- | --- |
-| Waybar shows nothing | `agent-bar-omarchy status --refresh` |
-| One provider is missing | `agent-bar-omarchy status --provider <id> --refresh` |
+| Waybar shows nothing | `agent-bar status --refresh` |
+| One provider is missing | `agent-bar status --provider <id> --refresh` |
 | Waybar JSON/parser error | run the module command in a terminal |
 | Waybar layout changed unexpectedly | inspect `~/.config/waybar/config.jsonc` managed entries |
 | Style broke after manual edits | inspect GTK CSS, not browser CSS assumptions |
@@ -13,11 +13,11 @@
 ## Runtime Checks
 
 ```bash
-agent-bar-omarchy status --refresh
-agent-bar-omarchy status --provider claude --refresh
-agent-bar-omarchy status --provider codex --refresh
-agent-bar-omarchy status --provider copilot --refresh
-agent-bar-omarchy status --provider amp --refresh
+agent-bar status --refresh
+agent-bar status --provider claude --refresh
+agent-bar status --provider codex --refresh
+agent-bar status --provider copilot --refresh
+agent-bar status --provider amp --refresh
 ```
 
 If these fail outside Waybar, fix provider auth/runtime first. Waybar is not the
@@ -28,7 +28,7 @@ first suspect.
 Run setup again:
 
 ```bash
-agent-bar-omarchy setup
+agent-bar setup
 ```
 
 Then reload Waybar manually if needed:
@@ -39,7 +39,7 @@ pkill -SIGUSR2 waybar
 
 ## Update Refuses To Run
 
-`agent-bar-omarchy update` only manages the `~/.agent-bar` checkout. If you are
+`agent-bar update` only manages the `~/.agent-bar` checkout. If you are
 in a development checkout, update manually with normal git commands.
 
 ## Provider Auth
@@ -82,17 +82,17 @@ amp login
 For a normal reset:
 
 ```bash
-agent-bar-omarchy setup
+agent-bar setup
 ```
 
 For removal:
 
 ```bash
-agent-bar-omarchy uninstall
+agent-bar uninstall
 ```
 
 For non-interactive forced cleanup:
 
 ```bash
-agent-bar-omarchy remove
+agent-bar remove
 ```

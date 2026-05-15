@@ -1,10 +1,11 @@
 {
-  "name": "agent-bar-omarchy",
+  "name": "agent-bar",
   "version": "3.0.0",
   "description": "LLM quota monitor for Waybar - Claude, Codex, Copilot, Amp",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
+    "agent-bar": "./scripts/agent-bar",
     "agent-bar-omarchy": "./scripts/agent-bar-omarchy"
   },
   "scripts": {

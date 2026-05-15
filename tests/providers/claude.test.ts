@@ -140,7 +140,7 @@ describe('ClaudeProvider', () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(false);
-      expect(q.error).toBe('Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.');
+      expect(q.error).toBe('Not logged in. Open `agent-bar menu` and choose Provider login.');
       expect(q.provider).toBe('claude');
     });
 
@@ -375,7 +375,7 @@ describe('ClaudeProvider', () => {
       const q = await p.getQuota();
 
       expect(q.available).toBe(false);
-      expect(q.error).toBe('Token expired. Open `agent-bar-omarchy menu` and choose Provider login.');
+      expect(q.error).toBe('Token expired. Open `agent-bar menu` and choose Provider login.');
       expect(q.plan).toBe('pro');
     });
 

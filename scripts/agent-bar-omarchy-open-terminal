@@ -1,52 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# agent-bar-omarchy-open-terminal <command...>
-#
-# Goal: open a floating-ish terminal for agent-bar-omarchy actions (menu/refresh).
-#
-# Omarchy/Hyprland users usually want a floating window; generic Waybar users
-# still get a working terminal launch.
-#
-# Usage:
-#   agent-bar-omarchy-open-terminal agent-bar-omarchy menu
-#   agent-bar-omarchy-open-terminal agent-bar-omarchy refresh claude
-
-if [ "$#" -lt 1 ]; then
-  echo "Usage: agent-bar-omarchy-open-terminal <command...>" >&2
-  exit 2
-fi
-
-cmd="$*"
-
-# 1) Omarchy/uwsm path (best UX on Omarchy)
-if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
-  exec setsid uwsm-app -- xdg-terminal-exec \
-    --app-id=org.omarchy.terminal \
-    --title="Agent Bar Omarchy" \
-    -e bash -lc "$cmd"
-fi
-
-# 2) Generic fallbacks (works on most distros)
-if command -v xdg-terminal-exec >/dev/null 2>&1; then
-  exec setsid xdg-terminal-exec --title="Agent Bar Omarchy" -e bash -lc "$cmd"
-fi
-
-if command -v alacritty >/dev/null 2>&1; then
-  exec setsid alacritty --title "Agent Bar Omarchy" -e bash -lc "$cmd"
-fi
-
-if command -v kitty >/dev/null 2>&1; then
-  exec setsid kitty --title "Agent Bar Omarchy" bash -lc "$cmd"
-fi
-
-if command -v foot >/dev/null 2>&1; then
-  exec setsid foot -T "Agent Bar Omarchy" bash -lc "$cmd"
-fi
-
-if command -v wezterm >/dev/null 2>&1; then
-  exec setsid wezterm start --always-new-process --class "AgentBarOmarchy" bash -lc "$cmd"
-fi
-
-echo "No supported terminal launcher found (xdg-terminal-exec/alacritty/kitty/foot/wezterm)." >&2
-exit 1
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+exec "$SCRIPT_DIR/agent-bar-open-terminal" "$@"

@@ -103,8 +103,12 @@ mock.module('../../src/config', () => ({
   CONFIG: {
     paths: {
       copilot: {
-        config: '/tmp/agent-bar-omarchy-copilot-test/config.json',
-        settings: '/tmp/agent-bar-omarchy-copilot-test/settings.json',
+        config: '/tmp/agent-bar-copilot-test/config.json',
+        settings: '/tmp/agent-bar-copilot-test/settings.json',
+      },
+      codex: {
+        auth: '/tmp/agent-bar-copilot-test/codex/auth.json',
+        sessions: '/tmp/agent-bar-copilot-test/codex/sessions',
       },
     },
     cache: {
@@ -286,7 +290,7 @@ describe('CopilotProvider', () => {
     const result = await provider.getQuota();
 
     expect(result.available).toBe(false);
-    expect(result.error).toBe('Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.');
+    expect(result.error).toBe('Not logged in. Open `agent-bar menu` and choose Provider login.');
   });
 
   it('returns a timeout error when the CLI does not answer', async () => {

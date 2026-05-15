@@ -1,5 +1,5 @@
 /**
- * agent-bar-omarchy action-right <provider>
+ * agent-bar action-right <provider>
  *
  * Used by Waybar right-click.
  * - If provider is disconnected/expired: start login flow.

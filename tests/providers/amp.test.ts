@@ -148,7 +148,7 @@ describe('AmpProvider', () => {
       const result = await provider.getQuota();
 
       expect(result.available).toBe(false);
-      expect(result.error).toBe('Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.');
+      expect(result.error).toBe('Not logged in. Open `agent-bar menu` and choose Provider login.');
     });
   });
 
@@ -165,7 +165,7 @@ describe('AmpProvider', () => {
       const result = await provider.getQuota();
 
       expect(result.available).toBe(false);
-      expect(result.error).toBe('Not logged in. Open `agent-bar-omarchy menu` and choose Provider login.');
+      expect(result.error).toBe('Not logged in. Open `agent-bar menu` and choose Provider login.');
     });
   });
 

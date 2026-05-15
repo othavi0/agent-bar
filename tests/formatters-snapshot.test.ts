@@ -51,7 +51,7 @@ function claudeError(): ClaudeQuota {
     provider: 'claude',
     displayName: 'Claude',
     available: false,
-    error: 'Token expired. Open `agent-bar-omarchy menu` and choose Provider login.',
+    error: 'Token expired. Open `agent-bar menu` and choose Provider login.',
   };
 }
 

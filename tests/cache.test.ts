@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { Cache } from '../src/cache';
 
-const TEST_DIR = join(tmpdir(), `agent-bar-omarchy-cache-test-${Date.now()}`);
+const TEST_DIR = join(tmpdir(), `agent-bar-cache-test-${Date.now()}`);
 
 describe('Cache', () => {
   let cache: Cache;

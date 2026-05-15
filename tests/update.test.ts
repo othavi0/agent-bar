@@ -40,7 +40,7 @@ describe('runManagedUpdate', () => {
     const { commands, run } = fakeRunner({});
 
     const result = await runManagedUpdate({
-      repoRoot: '/tmp/dev/agent-bar-omarchy',
+      repoRoot: '/tmp/dev/agent-bar',
       installRoot: '/home/test/.agent-bar',
       runCommand: run,
       runSetup: async () => {},
