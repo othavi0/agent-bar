@@ -42,6 +42,12 @@ const OUTPUT_FULL_QUOTA = [
   'replenishes +$0.25/hour',
 ].join('\n');
 
+const OUTPUT_ZERO_REPLENISH = [
+  'Signed in as user@email.com',
+  'Amp Free: $3.50/$5.00 remaining',
+  'replenishes +$0/hour',
+].join('\n');
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -376,6 +382,17 @@ describe('AmpProvider', () => {
       spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_NO_REPLENISH, 0) as any);
 
       const result = await provider.getQuota();
+      expect(result.primary?.resetsAt).toBeNull();
+    });
+
+    it('returns null resetsAt and stays available when replenish rate is 0', async () => {
+      spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeMockProc(OUTPUT_ZERO_REPLENISH, 0) as any);
+
+      const result = await provider.getQuota();
+
+      // Before the fix: parseAmpFreeTier threw RangeError -> available:false.
+      expect(result.available).toBe(true);
+      expect(result.primary?.remaining).toBe(70);
       expect(result.primary?.resetsAt).toBeNull();
     });
   });

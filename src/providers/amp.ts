@@ -80,29 +80,26 @@ export class AmpProvider implements Provider {
           const ratePerHour = parseFloat(replenish[1]);
           const effectiveRate = bonusM ? ratePerHour * (1 + parseInt(bonusM[1], 10) / 100) : ratePerHour;
           const hoursToFull = (total - remaining) / effectiveRate;
-          fullAt = new Date(Date.now() + hoursToFull * 3_600_000).toISOString();
+          if (effectiveRate > 0 && Number.isFinite(hoursToFull)) {
+            fullAt = new Date(Date.now() + hoursToFull * 3_600_000).toISOString();
+          }
         }
         return { pct, fullAt };
       };
-
-      let primary: QuotaWindow | undefined;
-
-      if (freeMatch) {
-        const { pct, fullAt } = parseAmpFreeTier(freeMatch, replenishMatch, bonusMatch);
-        primary = { remaining: pct, resetsAt: fullAt };
-      }
 
       const creditsMatch = stdout.match(/Individual credits:\s*\$([0-9.]+)\s*remaining/);
 
       const models: Record<string, QuotaWindow> = {};
       const meta: Record<string, string> = {};
       const extra: import('./types').AmpQuotaExtra = {};
+      let primary: QuotaWindow | undefined;
 
       if (freeMatch) {
         const remaining = parseFloat(freeMatch[1]);
         const total = parseFloat(freeMatch[2]);
         const { pct, fullAt } = parseAmpFreeTier(freeMatch, replenishMatch, bonusMatch);
 
+        primary = { remaining: pct, resetsAt: fullAt };
         models['Free Tier'] = { remaining: pct, resetsAt: fullAt };
         meta.freeRemaining = `$${remaining}`;
         meta.freeTotal = `$${total}`;
