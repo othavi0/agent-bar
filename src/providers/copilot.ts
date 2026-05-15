@@ -1,11 +1,11 @@
 import { Buffer } from 'node:buffer';
 import { APP_NAME } from '../app-identity';
-import { cache } from '../cache';
 import { CONFIG } from '../config';
 import { COPILOT_MISSING_ERROR, findCopilotBin } from '../copilot-cli';
-import { logger } from '../logger';
+import type { QuotaBase } from './base';
+import { BaseProvider } from './base';
 import { registerProvider } from './registry';
-import type { CopilotQuota, CopilotQuotaSnapshot, Provider, QuotaWindow } from './types';
+import type { CopilotQuota, CopilotQuotaSnapshot, ProviderQuota, QuotaWindow } from './types';
 
 const COPILOT_CACHE_KEY = 'copilot-quota';
 const NOT_LOGGED_IN_ERROR = `Not logged in. Open \`${APP_NAME} menu\` and choose Provider login.`;
@@ -70,7 +70,7 @@ function formatBucketLabel(bucket: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export class CopilotProvider implements Provider {
+export class CopilotProvider extends BaseProvider {
   readonly id = 'copilot';
   readonly name = 'Copilot';
   readonly cacheKey = COPILOT_CACHE_KEY;
@@ -81,33 +81,37 @@ export class CopilotProvider implements Provider {
     return (await this.readAccountFromConfig()) !== undefined;
   }
 
-  async getQuota(): Promise<CopilotQuota> {
+  protected unavailableError(): string {
+    if (!findCopilotBin()) return COPILOT_MISSING_ERROR;
+    return NOT_LOGGED_IN_ERROR;
+  }
+
+  protected async fetchRaw(): Promise<unknown> {
+    const bin = findCopilotBin();
+    if (!bin) {
+      throw new Error('Copilot CLI not found');
+    }
     const base: CopilotQuota = {
-      provider: 'copilot',
+      provider: this.id,
       displayName: this.name,
       available: false,
     };
+    return this.fetchUsage(base, bin);
+  }
 
-    const bin = findCopilotBin();
-    if (!bin) {
-      return { ...base, error: COPILOT_MISSING_ERROR };
-    }
+  protected buildQuota(raw: unknown, _base: QuotaBase): ProviderQuota {
+    return raw as ProviderQuota;
+  }
 
-    if (!(await this.isAvailable())) {
-      return { ...base, error: NOT_LOGGED_IN_ERROR };
+  protected toUserFacingError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/not logged in|auth|unauthorized|forbidden|token|login|credential/i.test(message)) {
+      return NOT_LOGGED_IN_ERROR;
     }
-
-    try {
-      return await cache.getOrFetch<CopilotQuota>(
-        COPILOT_CACHE_KEY,
-        async () => await this.fetchUsage(base, bin),
-        CONFIG.cache.ttlMs,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('Copilot quota fetch error', { message });
-      return { ...base, error: this.toUserFacingError(message) };
+    if (/timed out/i.test(message)) {
+      return 'GitHub Copilot CLI timed out while fetching usage';
     }
+    return 'Failed to fetch Copilot usage';
   }
 
   private hasTokenEnv(): boolean {
@@ -128,16 +132,6 @@ export class CopilotProvider implements Provider {
     }
 
     return undefined;
-  }
-
-  private toUserFacingError(message: string): string {
-    if (/not logged in|auth|unauthorized|forbidden|token|login|credential/i.test(message)) {
-      return NOT_LOGGED_IN_ERROR;
-    }
-    if (/timed out/i.test(message)) {
-      return 'GitHub Copilot CLI timed out while fetching usage';
-    }
-    return 'Failed to fetch Copilot usage';
   }
 
   private async fetchUsage(base: CopilotQuota, bin: string): Promise<CopilotQuota> {
