@@ -1,6 +1,5 @@
-import { cp, mkdir, readdir, rename, rm, unlink } from 'fs/promises';
+import { mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
-import { APP_NAME } from './app-identity';
 import { CONFIG } from './config';
 import { logger } from './logger';
 import type { CacheEntry } from './providers/types';
@@ -10,22 +9,11 @@ import type { CacheEntry } from './providers/types';
  */
 export class Cache {
   private cacheDir: string;
-  private legacyCacheDirs: string[];
-  private migrationAttempted = false;
   /** In-flight fetch deduplication: key → Promise */
   private inflight = new Map<string, Promise<unknown>>();
 
-  constructor(
-    cacheDir: string = CONFIG.paths.cache,
-    legacyCacheDirs: string[] = [
-      CONFIG.paths.legacyCache,
-      CONFIG.paths.qbarLegacyCache,
-      CONFIG.paths.waybarLegacyCache,
-      CONFIG.paths.waybarQbarLegacyCache,
-    ],
-  ) {
+  constructor(cacheDir: string = CONFIG.paths.cache) {
     this.cacheDir = cacheDir;
-    this.legacyCacheDirs = legacyCacheDirs;
   }
 
   private getPath(key: string): string {
@@ -38,57 +26,9 @@ export class Cache {
 
   async ensureDir(): Promise<void> {
     try {
-      await this.migrateLegacyCache();
       await mkdir(this.cacheDir, { recursive: true });
     } catch (error) {
       logger.error('Failed to create cache directory', { error, dir: this.cacheDir });
-    }
-  }
-
-  private async migrateLegacyCache(): Promise<void> {
-    if (this.migrationAttempted) {
-      return;
-    }
-
-    this.migrationAttempted = true;
-
-    for (const legacyCacheDir of this.legacyCacheDirs) {
-      try {
-        const legacyEntries = await readdir(legacyCacheDir);
-        if (legacyEntries.length === 0) {
-          continue;
-        }
-
-        await mkdir(this.cacheDir, { recursive: true });
-
-        for (const entry of legacyEntries) {
-          const source = join(legacyCacheDir, entry);
-          const destination = join(this.cacheDir, entry);
-
-          try {
-            await rename(source, destination);
-          } catch {
-            try {
-              await cp(source, destination, {
-                force: false,
-                errorOnExist: false,
-                recursive: true,
-              });
-              await rm(source, { recursive: true, force: true });
-            } catch {
-              // best effort cleanup when destination already exists
-            }
-          }
-        }
-
-        await rm(legacyCacheDir, { recursive: true, force: true });
-        logger.info(`Migrated ${APP_NAME} cache`, {
-          from: legacyCacheDir,
-          to: this.cacheDir,
-        });
-      } catch (error) {
-        logger.debug('Legacy cache migration skipped', { error, legacyCacheDir });
-      }
     }
   }
 

@@ -4,7 +4,7 @@ import { mkdirSync, symlinkSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import { APP_NAME, LEGACY_APP_NAME, QBAR_LEGACY_APP_NAME } from './app-identity';
+import { APP_NAME } from './app-identity';
 import { colorize, semantic } from './tui/colors';
 import { printCommandHeader } from './tui/terminal-ui';
 import { getDefaultWaybarAssetPaths, installWaybarAssets } from './waybar-contract';
@@ -22,9 +22,6 @@ export function createSymlink(): string {
   const localBin = join(HOME, '.local', 'bin');
   const link = join(localBin, APP_NAME);
   const target = join(REPO_ROOT, 'scripts', APP_NAME);
-  const legacyLink = join(localBin, LEGACY_APP_NAME);
-  const legacyTarget = join(REPO_ROOT, 'scripts', LEGACY_APP_NAME);
-  const qbarLegacyLink = join(localBin, QBAR_LEGACY_APP_NAME);
 
   mkdirSync(localBin, { recursive: true });
 
@@ -33,15 +30,6 @@ export function createSymlink(): string {
   } catch {}
 
   symlinkSync(target, link);
-
-  try {
-    unlinkSync(legacyLink);
-  } catch {}
-  symlinkSync(legacyTarget, legacyLink);
-
-  try {
-    unlinkSync(qbarLegacyLink);
-  } catch {}
   return link;
 }
 

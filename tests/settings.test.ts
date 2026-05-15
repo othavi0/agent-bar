@@ -62,7 +62,7 @@ describe('settings', () => {
     expect(onDisk.waybar.providers).toEqual(['codex', 'claude']);
   });
 
-  it('adds Copilot to legacy default provider settings', async () => {
+  it('adds Copilot to default providers on v1→v2 schema upgrade', async () => {
     const settingsDir = join(testRoot, 'agent-bar');
     const settingsFile = join(settingsDir, 'settings.json');
     await mkdir(settingsDir, { recursive: true });
@@ -153,67 +153,6 @@ describe('settings', () => {
     expect(settings.waybar.providerOrder).toEqual(['amp', 'claude']);
   });
 
-  it('moves agent-bar-omarchy settings into the new namespace', () => {
-    const legacyDir = join(testRoot, 'agent-bar-omarchy');
-    const legacyFile = join(legacyDir, 'settings.json');
-
-    return mkdir(legacyDir, { recursive: true })
-      .then(() =>
-        writeFile(
-          legacyFile,
-          JSON.stringify({
-            version: 1,
-            waybar: {
-              providers: ['amp', 'claude'],
-              showPercentage: true,
-              separators: 'glass',
-              providerOrder: ['amp', 'claude'],
-            },
-            tooltip: {},
-            models: {},
-            windowPolicy: {},
-          }),
-        ),
-      )
-      .then(() => {
-        const settings = loadSettingsSync();
-        const newFile = join(testRoot, 'agent-bar', 'settings.json');
-
-        expect(settings.waybar.providers).toEqual(['amp', 'claude']);
-        expect(existsSync(newFile)).toBe(true);
-        expect(existsSync(legacyFile)).toBe(false);
-      });
-  });
-
-  it('still moves old qbar settings into the new namespace', async () => {
-    const legacyDir = join(testRoot, 'qbar');
-    const legacyFile = join(legacyDir, 'settings.json');
-
-    await mkdir(legacyDir, { recursive: true });
-    await writeFile(
-      legacyFile,
-      JSON.stringify({
-        version: 1,
-        waybar: {
-          providers: ['claude'],
-          showPercentage: true,
-          separators: 'gap',
-          providerOrder: ['claude'],
-        },
-        tooltip: {},
-        models: {},
-        windowPolicy: {},
-      }),
-    );
-
-    const settings = loadSettingsSync();
-    const newFile = join(testRoot, 'agent-bar', 'settings.json');
-
-    expect(settings.waybar.providers).toEqual(['claude']);
-    expect(existsSync(newFile)).toBe(true);
-    expect(existsSync(legacyFile)).toBe(false);
-  });
-
   describe('Settings displayMode', () => {
     it('default is "remaining" when not set', async () => {
       const { loadSettings } = await import('../src/settings');
@@ -239,51 +178,5 @@ describe('settings', () => {
       const reloaded = await loadSettings();
       expect(reloaded.waybar.displayMode).toBe('used');
     });
-  });
-
-  it('does not overwrite existing new settings when a legacy directory still exists', async () => {
-    const newDir = join(testRoot, 'agent-bar');
-    const legacyDir = join(testRoot, 'qbar');
-    const newFile = join(newDir, 'settings.json');
-    const legacyFile = join(legacyDir, 'settings.json');
-
-    await mkdir(newDir, { recursive: true });
-    await mkdir(legacyDir, { recursive: true });
-
-    await writeFile(
-      newFile,
-      JSON.stringify({
-        version: 1,
-        waybar: {
-          providers: ['claude'],
-          showPercentage: true,
-          separators: 'gap',
-          providerOrder: ['claude'],
-        },
-        tooltip: {},
-        models: {},
-        windowPolicy: {},
-      }),
-    );
-    await writeFile(
-      legacyFile,
-      JSON.stringify({
-        version: 1,
-        waybar: {
-          providers: ['amp'],
-          showPercentage: true,
-          separators: 'shadow',
-          providerOrder: ['amp'],
-        },
-        tooltip: {},
-        models: {},
-        windowPolicy: {},
-      }),
-    );
-
-    const settings = loadSettingsSync();
-    expect(settings.waybar.providers).toEqual(['claude']);
-    expect(JSON.parse(await readFile(newFile, 'utf8')).waybar.providers).toEqual(['claude']);
-    expect(existsSync(legacyFile)).toBe(true);
   });
 });
