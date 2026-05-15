@@ -13,9 +13,13 @@ const TIME_DH_RE = /\d+d \d{2}h/g;
 const PAREN_TIME_RE = /\(\d{2}:\d{2}\)/g;
 const AGO_RE = /\d+[hm] ago/g;
 const JUST_NOW_RE = /just now/g;
+// Strip ANSI escape codes so snapshots are color-agnostic and deterministic.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the ESC byte is the point — intentional ANSI stripping
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
 
 function sanitize(s: string): string {
   return s
+    .replace(ANSI_RE, '')
     .replace(ISO_RE, '__ISO__')
     .replace(TIME_DH_RE, '__DH__')
     .replace(TIME_HM_RE, '__HM__')
