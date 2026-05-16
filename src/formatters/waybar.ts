@@ -207,7 +207,13 @@ function buildProviderTooltip(p: ProviderQuota, fetchedAt: string | undefined, m
   if (builder) return builder(p, fetchedAt, mode);
   const name = p.displayName ?? p.provider;
   return renderPango(
-    buildGeneric(p, { mode, headerTitle: name, headerWidth: TOOLTIP_BORDER - 4, labelColor: 'text', footer: { fetchedAt } }),
+    buildGeneric(p, {
+      mode,
+      headerTitle: name,
+      headerWidth: TOOLTIP_BORDER - 4,
+      labelColor: 'text',
+      footer: { fetchedAt },
+    }),
   );
 }
 
