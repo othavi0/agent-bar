@@ -24,15 +24,6 @@ export async function hasCmd(cmd: string): Promise<boolean> {
   }
 }
 
-async function runInteractive(cmd: string, args: string[] = []): Promise<number> {
-  const proc = Bun.spawn([cmd, ...args], {
-    stdin: 'inherit',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  return await proc.exited;
-}
-
 export async function ensureCommand(cmd: string, installHint: string): Promise<boolean> {
   if (await hasCmd(cmd)) {
     return true;
@@ -59,15 +50,27 @@ export async function ensureBunGlobalPackage(pkg: string, label?: string, binNam
   spinner.start(`Installing ${label ?? pkg}...`);
 
   try {
-    const code = await runInteractive('bun', ['add', '-g', pkg]);
+    const proc = Bun.spawn(['bun', 'add', '-g', pkg], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const code = await proc.exited;
+
     if (code === 0 && (await hasCmd(bin))) {
       spinner.stop(`${label ?? pkg} ready`);
       return true;
     }
 
+    const diagnostic = (stderr || stdout).trim();
+    if (diagnostic) {
+      p.log.error(diagnostic);
+    }
     spinner.error(`Failed to install ${label ?? pkg}`);
     return false;
-  } catch {
+  } catch (err) {
+    p.log.error(String(err));
     spinner.error(`Failed to install ${label ?? pkg}`);
     return false;
   }
