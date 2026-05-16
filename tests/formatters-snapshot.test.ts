@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { formatForTerminal } from '../src/formatters/terminal';
 import { formatForWaybar, formatProviderForWaybar } from '../src/formatters/waybar';
-import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota } from '../src/providers/types';
+import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota, CopilotQuota, ProviderQuota } from '../src/providers/types';
 
 // ---------------------------------------------------------------------------
 // Sanitize dynamic values so snapshots remain stable across runs.
@@ -116,6 +116,105 @@ function ampError(): AmpQuota {
     displayName: 'Amp',
     available: false,
     error: 'Amp CLI not installed. Right-click to install and log in.',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// C1: Factories with `account` field set
+// ---------------------------------------------------------------------------
+
+function ampWithAccount(): AmpQuota {
+  return { ...ampHealthy(), account: 'user@example.com' };
+}
+
+function copilotWithAccount(): CopilotQuota {
+  return {
+    provider: 'copilot',
+    displayName: 'Copilot',
+    available: true,
+    account: 'dev@example.com',
+    primary: { remaining: 80, resetsAt: FIXED_RESET },
+    models: {
+      'Premium requests': { remaining: 80, resetsAt: FIXED_RESET },
+    },
+    extra: {
+      quotaSnapshots: {
+        premium_interactions: {
+          isUnlimitedEntitlement: false,
+          entitlementRequests: 300,
+          usedRequests: 60,
+          usageAllowedWithExhaustedQuota: false,
+          overage: 0,
+          overageAllowedWithExhaustedQuota: false,
+          remainingPercentage: 80,
+          resetDate: FIXED_RESET,
+        },
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// C3: Rich factories for builder branch coverage
+// ---------------------------------------------------------------------------
+
+function claudeWithExtras(): ClaudeQuota {
+  return {
+    provider: 'claude',
+    displayName: 'Claude',
+    available: true,
+    plan: 'Pro',
+    primary: { remaining: 60, resetsAt: FIXED_RESET, windowMinutes: 300 },
+    secondary: { remaining: 50, resetsAt: FIXED_RESET, windowMinutes: 10080 },
+    extra: {
+      weeklyModels: {
+        'claude-opus-4-5': { remaining: 40, resetsAt: FIXED_RESET, windowMinutes: 10080 },
+        'claude-sonnet-4-5': { remaining: 65, resetsAt: FIXED_RESET, windowMinutes: 10080 },
+      },
+      extraUsage: {
+        enabled: true,
+        remaining: 55,
+        limit: 5000,
+        used: 2250,
+      },
+    },
+  };
+}
+
+function ampWithCredits(): AmpQuota {
+  return {
+    provider: 'amp',
+    displayName: 'Amp',
+    available: true,
+    primary: { remaining: 30, resetsAt: FIXED_RESET },
+    models: {
+      'Free Tier': { remaining: 30, resetsAt: FIXED_RESET },
+      Credits: { remaining: 75, resetsAt: FIXED_RESET },
+    },
+    extra: {
+      meta: {
+        freeRemaining: '$1.50',
+        freeTotal: '$5.00',
+        replenishRate: '+$0.25/hr',
+        creditsBalance: '$7.50',
+      },
+    },
+  };
+}
+
+function ampUnknownModels(): AmpQuota {
+  return {
+    provider: 'amp',
+    displayName: 'Amp',
+    available: true,
+    primary: { remaining: 45, resetsAt: FIXED_RESET },
+    models: {
+      'Custom Plan A': { remaining: 45, resetsAt: FIXED_RESET },
+      'Custom Plan B': { remaining: 80, resetsAt: FIXED_RESET },
+    },
+    extra: {
+      meta: {},
+    },
   };
 }
 
@@ -298,5 +397,136 @@ describe('Waybar formatter snapshots — displayMode=used', () => {
     expect(out.tooltip).not.toContain('Full in');
     expect(sanitize(out.text)).toMatchSnapshot();
     expect(sanitize(out.tooltip)).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C1: account field — Terminal snapshots
+// ---------------------------------------------------------------------------
+
+describe('Terminal formatter snapshots — account field (C1)', () => {
+  it('renders Amp with account', () => {
+    const result = sanitize(formatForTerminal(wrap(ampWithAccount())));
+    expect(result).toMatchSnapshot();
+  });
+
+  it('renders Copilot with account', () => {
+    const result = sanitize(formatForTerminal(wrap(copilotWithAccount())));
+    expect(result).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C1: account field — Waybar snapshots
+// ---------------------------------------------------------------------------
+
+describe('Waybar formatter snapshots — account field (C1)', () => {
+  it('renders Amp with account', () => {
+    const out = formatForWaybar(wrap(ampWithAccount()));
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Copilot with account', () => {
+    const out = formatForWaybar(wrap(copilotWithAccount()));
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C1: account field — formatProviderForWaybar snapshots
+// ---------------------------------------------------------------------------
+
+describe('formatProviderForWaybar snapshots — account field (C1)', () => {
+  it('renders Amp with account', () => {
+    const out = formatProviderForWaybar(ampWithAccount());
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Copilot with account', () => {
+    const out = formatProviderForWaybar(copilotWithAccount());
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C3: Rich builder fixtures — Terminal snapshots
+// ---------------------------------------------------------------------------
+
+describe('Terminal formatter snapshots — rich builder fixtures (C3)', () => {
+  it('renders Claude with weeklyModels and extraUsage', () => {
+    const result = sanitize(formatForTerminal(wrap(claudeWithExtras())));
+    expect(result).toMatchSnapshot();
+  });
+
+  it('renders Amp with Credits section', () => {
+    const result = sanitize(formatForTerminal(wrap(ampWithCredits())));
+    expect(result).toMatchSnapshot();
+  });
+
+  it('renders Amp with unknown models (fallback path)', () => {
+    const result = sanitize(formatForTerminal(wrap(ampUnknownModels())));
+    expect(result).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C3: Rich builder fixtures — Waybar snapshots
+// ---------------------------------------------------------------------------
+
+describe('Waybar formatter snapshots — rich builder fixtures (C3)', () => {
+  it('renders Claude with weeklyModels and extraUsage', () => {
+    const out = formatForWaybar(wrap(claudeWithExtras()));
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Amp with Credits section', () => {
+    const out = formatForWaybar(wrap(ampWithCredits()));
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Amp with unknown models (fallback path)', () => {
+    const out = formatForWaybar(wrap(ampUnknownModels()));
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C3: Rich builder fixtures — formatProviderForWaybar snapshots
+// ---------------------------------------------------------------------------
+
+describe('formatProviderForWaybar snapshots — rich builder fixtures (C3)', () => {
+  it('renders Claude with weeklyModels and extraUsage', () => {
+    const out = formatProviderForWaybar(claudeWithExtras());
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Amp with Credits section', () => {
+    const out = formatProviderForWaybar(ampWithCredits());
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
+  });
+
+  it('renders Amp with unknown models (fallback path)', () => {
+    const out = formatProviderForWaybar(ampUnknownModels());
+    expect(sanitize(out.text)).toMatchSnapshot();
+    expect(sanitize(out.tooltip)).toMatchSnapshot();
+    expect(out.class).toMatchSnapshot();
   });
 });

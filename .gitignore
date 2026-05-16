@@ -5,6 +5,9 @@ bun.lock
 # Build
 dist/
 
+# Coverage
+coverage/
+
 # Cache
 .cache/
 *.log
