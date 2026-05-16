@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { CONFIG } from '../../src/config';
 import type { QuotaBase } from '../../src/providers/base';
 import type { ProviderQuota } from '../../src/providers/types';
 
@@ -102,21 +103,6 @@ describe('BaseProvider', () => {
   });
 
   // -----------------------------------------------------------------------
-  // buildBase
-  // -----------------------------------------------------------------------
-
-  describe('buildBase', () => {
-    it('returns object with provider id, displayName, and available:false', () => {
-      // Access via getQuota unavailable path which exposes base shape
-      provider.available = false;
-      // The base is returned directly when unavailable — we verify shape below
-      // via the unavailability gate test; here we call buildBase through the spy
-      expect(provider.id).toBe('fake');
-      expect(provider.name).toBe('Fake');
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // Availability gate
   // -----------------------------------------------------------------------
 
@@ -188,6 +174,7 @@ describe('BaseProvider', () => {
       expect(mockCacheGetOrFetch).toHaveBeenCalledTimes(1);
       const [key] = mockCacheGetOrFetch.mock.calls[0];
       expect(key).toBe('fake-quota');
+      expect(mockCacheGetOrFetch.mock.calls[0][2]).toBe(CONFIG.cache.ttlMs);
     });
 
     it('does not call logger.error on success', async () => {
@@ -290,17 +277,11 @@ describe('BaseProvider', () => {
 
   describe('toUserFacingError (subclass override)', () => {
     let customProvider: FakeProviderCustomError;
-    let customFetchRawSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
       customProvider = new FakeProviderCustomError();
       customProvider.fetchError = new Error('underlying error');
-      customFetchRawSpy = spyOn(customProvider, 'fetchRaw' as any);
       mockCacheGetOrFetch.mockImplementation(async (_key: string, fetcher: () => Promise<unknown>) => fetcher());
-    });
-
-    afterEach(() => {
-      customFetchRawSpy.mockRestore();
     });
 
     it('uses the overridden toUserFacingError when fetchRaw throws', async () => {
