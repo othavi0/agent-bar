@@ -201,8 +201,8 @@ it does not fit the template and manages its own caching inline.
 Current fetch strategies:
 - Claude — reads Claude Code OAuth credentials, fetches the Anthropic usage API
   with an `AbortController`; cache key `claude-usage`.
-- Codex — `codex app-server` JSON-RPC over stdio, falling back to recent
-  session `.jsonl` rate-limit events; cache key `codex-quota`.
+- Codex — `codex app-server` JSON-RPC-ish protocol over stdio, falling back to
+  recent session `.jsonl` rate-limit events; cache key `codex-quota`.
 - Copilot — the official Copilot CLI over LSP-framed stdio JSON-RPC
   (`account.getQuota`); cache key `copilot-quota`.
 - Amp — locates the `amp` CLI, runs `amp usage`, parses stdout; cache key
@@ -222,7 +222,8 @@ Current fetch strategies:
 - The per-provider `extra` payload (accessed via `src/providers/extras.ts`)
   carries the rich data: Claude's `weeklyModels` and `extraUsage`, Codex's
   `modelsDetailed` (the canonical multi-window per-model structure) and
-  `extraUsage`, the Copilot `quotaSnapshots`, and the string-only `meta` map.
+  `extraUsage`, the Copilot `quotaSnapshots`, and the string-only `meta` map
+  carried by Amp and Copilot.
 
 ### Settings Contract
 
