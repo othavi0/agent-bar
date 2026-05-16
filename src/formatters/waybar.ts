@@ -3,18 +3,18 @@ import { getStatusForPercent } from '../config';
 import { getCopilotExtra } from '../providers/extras';
 import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota } from '../providers/types';
 import { type DisplayMode, loadSettingsSync } from '../settings';
-import { BOX, ONE_DARK } from '../theme';
+import { ONE_DARK } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
 import { buildCopilot as buildCopilotLines } from './builders/copilot';
+import { buildGeneric } from './builders/generic';
+import { TOOLTIP_BORDER } from './builders/shared';
 import { renderPango } from './render-pango';
-import { barSegments, type ColorToken, colorForDisplay, indicatorSegments, type Segment } from './segments';
+import { type ColorToken, colorForDisplay } from './segments';
 import { formatPercent, normalizePlanLabel, toDisplay } from './shared';
 import { type CodexViewModel, resolveCodexViewModelFrom } from './view-model';
 
-// Uniform tooltip width — all 3 cards share the same border
-const TOOLTIP_BORDER = 56; // total visual chars per line (┗ + 55 ━)
 const SETTINGS_CACHE_TTL_MS = 5_000;
 
 let settingsCache: {
@@ -63,16 +63,6 @@ interface WaybarOutput {
   class: string;
 }
 
-/** Escape special XML characters in dynamic content before embedding in Pango markup */
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/'/g, '&#39;')
-    .replace(/"/g, '&quot;');
-}
-
 const s = (color: string, text: string, bold = false) =>
   `<span foreground='${color}'${bold ? " weight='bold'" : ''}>${text}</span>`;
 
@@ -91,50 +81,12 @@ const HEX_BY_TOKEN: Record<ColorToken, string> = {
   brightBlue: ONE_DARK.brightBlue,
 };
 
-function renderPangoLocal(segs: Segment[]): string {
-  return segs.map((seg) => s(HEX_BY_TOKEN[seg.color], seg.text, seg.bold ?? false)).join('');
-}
-
 function colorFor(display: number | null, mode: DisplayMode): string {
   return HEX_BY_TOKEN[colorForDisplay(display, mode)];
 }
 
 function pctColored(display: number | null, mode: DisplayMode): string {
   return s(colorFor(display, mode), formatPercent(display));
-}
-
-function bar(display: number | null, mode: DisplayMode): string {
-  return renderPangoLocal(barSegments(display, mode));
-}
-
-function indicator(display: number | null, mode: DisplayMode): string {
-  return renderPangoLocal(indicatorSegments(display, mode));
-}
-
-function formatAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  if (diffMs < 60000) return 'just now';
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  return `${Math.floor(mins / 60)}h ago`;
-}
-
-function buildHeader(title: string, subtitle: string | undefined, color: string): string {
-  const fullTitle = subtitle ? `${title} · ${subtitle}` : title;
-  const fill = Math.max(1, TOOLTIP_BORDER - 4 - fullTitle.length);
-  return `${s(color, BOX.tl + BOX.h)} ${s(color, fullTitle, true)} ${s(color, BOX.h.repeat(fill))}`;
-}
-
-function buildFooter(color: string, fetchedAt?: string): string {
-  if (!fetchedAt) {
-    return s(color, BOX.bl + BOX.h.repeat(TOOLTIP_BORDER - 1));
-  }
-  const ago = formatAgo(fetchedAt);
-  const stamp = ` cached · ${ago} `;
-  const totalDashes = TOOLTIP_BORDER - 1 - stamp.length;
-  const left = Math.max(1, Math.floor(totalDashes / 2));
-  const right = Math.max(1, totalDashes - left);
-  return s(color, BOX.bl + BOX.h.repeat(left)) + s(ONE_DARK.comment, stamp) + s(color, BOX.h.repeat(right));
 }
 
 /**
@@ -198,8 +150,7 @@ function buildCopilotTooltip(p: ProviderQuota, fetchedAt: string | undefined, mo
  * Build Amp tooltip
  */
 function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const subtitle = p.account ? escapeXml(p.account) : undefined;
-  const headerTitle = subtitle ? `Amp · ${subtitle}` : 'Amp';
+  const headerTitle = p.account ? `Amp · ${p.account}` : 'Amp';
 
   return renderPango(
     buildAmpLines(p, {
@@ -251,29 +202,13 @@ const TOOLTIP_BUILDERS: Record<string, TooltipBuilder> = {
   amp: buildAmpTooltip,
 };
 
-function buildGenericTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const color = ONE_DARK.text;
-  const v = s(color, BOX.v);
-  const lines: string[] = [];
-
-  lines.push(buildHeader(p.displayName ?? p.provider, undefined, color));
-
-  if (p.error) {
-    lines.push(`${v}  ${s(ONE_DARK.red, p.error)}`);
-  } else if (p.primary) {
-    const rem = p.primary.remaining;
-    const disp = toDisplay(rem, mode);
-    lines.push(`${v}  ${indicator(disp, mode)} ${bar(disp, mode)} ${s(colorFor(disp, mode), formatPercent(disp))}`);
-  }
-
-  lines.push(buildFooter(color, fetchedAt));
-  return lines.join('\n');
-}
-
 function buildProviderTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
   const builder = TOOLTIP_BUILDERS[p.provider];
   if (builder) return builder(p, fetchedAt, mode);
-  return buildGenericTooltip(p, fetchedAt, mode);
+  const name = p.displayName ?? p.provider;
+  return renderPango(
+    buildGeneric(p, { mode, headerTitle: name, headerWidth: TOOLTIP_BORDER - 4, labelColor: 'text', footer: { fetchedAt } }),
+  );
 }
 
 function buildTooltip(quotas: AllQuotas, mode: DisplayMode): string {

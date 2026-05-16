@@ -1,32 +1,13 @@
 import type { AllQuotas, ProviderQuota } from '../providers/types';
-import { ANSI, BOX } from '../theme';
+import { ANSI } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
 import { buildCopilot as buildCopilotLines } from './builders/copilot';
+import { buildGeneric } from './builders/generic';
 import { renderAnsi } from './render-ansi';
-import { type ColorToken, colorForDisplay } from './segments';
-import { type DisplayMode, formatPercent, normalizePlanLabel, toDisplay } from './shared';
+import { type DisplayMode, normalizePlanLabel } from './shared';
 import { resolveCodexViewModel } from './view-model';
-
-const ANSI_BY_TOKEN: Record<ColorToken, string> = {
-  green: ANSI.green,
-  yellow: ANSI.yellow,
-  orange: ANSI.orange,
-  red: ANSI.red,
-  comment: ANSI.comment,
-  text: ANSI.text,
-  textBright: ANSI.textBright,
-  muted: ANSI.muted,
-  magenta: ANSI.magenta,
-  cyan: ANSI.cyan,
-  blue: ANSI.blue,
-  brightBlue: ANSI.brightBlue,
-};
-
-function getColor(display: number | null, mode: DisplayMode): string {
-  return ANSI_BY_TOKEN[colorForDisplay(display, mode)];
-}
 
 function buildClaudeTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
   const rendered = renderAnsi(
@@ -97,37 +78,22 @@ const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
   amp: buildAmpTerminal,
 };
 
-function buildGenericTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
-  const vc = ANSI.text;
-  const vi = (c: string) => `${c}${BOX.v}${ANSI.reset}`;
-  const lines: string[] = [];
-  const name = p.displayName ?? p.provider;
-
-  lines.push(
-    `${vc}${BOX.tl}${BOX.h}${ANSI.reset} ${vc}${name}${ANSI.reset} ${vc}${BOX.h.repeat(Math.max(1, 55 - name.length - 3))}${ANSI.reset}`,
-  );
-
-  if (p.error) {
-    lines.push(`${vi(vc)}  ${ANSI.red}${p.error}${ANSI.reset}`);
-  } else if (p.primary) {
-    const rem = p.primary.remaining;
-    const disp = toDisplay(rem, mode);
-    const color = getColor(disp, mode);
-    const suffix = mode === 'used' ? 'used' : 'remaining';
-    lines.push(`${vi(vc)}  ${color}${formatPercent(disp)} ${suffix}${ANSI.reset}`);
-  }
-
-  lines.push(`${vc}${BOX.bl}${BOX.h.repeat(55)}${ANSI.reset}`);
-  return lines;
-}
-
 export function formatForTerminal(quotas: AllQuotas, mode: DisplayMode = 'remaining'): string {
   const sections: string[][] = [];
 
   for (const p of quotas.providers) {
     if (!p.available && !p.error) continue;
     const builder = TERMINAL_BUILDERS[p.provider];
-    sections.push(builder ? builder(p, mode) : buildGenericTerminal(p, mode));
+    if (builder) {
+      sections.push(builder(p, mode));
+    } else {
+      const name = p.displayName ?? p.provider;
+      sections.push(
+        renderAnsi(
+          buildGeneric(p, { mode, headerTitle: name, headerWidth: 52, labelColor: 'text', footer: undefined }),
+        ).split('\n'),
+      );
+    }
   }
 
   if (sections.length === 0) {
