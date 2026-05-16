@@ -4,7 +4,7 @@ import { logger } from '../logger';
 import type { QuotaBase } from './base';
 import { BaseProvider } from './base';
 import { registerProvider } from './registry';
-import type { AmpQuota, ProviderQuota, QuotaWindow } from './types';
+import type { AmpQuota, AmpQuotaExtra, ProviderQuota, QuotaWindow } from './types';
 
 export class AmpProvider extends BaseProvider {
   readonly id = 'amp';
@@ -92,7 +92,7 @@ export class AmpProvider extends BaseProvider {
 
       const models: Record<string, QuotaWindow> = {};
       const meta: Record<string, string> = {};
-      const extra: import('./types').AmpQuotaExtra = {};
+      const extra: AmpQuotaExtra = {};
       let primary: QuotaWindow | undefined;
 
       if (freeMatch) {

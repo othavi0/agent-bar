@@ -1,5 +1,4 @@
 export const APP_NAME = 'agent-bar';
-export const APP_WINDOW_TITLE = 'Agent Bar';
 
 export const APP_BASE_CLASS = APP_NAME;
 export const APP_HIDDEN_CLASS = `${APP_NAME}-hidden`;

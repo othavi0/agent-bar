@@ -7,7 +7,7 @@ import { logger } from '../logger';
 import type { QuotaBase } from './base';
 import { BaseProvider } from './base';
 import { registerProvider } from './registry';
-import type { ModelWindows, ProviderQuota, QuotaWindow } from './types';
+import type { CodexQuotaExtra, ModelWindows, ProviderQuota, QuotaWindow } from './types';
 
 interface CodexWindowRaw {
   used_percent: number;
@@ -417,7 +417,7 @@ export class CodexProvider extends BaseProvider {
             return;
           }
 
-          if (msg?.id === 1 && msg.result) {
+          if (msg?.id === 1 && isRecord(msg.result)) {
             const accountResult = msg.result as CodexAppServerAccountReadResult;
             accountPlanType = accountResult.account?.planType ?? null;
             if (rateLimitsResult) tryResolve();
@@ -485,7 +485,7 @@ export class CodexProvider extends BaseProvider {
       return { ...base, error: 'No quota windows found' } as ProviderQuota;
     }
 
-    let codexCredits: import('./types').CodexQuotaExtra['extraUsage'] | undefined;
+    let codexCredits: CodexQuotaExtra['extraUsage'] | undefined;
     const credits = limits.credits;
     if (credits && (credits.has_credits || parseFloat(credits.balance || '0') > 0)) {
       const balance = parseFloat(credits.balance);
@@ -497,7 +497,7 @@ export class CodexProvider extends BaseProvider {
       };
     }
 
-    const extra: import('./types').CodexQuotaExtra = {};
+    const extra: CodexQuotaExtra = {};
     if (Object.keys(modelsDetailed).length > 0) extra.modelsDetailed = modelsDetailed;
     if (codexCredits) extra.extraUsage = codexCredits;
 
