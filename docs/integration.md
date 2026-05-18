@@ -2,6 +2,13 @@
 
 ## Setup
 
+The primary install flow is:
+
+```bash
+bun add -g @noctuacore/agent-bar
+agent-bar setup
+```
+
 `agent-bar setup` performs one managed install pass:
 
 1. copy provider icons to `~/.config/waybar/agent-bar/icons`
@@ -16,7 +23,10 @@ content alone.
 
 ## Update
 
-`agent-bar update` is the managed-install updater for `~/.agent-bar`.
+For npm installs, update by rerunning `bun add -g @noctuacore/agent-bar`, then
+`agent-bar setup`.
+
+`agent-bar update` is the legacy managed-checkout updater for `~/.agent-bar`.
 
 It discards local changes in that checkout after confirmation, resets to
 upstream, installs dependencies when needed, and then runs setup without a second

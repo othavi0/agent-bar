@@ -8,4 +8,14 @@ fi
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
-exec bun "$APP_DIR/src/index.ts" "$@"
+
+if [ -f "$APP_DIR/src/index.ts" ]; then
+  exec bun "$APP_DIR/src/index.ts" "$@"
+fi
+
+if [ -f "$APP_DIR/dist/index.js" ]; then
+  exec bun "$APP_DIR/dist/index.js" "$@"
+fi
+
+echo "agent-bar: could not find src/index.ts or dist/index.js in $APP_DIR" >&2
+exit 1

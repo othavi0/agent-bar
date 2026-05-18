@@ -19,13 +19,28 @@ Supported providers:
 Requires Bun.
 
 ```bash
-git clone git@github.com:othavioquiliao/agent-bar.git ~/.agent-bar
-cd ~/.agent-bar
-bun run setup
+bun add -g @noctuacore/agent-bar
+agent-bar setup
 ```
 
 `setup` installs the Waybar modules, CSS, provider icons, terminal helper, and
 `~/.local/bin/agent-bar` symlink.
+
+To update the npm package, rerun the global install and re-apply setup:
+
+```bash
+bun add -g @noctuacore/agent-bar
+agent-bar setup
+```
+
+For development, use a normal checkout:
+
+```bash
+git clone git@github.com:othavioquiliao/agent-bar.git
+cd agent-bar
+bun install
+bun run start status
+```
 
 ## Commands
 
@@ -33,14 +48,15 @@ bun run setup
 agent-bar             # Waybar JSON
 agent-bar status      # Terminal quota view
 agent-bar menu        # Login and layout TUI
-agent-bar update      # Update managed ~/.agent-bar install
+agent-bar update      # Update managed ~/.agent-bar checkout only
 agent-bar setup       # Re-apply Waybar integration
 agent-bar uninstall   # Interactive removal
 agent-bar remove      # Forced removal
 ```
 
-`update` is for the managed `~/.agent-bar` checkout. It discards local changes
-there, resets to upstream, installs dependencies when needed, and re-runs setup.
+`update` is only for the legacy managed `~/.agent-bar` checkout flow. It is not
+the npm package updater. For npm installs, use `bun add -g @noctuacore/agent-bar`
+and then `agent-bar setup`.
 
 ## Docs
 

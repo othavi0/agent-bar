@@ -64,6 +64,21 @@ test: cobrir cenarios de cache expirado
 - Path aliases: use `@/*` para importar de `src/*` (configurado no `tsconfig.json`).
 - Sem build step: o Bun resolve TypeScript + path aliases em runtime.
 
+## Release npm
+
+O pacote publico e `@noctuacore/agent-bar` no npm, mas o runtime continua Bun-only.
+
+```bash
+bun run release:check     # testes, typecheck, lint, build e pack dry-run
+bun run publish:dry-run   # exige login npm no ambiente atual
+```
+
+O publish real e manual e exige aprovacao explicita:
+
+```bash
+bun publish
+```
+
 ## Estrutura do projeto
 
 ```

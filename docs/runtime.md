@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 | --- | --- |
-| `~/.agent-bar` | Managed install checkout used by README install/update flow. |
+| `~/.agent-bar` | Optional managed checkout used only by the legacy `agent-bar update` flow. |
 | `~/.config/agent-bar/settings.json` | User settings. Normalized on load and written atomically. |
 | `~/.cache/agent-bar/` | Provider quota cache. |
 | `~/.local/bin/agent-bar` | Symlink created by setup. |
@@ -21,6 +21,19 @@
 | `~/.config/waybar/style.css` | Adds one managed import for `./agent-bar/style.css`. |
 
 The app does not rewrite full Waybar files.
+
+## Package Install
+
+The primary install path is the npm package via Bun:
+
+```bash
+bun add -g @noctuacore/agent-bar
+agent-bar setup
+```
+
+Bun owns the global package location. `agent-bar setup` still creates
+`~/.local/bin/agent-bar` as the stable command path used by generated Waybar
+modules.
 
 ## Settings
 

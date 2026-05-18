@@ -10,7 +10,7 @@ mock.module('../src/logger', () => ({
   },
 }));
 
-import { parseArgs } from '../src/cli';
+import { parseArgs, showHelp } from '../src/cli';
 
 describe('parseArgs', () => {
   // -----------------------------------------------------------------------
@@ -158,5 +158,25 @@ describe('parseArgs', () => {
       expect(opts.verbose).toBe(true);
       expect(opts.refresh).toBe(true);
     });
+  });
+});
+
+describe('showHelp', () => {
+  it('describes npm-era entrypoints and managed checkout updates', () => {
+    const lines: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => {
+      lines.push(args.join(' '));
+    };
+
+    try {
+      showHelp();
+    } finally {
+      console.log = originalLog;
+    }
+
+    const output = lines.join('\n');
+    expect(output).toContain('Update managed ~/.agent-bar checkout');
+    expect(output).toContain('agent-bar  or  bun run start');
   });
 });

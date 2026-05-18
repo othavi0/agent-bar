@@ -7,7 +7,7 @@
 | `agent-bar` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
 | `agent-bar status` | Print the quota view in a terminal. | Cache only |
 | `agent-bar menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
-| `agent-bar update` | Update the managed `~/.agent-bar` checkout and re-run setup. | `~/.agent-bar`, managed Waybar files |
+| `agent-bar update` | Update the legacy managed `~/.agent-bar` checkout and re-run setup. | `~/.agent-bar`, managed Waybar files |
 
 ## Install And Removal
 
@@ -39,8 +39,15 @@ These are mostly for tests, packagers, and manual integration.
 
 ## Update Behavior
 
-`agent-bar update` is intentionally destructive only for the managed
-install path:
+For npm installs, update the package with Bun and re-apply setup:
+
+```bash
+bun add -g @noctuacore/agent-bar
+agent-bar setup
+```
+
+`agent-bar update` is intentionally destructive only for the legacy managed
+checkout path:
 
 1. It must run from the `~/.agent-bar` checkout.
 2. It fetches upstream.
