@@ -375,3 +375,24 @@ dirs.
 
 `CHANGELOG.md` is historical — treat it as non-operational unless explicitly
 editing release notes.
+
+## 8. Release
+
+Releases publish `@noctuacore/agent-bar` to npm automatically. The
+`.github/workflows/publish.yml` workflow runs on the `release: published`
+event: it verifies `package.json` matches the release tag, runs
+`bun run release:check`, then publishes with `bun run publish:npm`.
+
+To cut a release:
+
+1. Bump `version` in `package.json`.
+2. Update `CHANGELOG.md` — move or create the section for the new version.
+3. Commit both changes.
+4. Create a GitHub Release with tag `v<version>` (matching `package.json`) and
+   notes. Publishing the Release triggers the workflow.
+
+The workflow needs an `NPM_TOKEN` repository secret: an npm automation /
+granular access token with publish permission. npm 2FA blocks interactive
+publishing, and automation tokens bypass 2FA — so this secret is required for
+CI publishing to work. Set it in GitHub → Settings → Secrets and variables →
+Actions.
