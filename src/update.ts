@@ -37,6 +37,8 @@ export interface UpdateSummary {
 
 export type ManagedUpdateStatus = 'wrong-root' | 'up-to-date' | 'cancelled' | 'updated';
 
+export type InstallKind = 'managed-git' | 'dev-git' | 'npm';
+
 export interface ManagedUpdateResult {
   status: ManagedUpdateStatus;
   repoRoot: string;
@@ -88,6 +90,16 @@ export async function runCmd(cmd: string, args: string[], cwd: string): Promise<
 
 export function isManagedInstallRoot(repoRoot: string, installRoot: string = join(homedir(), '.agent-bar')): boolean {
   return resolve(repoRoot) === resolve(installRoot);
+}
+
+export function detectInstallKind(
+  repoRoot: string,
+  installRoot: string = join(homedir(), '.agent-bar'),
+): InstallKind {
+  if (!existsSync(join(repoRoot, '.git'))) {
+    return 'npm';
+  }
+  return isManagedInstallRoot(repoRoot, installRoot) ? 'managed-git' : 'dev-git';
 }
 
 async function requireCommand(

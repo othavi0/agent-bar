@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type CommandRunner, runManagedUpdate } from '../src/update';
+import { type CommandRunner, detectInstallKind, runManagedUpdate } from '../src/update';
 
 const tempDirs: string[] = [];
 
@@ -186,5 +186,27 @@ describe('runManagedUpdate', () => {
     expect(setupCount).toBe(0);
     expect(commands.some(([cmd, args]) => cmd === 'git' && args[0] === 'reset')).toBe(false);
     expect(commands.some(([cmd, args]) => cmd === 'bun' && args[0] === 'install')).toBe(false);
+  });
+});
+
+describe('detectInstallKind', () => {
+  it('classifies a git checkout at the managed root as managed-git', () => {
+    const installRoot = tempInstallRoot();
+    mkdirSync(join(installRoot, '.git'));
+
+    expect(detectInstallKind(installRoot, installRoot)).toBe('managed-git');
+  });
+
+  it('classifies a git checkout outside the managed root as dev-git', () => {
+    const repoRoot = tempInstallRoot();
+    mkdirSync(join(repoRoot, '.git'));
+
+    expect(detectInstallKind(repoRoot, '/home/test/.agent-bar')).toBe('dev-git');
+  });
+
+  it('classifies a directory without .git as npm', () => {
+    const repoRoot = tempInstallRoot();
+
+    expect(detectInstallKind(repoRoot, '/home/test/.agent-bar')).toBe('npm');
   });
 });
