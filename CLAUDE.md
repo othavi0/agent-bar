@@ -71,6 +71,7 @@ contracts move.
 | Formatters / tooltips / classes | `bun test tests/formatters.test.ts tests/formatters-snapshot.test.ts tests/formatters-segments.test.ts` |
 | Waybar export contract | `bun test tests/waybar-contract.test.ts` |
 | Update flow (all install kinds) | `bun test tests/update.test.ts` |
+| `package.json` `files`/`bin`/release contract | `bun test tests/package.test.ts` |
 | Theme / colors / identity constants | `bun test tests/theme.test.ts tests/colors.test.ts tests/config.test.ts tests/app-identity.test.ts` |
 | CLI locator helpers | `bun test tests/amp-cli.test.ts tests/copilot-cli.test.ts` |
 | Shared TypeScript contracts | `bun run typecheck` |
