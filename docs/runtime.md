@@ -46,6 +46,7 @@ Defaults:
 - provider order: `claude`, `codex`, `copilot`, `amp`
 - separator style: `gap`
 - display mode: `remaining`
+- show percentage: `true`
 - Codex window policy: `both`
 
 Normalization:
@@ -54,7 +55,10 @@ Normalization:
 - duplicates are collapsed
 - enabled providers missing from `providerOrder` are appended
 - invalid separator, display, or window-policy values fall back to defaults
-- normalized async loads are saved back to disk when the stored file differs
+- if the normalized form differs from the stored file, it is written back to disk
+
+Schema version 1 settings files are migrated to version 2 automatically on
+load.
 
 ## Cache
 

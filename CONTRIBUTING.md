@@ -10,7 +10,7 @@ configurar o ambiente, manter a consistencia do codigo e enviar suas alteracoes.
 | [Bun](https://bun.sh) | >= 1.0 |
 | Git | qualquer versao recente |
 
-> **Nota:** Bun e o unico runtime suportado. Node/Deno nao sao compatoveis.
+> **Nota:** Bun e o unico runtime suportado. Node/Deno nao sao compativeis.
 
 ## Setup do dev environment
 
@@ -28,7 +28,9 @@ Pronto. Nao ha etapa de build -- o Bun executa TypeScript diretamente.
 bun run start          # Executar (equivale a ./scripts/agent-bar)
 bun run dev            # Watch mode (reinicia ao salvar)
 bun test               # Rodar testes (com coverage via bunfig.toml)
-bun run typecheck      # tsc --noEmit -- validacao de tipos sem emitir arquivos
+bun run typecheck      # bun x tsc --noEmit -- validacao de tipos sem emitir arquivos
+bun run lint           # Checagem de formatacao e lint (biome)
+bun run lint:fix       # Corrige problemas de lint automaticamente
 ```
 
 > **Atencao:** nao use `bun ./scripts/agent-bar`. O arquivo e um shim bash e o Bun vai
@@ -47,6 +49,10 @@ escritas em **portugues**:
 | `test:`     | Adicao ou modificacao de testes            |
 | `docs:`     | Documentacao                               |
 | `chore:`    | Manutencao (deps, CI, configs)             |
+| `perf:`     | Melhoria de performance                    |
+| `style:`    | Formatacao, sem mudanca de codigo          |
+| `build:`    | Sistema de build ou dependencias           |
+| `ci:`       | Configuracao de integracao continua        |
 
 Exemplos:
 
@@ -61,8 +67,8 @@ test: cobrir cenarios de cache expirado
 - **TypeScript strict** -- o `tsconfig.json` usa `"strict": true`. Evite `any` sempre que possivel.
 - **Nomes de variaveis e funcoes em ingles**, usando `camelCase`.
 - **Commits e comunicacao** em portugues.
-- Path aliases: use `@/*` para importar de `src/*` (configurado no `tsconfig.json`).
-- Sem build step: o Bun resolve TypeScript + path aliases em runtime.
+- Imports relativos: nao ha path aliases configurados no `tsconfig.json` -- use caminhos relativos.
+- Sem build step: o Bun executa TypeScript diretamente em runtime.
 
 ## Release npm
 
@@ -73,10 +79,11 @@ bun run release:check     # testes, typecheck, lint, build e pack dry-run
 bun run publish:dry-run   # exige login npm no ambiente atual
 ```
 
-O publish real e manual e exige aprovacao explicita:
+O publish real e manual e exige aprovacao explicita. Use o script do projeto,
+que injeta o token npm a partir do `~/.npmrc`:
 
 ```bash
-bun publish
+bun run publish:npm
 ```
 
 ## Estrutura do projeto
@@ -89,6 +96,9 @@ src/
   settings.ts           # Leitura/escrita de ~/.config/agent-bar/settings.json
   cache.ts              # Cache em disco com TTL
   setup.ts              # Comando `agent-bar setup`
+  update.ts             # Comando `agent-bar update`
+  uninstall.ts          # Comando `agent-bar uninstall`
+  remove.ts             # Comando `agent-bar remove`
   waybar-contract.ts    # Contrato de modulos/CSS para Waybar
   waybar-integration.ts # Wiring automatico no config.jsonc + style.css
   providers/

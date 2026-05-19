@@ -38,8 +38,8 @@ Both remove managed Waybar entries and owned files.
 ## Backups
 
 Before first live Waybar mutation, integration code creates backups using the
-project backup suffix. Repeated setup runs should update managed entries without
-creating duplicate include/import lines.
+`.agent-bar-backup` suffix. Repeated setup runs should update managed entries
+without creating duplicate include/import lines.
 
 ## Manual Integration
 

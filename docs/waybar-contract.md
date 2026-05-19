@@ -41,7 +41,8 @@ Each module includes:
 
 - `exec`
 - `return-type: json`
-- `interval`
+- `interval` (120 seconds)
+- `exec-on-event`
 - `tooltip`
 - `on-click`
 - `on-click-right`

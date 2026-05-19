@@ -32,7 +32,9 @@ throwing. Keep messages stable; tests assert exact strings in several places.
    - `src/tui/login-single.ts`
    - `src/tui/list-all.ts`
    - `src/tui/configure-layout.ts`
-9. Check terminal and Waybar formatters.
+9. Add a dedicated builder in `src/formatters/builders/<name>.ts` and register
+   it in the `terminal.ts` and `waybar.ts` dispatchers. An unregistered provider
+   falls back to the `generic` builder.
 10. Add tests in `tests/providers/<name>.test.ts`.
 
 ## Data Rules

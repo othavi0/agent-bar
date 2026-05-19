@@ -46,5 +46,6 @@ These are mostly for tests, packagers, and manual integration.
 - **Legacy managed `~/.agent-bar` checkout:** must run from `~/.agent-bar`;
   fetches upstream, shows incoming commits and local changes, and after
   confirmation runs `git reset --hard <upstream>` + `git clean -fd`, installs
-  dependencies when they changed, and re-applies setup.
+  dependencies when they changed or `node_modules` is missing, and re-applies
+  setup.
 - **Development checkout:** refuses and tells you to update with git directly.

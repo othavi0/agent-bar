@@ -32,10 +32,6 @@ To update later, run:
 agent-bar update
 ```
 
-For npm installs this runs `bun add -g @noctuacore/agent-bar` and re-applies
-setup. For the legacy `~/.agent-bar` checkout it fetches and resets to upstream, then re-applies
-setup.
-
 For development, use a normal checkout:
 
 ```bash

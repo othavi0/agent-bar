@@ -63,11 +63,8 @@ app-server protocol when available.
 
 ### Copilot
 
-Install and log in with the official Copilot CLI:
-
-```bash
-copilot login
-```
+Install and log in with the official Copilot CLI. See the Copilot CLI
+documentation for the current login command.
 
 The active Copilot CLI account determines which quota appears.
 
