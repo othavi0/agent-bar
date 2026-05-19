@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type CommandRunner, detectInstallKind, runManagedUpdate, runNpmUpdate } from '../src/update';
+import {
+  type CommandRunner,
+  detectInstallKind,
+  type NpmUpdateSummary,
+  runManagedUpdate,
+  runNpmUpdate,
+} from '../src/update';
 
 const tempDirs: string[] = [];
 
@@ -221,6 +227,7 @@ describe('runNpmUpdate', () => {
   it('runs bun add -g and setup after the confirmation is accepted', async () => {
     const repoRoot = tempNpmRoot('@noctuacore/agent-bar', '4.0.1');
     let setupCount = 0;
+    let capturedSummary: NpmUpdateSummary | undefined;
     const { commands, run } = fakeRunner({});
 
     const result = await runNpmUpdate({
@@ -230,14 +237,15 @@ describe('runNpmUpdate', () => {
         setupCount += 1;
       },
       confirmNpm: async (summary) => {
-        expect(summary.packageName).toBe('@noctuacore/agent-bar');
-        expect(summary.currentVersion).toBe('4.0.1');
+        capturedSummary = summary;
         return true;
       },
     });
 
     expect(result.status).toBe('updated');
     expect(setupCount).toBe(1);
+    expect(capturedSummary?.packageName).toBe('@noctuacore/agent-bar');
+    expect(capturedSummary?.currentVersion).toBe('4.0.1');
     expect(commands).toEqual([['bun', ['add', '-g', '@noctuacore/agent-bar']]]);
   });
 
