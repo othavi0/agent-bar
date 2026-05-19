@@ -373,21 +373,20 @@ dirs.
 - `docs/integration.md` — setup/update/remove ownership model.
 - `docs/troubleshooting.md` — runtime troubleshooting.
 
-`CHANGELOG.md` is historical — treat it as non-operational unless explicitly
-editing release notes.
+`CHANGELOG.md` is historical — treat it as read-only during regular development; it is updated only when cutting a release (see section 8).
 
 ## 8. Release
 
 Releases publish `@noctuacore/agent-bar` to npm automatically. The
 `.github/workflows/publish.yml` workflow runs on the `release: published`
 event: it verifies `package.json` matches the release tag, runs
-`bun run release:check`, then publishes with `bun run publish:npm`.
+`bun run release:check` (tests, typecheck, lint, build, and a pack dry-run), then publishes with `bun run publish:npm`.
 
 To cut a release:
 
 1. Bump `version` in `package.json`.
 2. Update `CHANGELOG.md` — move or create the section for the new version.
-3. Commit both changes.
+3. Commit both changes and push to the main branch.
 4. Create a GitHub Release with tag `v<version>` (matching `package.json`) and
    notes. Publishing the Release triggers the workflow.
 
@@ -396,3 +395,6 @@ granular access token with publish permission. npm 2FA blocks interactive
 publishing, and automation tokens bypass 2FA — so this secret is required for
 CI publishing to work. Set it in GitHub → Settings → Secrets and variables →
 Actions.
+
+For a manual local publish, `bun run publish:npm` reads the npm token from the
+`NPM_CONFIG_TOKEN` environment variable or from `~/.npmrc`.
