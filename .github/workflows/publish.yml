@@ -38,4 +38,5 @@ jobs:
       - name: Publish to npm
         run: bun run publish:npm
         env:
+          # scripts/bun-publish-with-npm-token reads NPM_CONFIG_TOKEN (not NODE_AUTH_TOKEN)
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
