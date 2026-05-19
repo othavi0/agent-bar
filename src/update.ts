@@ -303,9 +303,60 @@ function printSummary(summary: UpdateSummary): void {
   }
 }
 
+async function runNpmUpdateInteractive(): Promise<void> {
+  try {
+    const result = await runNpmUpdate({
+      runSetup: async () => {
+        const { runSetup } = await import('./setup');
+        await runSetup({ confirm: false, clearScreen: false });
+      },
+      confirmNpm: async (summary) => {
+        printKeyValues('Package', [
+          ['Name', summary.packageName],
+          ['Installed', summary.currentVersion],
+        ]);
+        printWarning('npm update', [`This runs \`bun add -g ${summary.packageName}\` and re-applies setup.`]);
+
+        const proceed = await p.confirm({
+          message: 'Update the package with Bun and re-apply setup?',
+          initialValue: true,
+        });
+
+        return !p.isCancel(proceed) && proceed;
+      },
+    });
+
+    if (result.status === 'cancelled') {
+      p.outro(colorize('Update cancelled', semantic.muted));
+      return;
+    }
+
+    p.outro(colorize('Package updated. Restart Waybar if modules look stale.', semantic.good));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.error(colorize(message, semantic.danger));
+    p.outro(colorize('Update failed', semantic.danger));
+    process.exit(1);
+  }
+}
+
 export async function main() {
   console.clear();
-  printCommandHeader('update', 'Managed updater for ~/.agent-bar');
+  printCommandHeader('update', 'Updater for agent-bar');
+
+  const installKind = detectInstallKind(REPO_ROOT);
+
+  if (installKind === 'dev-git') {
+    p.log.error(colorize('This is a development checkout, not a managed install.', semantic.danger));
+    p.log.info(colorize('Update it with git directly, e.g. `git pull`.', semantic.subtitle));
+    p.outro(colorize('Update aborted', semantic.muted));
+    return;
+  }
+
+  if (installKind === 'npm') {
+    await runNpmUpdateInteractive();
+    return;
+  }
 
   const spinner = p.spinner();
   let spinnerActive = false;
