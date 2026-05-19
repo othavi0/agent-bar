@@ -47,6 +47,26 @@ export interface ManagedUpdateResult {
   installedDependencies: boolean;
 }
 
+export interface NpmUpdateSummary {
+  packageName: string;
+  currentVersion: string;
+}
+
+export type NpmUpdateStatus = 'cancelled' | 'updated';
+
+export interface NpmUpdateResult {
+  status: NpmUpdateStatus;
+  summary: NpmUpdateSummary;
+}
+
+export interface NpmUpdateOptions {
+  repoRoot?: string;
+  runCommand?: CommandRunner;
+  runSetup: () => Promise<void>;
+  confirmNpm: (summary: NpmUpdateSummary) => Promise<boolean>;
+  onEvent?: (event: UpdateEvent) => void;
+}
+
 export type UpdateEvent =
   | { type: 'step'; message: string }
   | { type: 'info'; message: string }
@@ -227,6 +247,40 @@ export async function runManagedUpdate(options: ManagedUpdateOptions): Promise<M
   onEvent({ type: 'success', message: 'Managed install updated.' });
 
   return { status: 'updated', repoRoot, installRoot, summary, installedDependencies };
+}
+
+async function readPackageInfo(repoRoot: string): Promise<NpmUpdateSummary> {
+  const pkg = (await Bun.file(join(repoRoot, 'package.json')).json()) as {
+    name?: string;
+    version?: string;
+  };
+  if (!pkg.name || !pkg.version) {
+    throw new Error('package.json is missing name or version');
+  }
+  return { packageName: pkg.name, currentVersion: pkg.version };
+}
+
+export async function runNpmUpdate(options: NpmUpdateOptions): Promise<NpmUpdateResult> {
+  const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const runCommand = options.runCommand ?? runCmd;
+  const onEvent = options.onEvent ?? (() => {});
+
+  onEvent({ type: 'step', message: 'Reading package info...' });
+  const summary = await readPackageInfo(repoRoot);
+
+  const approved = await options.confirmNpm(summary);
+  if (!approved) {
+    return { status: 'cancelled', summary };
+  }
+
+  onEvent({ type: 'step', message: 'Updating package with Bun...' });
+  await requireCommand(runCommand, repoRoot, 'Update package', 'bun', ['add', '-g', summary.packageName]);
+
+  onEvent({ type: 'step', message: 'Re-applying Waybar integration...' });
+  await options.runSetup();
+  onEvent({ type: 'success', message: 'Package updated.' });
+
+  return { status: 'updated', summary };
 }
 
 function printSummary(summary: UpdateSummary): void {
