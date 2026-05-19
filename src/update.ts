@@ -112,10 +112,7 @@ export function isManagedInstallRoot(repoRoot: string, installRoot: string = joi
   return resolve(repoRoot) === resolve(installRoot);
 }
 
-export function detectInstallKind(
-  repoRoot: string,
-  installRoot: string = join(homedir(), '.agent-bar'),
-): InstallKind {
+export function detectInstallKind(repoRoot: string, installRoot: string = join(homedir(), '.agent-bar')): InstallKind {
   if (!existsSync(join(repoRoot, '.git'))) {
     return 'npm';
   }
