@@ -58,8 +58,9 @@ agent-bar remove      # Forced removal
 ```
 
 `agent-bar update` detects the install type. For an npm/Bun global install it
-updates the package; for the legacy managed `~/.agent-bar` checkout it pulls
-upstream. In a development checkout it refuses and tells you to use git.
+updates the package; for the legacy managed `~/.agent-bar` checkout it fetches
+and resets to upstream. In a development checkout it refuses and tells you to
+use git.
 
 ## Docs
 
