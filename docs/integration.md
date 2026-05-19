@@ -25,7 +25,7 @@ content alone.
 
 `agent-bar update` detects the install type. For an npm/Bun install it runs
 `bun add -g @noctuacore/agent-bar` and re-applies setup. For the legacy
-managed `~/.agent-bar` checkout it pulls upstream and re-applies setup. In a
+managed `~/.agent-bar` checkout it fetches and resets to upstream, then re-applies setup. In a
 development checkout it refuses and points you to git.
 
 ## Removal

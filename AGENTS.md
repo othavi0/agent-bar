@@ -71,7 +71,7 @@ contracts move.
 | `BaseProvider` orchestration | `bun test tests/providers/base.test.ts` |
 | Formatters / tooltips / classes | `bun test tests/formatters.test.ts tests/formatters-snapshot.test.ts tests/formatters-segments.test.ts` |
 | Waybar export contract | `bun test tests/waybar-contract.test.ts` |
-| Managed update flow | `bun test tests/update.test.ts` |
+| Update flow (all install kinds) | `bun test tests/update.test.ts` |
 | Theme / colors / identity constants | `bun test tests/theme.test.ts tests/colors.test.ts tests/config.test.ts tests/app-identity.test.ts` |
 | CLI locator helpers | `bun test tests/amp-cli.test.ts tests/copilot-cli.test.ts` |
 | Shared TypeScript contracts | `bun run typecheck` |
@@ -313,7 +313,7 @@ and leave the terminal sane.
 | --- | --- |
 | `~/.config/agent-bar/settings.json` | Versioned user settings; atomic writes |
 | `~/.cache/agent-bar/` | Provider quota cache |
-| `~/.agent-bar` | Managed install checkout (update flow) |
+| `~/.agent-bar` | Optional legacy managed checkout (legacy update flow) |
 | `~/.local/bin/agent-bar` | Symlink created by setup |
 | `~/.config/waybar/agent-bar/` | Generated `modules.jsonc`, `style.css`, `icons/` |
 | `~/.config/waybar/scripts/agent-bar-open-terminal` | Terminal helper for click actions |
