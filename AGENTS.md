@@ -71,7 +71,7 @@ contracts move.
 | `BaseProvider` orchestration | `bun test tests/providers/base.test.ts` |
 | Formatters / tooltips / classes | `bun test tests/formatters.test.ts tests/formatters-snapshot.test.ts tests/formatters-segments.test.ts` |
 | Waybar export contract | `bun test tests/waybar-contract.test.ts` |
-| Managed update flow | `bun test tests/update.test.ts` |
+| Update flow (all install kinds) | `bun test tests/update.test.ts` |
 | Theme / colors / identity constants | `bun test tests/theme.test.ts tests/colors.test.ts tests/config.test.ts tests/app-identity.test.ts` |
 | CLI locator helpers | `bun test tests/amp-cli.test.ts tests/copilot-cli.test.ts` |
 | Shared TypeScript contracts | `bun run typecheck` |
@@ -118,8 +118,9 @@ contracts move.
 **Lifecycle** (each lazy-imported by `index.ts`)
 - `src/setup.ts` — installs Waybar assets, creates the `~/.local/bin/agent-bar`
   symlink, patches live Waybar config, reloads Waybar.
-- `src/update.ts` — managed git update of the `~/.agent-bar` checkout, then
-  re-runs setup.
+- `src/update.ts` — detects the install type and updates it: `bun add -g` for
+  npm installs, git pull for the managed `~/.agent-bar` checkout, then re-runs
+  setup.
 - `src/uninstall.ts` — interactive removal of owned paths and managed Waybar
   entries.
 - `src/remove.ts` — thin non-interactive wrapper over uninstall (`force: true`).
@@ -312,7 +313,7 @@ and leave the terminal sane.
 | --- | --- |
 | `~/.config/agent-bar/settings.json` | Versioned user settings; atomic writes |
 | `~/.cache/agent-bar/` | Provider quota cache |
-| `~/.agent-bar` | Managed install checkout (update flow) |
+| `~/.agent-bar` | Optional legacy managed checkout (legacy update flow) |
 | `~/.local/bin/agent-bar` | Symlink created by setup |
 | `~/.config/waybar/agent-bar/` | Generated `modules.jsonc`, `style.css`, `icons/` |
 | `~/.config/waybar/scripts/agent-bar-open-terminal` | Terminal helper for click actions |

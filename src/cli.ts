@@ -70,7 +70,7 @@ export function showHelp(): void {
   console.log(cmdLine('assets install', 'Install icons/helper only'));
   console.log(cmdLine('export waybar-modules', 'Print Waybar JSON module contract'));
   console.log(cmdLine('export waybar-css', 'Print Waybar CSS JSON contract'));
-  console.log(cmdLine('update', 'Update managed ~/.agent-bar checkout'));
+  console.log(cmdLine('update', 'Update the install (npm or managed checkout)'));
   console.log(cmdLine('uninstall', `Remove ${APP_NAME} + integration`));
   console.log(cmdLine('remove', 'Force remove without prompt'));
   console.log(v());

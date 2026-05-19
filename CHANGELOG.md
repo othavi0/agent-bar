@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- `agent-bar update` agora detecta instalações npm/Bun e atualiza o pacote
+  global com `bun add -g`, em vez de tratar apenas o checkout legado
+  `~/.agent-bar`.
+
 ## [4.0.1] - 2026-05-18
 
 ### Fixed

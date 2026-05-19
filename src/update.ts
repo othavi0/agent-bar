@@ -37,12 +37,34 @@ export interface UpdateSummary {
 
 export type ManagedUpdateStatus = 'wrong-root' | 'up-to-date' | 'cancelled' | 'updated';
 
+export type InstallKind = 'managed-git' | 'dev-git' | 'npm';
+
 export interface ManagedUpdateResult {
   status: ManagedUpdateStatus;
   repoRoot: string;
   installRoot: string;
   summary?: UpdateSummary;
   installedDependencies: boolean;
+}
+
+export interface NpmUpdateSummary {
+  packageName: string;
+  currentVersion: string;
+}
+
+export type NpmUpdateStatus = 'cancelled' | 'updated';
+
+export interface NpmUpdateResult {
+  status: NpmUpdateStatus;
+  summary: NpmUpdateSummary;
+}
+
+export interface NpmUpdateOptions {
+  repoRoot?: string;
+  runCommand?: CommandRunner;
+  runSetup: () => Promise<void>;
+  confirmNpm: (summary: NpmUpdateSummary) => Promise<boolean>;
+  onEvent?: (event: UpdateEvent) => void;
 }
 
 export type UpdateEvent =
@@ -88,6 +110,13 @@ export async function runCmd(cmd: string, args: string[], cwd: string): Promise<
 
 export function isManagedInstallRoot(repoRoot: string, installRoot: string = join(homedir(), '.agent-bar')): boolean {
   return resolve(repoRoot) === resolve(installRoot);
+}
+
+export function detectInstallKind(repoRoot: string, installRoot: string = join(homedir(), '.agent-bar')): InstallKind {
+  if (!existsSync(join(repoRoot, '.git'))) {
+    return 'npm';
+  }
+  return isManagedInstallRoot(repoRoot, installRoot) ? 'managed-git' : 'dev-git';
 }
 
 async function requireCommand(
@@ -217,6 +246,40 @@ export async function runManagedUpdate(options: ManagedUpdateOptions): Promise<M
   return { status: 'updated', repoRoot, installRoot, summary, installedDependencies };
 }
 
+async function readPackageInfo(repoRoot: string): Promise<NpmUpdateSummary> {
+  const pkg = (await Bun.file(join(repoRoot, 'package.json')).json()) as {
+    name?: string;
+    version?: string;
+  };
+  if (!pkg.name || !pkg.version) {
+    throw new Error('package.json is missing name or version');
+  }
+  return { packageName: pkg.name, currentVersion: pkg.version };
+}
+
+export async function runNpmUpdate(options: NpmUpdateOptions): Promise<NpmUpdateResult> {
+  const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const runCommand = options.runCommand ?? runCmd;
+  const onEvent = options.onEvent ?? (() => {});
+
+  onEvent({ type: 'step', message: 'Reading package info...' });
+  const summary = await readPackageInfo(repoRoot);
+
+  const approved = await options.confirmNpm(summary);
+  if (!approved) {
+    return { status: 'cancelled', summary };
+  }
+
+  onEvent({ type: 'step', message: 'Updating package with Bun...' });
+  await requireCommand(runCommand, repoRoot, 'Update package', 'bun', ['add', '-g', summary.packageName]);
+
+  onEvent({ type: 'step', message: 'Re-applying Waybar integration...' });
+  await options.runSetup();
+  onEvent({ type: 'success', message: 'Package updated.' });
+
+  return { status: 'updated', summary };
+}
+
 function printSummary(summary: UpdateSummary): void {
   printKeyValues('Install', [
     ['Path', summary.repoRoot],
@@ -240,9 +303,60 @@ function printSummary(summary: UpdateSummary): void {
   }
 }
 
+async function runNpmUpdateInteractive(): Promise<void> {
+  try {
+    const result = await runNpmUpdate({
+      runSetup: async () => {
+        const { runSetup } = await import('./setup');
+        await runSetup({ confirm: false, clearScreen: false });
+      },
+      confirmNpm: async (summary) => {
+        printKeyValues('Package', [
+          ['Name', summary.packageName],
+          ['Installed', summary.currentVersion],
+        ]);
+        printWarning('npm update', [`This runs \`bun add -g ${summary.packageName}\` and re-applies setup.`]);
+
+        const proceed = await p.confirm({
+          message: 'Update the package with Bun and re-apply setup?',
+          initialValue: true,
+        });
+
+        return !p.isCancel(proceed) && proceed;
+      },
+    });
+
+    if (result.status === 'cancelled') {
+      p.outro(colorize('Update cancelled', semantic.muted));
+      return;
+    }
+
+    p.outro(colorize('Package updated. Restart Waybar if modules look stale.', semantic.good));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.error(colorize(message, semantic.danger));
+    p.outro(colorize('Update failed', semantic.danger));
+    process.exit(1);
+  }
+}
+
 export async function main() {
   console.clear();
-  printCommandHeader('update', 'Managed updater for ~/.agent-bar');
+  printCommandHeader('update', 'Updater for agent-bar');
+
+  const installKind = detectInstallKind(REPO_ROOT);
+
+  if (installKind === 'dev-git') {
+    p.log.error(colorize('This is a development checkout, not a managed install.', semantic.danger));
+    p.log.info(colorize('Update it with git directly, e.g. `git pull`.', semantic.subtitle));
+    p.outro(colorize('Update aborted', semantic.muted));
+    return;
+  }
+
+  if (installKind === 'npm') {
+    await runNpmUpdateInteractive();
+    return;
+  }
 
   const spinner = p.spinner();
   let spinnerActive = false;

@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type CommandRunner, runManagedUpdate } from '../src/update';
+import {
+  type CommandRunner,
+  detectInstallKind,
+  type NpmUpdateSummary,
+  runManagedUpdate,
+  runNpmUpdate,
+} from '../src/update';
 
 const tempDirs: string[] = [];
 
@@ -33,6 +39,12 @@ function fakeRunner(outputs: Record<string, string>): { commands: Array<[string,
       return { ok: true, output: outputs[key] ?? '' };
     },
   };
+}
+
+function tempNpmRoot(name: string, version: string): string {
+  const dir = tempInstallRoot();
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name, version }));
+  return dir;
 }
 
 describe('runManagedUpdate', () => {
@@ -186,5 +198,73 @@ describe('runManagedUpdate', () => {
     expect(setupCount).toBe(0);
     expect(commands.some(([cmd, args]) => cmd === 'git' && args[0] === 'reset')).toBe(false);
     expect(commands.some(([cmd, args]) => cmd === 'bun' && args[0] === 'install')).toBe(false);
+  });
+});
+
+describe('detectInstallKind', () => {
+  it('classifies a git checkout at the managed root as managed-git', () => {
+    const installRoot = tempInstallRoot();
+    mkdirSync(join(installRoot, '.git'));
+
+    expect(detectInstallKind(installRoot, installRoot)).toBe('managed-git');
+  });
+
+  it('classifies a git checkout outside the managed root as dev-git', () => {
+    const repoRoot = tempInstallRoot();
+    mkdirSync(join(repoRoot, '.git'));
+
+    expect(detectInstallKind(repoRoot, '/home/test/.agent-bar')).toBe('dev-git');
+  });
+
+  it('classifies a directory without .git as npm', () => {
+    const repoRoot = tempInstallRoot();
+
+    expect(detectInstallKind(repoRoot, '/home/test/.agent-bar')).toBe('npm');
+  });
+});
+
+describe('runNpmUpdate', () => {
+  it('runs bun add -g and setup after the confirmation is accepted', async () => {
+    const repoRoot = tempNpmRoot('@noctuacore/agent-bar', '4.0.1');
+    let setupCount = 0;
+    let capturedSummary: NpmUpdateSummary | undefined;
+    const { commands, run } = fakeRunner({});
+
+    const result = await runNpmUpdate({
+      repoRoot,
+      runCommand: run,
+      runSetup: async () => {
+        setupCount += 1;
+      },
+      confirmNpm: async (summary) => {
+        capturedSummary = summary;
+        return true;
+      },
+    });
+
+    expect(result.status).toBe('updated');
+    expect(setupCount).toBe(1);
+    expect(capturedSummary?.packageName).toBe('@noctuacore/agent-bar');
+    expect(capturedSummary?.currentVersion).toBe('4.0.1');
+    expect(commands).toEqual([['bun', ['add', '-g', '@noctuacore/agent-bar']]]);
+  });
+
+  it('does not run bun add or setup when the confirmation is declined', async () => {
+    const repoRoot = tempNpmRoot('@noctuacore/agent-bar', '4.0.1');
+    let setupCount = 0;
+    const { commands, run } = fakeRunner({});
+
+    const result = await runNpmUpdate({
+      repoRoot,
+      runCommand: run,
+      runSetup: async () => {
+        setupCount += 1;
+      },
+      confirmNpm: async () => false,
+    });
+
+    expect(result.status).toBe('cancelled');
+    expect(setupCount).toBe(0);
+    expect(commands).toEqual([]);
   });
 });

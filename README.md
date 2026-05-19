@@ -26,12 +26,15 @@ agent-bar setup
 `setup` installs the Waybar modules, CSS, provider icons, terminal helper, and
 `~/.local/bin/agent-bar` symlink.
 
-To update the npm package, rerun the global install and re-apply setup:
+To update later, run:
 
 ```bash
-bun add -g @noctuacore/agent-bar
-agent-bar setup
+agent-bar update
 ```
+
+For npm installs this runs `bun add -g @noctuacore/agent-bar` and re-applies
+setup. For the legacy `~/.agent-bar` checkout it fetches and resets to upstream, then re-applies
+setup.
 
 For development, use a normal checkout:
 
@@ -48,15 +51,16 @@ bun run start status
 agent-bar             # Waybar JSON
 agent-bar status      # Terminal quota view
 agent-bar menu        # Login and layout TUI
-agent-bar update      # Update managed ~/.agent-bar checkout only
+agent-bar update      # Update the install (npm package or managed checkout)
 agent-bar setup       # Re-apply Waybar integration
 agent-bar uninstall   # Interactive removal
 agent-bar remove      # Forced removal
 ```
 
-`update` is only for the legacy managed `~/.agent-bar` checkout flow. It is not
-the npm package updater. For npm installs, use `bun add -g @noctuacore/agent-bar`
-and then `agent-bar setup`.
+`agent-bar update` detects the install type. For an npm/Bun global install it
+updates the package; for the legacy managed `~/.agent-bar` checkout it fetches
+and resets to upstream. In a development checkout it refuses and tells you to
+use git.
 
 ## Docs
 
