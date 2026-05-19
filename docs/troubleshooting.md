@@ -39,15 +39,16 @@ pkill -SIGUSR2 waybar
 
 ## Update Refuses To Run
 
-`agent-bar update` only manages the `~/.agent-bar` checkout. If you are
-using the npm package, update with:
+`agent-bar update` refuses when it runs from a development checkout (a git
+checkout that is not `~/.agent-bar`). Update a development checkout with git
+directly:
 
 ```bash
-bun add -g @noctuacore/agent-bar
-agent-bar setup
+git pull
 ```
 
-If you are in a development checkout, update manually with normal git commands.
+For npm installs and the legacy `~/.agent-bar` checkout, `agent-bar update`
+works without extra steps.
 
 ## Provider Auth
 

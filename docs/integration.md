@@ -23,17 +23,10 @@ content alone.
 
 ## Update
 
-For npm installs, update by rerunning `bun add -g @noctuacore/agent-bar`, then
-`agent-bar setup`.
-
-`agent-bar update` is the legacy managed-checkout updater for `~/.agent-bar`.
-
-It discards local changes in that checkout after confirmation, resets to
-upstream, installs dependencies when needed, and then runs setup without a second
-prompt.
-
-The command aborts outside `~/.agent-bar` so development checkouts are not reset
-by accident.
+`agent-bar update` detects the install type. For an npm/Bun install it runs
+`bun add -g @noctuacore/agent-bar` and re-applies setup. For the legacy
+managed `~/.agent-bar` checkout it pulls upstream and re-applies setup. In a
+development checkout it refuses and points you to git.
 
 ## Removal
 

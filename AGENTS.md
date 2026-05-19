@@ -118,8 +118,9 @@ contracts move.
 **Lifecycle** (each lazy-imported by `index.ts`)
 - `src/setup.ts` — installs Waybar assets, creates the `~/.local/bin/agent-bar`
   symlink, patches live Waybar config, reloads Waybar.
-- `src/update.ts` — managed git update of the `~/.agent-bar` checkout, then
-  re-runs setup.
+- `src/update.ts` — detects the install type and updates it: `bun add -g` for
+  npm installs, git pull for the managed `~/.agent-bar` checkout, then re-runs
+  setup.
 - `src/uninstall.ts` — interactive removal of owned paths and managed Waybar
   entries.
 - `src/remove.ts` — thin non-interactive wrapper over uninstall (`force: true`).

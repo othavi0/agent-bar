@@ -176,7 +176,7 @@ describe('showHelp', () => {
     }
 
     const output = lines.join('\n');
-    expect(output).toContain('Update managed ~/.agent-bar checkout');
+    expect(output).toContain('Update the install (npm or managed checkout)');
     expect(output).toContain('agent-bar  or  bun run start');
   });
 });

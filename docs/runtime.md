@@ -33,7 +33,8 @@ agent-bar setup
 
 Bun owns the global package location. `agent-bar setup` still creates
 `~/.local/bin/agent-bar` as the stable command path used by generated Waybar
-modules.
+modules. After the initial install, `agent-bar update` updates the package and
+re-applies setup.
 
 ## Settings
 
