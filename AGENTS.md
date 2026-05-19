@@ -373,14 +373,16 @@ dirs.
 - `docs/integration.md` — setup/update/remove ownership model.
 - `docs/troubleshooting.md` — runtime troubleshooting.
 
-`CHANGELOG.md` is historical — treat it as read-only during regular development; it is updated only when cutting a release (see section 8).
+`CHANGELOG.md` is historical — treat it as read-only during regular
+development; it is updated only when cutting a release (see section 8).
 
 ## 8. Release
 
 Releases publish `@noctuacore/agent-bar` to npm automatically. The
 `.github/workflows/publish.yml` workflow runs on the `release: published`
 event: it verifies `package.json` matches the release tag, runs
-`bun run release:check` (tests, typecheck, lint, build, and a pack dry-run), then publishes with `bun run publish:npm`.
+`bun run release:check` (tests, typecheck, lint, build, and a pack dry-run),
+then publishes with `bun run publish:npm`.
 
 To cut a release:
 
