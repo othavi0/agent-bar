@@ -10,7 +10,8 @@ drift, but explicit enough that a fresh Codex session can bootstrap safely.
 ## Boot Order
 
 1. Read this file.
-2. Read [`CLAUDE.md`](CLAUDE.md) with `rtk sed -n '1,260p' CLAUDE.md`.
+2. Read [`CLAUDE.md`](CLAUDE.md) in full — it now fits comfortably under 200
+   lines after the 4.0.3 prune.
 3. Let `CLAUDE.md` define the repo contract. The code in `src/` still wins over
    docs when behavior and docs disagree.
 4. Translate Claude Code-specific tools and workflows to Codex equivalents using
