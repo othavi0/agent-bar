@@ -172,6 +172,74 @@ describe('parseArgs', () => {
   });
 });
 
+describe('unknown commands', () => {
+  it('exits 1 on unknown command with suggestion (typo)', () => {
+    const originalExit = process.exit;
+    const originalError = console.error;
+    const exitCalls: number[] = [];
+    const errors: string[] = [];
+
+    process.exit = ((code?: number) => {
+      exitCalls.push(code ?? 0);
+      throw new Error('__exit__');
+    }) as typeof process.exit;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.join(' '));
+    };
+
+    try {
+      expect(() => parseArgs(['setip'])).toThrow('__exit__');
+      expect(exitCalls).toEqual([1]);
+      expect(errors.join('\n')).toContain("Did you mean 'setup'");
+    } finally {
+      process.exit = originalExit;
+      console.error = originalError;
+    }
+  });
+
+  it('exits 1 on unknown command without suggestion', () => {
+    const originalExit = process.exit;
+    const originalError = console.error;
+    const exitCalls: number[] = [];
+    const errors: string[] = [];
+
+    process.exit = ((code?: number) => {
+      exitCalls.push(code ?? 0);
+      throw new Error('__exit__');
+    }) as typeof process.exit;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.join(' '));
+    };
+
+    try {
+      expect(() => parseArgs(['xyzzy'])).toThrow('__exit__');
+      expect(exitCalls).toEqual([1]);
+      expect(errors.join('\n')).toContain('Unknown command: xyzzy');
+      expect(errors.join('\n')).toContain('help');
+    } finally {
+      process.exit = originalExit;
+      console.error = originalError;
+    }
+  });
+
+  it('does not exit on unknown flag (warn only)', () => {
+    const originalExit = process.exit;
+    let exited = false;
+    process.exit = (() => {
+      exited = true;
+      throw new Error('__exit__');
+    }) as typeof process.exit;
+
+    try {
+      const opts = parseArgs(['--unknown-flag']);
+      expect(exited).toBe(false);
+      expect(opts.command).toBe('waybar');
+    } finally {
+      process.exit = originalExit;
+    }
+  });
+});
+
 describe('showHelp', () => {
   it('describes npm-era entrypoints and managed checkout updates', () => {
     const lines: string[] = [];

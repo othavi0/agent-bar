@@ -262,6 +262,7 @@ export function parseArgs(args: string[]): CliOptions {
           } else {
             console.error(`Unknown command: ${arg}. Run '${APP_NAME} help' for available commands.`);
           }
+          process.exit(1);
         }
     }
   }
