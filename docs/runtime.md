@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 | --- | --- |
-| `~/.agent-bar` | Optional managed checkout used only by the legacy `agent-bar update` flow. |
+| `~/.agent-bar` | Managed checkout created by `install.sh` and updated by `agent-bar update`. |
 | `~/.config/agent-bar/settings.json` | User settings. Normalized on load and written atomically. |
 | `~/.cache/agent-bar/` | Provider quota cache. |
 | `~/.local/bin/agent-bar` | Symlink created by setup. |
@@ -22,19 +22,19 @@
 
 The app does not rewrite full Waybar files.
 
-## Package Install
+## Install Paths
 
-The primary install path is the npm package via Bun:
+Three supported paths, all converge on the same `~/.local/bin/agent-bar`
+symlink that generated Waybar modules invoke:
 
-```bash
-bun add -g @noctuacore/agent-bar
-agent-bar setup
-```
+| Path | Source | Update |
+| --- | --- | --- |
+| Hosted installer (primary) | `curl -fsSL .../install.sh \| bash` clones into `~/.agent-bar` | `agent-bar update` (managed-git) |
+| Bun global | `bun add -g @noctuacore/agent-bar` | `agent-bar update` (npm) |
+| Dev checkout | Manual `git clone` anywhere + `bun run start setup` | `git pull` (update refuses) |
 
-Bun owns the global package location. `agent-bar setup` still creates
-`~/.local/bin/agent-bar` as the stable command path used by generated Waybar
-modules. After the initial install, `agent-bar update` updates the package and
-re-applies setup.
+`agent-bar setup` always creates `~/.local/bin/agent-bar` as the stable
+command path. The symlink target depends on which install ran setup.
 
 ## Settings
 

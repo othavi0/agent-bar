@@ -2,14 +2,14 @@
 
 ## Setup
 
-The primary install flow is:
+The primary install flow uses the hosted installer:
 
 ```bash
-bun add -g @noctuacore/agent-bar
-agent-bar setup
+curl -fsSL https://raw.githubusercontent.com/othavioquiliao/agent-bar/master/install.sh | bash
 ```
 
-`agent-bar setup` performs one managed install pass:
+It clones into `~/.agent-bar`, runs `bun install`, and optionally runs
+`agent-bar setup`. `agent-bar setup` performs one managed install pass:
 
 1. copy provider icons to `~/.config/waybar/agent-bar/icons`
 2. copy the terminal helper to `~/.config/waybar/scripts`
@@ -23,10 +23,11 @@ content alone.
 
 ## Update
 
-`agent-bar update` detects the install type. For an npm/Bun install it runs
-`bun add -g @noctuacore/agent-bar` and re-applies setup. For the legacy
-managed `~/.agent-bar` checkout it fetches and resets to upstream, then re-applies setup. In a
-development checkout it refuses and points you to git.
+`agent-bar update` detects the install type. For the managed `~/.agent-bar`
+checkout (the install.sh path) it fetches and resets to upstream, then
+re-applies setup. For an npm/Bun global install it runs
+`bun add -g @noctuacore/agent-bar` and re-applies setup. In a development
+checkout it refuses and points you to `git pull`.
 
 ## Removal
 

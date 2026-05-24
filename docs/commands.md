@@ -7,7 +7,7 @@
 | `agent-bar` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
 | `agent-bar status` | Print the quota view in a terminal. | Cache only |
 | `agent-bar menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
-| `agent-bar update` | Update the install: npm package via Bun, or the legacy `~/.agent-bar` checkout. | Global package or `~/.agent-bar`, managed Waybar files |
+| `agent-bar update` | Update the install: managed `~/.agent-bar` checkout, or npm/Bun global package. | `~/.agent-bar` or global package, managed Waybar files |
 
 ## Install And Removal
 
@@ -61,11 +61,11 @@ These are mostly for tests, packagers, and manual integration.
 
 `agent-bar update` detects the install type and updates accordingly:
 
-- **npm/Bun install:** after confirmation, runs `bun add -g @noctuacore/agent-bar`
-  and re-applies setup.
-- **Legacy managed `~/.agent-bar` checkout:** must run from `~/.agent-bar`;
-  fetches upstream, shows incoming commits and local changes, and after
-  confirmation runs `git reset --hard <upstream>` + `git clean -fd`, installs
-  dependencies when they changed or `node_modules` is missing, and re-applies
-  setup.
-- **Development checkout:** refuses and tells you to update with git directly.
+- **Managed `~/.agent-bar` checkout (install.sh path):** must run from
+  `~/.agent-bar`; fetches upstream, shows incoming commits and local changes,
+  and after confirmation runs `git reset --hard <upstream>` + `git clean -fd`,
+  installs dependencies when they changed or `node_modules` is missing, and
+  re-applies setup.
+- **npm/Bun global install:** after confirmation, runs
+  `bun add -g @noctuacore/agent-bar` and re-applies setup.
+- **Development checkout:** refuses and tells you to update with `git pull`.

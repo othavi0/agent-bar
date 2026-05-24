@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - README now promotes the hosted install script as the primary install path.
   `bun add -g` remains documented as an alternative with explicit warning about
   the `-g` flag.
+- Documentation refresh: `CONTRIBUTING.md` rewritten in English and trimmed,
+  with a new "Dev install" section explaining how to wire a local checkout
+  straight into Waybar. `docs/runtime.md`, `docs/integration.md`,
+  `docs/commands.md`, and `docs/troubleshooting.md` updated to drop the
+  outdated "legacy" label on `~/.agent-bar`, reflect `install.sh` as the
+  primary install path, and document `$HOME` pollution handling.
 
 ### Removed
 - `preinstall` script from `package.json` — Bun does not execute lifecycle

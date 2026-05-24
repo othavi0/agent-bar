@@ -1,180 +1,131 @@
-# Contribuindo para o agent-bar
+# Contributing
 
-Obrigado pelo interesse em contribuir com o agent-bar! Este guia cobre o essencial para
-configurar o ambiente, manter a consistencia do codigo e enviar suas alteracoes.
+Quick start for developers.
 
-## Pre-requisitos
+## Prerequisites
 
-| Ferramenta | Versao minima |
-|------------|---------------|
+| Tool | Minimum |
+|------|---------|
 | [Bun](https://bun.sh) | >= 1.0 |
-| Git | qualquer versao recente |
+| Git | recent |
 
-> **Nota:** Bun e o unico runtime suportado. Node/Deno nao sao compativeis.
+Bun is the only supported runtime. Node and Deno will not work.
 
-## Setup do dev environment
+## Dev install (live edit → live Waybar)
+
+Wire your local checkout straight into Waybar so every edit shows up on the
+next poll, with no rebuild:
 
 ```bash
-git clone <repo-url>
+git clone git@github.com:othavioquiliao/agent-bar.git
 cd agent-bar
 bun install
+bun run start setup
 ```
 
-Pronto. Nao ha etapa de build -- o Bun executa TypeScript diretamente.
+`setup` symlinks `~/.local/bin/agent-bar` to `scripts/agent-bar` inside this
+checkout. The shim does `exec bun src/index.ts`, so saved changes apply on the
+next Waybar tick.
 
-## Comandos uteis
+If you already have a non-dev install (`~/.agent-bar`, npm global, or both),
+wipe it first to avoid the symlink fighting your changes:
 
 ```bash
-bun run start          # Executar (equivale a ./scripts/agent-bar)
-bun run dev            # Watch mode (reinicia ao salvar)
-bun test               # Rodar testes (com coverage via bunfig.toml)
-bun run typecheck      # bun x tsc --noEmit -- validacao de tipos sem emitir arquivos
-bun run lint           # Checagem de formatacao e lint (biome)
-bun run lint:fix       # Corrige problemas de lint automaticamente
+unlink ~/.local/bin/agent-bar 2>/dev/null
+rm -rf ~/.agent-bar ~/.config/agent-bar ~/.cache/agent-bar
+rm -rf ~/.config/waybar/agent-bar
 ```
 
-> **Atencao:** nao use `bun ./scripts/agent-bar`. O arquivo e um shim bash e o Bun vai
-> tentar interpreta-lo como JavaScript. Use `./scripts/agent-bar` (shell) ou `bun run start`.
+`agent-bar update` refuses to run from a dev checkout. Use `git pull` instead.
 
-## Conventional Commits (em portugues)
+## Useful commands
 
-Todas as mensagens de commit seguem o padrao [Conventional Commits](https://www.conventionalcommits.org/),
-escritas em **portugues**:
+```bash
+bun run start          # Run from source (equivalent to ./scripts/agent-bar)
+bun run dev            # Watch mode (restart on save)
+bun test               # Test suite (coverage via bunfig.toml)
+bun run typecheck      # bun x tsc --noEmit
+bun run lint           # biome check
+bun run lint:fix       # biome check --write
+```
 
-| Prefixo     | Quando usar                                |
-|-------------|--------------------------------------------|
-| `feat:`     | Nova funcionalidade                        |
-| `fix:`      | Correcao de bug                            |
-| `refactor:` | Refatoracao sem mudanca de comportamento   |
-| `test:`     | Adicao ou modificacao de testes            |
-| `docs:`     | Documentacao                               |
-| `chore:`    | Manutencao (deps, CI, configs)             |
-| `perf:`     | Melhoria de performance                    |
-| `style:`    | Formatacao, sem mudanca de codigo          |
-| `build:`    | Sistema de build ou dependencias           |
-| `ci:`       | Configuracao de integracao continua        |
+Do not run `bun ./scripts/agent-bar`. It is a Bash shim and Bun will try to
+parse it as JavaScript. Use `./scripts/agent-bar` or `bun run start`.
 
-Exemplos:
+## Conventional Commits (in Portuguese)
+
+Commit messages use [Conventional Commits](https://www.conventionalcommits.org/)
+written in **Portuguese**, subject ≤ 50 chars:
+
+| Prefix      | Use for                                |
+|-------------|----------------------------------------|
+| `feat:`     | New functionality                      |
+| `fix:`      | Bug fix                                |
+| `refactor:` | Refactor without behavior change       |
+| `test:`     | Tests added or changed                 |
+| `docs:`     | Documentation                          |
+| `chore:`    | Maintenance (deps, CI, configs)        |
+| `perf:`     | Performance                            |
+| `style:`    | Formatting only                        |
+| `build:`    | Build system or dependencies           |
+| `ci:`       | CI configuration                       |
+
+Examples:
 
 ```
-feat: adicionar provider para Gemini
-fix: corrigir parsing de reset time no provider Amp
-test: cobrir cenarios de cache expirado
+feat: adiciona provider para Gemini
+fix: corrige parsing do reset time no Amp
+test: cobre cenários de cache expirado
 ```
 
 ## Code style
 
-- **TypeScript strict** -- o `tsconfig.json` usa `"strict": true`. Evite `any` sempre que possivel.
-- **Nomes de variaveis e funcoes em ingles**, usando `camelCase`.
-- **Commits e comunicacao** em portugues.
-- Imports relativos: nao ha path aliases configurados no `tsconfig.json` -- use caminhos relativos.
-- Sem build step: o Bun executa TypeScript diretamente em runtime.
+- TypeScript strict. Avoid `any`. Never `!` non-null assertion (use a guard
+  that throws explicitly).
+- Identifiers and file names in English, `camelCase`. Repo communication and
+  commits in Portuguese.
+- No path aliases — use relative imports.
+- No build step at runtime. Bun runs TypeScript directly.
+- Biome enforces formatting (2 spaces, single quotes, 120 cols).
 
-## Release npm
+## Tests
 
-O pacote publico e `@noctuacore/agent-bar` no npm, mas o runtime continua Bun-only.
-
-```bash
-bun run release:check     # testes, typecheck, lint, build e pack dry-run
-bun run publish:dry-run   # exige login npm no ambiente atual
-```
-
-O publish real e manual e exige aprovacao explicita. Use o script do projeto,
-que injeta o token npm a partir do `~/.npmrc`:
+`bun:test`. Tests in `tests/`, mirroring `src/`. No real credentials, no live
+CLIs, no network, no real Waybar — mock `fs`, `fetch`, `spawn`, app-server
+data.
 
 ```bash
-bun run publish:npm
+bun test                       # All
+bun test tests/cache.test.ts   # One file
 ```
 
-## Estrutura do projeto
+When using `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` in a test, set them **before**
+importing `src/config.ts` or any module that imports it. Config reads env at
+import time.
 
-```
-src/
-  index.ts              # Entry point e command dispatcher
-  cli.ts                # Parser de argumentos CLI
-  config.ts             # Constantes (cache TTL, paths)
-  settings.ts           # Leitura/escrita de ~/.config/agent-bar/settings.json
-  cache.ts              # Cache em disco com TTL
-  setup.ts              # Comando `agent-bar setup`
-  update.ts             # Comando `agent-bar update`
-  uninstall.ts          # Comando `agent-bar uninstall`
-  remove.ts             # Comando `agent-bar remove`
-  waybar-contract.ts    # Contrato de modulos/CSS para Waybar
-  waybar-integration.ts # Wiring automatico no config.jsonc + style.css
-  providers/
-    types.ts            # Interfaces Provider, ProviderQuota, QuotaWindow
-    index.ts            # Registry de providers
-    claude.ts           # Provider: Claude
-    codex.ts            # Provider: Codex
-    copilot.ts          # Provider: GitHub Copilot
-    amp.ts              # Provider: Amp
-  formatters/           # Formatacao de output (terminal e Waybar)
-  tui/                  # Menus interativos e login flows (clack/prompts)
-scripts/
-  agent-bar                  # Bash shim (entry point do bin)
-tests/                  # Testes (bun:test)
-icons/                  # Icones dos providers para Waybar
-docs/                   # Documentacao detalhada
-```
+Restore env and global state in `afterEach`.
 
-## Testes
-
-Os testes usam `bun:test` e ficam no diretorio `tests/`, espelhando a estrutura de `src/`.
-
-### Rodando
+## Releasing to npm
 
 ```bash
-bun test                       # Todos os testes (com coverage)
-bun test tests/cache.test.ts   # Um arquivo especifico
+bun run release:check     # tests + typecheck + lint + build + pack dry-run
+bun run publish:dry-run   # requires npm login in the environment
+bun run publish:npm       # real publish — manual, requires explicit approval
 ```
 
-### Escrevendo testes
+Publishing is normally done by the GitHub `publish.yml` workflow on
+`release: published` (uses `NPM_TOKEN` secret). See `CLAUDE.md` §8.
 
-```typescript
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+## Adding a provider
 
-describe("MinhaFeature", () => {
-  it("deve fazer X quando Y", () => {
-    const result = minhaFuncao();
-    expect(result).toBe(valorEsperado);
-  });
-});
-```
+See [`docs/new-provider.md`](docs/new-provider.md) for the full checklist.
+Short version: implement `Provider` from `src/providers/types.ts`, register in
+`src/providers/index.ts`, add tests under `tests/providers/`, drop an icon in
+`icons/`.
 
-### Mocks
+## Links
 
-O `bun:test` oferece `mock()` e `spyOn()` nativamente:
-
-```typescript
-import { mock, spyOn } from "bun:test";
-
-// Mock de funcao
-const fn = mock(() => "valor mockado");
-
-// Spy em metodo existente
-const spy = spyOn(objeto, "metodo").mockReturnValue("fake");
-```
-
-### Boas praticas
-
-- Use `beforeEach`/`afterEach` para setup e cleanup (especialmente arquivos temporarios).
-- Testes de providers devem mockar chamadas HTTP -- nao dependa de credenciais reais.
-- Nomeie os testes em portugues de forma descritiva: `"deve retornar erro quando token invalido"`.
-
-## Como adicionar um novo provider
-
-Consulte [`docs/new-provider.md`](docs/new-provider.md) para o guia completo.
-
-Em resumo, um novo provider precisa:
-
-1. Implementar a interface `Provider` de `src/providers/types.ts` (propriedades: `id`, `name`, `cacheKey`; metodos: `isAvailable()`, `getQuota()`).
-2. Registrar o provider em `src/providers/index.ts`.
-3. Adicionar testes em `tests/providers/<nome>.test.ts`.
-4. Adicionar um icone em `icons/`.
-
-## Links uteis
-
-- [README principal](README.md) -- Quick Start e comandos
-- [Docs index](docs/README.md) -- Documentacao detalhada
-- [Waybar contract](docs/waybar-contract.md) -- Contrato de integracao com Waybar
-- [Troubleshooting](docs/troubleshooting.md) -- Problemas comuns
+- [README](README.md)
+- [Docs index](docs/README.md)
+- [Waybar contract](docs/waybar-contract.md)
+- [Troubleshooting](docs/troubleshooting.md)

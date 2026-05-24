@@ -44,14 +44,8 @@ bun add -g @noctuacore/agent-bar && agent-bar setup
 > ⚠ Don't drop the `-g`. Without it, `bun add` writes `package.json` + `bun.lock`
 > to your current directory. If that happens, run `agent-bar doctor` to clean up.
 
-For development, use a normal checkout:
-
-```bash
-git clone git@github.com:othavioquiliao/agent-bar.git
-cd agent-bar
-bun install
-bun run start status
-```
+For development (live edits reflected in Waybar on the next poll), see
+[CONTRIBUTING.md → Dev install](CONTRIBUTING.md#dev-install-live-edit--live-waybar).
 
 ## Commands
 
@@ -66,10 +60,10 @@ agent-bar remove      # Forced removal
 agent-bar doctor      # Detect & clean leftovers in $HOME
 ```
 
-`agent-bar update` detects the install type. For an npm/Bun global install it
-updates the package; for the legacy managed `~/.agent-bar` checkout it fetches
-and resets to upstream. In a development checkout it refuses and tells you to
-use git.
+`agent-bar update` detects the install type. For the managed `~/.agent-bar`
+checkout (the install.sh path) it fetches and resets to upstream. For an
+npm/Bun global install it updates the package. In a dev checkout it refuses
+and tells you to use `git pull`.
 
 ## Docs
 

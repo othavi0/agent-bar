@@ -9,6 +9,7 @@
 | Waybar JSON/parser error | run the module command in a terminal |
 | Waybar layout changed unexpectedly | inspect `~/.config/waybar/config.jsonc` managed entries |
 | Style broke after manual edits | inspect GTK CSS, not browser CSS assumptions |
+| `[agent-bar] Pollution detected in $HOME` warnings | run `agent-bar doctor` |
 
 ## Runtime Checks
 
@@ -40,15 +41,28 @@ pkill -SIGUSR2 waybar
 ## Update Refuses To Run
 
 `agent-bar update` refuses when it runs from a development checkout (a git
-checkout that is not `~/.agent-bar`). Update a development checkout with git
-directly:
+checkout that is not `~/.agent-bar`). Update a dev checkout with git directly:
 
 ```bash
 git pull
 ```
 
-For npm installs and the legacy `~/.agent-bar` checkout, `agent-bar update`
-works without extra steps.
+For npm/Bun global installs and the managed `~/.agent-bar` checkout (the
+install.sh path), `agent-bar update` works without extra steps.
+
+## `$HOME` Pollution After Install
+
+If `bun add` or `npm i` was run without `-g` in your home directory, a stray
+`package.json`, `bun.lock`, or `node_modules/@noctuacore/agent-bar/` ends up
+in `$HOME`. The bin shim warns about this on every invocation. To clean up:
+
+```bash
+agent-bar doctor
+```
+
+The doctor preserves `~/package.json` if it lists other dependencies (a real
+project), and only removes the `node_modules/@noctuacore/` copy in that case.
+See [Commands → `doctor`](commands.md) for flags.
 
 ## Provider Auth
 
