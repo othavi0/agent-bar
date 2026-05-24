@@ -103,6 +103,7 @@ mock.module('../../src/config', () => ({
   CONFIG: {
     paths: {
       copilot: {
+        home: '/tmp/agent-bar-copilot-test',
         config: '/tmp/agent-bar-copilot-test/config.json',
         settings: '/tmp/agent-bar-copilot-test/settings.json',
       },
@@ -110,12 +111,27 @@ mock.module('../../src/config', () => ({
         auth: '/tmp/agent-bar-copilot-test/codex/auth.json',
         sessions: '/tmp/agent-bar-copilot-test/codex/sessions',
       },
+      claude: {
+        credentials: '/tmp/agent-bar-copilot-test/claude/.credentials.json',
+      },
+      amp: {
+        bin: '/tmp/agent-bar-copilot-test/amp/bin',
+        settings: '/tmp/agent-bar-copilot-test/amp/settings.json',
+        threads: '/tmp/agent-bar-copilot-test/amp/threads',
+      },
+      cache: '/tmp/agent-bar-copilot-test/cache',
+      config: '/tmp/agent-bar-copilot-test/config',
     },
     cache: {
       ttlMs: 300_000,
+      lockTimeoutMs: 5_000,
     },
     api: {
       timeoutMs: 50,
+      claude: {
+        usageUrl: 'https://api.anthropic.com/api/oauth/usage',
+        betaHeader: 'oauth-2025-04-20',
+      },
     },
   },
 }));
