@@ -55,15 +55,6 @@ describe('npm package contract', () => {
     expect(shim).toContain('exec bun "$APP_DIR/dist/index.js" "$@"');
   });
 
-  it('refuses local install in $HOME via preinstall guard', () => {
-    const preinstall = (pkg.scripts as Record<string, string | undefined>).preinstall;
-    expect(preinstall).toBeDefined();
-    expect(preinstall).toContain('INIT_CWD');
-    expect(preinstall).toContain('homedir');
-    expect(preinstall).toContain('process.exit(1)');
-    expect(preinstall).toContain('bun add -g @noctuacore/agent-bar');
-  });
-
   it('bridges npm login tokens into Bun publish', () => {
     const helper = readFileSync(join(repoRoot, 'scripts', 'bun-publish-with-npm-token'), 'utf8');
 

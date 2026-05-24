@@ -13,13 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   caused by `bun add` / `npm i` without `-g`.
 - `setup` now warns when `$HOME` has leftover install artifacts and points to
   `agent-bar doctor`.
+- Bin shim (`scripts/agent-bar`) now detects install pollution in `$HOME` on
+  every invocation and prints a warning suggesting `agent-bar doctor`. Warns at
+  most once per hour per UID (cached in `$XDG_RUNTIME_DIR`) so Waybar logs stay
+  clean.
 
 ### Changed
-- `package.json` ships a `preinstall` script that refuses local install in
-  `$HOME` (when `INIT_CWD === os.homedir()`) and instructs the user to run
-  `cd /tmp && bun add -g @noctuacore/agent-bar`.
 - README install snippet now uses `cd /tmp && bun add -g ...` to remain safe
   if `-g` is accidentally dropped.
+
+### Removed
+- `preinstall` script from `package.json` — Bun does not execute lifecycle
+  scripts of dependencies by default, so the guard was silent theater. Replaced
+  by a Bash-level detector in the bin shim that runs on every invocation
+  regardless of package manager.
 
 ## [4.0.2] - 2026-05-19
 
