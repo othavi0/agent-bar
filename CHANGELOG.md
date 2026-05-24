@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-05-23
+
 ### Added
 - `agent-bar doctor` command: detects and cleans `@noctuacore/agent-bar`
   leftovers (`package.json`, lockfiles, `node_modules/@noctuacore/`) in `$HOME`
