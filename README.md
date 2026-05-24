@@ -16,16 +16,13 @@ Supported providers:
 
 ## Install
 
-Requires Bun.
+Recommended (zero pollution, runs setup automatically):
 
 ```bash
-cd /tmp && bun add -g @noctuacore/agent-bar && agent-bar setup
+curl -fsSL https://raw.githubusercontent.com/othavioquiliao/agent-bar/master/install.sh | bash
 ```
 
-> Run the command from `/tmp` (or any non-`$HOME` dir) and keep the `-g` flag.
-> Without `-g`, `bun add` treats the current directory as a project and writes
-> `package.json` + `bun.lock` there. If that happened, run
-> `agent-bar doctor` to clean up.
+Requires `bun` and `git`. Installs to `~/.agent-bar` and runs `agent-bar setup`.
 
 `setup` installs the Waybar modules, CSS, provider icons, terminal helper, and
 `~/.local/bin/agent-bar` symlink.
@@ -35,6 +32,17 @@ To update later, run:
 ```bash
 agent-bar update
 ```
+
+### Alternative: Bun global
+
+If you already use Bun globally and prefer that workflow:
+
+```bash
+bun add -g @noctuacore/agent-bar && agent-bar setup
+```
+
+> ⚠ Don't drop the `-g`. Without it, `bun add` writes `package.json` + `bun.lock`
+> to your current directory. If that happens, run `agent-bar doctor` to clean up.
 
 For development, use a normal checkout:
 

@@ -17,10 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   every invocation and prints a warning suggesting `agent-bar doctor`. Warns at
   most once per hour per UID (cached in `$XDG_RUNTIME_DIR`) so Waybar logs stay
   clean.
+- `install.sh` hosted installer: zero-pollution install path via
+  `curl -fsSL .../install.sh | bash`. Clones to `~/.agent-bar`, installs deps,
+  and optionally runs `agent-bar setup`. Adopts the curl|bash pattern used by
+  bun, deno, rustup, uv, and other serious CLI tools.
 
 ### Changed
-- README install snippet now uses `cd /tmp && bun add -g ...` to remain safe
-  if `-g` is accidentally dropped.
+- README now promotes the hosted install script as the primary install path.
+  `bun add -g` remains documented as an alternative with explicit warning about
+  the `-g` flag.
 
 ### Removed
 - `preinstall` script from `package.json` — Bun does not execute lifecycle
