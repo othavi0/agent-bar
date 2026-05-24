@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { APP_NAME } from './app-identity';
+import { scan } from './doctor';
 import { colorize, semantic } from './tui/colors';
 import { printCommandHeader } from './tui/terminal-ui';
 import { getDefaultWaybarAssetPaths, installWaybarAssets } from './waybar-contract';
@@ -139,6 +140,22 @@ export async function runSetup(options: SetupOptions = {}): Promise<boolean> {
           semantic.warning,
         ),
       );
+    }
+
+    try {
+      const findings = await scan(HOME);
+      const hasLeftovers =
+        findings.packageJsonOrphan ||
+        findings.packageJsonMixed ||
+        findings.nodeModulesDir !== null ||
+        findings.lockfiles.length > 0;
+      if (hasLeftovers) {
+        p.log.warn(
+          colorize(`Detected leftover install in $HOME. Run \`${APP_NAME} doctor\` to clean up.`, semantic.warning),
+        );
+      }
+    } catch {
+      // Scan must never block setup.
     }
 
     p.outro(colorize('Setup complete', semantic.good));

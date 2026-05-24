@@ -17,6 +17,26 @@
 | `agent-bar uninstall` | Interactive removal of managed integration and owned files. | Removes managed files/entries |
 | `agent-bar remove` | Non-interactive forced removal. | Same targets as uninstall |
 
+## `doctor`
+
+Detect and clean `@noctuacore/agent-bar` artifacts accidentally written to
+`$HOME` by a local install (`bun add` without `-g`).
+
+```bash
+agent-bar doctor              # interactive
+agent-bar doctor --dry-run    # report without removing
+agent-bar doctor --yes        # non-interactive, remove without prompting
+```
+
+Removes:
+- `~/package.json` only when `@noctuacore/agent-bar` is the *only* dep.
+- `~/node_modules/@noctuacore/agent-bar/` always.
+- `~/bun.lock`, `~/bun.lockb`, `~/package-lock.json` when `package.json` is
+  orphan or absent.
+
+If `~/package.json` has other dependencies, it is preserved — only the
+agent-bar copy in `node_modules` is removed.
+
 ## Export And Assets
 
 These are mostly for tests, packagers, and manual integration.

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `agent-bar doctor` command: detects and cleans `@noctuacore/agent-bar`
+  leftovers (`package.json`, lockfiles, `node_modules/@noctuacore/`) in `$HOME`
+  caused by `bun add` / `npm i` without `-g`.
+- `setup` now warns when `$HOME` has leftover install artifacts and points to
+  `agent-bar doctor`.
+
+### Changed
+- `package.json` ships a `preinstall` script that refuses local install in
+  `$HOME` (when `INIT_CWD === os.homedir()`) and instructs the user to run
+  `cd /tmp && bun add -g @noctuacore/agent-bar`.
+- README install snippet now uses `cd /tmp && bun add -g ...` to remain safe
+  if `-g` is accidentally dropped.
+
 ## [4.0.2] - 2026-05-19
 
 ### Changed

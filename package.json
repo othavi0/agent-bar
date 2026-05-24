@@ -26,6 +26,7 @@
     "docs/assets/agent-bar-banner.png"
   ],
   "scripts": {
+    "preinstall": "node -e \"const os=require('os');const c=process.env.INIT_CWD||process.cwd();if(c===os.homedir()){console.error('\\n[agent-bar] Install must be global. Local install in $HOME pollutes the home directory.\\n  Run from a safe dir:  cd /tmp && bun add -g @noctuacore/agent-bar\\n');process.exit(1)}\"",
     "setup": "bun install && bun run start setup",
     "start": "bun run src/index.ts",
     "dev": "bun --watch run src/index.ts",

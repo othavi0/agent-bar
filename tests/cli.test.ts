@@ -65,6 +65,17 @@ describe('parseArgs', () => {
       expect(parseArgs(['remove']).command).toBe('remove');
     });
 
+    it('parses the doctor command', () => {
+      expect(parseArgs(['doctor']).command).toBe('doctor');
+    });
+
+    it('parses --dry-run and --yes flags for doctor', () => {
+      const opts = parseArgs(['doctor', '--dry-run', '--yes']);
+      expect(opts.command).toBe('doctor');
+      expect(opts.dryRun).toBe(true);
+      expect(opts.yes).toBe(true);
+    });
+
     it('parses help', () => {
       expect(parseArgs(['help']).command).toBe('help');
     });

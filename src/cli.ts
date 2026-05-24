@@ -17,7 +17,8 @@ export interface CliOptions {
     | 'export-waybar-css'
     | 'update'
     | 'uninstall'
-    | 'remove';
+    | 'remove'
+    | 'doctor';
   refresh: boolean;
   provider?: string;
   verbose: boolean;
@@ -26,6 +27,8 @@ export interface CliOptions {
   iconsDir?: string;
   appBin?: string;
   terminalScript?: string;
+  dryRun?: boolean;
+  yes?: boolean;
 }
 
 const vc = ANSI.magenta;
@@ -73,6 +76,7 @@ export function showHelp(): void {
   console.log(cmdLine('update', 'Update the install (npm or managed checkout)'));
   console.log(cmdLine('uninstall', `Remove ${APP_NAME} + integration`));
   console.log(cmdLine('remove', 'Force remove without prompt'));
+  console.log(cmdLine('doctor', `Detect & clean ${APP_NAME} leftovers in $HOME`));
   console.log(v());
 
   // Waybar
@@ -116,6 +120,7 @@ const KNOWN_COMMANDS = [
   'uninstall',
   'remove',
   'action-right',
+  'doctor',
   'help',
 ];
 
@@ -190,10 +195,20 @@ export function parseArgs(args: string[]): CliOptions {
       case 'remove':
         options.command = 'remove';
         break;
+      case 'doctor':
+        options.command = 'doctor';
+        break;
       case 'action-right':
         options.command = 'action-right';
         options.provider = requireNextArg(args, i, 'action-right');
         i++;
+        break;
+      case '--dry-run':
+        options.dryRun = true;
+        break;
+      case '--yes':
+      case '-y':
+        options.yes = true;
         break;
       case '--terminal':
       case '-t':

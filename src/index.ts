@@ -105,6 +105,13 @@ async function main() {
     process.exit(0);
   }
 
+  // Handle doctor
+  if (options.command === 'doctor') {
+    const { main: doctorMain } = await import('./doctor');
+    await doctorMain({ dryRun: options.dryRun ?? false, yes: options.yes ?? false });
+    process.exit(0);
+  }
+
   // Handle update
   if (options.command === 'update') {
     const { main: updateMain } = await import('./update');

@@ -19,9 +19,13 @@ Supported providers:
 Requires Bun.
 
 ```bash
-bun add -g @noctuacore/agent-bar
-agent-bar setup
+cd /tmp && bun add -g @noctuacore/agent-bar && agent-bar setup
 ```
+
+> Run the command from `/tmp` (or any non-`$HOME` dir) and keep the `-g` flag.
+> Without `-g`, `bun add` treats the current directory as a project and writes
+> `package.json` + `bun.lock` there. If that happened, run
+> `agent-bar doctor` to clean up.
 
 `setup` installs the Waybar modules, CSS, provider icons, terminal helper, and
 `~/.local/bin/agent-bar` symlink.
@@ -51,6 +55,7 @@ agent-bar update      # Update the install (npm package or managed checkout)
 agent-bar setup       # Re-apply Waybar integration
 agent-bar uninstall   # Interactive removal
 agent-bar remove      # Forced removal
+agent-bar doctor      # Detect & clean leftovers in $HOME
 ```
 
 `agent-bar update` detects the install type. For an npm/Bun global install it
