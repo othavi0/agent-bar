@@ -3,7 +3,9 @@ import type { AllQuotas } from '../src/providers/types';
 import { buildWatchLine } from '../src/watch';
 
 const quotas: AllQuotas = {
-  providers: [{ provider: 'claude', displayName: 'Claude', available: true, primary: { remaining: 50, resetsAt: null } }],
+  providers: [
+    { provider: 'claude', displayName: 'Claude', available: true, primary: { remaining: 50, resetsAt: null } },
+  ],
   fetchedAt: '2026-06-17T19:00:00.000Z',
 };
 

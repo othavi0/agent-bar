@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { AllQuotas, ProviderQuota } from '../src/providers/types';
 import { SCHEMA_VERSION, toJsonOutput, toProviderOutput } from '../src/formatters/json';
+import type { AllQuotas, ProviderQuota } from '../src/providers/types';
 
 const claude: ProviderQuota = {
   provider: 'claude',

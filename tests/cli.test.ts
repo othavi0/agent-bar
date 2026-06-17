@@ -316,7 +316,7 @@ describe('output format flags', () => {
   }
 
   it('exits 1 on invalid --format', () => {
-    expectExit1(['--format', 'xml'], "--format must be");
+    expectExit1(['--format', 'xml'], '--format must be');
   });
 
   it('exits 1 on invalid --interval', () => {
