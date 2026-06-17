@@ -158,7 +158,7 @@ async function main() {
 
   if (options.provider) {
     // If provider is disabled in waybar settings, output empty (hidden module)
-    if (!settings.waybar.providers.includes(options.provider)) {
+    if (options.format !== 'json' && !settings.waybar.providers.includes(options.provider)) {
       console.log(JSON.stringify({ text: '', tooltip: '', class: APP_HIDDEN_CLASS }));
       process.exit(0);
     }
@@ -176,9 +176,15 @@ async function main() {
     quotas = await getAllQuotas();
 
     // Filter by settings for waybar output
-    if (options.command === 'waybar') {
+    if (options.command === 'waybar' && options.format !== 'json') {
       quotas.providers = quotas.providers.filter((p) => settings.waybar.providers.includes(p.provider));
     }
+  }
+
+  if (options.format === 'json') {
+    const { toJsonOutput } = await import('./formatters/json');
+    console.log(JSON.stringify(toJsonOutput(quotas)));
+    process.exit(0);
   }
 
   const mode = settings.waybar.displayMode;
