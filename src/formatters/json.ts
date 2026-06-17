@@ -47,15 +47,16 @@ export function toProviderOutput(p: ProviderQuota): JsonProvider {
   if (p.account !== undefined) out.account = p.account;
   if (p.plan !== undefined) out.plan = p.plan;
   if (p.planType !== undefined) out.planType = p.planType;
-  if (p.primary) out.primary = toJsonWindow(p.primary);
-  if (p.secondary) out.secondary = toJsonWindow(p.secondary);
-  if (p.models) {
+  if (p.primary !== undefined) out.primary = toJsonWindow(p.primary);
+  if (p.secondary !== undefined) out.secondary = toJsonWindow(p.secondary);
+  if (p.models !== undefined) {
     const models: Record<string, JsonWindow> = {};
     for (const [name, w] of Object.entries(p.models)) {
       models[name] = toJsonWindow(w);
     }
     out.models = models;
   }
+  // Omit an empty extra object so the contract stays clean (only emit extra when it carries data).
   if (p.extra && Object.keys(p.extra).length > 0) {
     out.extra = p.extra as Record<string, unknown>;
   }

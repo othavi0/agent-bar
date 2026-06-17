@@ -25,6 +25,7 @@ const allQuotas: AllQuotas = { providers: [claude, ampError], fetchedAt: '2026-0
 describe('json formatter', () => {
   it('wraps providers in a versioned envelope', () => {
     const out = toJsonOutput(allQuotas);
+    expect(SCHEMA_VERSION).toBe(1);
     expect(out.schemaVersion).toBe(SCHEMA_VERSION);
     expect(out.fetchedAt).toBe('2026-06-17T19:00:00.000Z');
     expect(out.providers).toHaveLength(2);
