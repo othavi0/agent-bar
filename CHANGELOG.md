@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-06-17
+
+### Added
+- `--format json`: versioned, Pango-free JSON contract that mirrors the internal
+  quota model, for non-Waybar bars (Quickshell, Eww, Ironbar). Emits all
+  registered providers (`--provider <id>` for a single one); independent of the
+  `waybar.providers` setting. Schema, stability policy, and a Quickshell QML
+  example in [`docs/json-output.md`](docs/json-output.md).
+- `--watch [--interval <seconds>]`: long-running NDJSON stream (one envelope per
+  line), backpressure-aware scheduling, EPIPE-safe, fails fast on unknown
+  provider.
+- `--version` / `-V` flag.
+- `engines.bun` in `package.json`.
+
+### Changed
+- Copilot and Amp providers now follow the `BaseProvider` `fetchRaw`/`buildQuota`
+  contract — the cache stores raw provider data instead of a pre-built quota.
+- Copilot "used" percentage is computed at the provider layer
+  (`QuotaWindow.used`); the Waybar renderer reuses `render-pango`'s span/escape
+  boundary instead of a divergent local copy.
+
+### Fixed
+- Claude: send `User-Agent: claude-code/<version>` to avoid the aggressive
+  rate-limit bucket (persistent 429s) on the OAuth usage endpoint; keep the
+  request abort timer armed through the response-body read.
+- Waybar config patcher: bracket-aware array matching that respects strings and
+  JSONC comments. The previous non-greedy regex could corrupt `config.jsonc`
+  when `modules-right`/`include` contained nested brackets, and could rewrite
+  commented-out lines. `removeWaybarIntegration` now backs up before mutating.
+- Amp: the `amp usage` subprocess now has a timeout and is killed on hang (no
+  more zombie processes per Waybar poll); auth failures are no longer cached.
+- Cache writes are atomic (temp file + rename).
+- CLI: explicit error on `assets`/`export` without a valid subcommand.
+
+### Removed
+- The CI-only `bun-publish-with-npm-token` helper is no longer shipped in the
+  npm `files` allowlist.
+
 ## [4.1.0] - 2026-05-23
 
 ### Added
