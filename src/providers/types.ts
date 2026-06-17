@@ -8,6 +8,13 @@ export interface QuotaWindow {
   resetsAt: string | null;
   /** Window length in minutes (if provided by provider) */
   windowMinutes?: number | null;
+  /**
+   * Provider-supplied "used" percentage, when it is NOT simply `100 - remaining`.
+   * Copilot derives this from usedRequests/entitlementRequests (can exceed 100%
+   * with overage). Renderers prefer this in `used` display mode and fall back to
+   * `100 - remaining` when undefined. See `toWindowDisplay`.
+   */
+  used?: number | null;
 }
 
 /**

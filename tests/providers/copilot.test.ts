@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { Readable, Writable } from 'node:stream';
-import type { ProviderQuota } from '../../src/providers/types';
 import { fakeFile } from '../helpers/mocks';
 
 class FakeCopilotProcess extends EventEmitter {
@@ -326,17 +325,25 @@ describe('CopilotProvider', () => {
     expect(result.error).toBe('Failed to fetch Copilot usage');
   });
 
-  it('returns cached results when cache hits', async () => {
-    const cachedResult: ProviderQuota = {
-      provider: 'copilot',
-      displayName: 'Copilot',
-      available: true,
-      primary: { remaining: 42, resetsAt: null },
-    };
-    mockCacheGetOrFetch.mockResolvedValue(cachedResult);
+  it('builds from the cached raw payload on a cache hit', async () => {
+    // The cache stores raw { quotaSnapshots, account }; buildQuota transforms it.
+    mockCacheGetOrFetch.mockResolvedValue({
+      quotaSnapshots: {
+        premium_interactions: {
+          isUnlimitedEntitlement: false,
+          entitlementRequests: 100,
+          usedRequests: 58,
+          remainingPercentage: 42,
+          resetDate: null,
+        },
+      },
+      account: 'octocat',
+    });
 
     const result = await provider.getQuota();
 
+    expect(result.available).toBe(true);
     expect(result.primary?.remaining).toBe(42);
+    expect(result.account).toBe('octocat');
   });
 });

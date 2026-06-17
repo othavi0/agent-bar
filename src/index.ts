@@ -39,6 +39,13 @@ async function main() {
     process.exit(0);
   }
 
+  // Handle version
+  if (options.command === 'version') {
+    const { default: pkg } = await import('../package.json');
+    console.log(pkg.version);
+    process.exit(0);
+  }
+
   // Handle menu
   if (options.command === 'menu') {
     await runTui();

@@ -10,6 +10,7 @@ export interface CliOptions {
     | 'menu'
     | 'status'
     | 'help'
+    | 'version'
     | 'action-right'
     | 'setup'
     | 'assets-install'
@@ -87,6 +88,12 @@ export function showHelp(): void {
   console.log(v());
 
   console.log(label('Flags'));
+  console.log(optLine('--provider, -p <id>', 'Single provider (Waybar module)'));
+  console.log(optLine('--refresh, -r', 'Invalidate cache before output'));
+  console.log(optLine('--verbose, -v', 'Debug logging to stderr'));
+  console.log(optLine('--version, -V', 'Print version and exit'));
+  console.log(optLine('--dry-run', 'Preview changes (doctor)'));
+  console.log(optLine('--yes, -y', 'Assume yes (doctor/uninstall)'));
   console.log(optLine('--waybar-dir <path>', 'Assets install target'));
   console.log(optLine('--scripts-dir <path>', 'Terminal helper target'));
   console.log(optLine('--icons-dir <path>', 'CSS export icon directory'));
@@ -175,6 +182,9 @@ export function parseArgs(args: string[]): CliOptions {
         if (args[i + 1] === 'install') {
           options.command = 'assets-install';
           i += 1;
+        } else {
+          console.error("Unknown subcommand for 'assets'. Did you mean 'assets install'?");
+          process.exit(1);
         }
         break;
       case 'export':
@@ -184,6 +194,9 @@ export function parseArgs(args: string[]): CliOptions {
         } else if (args[i + 1] === 'waybar-css') {
           options.command = 'export-waybar-css';
           i += 1;
+        } else {
+          console.error("Unknown subcommand for 'export'. Use 'export waybar-modules' or 'export waybar-css'.");
+          process.exit(1);
         }
         break;
       case 'update':
@@ -251,6 +264,10 @@ export function parseArgs(args: string[]): CliOptions {
       case '-h':
       case 'help':
         options.command = 'help';
+        break;
+      case '--version':
+      case '-V':
+        options.command = 'version';
         break;
       default:
         if (arg.startsWith('-')) {

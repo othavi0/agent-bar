@@ -470,6 +470,7 @@ describe('ClaudeProvider', () => {
       expect(opts.headers).toEqual({
         Authorization: 'Bearer my-secret-token',
         'anthropic-beta': CONFIG.api.claude.betaHeader,
+        'User-Agent': CONFIG.api.claude.userAgent,
       });
       expect(opts.signal).toBeDefined();
     });

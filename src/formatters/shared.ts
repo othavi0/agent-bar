@@ -8,6 +8,19 @@ export function toDisplay(remaining: number | null, mode: DisplayMode): number |
   return mode === 'used' ? 100 - remaining : remaining;
 }
 
+/**
+ * Display value for a quota window, honoring a provider-supplied `used` percent
+ * (Copilot) when present. Falls back to `100 - remaining` in `used` mode.
+ */
+export function toWindowDisplay(
+  window: { remaining: number; used?: number | null } | undefined,
+  mode: DisplayMode,
+): number | null {
+  if (!window) return null;
+  if (mode === 'used' && window.used != null) return window.used;
+  return toDisplay(window.remaining, mode);
+}
+
 export function toHealth(displayValue: number | null, mode: DisplayMode): number | null {
   if (displayValue === null) return null;
   return mode === 'used' ? 100 - displayValue : displayValue;

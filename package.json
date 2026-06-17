@@ -7,11 +7,13 @@
   "bin": {
     "agent-bar": "scripts/agent-bar"
   },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
   "files": [
     "dist/",
     "scripts/agent-bar",
     "scripts/agent-bar-open-terminal",
-    "scripts/bun-publish-with-npm-token",
     "icons/",
     "README.md",
     "LICENSE",

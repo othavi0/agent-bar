@@ -60,11 +60,13 @@ function mockCopilotQuota(): CopilotQuota {
     primary: {
       remaining: 0,
       resetsAt: new Date(Date.now() + 3600000).toISOString(),
+      used: (698 / 300) * 100,
     },
     models: {
       'Premium requests': {
         remaining: 0,
         resetsAt: new Date(Date.now() + 3600000).toISOString(),
+        used: (698 / 300) * 100,
       },
       Chat: {
         remaining: 100,

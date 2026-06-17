@@ -1,7 +1,6 @@
 import { APP_BASE_CLASS } from '../app-identity';
 import { getStatusForPercent } from '../config';
-import { getCopilotExtra } from '../providers/extras';
-import type { AllQuotas, CopilotQuotaSnapshot, ProviderQuota } from '../providers/types';
+import type { AllQuotas, ProviderQuota } from '../providers/types';
 import { type DisplayMode, loadSettingsSync } from '../settings';
 import { ONE_DARK } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
@@ -10,9 +9,9 @@ import { buildCodex as buildCodexLines } from './builders/codex';
 import { buildCopilot as buildCopilotLines } from './builders/copilot';
 import { buildGeneric } from './builders/generic';
 import { TOOLTIP_BORDER } from './builders/shared';
-import { renderPango } from './render-pango';
-import { type ColorToken, colorForDisplay } from './segments';
-import { formatPercent, normalizePlanLabel, toDisplay } from './shared';
+import { HEX_BY_TOKEN, renderPango, span } from './render-pango';
+import { colorForDisplay } from './segments';
+import { formatPercent, normalizePlanLabel, toWindowDisplay } from './shared';
 import { type CodexViewModel, resolveCodexViewModelFrom } from './view-model';
 
 const SETTINGS_CACHE_TTL_MS = 5_000;
@@ -63,30 +62,12 @@ interface WaybarOutput {
   class: string;
 }
 
-const s = (color: string, text: string, bold = false) =>
-  `<span foreground='${color}'${bold ? " weight='bold'" : ''}>${text}</span>`;
-
-const HEX_BY_TOKEN: Record<ColorToken, string> = {
-  green: ONE_DARK.green,
-  yellow: ONE_DARK.yellow,
-  orange: ONE_DARK.orange,
-  red: ONE_DARK.red,
-  comment: ONE_DARK.comment,
-  text: ONE_DARK.text,
-  textBright: ONE_DARK.textBright,
-  muted: ONE_DARK.muted,
-  magenta: ONE_DARK.magenta,
-  cyan: ONE_DARK.cyan,
-  blue: ONE_DARK.blue,
-  brightBlue: ONE_DARK.brightBlue,
-};
-
 function colorFor(display: number | null, mode: DisplayMode): string {
   return HEX_BY_TOKEN[colorForDisplay(display, mode)];
 }
 
 function pctColored(display: number | null, mode: DisplayMode): string {
-  return s(colorFor(display, mode), formatPercent(display));
+  return span(colorFor(display, mode), formatPercent(display));
 }
 
 /**
@@ -165,30 +146,6 @@ function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: 
   );
 }
 
-function copilotUsedPercent(snapshot: CopilotQuotaSnapshot | undefined): number | null {
-  if (!snapshot || snapshot.isUnlimitedEntitlement || snapshot.entitlementRequests <= 0) {
-    return null;
-  }
-  return (snapshot.usedRequests / snapshot.entitlementRequests) * 100;
-}
-
-function copilotDisplayValue(
-  snapshot: CopilotQuotaSnapshot | undefined,
-  remaining: number | null,
-  mode: DisplayMode,
-): number | null {
-  if (mode === 'used') {
-    const used = copilotUsedPercent(snapshot);
-    if (used !== null) return used;
-  }
-  return toDisplay(remaining, mode);
-}
-
-function copilotPrimaryDisplayValue(p: ProviderQuota, mode: DisplayMode): number | null {
-  const snapshot = getCopilotExtra(p)?.quotaSnapshots?.premium_interactions;
-  return copilotDisplayValue(snapshot, p.primary?.remaining ?? null, mode);
-}
-
 // ---------------------------------------------------------------------------
 // Tooltip builder registry
 // ---------------------------------------------------------------------------
@@ -234,13 +191,12 @@ function buildText(quotas: AllQuotas, mode: DisplayMode): string {
 
   for (const p of quotas.providers) {
     if (!p.available) continue;
-    const rem = p.primary?.remaining ?? null;
-    const disp = p.provider === 'copilot' ? copilotPrimaryDisplayValue(p, mode) : toDisplay(rem, mode);
+    const disp = toWindowDisplay(p.primary, mode);
     parts.push(pctColored(disp, mode));
   }
 
-  if (parts.length === 0) return s(ONE_DARK.comment, 'No Providers');
-  return parts.join(` ${s(ONE_DARK.comment, '│')} `);
+  if (parts.length === 0) return span(ONE_DARK.comment, 'No Providers');
+  return parts.join(` ${span(ONE_DARK.comment, '│')} `);
 }
 
 function getClass(quotas: AllQuotas): string {
@@ -279,7 +235,7 @@ export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode 
   }
 
   const rem = quota.primary?.remaining ?? null;
-  const disp = quota.provider === 'copilot' ? copilotPrimaryDisplayValue(quota, mode) : toDisplay(rem, mode);
+  const disp = toWindowDisplay(quota.primary, mode);
   // class based on health (raw remaining), not display value
   const health = rem ?? 100;
   const status = getStatusForPercent(health);

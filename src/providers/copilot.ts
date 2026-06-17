@@ -35,6 +35,12 @@ interface CopilotQuotaRpcResult {
   quotaSnapshots?: Record<string, unknown>;
 }
 
+/** Raw cached payload: RPC snapshots plus the account read from config. */
+interface CopilotRawData {
+  quotaSnapshots?: Record<string, unknown>;
+  account?: string;
+}
+
 interface FrameState {
   buffer: Buffer;
 }
@@ -58,6 +64,15 @@ function stringOrNull(value: unknown): string | null {
 
 function boolOrFalse(value: unknown): boolean {
   return typeof value === 'boolean' ? value : false;
+}
+
+/**
+ * Copilot "used" percent from request counts. Can exceed 100% with overage.
+ * Null when unbounded or unmeasurable, so renderers fall back to 100-remaining.
+ */
+function usedPercentOf(snapshot: CopilotQuotaSnapshot): number | null {
+  if (snapshot.isUnlimitedEntitlement || snapshot.entitlementRequests <= 0) return null;
+  return (snapshot.usedRequests / snapshot.entitlementRequests) * 100;
 }
 
 function formatBucketLabel(bucket: string): string {
@@ -91,16 +106,44 @@ export class CopilotProvider extends BaseProvider {
     if (!bin) {
       throw new Error('Copilot CLI not found');
     }
-    const base: CopilotQuota = {
-      provider: this.id,
-      displayName: this.name,
-      available: false,
-    };
-    return this.fetchUsage(base, bin);
+    const result = await this.fetchQuotaViaCli(bin);
+    // The logged-in account lives in config files, not the RPC result. Cache it
+    // alongside the snapshots so buildQuota stays synchronous (BaseProvider
+    // contract) and the cache holds raw data, not a pre-built quota.
+    const account = await this.readAccountFromConfig();
+    return { quotaSnapshots: result.quotaSnapshots, account } satisfies CopilotRawData;
   }
 
-  protected buildQuota(raw: unknown, _base: QuotaBase): ProviderQuota {
-    return raw as ProviderQuota;
+  protected buildQuota(raw: unknown, base: QuotaBase): ProviderQuota {
+    const payload = (raw ?? {}) as CopilotRawData;
+    const quotaSnapshots = this.normalizeQuotaSnapshots(payload.quotaSnapshots);
+
+    if (Object.keys(quotaSnapshots).length === 0) {
+      return { ...base, provider: this.id, error: 'No Copilot quota snapshots found' } as CopilotQuota;
+    }
+
+    const models = this.buildModels(quotaSnapshots);
+    const primary = models['Premium requests'] ?? Object.values(models)[0];
+    if (!primary) {
+      return { ...base, provider: this.id, error: 'No Copilot quota windows found' } as CopilotQuota;
+    }
+
+    const meta: Record<string, string> = {
+      primaryBucket: quotaSnapshots.premium_interactions ? 'premium_interactions' : Object.keys(quotaSnapshots)[0],
+    };
+
+    return {
+      ...base,
+      provider: this.id,
+      available: true,
+      ...(payload.account ? { account: payload.account } : {}),
+      primary,
+      models,
+      extra: {
+        meta,
+        quotaSnapshots,
+      },
+    } as CopilotQuota;
   }
 
   protected toUserFacingError(error: unknown): string {
@@ -132,38 +175,6 @@ export class CopilotProvider extends BaseProvider {
     }
 
     return undefined;
-  }
-
-  private async fetchUsage(base: CopilotQuota, bin: string): Promise<CopilotQuota> {
-    const result = await this.fetchQuotaViaCli(bin);
-    const quotaSnapshots = this.normalizeQuotaSnapshots(result.quotaSnapshots);
-
-    if (Object.keys(quotaSnapshots).length === 0) {
-      return { ...base, error: 'No Copilot quota snapshots found' };
-    }
-
-    const models = this.buildModels(quotaSnapshots);
-    const primary = models['Premium requests'] ?? Object.values(models)[0];
-    if (!primary) {
-      return { ...base, error: 'No Copilot quota windows found' };
-    }
-
-    const account = await this.readAccountFromConfig();
-    const meta: Record<string, string> = {
-      primaryBucket: quotaSnapshots.premium_interactions ? 'premium_interactions' : Object.keys(quotaSnapshots)[0],
-    };
-
-    return {
-      ...base,
-      available: true,
-      ...(account ? { account } : {}),
-      primary,
-      models,
-      extra: {
-        meta,
-        quotaSnapshots,
-      },
-    };
   }
 
   private normalizeQuotaSnapshots(raw: Record<string, unknown> | undefined): Record<string, CopilotQuotaSnapshot> {
@@ -224,6 +235,7 @@ export class CopilotProvider extends BaseProvider {
       models[formatBucketLabel(bucket)] = {
         remaining: snapshot.isUnlimitedEntitlement ? 100 : clampPercent(snapshot.remainingPercentage),
         resetsAt: snapshot.resetDate,
+        used: usedPercentOf(snapshot),
       };
     }
 

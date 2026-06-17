@@ -93,6 +93,11 @@ describe('parseArgs', () => {
       expect(opts.command).toBe('action-right');
       expect(opts.provider).toBe('claude');
     });
+
+    it('parses --version and -V', () => {
+      expect(parseArgs(['--version']).command).toBe('version');
+      expect(parseArgs(['-V']).command).toBe('version');
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -216,6 +221,32 @@ describe('unknown commands', () => {
       expect(exitCalls).toEqual([1]);
       expect(errors.join('\n')).toContain('Unknown command: xyzzy');
       expect(errors.join('\n')).toContain('help');
+    } finally {
+      process.exit = originalExit;
+      console.error = originalError;
+    }
+  });
+
+  it('exits 1 on a two-word subcommand missing its second word', () => {
+    const originalExit = process.exit;
+    const originalError = console.error;
+    const exitCalls: number[] = [];
+    const errors: string[] = [];
+
+    process.exit = ((code?: number) => {
+      exitCalls.push(code ?? 0);
+      throw new Error('__exit__');
+    }) as typeof process.exit;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.join(' '));
+    };
+
+    try {
+      expect(() => parseArgs(['assets'])).toThrow('__exit__');
+      expect(() => parseArgs(['export'])).toThrow('__exit__');
+      expect(exitCalls).toEqual([1, 1]);
+      expect(errors.join('\n')).toContain('assets install');
+      expect(errors.join('\n')).toContain('waybar-modules');
     } finally {
       process.exit = originalExit;
       console.error = originalError;

@@ -12,12 +12,19 @@ describe('npm package contract', () => {
     expect(pkg.bin).toEqual({ 'agent-bar': 'scripts/agent-bar' });
   });
 
+  it('declares the Bun runtime requirement', () => {
+    expect(pkg.engines).toEqual({ bun: '>=1.1.0' });
+  });
+
+  it('does not ship the CI-only publish helper to consumers', () => {
+    expect(pkg.files).not.toContain('scripts/bun-publish-with-npm-token');
+  });
+
   it('publishes only runtime assets and public documentation', () => {
     expect(pkg.files).toEqual([
       'dist/',
       'scripts/agent-bar',
       'scripts/agent-bar-open-terminal',
-      'scripts/bun-publish-with-npm-token',
       'icons/',
       'README.md',
       'LICENSE',
