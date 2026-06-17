@@ -9,6 +9,22 @@
 | `agent-bar menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
 | `agent-bar update` | Update the install: managed `~/.agent-bar` checkout, or npm/Bun global package. | `~/.agent-bar` or global package, managed Waybar files |
 
+## JSON Output (non-Waybar bars)
+
+For Quickshell, Eww, Ironbar, or any consumer that renders natively and wants
+raw structured data instead of the Waybar Pango envelope.
+
+| Command | Purpose | Writes |
+| --- | --- | --- |
+| `agent-bar --format json` | One-shot versioned JSON envelope for all registered providers (Pango-free). | Cache only |
+| `agent-bar --format json --provider <id>` | Same, single provider. | Cache only |
+| `agent-bar --watch [--interval <s>]` | Stream NDJSON (one envelope per line) until killed. | Cache only |
+
+The schema, stability policy, and a Quickshell QML example live in
+[`docs/json-output.md`](json-output.md). Unlike the Waybar path, JSON output is
+**not** filtered by the `waybar.providers` setting — it emits all registered
+providers and the consumer decides what to show.
+
 ## Install And Removal
 
 | Command | Purpose | Writes |
@@ -54,7 +70,11 @@ These are mostly for tests, packagers, and manual integration.
 | `-p`, `--provider <id>` | Limit output to `claude`, `codex`, `copilot`, or `amp`. |
 | `-r`, `--refresh` | Ignore cache and fetch fresh provider data. |
 | `-t`, `--terminal` | Force terminal output mode. |
-| `-v`, `--verbose` | Enable diagnostic logging. |
+| `--format <waybar\|json>` | Output format. Default `waybar`. `json` emits the versioned contract (see below). |
+| `--watch` | Stream NDJSON (one envelope per line); implies `--format json`. |
+| `--interval <seconds>` | Watch poll floor (default 60). Only meaningful with `--watch`. |
+| `-v`, `--verbose` | Enable diagnostic logging (stderr). |
+| `-V`, `--version` | Print version and exit. |
 | `-h`, `--help` | Print CLI help. |
 
 ## Update Behavior

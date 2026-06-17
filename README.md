@@ -50,15 +50,27 @@ For development (live edits reflected in Waybar on the next poll), see
 ## Commands
 
 ```bash
-agent-bar             # Waybar JSON
-agent-bar status      # Terminal quota view
-agent-bar menu        # Login and layout TUI
-agent-bar update      # Update the install (npm package or managed checkout)
-agent-bar setup       # Re-apply Waybar integration
-agent-bar uninstall   # Interactive removal
-agent-bar remove      # Forced removal
-agent-bar doctor      # Detect & clean leftovers in $HOME
+agent-bar               # Waybar JSON
+agent-bar status        # Terminal quota view
+agent-bar menu          # Login and layout TUI
+agent-bar update        # Update the install (npm package or managed checkout)
+agent-bar setup         # Re-apply Waybar integration
+agent-bar uninstall     # Interactive removal
+agent-bar remove        # Forced removal
+agent-bar doctor        # Detect & clean leftovers in $HOME
+agent-bar --version     # Print version
 ```
+
+### Use with other bars (Quickshell, Eww, Ironbar)
+
+Waybar is the default, but any bar can consume the raw, versioned JSON contract:
+
+```bash
+agent-bar --format json   # one-shot structured JSON (all providers, no Pango)
+agent-bar --watch         # stream NDJSON: one JSON object per line (default 60s)
+```
+
+See [JSON output](docs/json-output.md) for the schema and a Quickshell example.
 
 `agent-bar update` detects the install type. For the managed `~/.agent-bar`
 checkout (the install.sh path) it fetches and resets to upstream. For an
