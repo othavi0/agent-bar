@@ -79,6 +79,7 @@ and tells you to use `git pull`.
 ## Docs
 
 - [Docs index](docs/README.md)
+- [Architecture](docs/architecture.md)
 - [Commands](docs/commands.md)
 - [Runtime](docs/runtime.md)
 - [Waybar integration](docs/integration.md)

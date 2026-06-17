@@ -9,6 +9,30 @@
 | `agent-bar menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
 | `agent-bar update` | Update the install: managed `~/.agent-bar` checkout, or npm/Bun global package. | `~/.agent-bar` or global package, managed Waybar files |
 
+## Internal Commands (Waybar-Triggered)
+
+You normally don't type these — generated Waybar modules wire them to click
+actions (see [waybar-contract.md](waybar-contract.md)).
+
+| Command | Trigger | Behavior |
+| --- | --- | --- |
+| `agent-bar menu` | Left click | Interactive login/layout TUI (also a primary command). |
+| `agent-bar action-right <provider>` | Right click | Refresh **or** login for one provider. Requires a provider arg. |
+
+`action-right` opens inside the terminal helper and branches:
+
+- **Disconnected** — no credentials, or a quota error matching the base pattern
+  (`expired` / `not logged in` / `login again` / `please login`); for Codex,
+  additionally `no session data` / `no rate limit data` / `auth` / `token` →
+  launches the single-provider login flow.
+- **Connected** — invalidates that provider's cache (force refresh, ignoring the
+  5-minute TTL), fetches fresh, prints the terminal quota view, and waits for
+  Enter before closing.
+
+It requires a provider argument — the CLI parser exits non-zero without one. Like
+the `--refresh` flag, it deliberately bypasses the quota cache, but scoped to just
+the clicked provider on every right-click.
+
 ## JSON Output (non-Waybar bars)
 
 For Quickshell, Eww, Ironbar, or any consumer that renders natively and wants

@@ -37,13 +37,21 @@ The JSON contains:
 
 Each module includes:
 
-- `exec`
+- `exec` — `<app-bin> --provider <provider>`
 - `return-type: json`
 - `interval` (120 seconds)
 - `exec-on-event`
 - `tooltip`
-- `on-click`
-- `on-click-right`
+- `on-click` — left click; runs `<terminal-script> <app-bin> menu`
+- `on-click-right` — right click; runs `<terminal-script> <app-bin> action-right <provider>`
+
+### Click Actions
+
+Both click handlers wrap the command in the terminal helper so it opens a
+window. `menu` is the interactive TUI; `action-right` refreshes the provider, or
+starts its login flow when it is disconnected. See
+[commands.md → Internal Commands](commands.md#internal-commands-waybar-triggered)
+for the `action-right` branch logic.
 
 ## CSS Export
 
