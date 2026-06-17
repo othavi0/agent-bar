@@ -6,7 +6,6 @@ import { ONE_DARK } from './theme';
 // XDG Base Directory paths
 const XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME ?? Bun.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
 const XDG_CACHE_HOME = process.env.XDG_CACHE_HOME ?? Bun.env.XDG_CACHE_HOME ?? join(homedir(), '.cache');
-const COPILOT_HOME = process.env.COPILOT_HOME ?? Bun.env.COPILOT_HOME ?? join(homedir(), '.copilot');
 
 export const CONFIG = {
   // Paths
@@ -26,11 +25,6 @@ export const CONFIG = {
       bin: join(homedir(), '.cache', '.bun', 'bin', 'amp'),
       settings: join(XDG_CONFIG_HOME, 'amp', 'settings.json'),
       threads: join(homedir(), '.local', 'share', 'amp', 'threads'),
-    },
-    copilot: {
-      home: COPILOT_HOME,
-      config: join(COPILOT_HOME, 'config.json'),
-      settings: join(COPILOT_HOME, 'settings.json'),
     },
   },
 

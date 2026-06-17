@@ -47,8 +47,8 @@ agent-bar --watch --interval 30            # custom poll floor
 | --- | --- | --- |
 | `schemaVersion` | number | Contract version. See stability below. |
 | `fetchedAt` | string (ISO) | When agent-bar produced the snapshot — **not** the network fetch time. On a cache hit the underlying data can be up to the cache TTL (~5min) older. |
-| `providers[]` | array | One entry per provider. Order is registry order (currently `amp`, `claude`, `codex`, `copilot`) and is **not** part of the contract — key on the `provider` field, never on array index. |
-| `provider` | string | `claude` / `codex` / `copilot` / `amp`. |
+| `providers[]` | array | One entry per provider. Order is registry order (currently `amp`, `claude`, `codex`) and is **not** part of the contract — key on the `provider` field, never on array index. |
+| `provider` | string | `claude` / `codex` / `amp`. |
 | `displayName` | string | Human label. |
 | `available` | boolean | Authenticated and fetched OK. |
 | `account` / `plan` / `planType` | string | Optional; omitted when absent. |
@@ -58,7 +58,8 @@ agent-bar --watch --interval 30            # custom poll floor
 | `error` | string | Present only on failure (key omitted when OK — check `'error' in p`). |
 
 `Window`: `{ remaining: number, used?: number|null, resetsAt: string|null, windowMinutes?: number|null }`.
-`remaining`/`used` are percentages (0-100; Copilot `used` can exceed 100 with overage).
+`remaining`/`used` are percentages (0-100). `used` is only present when a provider
+reports a distinct "used" metric that is not simply `100 - remaining` (it can exceed 100 with overage).
 
 ## Stability
 

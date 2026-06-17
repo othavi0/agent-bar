@@ -16,7 +16,6 @@ const VALID_DISPLAY_MODES = ['remaining', 'used'] as const;
 export type DisplayMode = (typeof VALID_DISPLAY_MODES)[number];
 
 const VALID_WINDOW_POLICIES = ['both', 'five_hour', 'seven_day'] as const;
-const LEGACY_DEFAULT_PROVIDERS = ['claude', 'codex', 'amp'] as const;
 
 interface SettingsPaths {
   settingsDir: string;
@@ -52,10 +51,10 @@ export interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   version: CURRENT_VERSION,
   waybar: {
-    providers: ['claude', 'codex', 'copilot', 'amp'],
+    providers: ['claude', 'codex', 'amp'],
     showPercentage: true,
     separators: 'gap',
-    providerOrder: ['claude', 'codex', 'copilot', 'amp'],
+    providerOrder: ['claude', 'codex', 'amp'],
     displayMode: 'remaining',
   },
   tooltip: {},
@@ -64,23 +63,6 @@ const DEFAULT_SETTINGS: Settings = {
     codex: 'both',
   },
 };
-
-/** Migrate settings from older schema versions. */
-function migrateSettings(data: Record<string, unknown>, fromVersion: number): Record<string, unknown> {
-  if (fromVersion < 2) {
-    // v1 → v2: Add Copilot to legacy default provider lists (one-shot migration).
-    const waybar = data.waybar as Record<string, unknown> | undefined;
-    if (waybar) {
-      if (isExactStringArray(waybar.providers, LEGACY_DEFAULT_PROVIDERS)) {
-        waybar.providers = withCopilotAfterCodex(waybar.providers as string[]);
-      }
-      if (waybar.providerOrder === undefined || isExactStringArray(waybar.providerOrder, LEGACY_DEFAULT_PROVIDERS)) {
-        waybar.providerOrder = withCopilotAfterCodex((waybar.providerOrder ?? waybar.providers) as string[]);
-      }
-    }
-  }
-  return data;
-}
 
 function isValidDisplayMode(value: unknown): value is DisplayMode {
   return typeof value === 'string' && (VALID_DISPLAY_MODES as readonly string[]).includes(value);
@@ -94,30 +76,7 @@ function isValidWindowPolicy(value: unknown): value is WindowPolicy {
   return typeof value === 'string' && (VALID_WINDOW_POLICIES as readonly string[]).includes(value);
 }
 
-function isExactStringArray(value: unknown, expected: readonly string[]): boolean {
-  return (
-    Array.isArray(value) && value.length === expected.length && value.every((item, index) => item === expected[index])
-  );
-}
-
-function withCopilotAfterCodex(providers: string[]): string[] {
-  if (providers.includes('copilot')) {
-    return providers;
-  }
-
-  const next = [...providers];
-  const codexIndex = next.indexOf('codex');
-  next.splice(codexIndex >= 0 ? codexIndex + 1 : next.length, 0, 'copilot');
-  return next;
-}
-
 function normalizeSettings(data: Partial<Settings> | undefined): Settings {
-  // Handle version migration
-  const version = (data as Record<string, unknown>)?.version;
-  if (typeof version === 'number' && version < CURRENT_VERSION) {
-    data = migrateSettings(data as Record<string, unknown>, version) as Partial<Settings>;
-  }
-
   const merged: Settings = {
     version: CURRENT_VERSION,
     waybar: { ...DEFAULT_SETTINGS.waybar, ...data?.waybar },

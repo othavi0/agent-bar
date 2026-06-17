@@ -11,7 +11,6 @@ Supported providers:
 
 - Claude Code
 - OpenAI Codex
-- GitHub Copilot
 - Amp
 
 ## Install

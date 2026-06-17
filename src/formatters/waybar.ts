@@ -6,7 +6,6 @@ import { ONE_DARK } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
-import { buildCopilot as buildCopilotLines } from './builders/copilot';
 import { buildGeneric } from './builders/generic';
 import { TOOLTIP_BORDER } from './builders/shared';
 import { HEX_BY_TOKEN, renderPango, span } from './render-pango';
@@ -110,24 +109,6 @@ function buildCodexTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode
 }
 
 /**
- * Build Copilot tooltip
- */
-function buildCopilotTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
-  const headerTitle = p.account ? `Copilot · ${p.account}` : 'Copilot';
-
-  return renderPango(
-    buildCopilotLines(p, {
-      mode,
-      headerTitle,
-      headerWidth: TOOLTIP_BORDER - 4,
-      labelColor: 'brightBlue',
-      footer: { fetchedAt },
-      accountInHeader: true,
-    }),
-  );
-}
-
-/**
  * Build Amp tooltip
  */
 function buildAmpTooltip(p: ProviderQuota, fetchedAt: string | undefined, mode: DisplayMode): string {
@@ -155,7 +136,6 @@ type TooltipBuilder = (p: ProviderQuota, fetchedAt: string | undefined, mode: Di
 const TOOLTIP_BUILDERS: Record<string, TooltipBuilder> = {
   claude: buildClaudeTooltip,
   codex: buildCodexTooltip,
-  copilot: buildCopilotTooltip,
   amp: buildAmpTooltip,
 };
 

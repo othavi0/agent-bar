@@ -17,7 +17,6 @@
 agent-bar status --refresh
 agent-bar status --provider claude --refresh
 agent-bar status --provider codex --refresh
-agent-bar status --provider copilot --refresh
 agent-bar status --provider amp --refresh
 ```
 
@@ -74,13 +73,6 @@ Claude uses Claude Code credentials from `~/.claude/.credentials.json`.
 
 Codex uses `~/.codex/auth.json`, recent session rate-limit events, or the Codex
 app-server protocol when available.
-
-### Copilot
-
-Install and log in with the official Copilot CLI. See the Copilot CLI
-documentation for the current login command.
-
-The active Copilot CLI account determines which quota appears.
 
 ### Amp
 

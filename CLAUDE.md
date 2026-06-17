@@ -1,6 +1,6 @@
 # agent-bar — Agent Instructions
 
-Monitor de quotas LLM para Waybar (Claude, Codex, GitHub Copilot, Amp).
+Monitor de quotas LLM para Waybar (Claude, Codex, Amp).
 `AGENTS.md` é shim de compat Codex. **O código em `src/` é a fonte da verdade.**
 
 ## 1. Hard Rules
@@ -41,7 +41,7 @@ Use a verificação mais estreita; só amplie se contrato compartilhado se moveu
 | Update flow | `bun test tests/update.test.ts` |
 | `package.json` `files`/`bin`/release | `bun test tests/package.test.ts` |
 | Theme / colors / identity | `bun test tests/theme.test.ts tests/colors.test.ts tests/config.test.ts tests/app-identity.test.ts` |
-| CLI locators | `bun test tests/amp-cli.test.ts tests/copilot-cli.test.ts` |
+| CLI locators | `bun test tests/amp-cli.test.ts` |
 | Contratos TypeScript | `bun run typecheck` |
 | Mudanças amplas antes de handoff | `bun test && bun run typecheck && bun run lint` |
 
@@ -56,7 +56,7 @@ Use a verificação mais estreita; só amplie se contrato compartilhado se moveu
   *Why:* biome desativa `noNonNullAssertion` (linter permite), mas o projeto
   bane. `!` esconde nulls que precisam virar erros explícitos.
 - **`ClaudeProvider` implementa `Provider` direto, não estende `BaseProvider`.**
-  Codex/Copilot/Amp estendem. Não force Claude no template — ele gerencia
+  Codex/Amp estendem. Não force Claude no template — ele gerencia
   cache inline porque o fluxo não cabe.
 - **XML-escape acontece SÓ em `render-pango.ts`.** Builders nunca escapam;
   segments `raw` bulam color-wrap E escape. Romper isso vira XSS no tooltip

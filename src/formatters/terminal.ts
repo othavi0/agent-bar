@@ -3,7 +3,6 @@ import { ANSI } from '../theme';
 import { buildAmp as buildAmpLines } from './builders/amp';
 import { buildClaude } from './builders/claude';
 import { buildCodex as buildCodexLines } from './builders/codex';
-import { buildCopilot as buildCopilotLines } from './builders/copilot';
 import { buildGeneric } from './builders/generic';
 import { renderAnsi } from './render-ansi';
 import { type DisplayMode, normalizePlanLabel } from './shared';
@@ -52,19 +51,6 @@ function buildAmpTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
   return rendered.split('\n');
 }
 
-function buildCopilotTerminal(p: ProviderQuota, mode: DisplayMode): string[] {
-  const rendered = renderAnsi(
-    buildCopilotLines(p, {
-      mode,
-      headerTitle: 'Copilot',
-      headerWidth: 56,
-      labelColor: 'magenta',
-      footer: undefined,
-    }),
-  );
-  return rendered.split('\n');
-}
-
 // ---------------------------------------------------------------------------
 // Terminal builder registry
 // ---------------------------------------------------------------------------
@@ -74,7 +60,6 @@ type TerminalBuilder = (p: ProviderQuota, mode: DisplayMode) => string[];
 const TERMINAL_BUILDERS: Record<string, TerminalBuilder> = {
   claude: buildClaudeTerminal,
   codex: buildCodexTerminal,
-  copilot: buildCopilotTerminal,
   amp: buildAmpTerminal,
 };
 

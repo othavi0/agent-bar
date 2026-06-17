@@ -383,18 +383,6 @@ exports[`Terminal formatter snapshots — account field (C1) renders Amp with ac
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 `;
 
-exports[`Terminal formatter snapshots — account field (C1) renders Copilot with account 1`] = `
-"┏━ Copilot ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-┃
-┣━ ◆ Usage
-┃  ● Premium requests     ████████████████░░░░  80% → __HM__ (__:__)
-┃  ○ 60 / 300 used  |  raw 80%
-┃
-┃  Account: dev@example.com
-┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-`;
-
 exports[`Waybar formatter snapshots — account field (C1) renders Amp with account 1`] = `"<span foreground='#98c379'>70%</span>"`;
 
 exports[`Waybar formatter snapshots — account field (C1) renders Amp with account 2`] = `
@@ -409,20 +397,6 @@ exports[`Waybar formatter snapshots — account field (C1) renders Amp with acco
 
 exports[`Waybar formatter snapshots — account field (C1) renders Amp with account 3`] = `"agent-bar amp-ok"`;
 
-exports[`Waybar formatter snapshots — account field (C1) renders Copilot with account 1`] = `"<span foreground='#98c379'>80%</span>"`;
-
-exports[`Waybar formatter snapshots — account field (C1) renders Copilot with account 2`] = `
-"<span foreground='#528bff'>┏━</span> <span foreground='#528bff' weight='bold'>Copilot · dev@example.com</span> <span foreground='#528bff'>━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
-<span foreground='#528bff'>┃</span>
-<span foreground='#528bff'>┣━</span> <span foreground='#528bff' weight='bold'>◆ Usage</span>
-<span foreground='#528bff'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Premium requests    </span> <span foreground='#98c379'>████████████████</span><span foreground='#6a7485'>░░░░</span> <span foreground='#98c379'> 80%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
-<span foreground='#528bff'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#c0c9d4'>60 / 300 used</span><span foreground='#6a7485'>  |  </span><span foreground='#6a7485'>raw 80%</span>
-<span foreground='#528bff'>┃</span>
-<span foreground='#528bff'>┗━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#528bff'>━━━━━━━━━━━━━━━━━━</span>"
-`;
-
-exports[`Waybar formatter snapshots — account field (C1) renders Copilot with account 3`] = `"agent-bar copilot-ok"`;
-
 exports[`formatProviderForWaybar snapshots — account field (C1) renders Amp with account 1`] = `"<span foreground='#98c379'>70%</span>"`;
 
 exports[`formatProviderForWaybar snapshots — account field (C1) renders Amp with account 2`] = `
@@ -436,20 +410,6 @@ exports[`formatProviderForWaybar snapshots — account field (C1) renders Amp wi
 `;
 
 exports[`formatProviderForWaybar snapshots — account field (C1) renders Amp with account 3`] = `"agent-bar-amp ok"`;
-
-exports[`formatProviderForWaybar snapshots — account field (C1) renders Copilot with account 1`] = `"<span foreground='#98c379'>80%</span>"`;
-
-exports[`formatProviderForWaybar snapshots — account field (C1) renders Copilot with account 2`] = `
-"<span foreground='#528bff'>┏━</span> <span foreground='#528bff' weight='bold'>Copilot · dev@example.com</span> <span foreground='#528bff'>━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
-<span foreground='#528bff'>┃</span>
-<span foreground='#528bff'>┣━</span> <span foreground='#528bff' weight='bold'>◆ Usage</span>
-<span foreground='#528bff'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Premium requests    </span> <span foreground='#98c379'>████████████████</span><span foreground='#6a7485'>░░░░</span> <span foreground='#98c379'> 80%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
-<span foreground='#528bff'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#c0c9d4'>60 / 300 used</span><span foreground='#6a7485'>  |  </span><span foreground='#6a7485'>raw 80%</span>
-<span foreground='#528bff'>┃</span>
-<span foreground='#528bff'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>"
-`;
-
-exports[`formatProviderForWaybar snapshots — account field (C1) renders Copilot with account 3`] = `"agent-bar-copilot ok"`;
 
 exports[`Terminal formatter snapshots — rich builder fixtures (C3) renders Claude with weeklyModels and extraUsage 1`] = `
 "┏━ Claude ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

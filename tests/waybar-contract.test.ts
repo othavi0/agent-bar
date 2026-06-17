@@ -17,14 +17,14 @@ describe('exportWaybarModules', () => {
         appBin: '$HOME/.local/bin/agent-bar',
         terminalScript: '$HOME/.config/waybar/scripts/agent-bar-open-terminal',
       },
-      ['claude', 'codex', 'copilot', 'amp'],
+      ['claude', 'codex', 'amp'],
     );
 
     expect(result.modules['custom/agent-bar-claude']['on-click']).toBe(
       '$HOME/.config/waybar/scripts/agent-bar-open-terminal $HOME/.local/bin/agent-bar menu',
     );
     expect(result.modules['custom/agent-bar-codex']['exec-on-event']).toBe(true);
-    expect(result.modules['custom/agent-bar-copilot'].exec).toBe('$HOME/.local/bin/agent-bar --provider copilot');
+    expect(result.modules['custom/agent-bar-codex'].exec).toBe('$HOME/.local/bin/agent-bar --provider codex');
     expect(result.modules['custom/agent-bar-amp']['on-click-right']).toBe(
       '$HOME/.config/waybar/scripts/agent-bar-open-terminal $HOME/.local/bin/agent-bar action-right amp',
     );
@@ -64,18 +64,15 @@ describe('normalizeProviderSelection', () => {
   });
 
   it('respects providerOrder for ordering', () => {
-    const result = normalizeProviderSelection(
-      ['claude', 'codex', 'copilot', 'amp'],
-      ['amp', 'claude', 'copilot', 'codex'],
-    );
+    const result = normalizeProviderSelection(['claude', 'codex', 'amp'], ['amp', 'claude', 'codex']);
 
-    expect(result.providerOrder).toEqual(['amp', 'claude', 'copilot', 'codex']);
+    expect(result.providerOrder).toEqual(['amp', 'claude', 'codex']);
   });
 
   it('adds providers missing from providerOrder to the end', () => {
-    const result = normalizeProviderSelection(['claude', 'codex', 'copilot', 'amp'], ['codex']);
+    const result = normalizeProviderSelection(['claude', 'codex', 'amp'], ['codex']);
 
-    expect(result.providerOrder).toEqual(['codex', 'claude', 'copilot', 'amp']);
+    expect(result.providerOrder).toEqual(['codex', 'claude', 'amp']);
   });
 
   it('filters providerOrder entries not in enabled providers', () => {
@@ -99,7 +96,7 @@ describe('normalizeProviderSelection', () => {
 describe('exportWaybarCss', () => {
   const defaultOpts: WaybarCssExportOptions = {
     iconsDir: '/home/user/.config/waybar/agent-bar/icons',
-    providerOrder: ['claude', 'codex', 'copilot', 'amp'],
+    providerOrder: ['claude', 'codex', 'amp'],
     separators: 'gap',
   };
 
@@ -111,7 +108,6 @@ describe('exportWaybarCss', () => {
     const css = cssFor('gap');
     expect(css).toContain('#custom-agent-bar-claude');
     expect(css).toContain('#custom-agent-bar-codex');
-    expect(css).toContain('#custom-agent-bar-copilot');
     expect(css).toContain('#custom-agent-bar-amp');
   });
 
@@ -119,7 +115,6 @@ describe('exportWaybarCss', () => {
     const css = cssFor('gap');
     expect(css).toContain('claude-code-icon.png');
     expect(css).toContain('codex-icon.png');
-    expect(css).toContain('github-copilot-white-icon.webp');
     expect(css).toContain('amp-icon.svg');
   });
 

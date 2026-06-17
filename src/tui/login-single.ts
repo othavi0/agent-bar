@@ -21,10 +21,6 @@ async function ensureCodexCli(): Promise<boolean> {
   return ensureCommand('codex', 'Install OpenAI Codex CLI first (binary: codex).');
 }
 
-async function ensureCopilotCli(): Promise<boolean> {
-  return ensureCommand('copilot', 'Install GitHub Copilot CLI first (binary: copilot).');
-}
-
 async function activateProvider(providerId: string): Promise<void> {
   const settings = await loadSettings();
 
@@ -98,23 +94,6 @@ export async function loginSingleProvider(providerId: string): Promise<void> {
       const code = await runInteractive('codex', ['auth', 'login']);
       if (code === 0) {
         await activateProvider('codex');
-      }
-      await waitEnter();
-      return;
-    }
-
-    case 'copilot': {
-      p.note(`Will run ${colorize('copilot login', semantic.accent)}`, colorize('Copilot Login', semantic.title));
-
-      const ok = await ensureCopilotCli();
-      if (!ok) {
-        await waitEnter();
-        return;
-      }
-
-      const code = await runInteractive('copilot', ['login']);
-      if (code === 0) {
-        await activateProvider('copilot');
       }
       await waitEnter();
       return;

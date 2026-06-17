@@ -29,8 +29,8 @@ describe('settings', () => {
     const settings = loadSettingsSync();
 
     expect(settings.version).toBe(2);
-    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
-    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'copilot', 'amp']);
+    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'amp']);
+    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'amp']);
     expect(settings.waybar.separators).toBe('gap');
     expect(getSettingsPath()).toBe(join(testRoot, 'agent-bar', 'settings.json'));
   });
@@ -62,7 +62,7 @@ describe('settings', () => {
     expect(onDisk.waybar.providers).toEqual(['codex', 'claude']);
   });
 
-  it('adds Copilot to default providers on v1→v2 schema upgrade', async () => {
+  it('drops unknown providers and preserves a customized provider list', async () => {
     const settingsDir = join(testRoot, 'agent-bar');
     const settingsFile = join(settingsDir, 'settings.json');
     await mkdir(settingsDir, { recursive: true });
@@ -71,75 +71,11 @@ describe('settings', () => {
       JSON.stringify({
         version: 1,
         waybar: {
-          providers: ['claude', 'codex', 'amp'],
-          showPercentage: true,
-          separators: 'bare',
-          providerOrder: ['claude', 'codex', 'amp'],
-        },
-        tooltip: {},
-        models: {},
-        windowPolicy: { codex: 'both' },
-      }),
-    );
-
-    const settings = await loadSettings();
-
-    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
-    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'copilot', 'amp']);
-    expect(settings.waybar.separators).toBe('bare');
-
-    const onDisk = JSON.parse(await readFile(settingsFile, 'utf8'));
-    expect(onDisk.waybar.providers).toEqual(['claude', 'codex', 'copilot', 'amp']);
-  });
-
-  it('does not re-add Copilot after user removes it (v2 settings)', async () => {
-    const settingsDir = join(testRoot, 'agent-bar');
-    const settingsFile = join(settingsDir, 'settings.json');
-    await mkdir(settingsDir, { recursive: true });
-    await writeFile(
-      settingsFile,
-      JSON.stringify({
-        version: 2,
-        waybar: {
-          providers: ['claude', 'codex', 'amp'],
+          // 'copilot' is no longer a known provider and must be dropped on load.
+          providers: ['claude', 'copilot', 'amp'],
           showPercentage: true,
           separators: 'gap',
-          providerOrder: ['claude', 'codex', 'amp'],
-          displayMode: 'remaining',
-        },
-        tooltip: {},
-        models: {},
-        windowPolicy: { codex: 'both' },
-      }),
-    );
-
-    const settings = await loadSettings();
-    expect(settings.waybar.providers).toEqual(['claude', 'codex', 'amp']);
-    expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'amp']);
-
-    // Save and reload — must still stay without Copilot
-    await saveSettings(settings);
-    const reloaded = await loadSettings();
-    expect(reloaded.waybar.providers).toEqual(['claude', 'codex', 'amp']);
-    expect(reloaded.waybar.providerOrder).toEqual(['claude', 'codex', 'amp']);
-
-    const onDisk = JSON.parse(await readFile(settingsFile, 'utf8'));
-    expect(onDisk.waybar.providers).toEqual(['claude', 'codex', 'amp']);
-  });
-
-  it('does not add Copilot when providers were manually customized', async () => {
-    const settingsDir = join(testRoot, 'agent-bar');
-    const settingsFile = join(settingsDir, 'settings.json');
-    await mkdir(settingsDir, { recursive: true });
-    await writeFile(
-      settingsFile,
-      JSON.stringify({
-        version: 1,
-        waybar: {
-          providers: ['claude', 'amp'],
-          showPercentage: true,
-          separators: 'gap',
-          providerOrder: ['amp', 'claude'],
+          providerOrder: ['amp', 'copilot', 'claude'],
         },
         tooltip: {},
         models: {},

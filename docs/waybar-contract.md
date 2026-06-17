@@ -8,14 +8,12 @@ Built-in Waybar providers:
 
 - `claude`
 - `codex`
-- `copilot`
 - `amp`
 
 Generated module IDs:
 
 - `custom/agent-bar-claude`
 - `custom/agent-bar-codex`
-- `custom/agent-bar-copilot`
 - `custom/agent-bar-amp`
 
 CSS selectors use:
