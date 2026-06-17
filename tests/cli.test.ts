@@ -12,6 +12,28 @@ mock.module('../src/logger', () => ({
 
 import { parseArgs, showHelp } from '../src/cli';
 
+function expectExit1(args: string[], needle: string) {
+  const origExit = process.exit;
+  const origErr = console.error;
+  const codes: number[] = [];
+  const errs: string[] = [];
+  process.exit = ((c?: number) => {
+    codes.push(c ?? 0);
+    throw new Error('__exit__');
+  }) as typeof process.exit;
+  console.error = (...a: unknown[]) => {
+    errs.push(a.join(' '));
+  };
+  try {
+    expect(() => parseArgs(args)).toThrow('__exit__');
+    expect(codes).toEqual([1]);
+    expect(errs.join('\n')).toContain(needle);
+  } finally {
+    process.exit = origExit;
+    console.error = origErr;
+  }
+}
+
 describe('parseArgs', () => {
   // -----------------------------------------------------------------------
   // Default behavior
@@ -293,28 +315,6 @@ describe('output format flags', () => {
     expect(parseArgs(['--watch', '--interval', '30']).intervalSeconds).toBe(30);
   });
 
-  function expectExit1(args: string[], needle: string) {
-    const origExit = process.exit;
-    const origErr = console.error;
-    const codes: number[] = [];
-    const errs: string[] = [];
-    process.exit = ((c?: number) => {
-      codes.push(c ?? 0);
-      throw new Error('__exit__');
-    }) as typeof process.exit;
-    console.error = (...a: unknown[]) => {
-      errs.push(a.join(' '));
-    };
-    try {
-      expect(() => parseArgs(args)).toThrow('__exit__');
-      expect(codes).toEqual([1]);
-      expect(errs.join('\n')).toContain(needle);
-    } finally {
-      process.exit = origExit;
-      console.error = origErr;
-    }
-  }
-
   it('exits 1 on invalid --format', () => {
     expectExit1(['--format', 'xml'], '--format must be');
   });
@@ -325,6 +325,14 @@ describe('output format flags', () => {
 
   it('exits 1 on --watch with explicit --format waybar', () => {
     expectExit1(['--watch', '--format', 'waybar'], '--watch requires --format json');
+  });
+
+  it('exits 1 on --interval 1.5 (non-integer)', () => {
+    expectExit1(['--watch', '--interval', '1.5'], '--interval must be');
+  });
+
+  it('exits 1 on --interval 0', () => {
+    expectExit1(['--watch', '--interval', '0'], '--interval must be');
   });
 
   it('warns (no exit) on --interval without --watch', () => {

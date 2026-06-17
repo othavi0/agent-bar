@@ -1,6 +1,6 @@
 import { toJsonOutput } from './formatters/json';
 import { logger } from './logger';
-import { getAllQuotas, getQuotaFor } from './providers';
+import { getAllQuotas, getProvider, getQuotaFor } from './providers';
 import type { AllQuotas } from './providers/types';
 
 export interface StartWatchOptions {
@@ -31,6 +31,11 @@ export function buildWatchLine(quotas: AllQuotas): string {
  * Never resolves on its own.
  */
 export async function startWatch(opts: StartWatchOptions): Promise<void> {
+  if (opts.provider && !getProvider(opts.provider)) {
+    process.stderr.write(`[agent-bar] Unknown provider: ${opts.provider}\n`);
+    process.exit(1);
+  }
+
   process.stdout.on('error', (err: Error & { code?: string }) => {
     if (err.code === 'EPIPE') process.exit(0);
   });
@@ -43,7 +48,16 @@ export async function startWatch(opts: StartWatchOptions): Promise<void> {
     try {
       const quotas = await fetchQuotas(opts.provider);
       process.stdout.write(buildWatchLine(quotas), (writeErr?: Error | null) => {
-        if (!writeErr) setTimeout(tick, opts.intervalMs);
+        if (!writeErr) {
+          setTimeout(tick, opts.intervalMs);
+          return;
+        }
+        // EPIPE is handled by the stdout 'error' listener (exits 0); any other
+        // write error is fatal — log and exit rather than hang.
+        if ((writeErr as Error & { code?: string }).code !== 'EPIPE') {
+          logger.error('stdout write error', { writeErr });
+          process.exit(1);
+        }
       });
     } catch (error) {
       logger.error('watch tick failed', { error });

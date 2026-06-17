@@ -163,7 +163,7 @@ async function main() {
   let quotas: AllQuotas;
 
   if (options.provider) {
-    // If provider is disabled in waybar settings, output empty (hidden module)
+    // Waybar: provider disabled in settings → hidden module. (json mode bypasses this gate.)
     if (options.format !== 'json' && !settings.waybar.providers.includes(options.provider)) {
       console.log(JSON.stringify({ text: '', tooltip: '', class: APP_HIDDEN_CLASS }));
       process.exit(0);

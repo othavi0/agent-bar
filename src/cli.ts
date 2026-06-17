@@ -268,7 +268,7 @@ export function parseArgs(args: string[]): CliOptions {
         break;
       case '--interval': {
         const val = requireNextArg(args, i, '--interval');
-        const n = Number.parseInt(val, 10);
+        const n = Number(val);
         if (!Number.isInteger(n) || n <= 0) {
           console.error(`Error: --interval must be a positive integer (got '${val}')`);
           process.exit(1);
