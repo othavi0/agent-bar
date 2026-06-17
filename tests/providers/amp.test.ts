@@ -432,18 +432,16 @@ describe('AmpProvider', () => {
       expect(key).toBe('amp-quota');
     });
 
-    it('returns cached result when cache hits', async () => {
-      const cachedResult: ProviderQuota = {
-        provider: 'amp',
-        displayName: 'Amp',
-        available: true,
-        account: 'cached@email.com',
-      };
-
-      mockCacheGetOrFetch.mockResolvedValue(cachedResult);
+    it('parses the cached raw stdout payload on a cache hit', async () => {
+      // The cache stores raw `amp usage` stdout (not a built quota); buildQuota
+      // parses it on the way out.
+      mockCacheGetOrFetch.mockResolvedValue(
+        ['Signed in as cached@email.com', 'Amp Free: $5.00/$5.00 remaining'].join('\n'),
+      );
 
       const result = await provider.getQuota();
       expect(result.account).toBe('cached@email.com');
+      expect(result.available).toBe(true);
     });
   });
 

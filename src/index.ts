@@ -39,6 +39,13 @@ async function main() {
     process.exit(0);
   }
 
+  // Handle version
+  if (options.command === 'version') {
+    const { default: pkg } = await import('../package.json');
+    console.log(pkg.version);
+    process.exit(0);
+  }
+
   // Handle menu
   if (options.command === 'menu') {
     await runTui();
@@ -143,6 +150,12 @@ async function main() {
     logger.info('Cache invalidated');
   }
 
+  if (options.watch) {
+    const { startWatch } = await import('./watch');
+    await startWatch({ provider: options.provider, intervalMs: options.intervalSeconds * 1000 });
+    return;
+  }
+
   // Load settings
   const settings = await loadSettings();
 
@@ -150,8 +163,8 @@ async function main() {
   let quotas: AllQuotas;
 
   if (options.provider) {
-    // If provider is disabled in waybar settings, output empty (hidden module)
-    if (!settings.waybar.providers.includes(options.provider)) {
+    // Waybar: provider disabled in settings → hidden module. (json mode bypasses this gate.)
+    if (options.format !== 'json' && !settings.waybar.providers.includes(options.provider)) {
       console.log(JSON.stringify({ text: '', tooltip: '', class: APP_HIDDEN_CLASS }));
       process.exit(0);
     }
@@ -169,9 +182,15 @@ async function main() {
     quotas = await getAllQuotas();
 
     // Filter by settings for waybar output
-    if (options.command === 'waybar') {
+    if (options.command === 'waybar' && options.format !== 'json') {
       quotas.providers = quotas.providers.filter((p) => settings.waybar.providers.includes(p.provider));
     }
+  }
+
+  if (options.format === 'json') {
+    const { toJsonOutput } = await import('./formatters/json');
+    console.log(JSON.stringify(toJsonOutput(quotas)));
+    process.exit(0);
   }
 
   const mode = settings.waybar.displayMode;

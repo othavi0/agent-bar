@@ -104,18 +104,21 @@ export class ClaudeProvider implements Provider {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'anthropic-beta': CONFIG.api.claude.betaHeader,
+              'User-Agent': CONFIG.api.claude.userAgent,
             },
             signal: controller.signal,
           });
-
-          clearTimeout(timeout);
 
           if (!response.ok) {
             // keep non-200 out of cache
             throw new Error(`Claude API error: ${response.status}`);
           }
 
-          return await response.json();
+          // Keep the abort timer armed through the body read: a server that
+          // sends headers fast then stalls the body would otherwise hang.
+          const data = await response.json();
+          clearTimeout(timeout);
+          return data;
         },
         CONFIG.cache.ttlMs,
       );

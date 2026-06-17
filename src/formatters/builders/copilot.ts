@@ -2,7 +2,7 @@ import { getCopilotExtra } from '../../providers/extras';
 import type { CopilotQuotaSnapshot, ProviderQuota } from '../../providers/types';
 import { BOX } from '../../theme';
 import { barSegments, colorForDisplay, indicatorSegments, type Line } from '../segments';
-import { formatEta, formatPercent, formatResetTime, toDisplay } from '../shared';
+import { formatEta, formatPercent, formatResetTime, toWindowDisplay } from '../shared';
 import { buildFooterLine, labelLine, raw, vLine } from './shared';
 import type { BuildOptions } from './types';
 
@@ -30,25 +30,6 @@ function formatRawPercent(value: number): string {
 function boundedPercent(value: number | null): number | null {
   if (value === null) return null;
   return Math.max(0, Math.min(100, value));
-}
-
-function copilotUsedPercent(snapshot: CopilotQuotaSnapshot | undefined): number | null {
-  if (!snapshot || snapshot.isUnlimitedEntitlement || snapshot.entitlementRequests <= 0) {
-    return null;
-  }
-  return (snapshot.usedRequests / snapshot.entitlementRequests) * 100;
-}
-
-function copilotDisplayValue(
-  snapshot: CopilotQuotaSnapshot | undefined,
-  remaining: number | null,
-  mode: BuildOptions['mode'],
-): number | null {
-  if (mode === 'used') {
-    const used = copilotUsedPercent(snapshot);
-    if (used !== null) return used;
-  }
-  return toDisplay(remaining, mode);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +132,7 @@ export function buildCopilot(p: ProviderQuota, options: BuildOptions): Line[] {
         const snapshot = snapshots[bucket];
         const window = p.models?.[name];
         const rem = window?.remaining ?? null;
-        const disp = copilotDisplayValue(snapshot, rem, mode);
+        const disp = toWindowDisplay(window, mode);
         const boundedDisp = boundedPercent(disp);
 
         // ETA text: '→ ETA (time)' when resetsAt is known, '→ N/A' otherwise

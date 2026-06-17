@@ -46,6 +46,10 @@ export const CONFIG = {
     claude: {
       usageUrl: 'https://api.anthropic.com/api/oauth/usage',
       betaHeader: 'oauth-2025-04-20',
+      // The OAuth usage endpoint is Claude Code's own undocumented endpoint.
+      // Requests without a `claude-code/<version>` User-Agent land in a stricter
+      // rate-limit bucket and hit persistent 429s. Mimic the expected client.
+      userAgent: 'claude-code/2.1.179',
     },
   },
 

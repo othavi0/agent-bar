@@ -12,6 +12,28 @@ mock.module('../src/logger', () => ({
 
 import { parseArgs, showHelp } from '../src/cli';
 
+function expectExit1(args: string[], needle: string) {
+  const origExit = process.exit;
+  const origErr = console.error;
+  const codes: number[] = [];
+  const errs: string[] = [];
+  process.exit = ((c?: number) => {
+    codes.push(c ?? 0);
+    throw new Error('__exit__');
+  }) as typeof process.exit;
+  console.error = (...a: unknown[]) => {
+    errs.push(a.join(' '));
+  };
+  try {
+    expect(() => parseArgs(args)).toThrow('__exit__');
+    expect(codes).toEqual([1]);
+    expect(errs.join('\n')).toContain(needle);
+  } finally {
+    process.exit = origExit;
+    console.error = origErr;
+  }
+}
+
 describe('parseArgs', () => {
   // -----------------------------------------------------------------------
   // Default behavior
@@ -92,6 +114,11 @@ describe('parseArgs', () => {
       const opts = parseArgs(['action-right', 'claude']);
       expect(opts.command).toBe('action-right');
       expect(opts.provider).toBe('claude');
+    });
+
+    it('parses --version and -V', () => {
+      expect(parseArgs(['--version']).command).toBe('version');
+      expect(parseArgs(['-V']).command).toBe('version');
     });
   });
 
@@ -222,6 +249,32 @@ describe('unknown commands', () => {
     }
   });
 
+  it('exits 1 on a two-word subcommand missing its second word', () => {
+    const originalExit = process.exit;
+    const originalError = console.error;
+    const exitCalls: number[] = [];
+    const errors: string[] = [];
+
+    process.exit = ((code?: number) => {
+      exitCalls.push(code ?? 0);
+      throw new Error('__exit__');
+    }) as typeof process.exit;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.join(' '));
+    };
+
+    try {
+      expect(() => parseArgs(['assets'])).toThrow('__exit__');
+      expect(() => parseArgs(['export'])).toThrow('__exit__');
+      expect(exitCalls).toEqual([1, 1]);
+      expect(errors.join('\n')).toContain('assets install');
+      expect(errors.join('\n')).toContain('waybar-modules');
+    } finally {
+      process.exit = originalExit;
+      console.error = originalError;
+    }
+  });
+
   it('does not exit on unknown flag (warn only)', () => {
     const originalExit = process.exit;
     let exited = false;
@@ -236,6 +289,64 @@ describe('unknown commands', () => {
       expect(opts.command).toBe('waybar');
     } finally {
       process.exit = originalExit;
+    }
+  });
+});
+
+describe('output format flags', () => {
+  it('defaults format to waybar, watch false, interval 60', () => {
+    const o = parseArgs([]);
+    expect(o.format).toBe('waybar');
+    expect(o.watch).toBe(false);
+    expect(o.intervalSeconds).toBe(60);
+  });
+
+  it('parses --format json', () => {
+    expect(parseArgs(['--format', 'json']).format).toBe('json');
+  });
+
+  it('--watch implies json', () => {
+    const o = parseArgs(['--watch']);
+    expect(o.watch).toBe(true);
+    expect(o.format).toBe('json');
+  });
+
+  it('parses --interval', () => {
+    expect(parseArgs(['--watch', '--interval', '30']).intervalSeconds).toBe(30);
+  });
+
+  it('exits 1 on invalid --format', () => {
+    expectExit1(['--format', 'xml'], '--format must be');
+  });
+
+  it('exits 1 on invalid --interval', () => {
+    expectExit1(['--watch', '--interval', 'abc'], '--interval must be');
+  });
+
+  it('exits 1 on --watch with explicit --format waybar', () => {
+    expectExit1(['--watch', '--format', 'waybar'], '--watch requires --format json');
+  });
+
+  it('exits 1 on --interval 1.5 (non-integer)', () => {
+    expectExit1(['--watch', '--interval', '1.5'], '--interval must be');
+  });
+
+  it('exits 1 on --interval 0', () => {
+    expectExit1(['--watch', '--interval', '0'], '--interval must be');
+  });
+
+  it('warns (no exit) on --interval without --watch', () => {
+    const origErr = console.error;
+    const errs: string[] = [];
+    console.error = (...a: unknown[]) => {
+      errs.push(a.join(' '));
+    };
+    try {
+      const o = parseArgs(['--interval', '30']);
+      expect(o.watch).toBe(false);
+      expect(errs.join('\n')).toContain('--interval has no effect without --watch');
+    } finally {
+      console.error = origErr;
     }
   });
 });

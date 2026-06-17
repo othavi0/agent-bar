@@ -1,4 +1,4 @@
-import { mkdir, unlink } from 'fs/promises';
+import { mkdir, rename, unlink } from 'fs/promises';
 import { join } from 'path';
 import { CONFIG } from './config';
 import { logger } from './logger';
@@ -77,7 +77,13 @@ export class Cache {
     };
 
     try {
-      await Bun.write(path, JSON.stringify(entry, null, 2));
+      // Atomic write: each provider runs as a separate `agent-bar --provider X`
+      // process, so two Waybar polls can write the same key concurrently. Write
+      // to a unique temp file then rename (atomic on the same filesystem) so a
+      // crash or concurrent writer never leaves a partially-written cache file.
+      const tmp = `${path}.${process.pid}.tmp`;
+      await Bun.write(tmp, JSON.stringify(entry, null, 2));
+      await rename(tmp, path);
       logger.debug('Cache write', { key, ttlMs });
     } catch (error) {
       logger.error('Cache write error', { key, error });

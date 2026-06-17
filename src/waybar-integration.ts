@@ -112,38 +112,107 @@ interface RewriteArrayResult {
   changed: boolean;
 }
 
+/** Advance past a JSON string literal; `i` points at the opening quote. Returns the index just after the closing quote. */
+function skipString(content: string, i: number): number {
+  i += 1;
+  while (i < content.length) {
+    const c = content[i];
+    if (c === '\\') {
+      i += 2;
+      continue;
+    }
+    if (c === '"') {
+      return i + 1;
+    }
+    i += 1;
+  }
+  return i;
+}
+
+/**
+ * Find the `]` that closes the `[` at `openIdx`, honoring nested brackets,
+ * string literals, and JSONC comments. Returns -1 if unbalanced.
+ *
+ * A flat non-greedy regex (`\[([\s\S]*?)\]`) stops at the FIRST `]`, which
+ * truncates and corrupts the config when an array element contains a nested
+ * `]` (e.g. an inline object with its own array). This scanner is exact.
+ */
+function findMatchingBracket(content: string, openIdx: number): number {
+  let depth = 0;
+  let i = openIdx;
+  while (i < content.length) {
+    const c = content[i];
+    if (c === '"') {
+      i = skipString(content, i);
+      continue;
+    }
+    if (c === '/' && content[i + 1] === '/') {
+      const nl = content.indexOf('\n', i);
+      i = nl === -1 ? content.length : nl;
+      continue;
+    }
+    if (c === '/' && content[i + 1] === '*') {
+      const end = content.indexOf('*/', i + 2);
+      i = end === -1 ? content.length : end + 2;
+      continue;
+    }
+    if (c === '[') {
+      depth += 1;
+    } else if (c === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        return i;
+      }
+    }
+    i += 1;
+  }
+  return -1;
+}
+
 function rewriteStringArrayProperty(
   content: string,
   propertyName: string,
   transform: (values: string[]) => string[],
 ): RewriteArrayResult {
-  const pattern = new RegExp(`("${escapeRegex(propertyName)}"\\s*:\\s*)\\[([\\s\\S]*?)\\]`, 'g');
+  const keyPattern = new RegExp(`"${escapeRegex(propertyName)}"\\s*:\\s*\\[`, 'g');
 
-  let found = false;
-  let changed = false;
+  let match: RegExpExecArray | null = keyPattern.exec(content);
+  while (match !== null) {
+    const matchStart = match.index;
+    const lineStart = content.lastIndexOf('\n', matchStart) + 1;
+    const linePrefix = content.slice(lineStart, matchStart);
 
-  const rewritten = content.replace(
-    pattern,
-    (full: string, prefix: string, body: string, offset: number, source: string): string => {
-      found = true;
-      const lineStart = source.lastIndexOf('\n', offset) + 1;
-      const linePrefix = source.slice(lineStart, offset);
-      const indentMatch = linePrefix.match(/^\s*/);
-      const indent = indentMatch ? indentMatch[0] : '';
+    // Skip occurrences sitting inside a `//` line comment so commented-out
+    // examples are never rewritten.
+    if (linePrefix.includes('//')) {
+      match = keyPattern.exec(content);
+      continue;
+    }
 
-      const currentValues = parseQuotedStrings(body);
-      const nextValues = transform(currentValues);
+    const openIdx = matchStart + match[0].length - 1; // index of the `[`
+    const closeIdx = findMatchingBracket(content, openIdx);
+    if (closeIdx === -1) {
+      match = keyPattern.exec(content);
+      continue;
+    }
 
-      if (arraysEqual(currentValues, nextValues)) {
-        return full;
-      }
+    const body = content.slice(openIdx + 1, closeIdx);
+    const currentValues = parseQuotedStrings(body);
+    const nextValues = transform(currentValues);
 
-      changed = true;
-      return `${prefix}${formatStringArray(nextValues, indent)}`;
-    },
-  );
+    const indentMatch = linePrefix.match(/^\s*/);
+    const indent = indentMatch ? indentMatch[0] : '';
 
-  return { content: rewritten, found, changed };
+    if (arraysEqual(currentValues, nextValues)) {
+      return { content, found: true, changed: false };
+    }
+
+    const prefix = content.slice(matchStart, openIdx); // `"prop"\s*:\s*`
+    const rewritten = `${content.slice(0, matchStart)}${prefix}${formatStringArray(nextValues, indent)}${content.slice(closeIdx + 1)}`;
+    return { content: rewritten, found: true, changed: true };
+  }
+
+  return { content, found: false, changed: false };
 }
 
 function insertPropertyIntoFirstObject(content: string, propertyText: string): string {
@@ -377,6 +446,9 @@ export function removeWaybarIntegration(options: RemoveWaybarIntegrationOptions 
     const nextConfig = modulesResult.content;
     configChanged = includeResult.changed || modulesResult.changed;
     if (configChanged) {
+      // Back up before rewriting, mirroring applyWaybarIntegration — removal
+      // mutates the user's config and must be recoverable.
+      backupIfNeeded(paths.waybarConfigPath);
       writeText(paths.waybarConfigPath, nextConfig);
     }
   }
@@ -387,6 +459,7 @@ export function removeWaybarIntegration(options: RemoveWaybarIntegrationOptions 
     const styleResult = removeStyleImport(currentStyle);
     styleChanged = styleResult.changed;
     if (styleChanged) {
+      backupIfNeeded(paths.waybarStylePath);
       writeText(paths.waybarStylePath, styleResult.content);
     }
   }
