@@ -10,7 +10,7 @@ export function toDisplay(remaining: number | null, mode: DisplayMode): number |
 
 /**
  * Display value for a quota window, honoring a provider-supplied `used` percent
- * (Copilot) when present. Falls back to `100 - remaining` in `used` mode.
+ * when present. Falls back to `100 - remaining` in `used` mode.
  */
 export function toWindowDisplay(
   window: { remaining: number; used?: number | null } | undefined,

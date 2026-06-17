@@ -51,7 +51,7 @@ describe('waybar config patcher', () => {
     // user modules preserved, managed appended
     expect(parsed['modules-right']).toContain('clock');
     expect(parsed['modules-right']).toContain('battery');
-    for (const id of getAppModuleIDs(['claude', 'codex', 'copilot', 'amp'])) {
+    for (const id of getAppModuleIDs(['claude', 'codex', 'amp'])) {
       expect(parsed['modules-right']).toContain(id);
     }
     // include preserved + managed include added
@@ -108,7 +108,7 @@ describe('waybar config patcher', () => {
     expect(removeResult.configChanged).toBe(true);
 
     const finalConfig = JSON.parse(stripJsonc(readFileSync(paths.waybarConfigPath, 'utf8')));
-    for (const id of getAppModuleIDs(['claude', 'codex', 'copilot', 'amp'])) {
+    for (const id of getAppModuleIDs(['claude', 'codex', 'amp'])) {
       expect(finalConfig['modules-right']).not.toContain(id);
     }
     expect(finalConfig['modules-right']).toContain('clock');

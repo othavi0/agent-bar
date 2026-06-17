@@ -42,8 +42,8 @@ Settings schema version: `2`.
 
 Defaults:
 
-- providers: `claude`, `codex`, `copilot`, `amp`
-- provider order: `claude`, `codex`, `copilot`, `amp`
+- providers: `claude`, `codex`, `amp`
+- provider order: `claude`, `codex`, `amp`
 - separator style: `gap`
 - display mode: `remaining`
 - show percentage: `true`
@@ -57,8 +57,9 @@ Normalization:
 - invalid separator, display, or window-policy values fall back to defaults
 - if the normalized form differs from the stored file, it is written back to disk
 
-Schema version 1 settings files are migrated to version 2 automatically on
-load.
+Older settings files are normalized to schema version 2 on load: the version is
+stamped and unknown providers are dropped (e.g. a `copilot` entry from a previous
+version is removed).
 
 ## Cache
 
@@ -76,5 +77,4 @@ them; it does not store provider tokens.
 | --- | --- |
 | Claude | `~/.claude/.credentials.json` |
 | Codex | `~/.codex/auth.json`, recent `~/.codex/sessions/**` rate-limit events, or `codex app-server` |
-| Copilot | official Copilot CLI/config |
 | Amp | official `amp` CLI |

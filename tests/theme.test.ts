@@ -99,10 +99,6 @@ describe('PROVIDER_HEX', () => {
     expect(PROVIDER_HEX.codex).toBe(ONE_DARK.green);
   });
 
-  it('maps copilot to bright blue', () => {
-    expect(PROVIDER_HEX.copilot).toBe(ONE_DARK.brightBlue);
-  });
-
   it('maps amp to magenta', () => {
     expect(PROVIDER_HEX.amp).toBe(ONE_DARK.magenta);
   });
@@ -115,10 +111,6 @@ describe('PROVIDER_ANSI', () => {
 
   it('maps codex to green ANSI', () => {
     expect(PROVIDER_ANSI.codex).toBe(ANSI.green);
-  });
-
-  it('maps copilot to bright blue ANSI', () => {
-    expect(PROVIDER_ANSI.copilot).toBe(ANSI.brightBlue);
   });
 
   it('maps amp to magenta ANSI', () => {

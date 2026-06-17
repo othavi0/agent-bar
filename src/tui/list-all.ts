@@ -2,7 +2,6 @@ import * as p from '@clack/prompts';
 import { buildAmp as buildAmpLines } from '../formatters/builders/amp';
 import { buildClaude } from '../formatters/builders/claude';
 import { buildCodex as buildCodexLines } from '../formatters/builders/codex';
-import { buildCopilot as buildCopilotLines } from '../formatters/builders/copilot';
 import { normalizePlanLabel } from '../formatters/shared';
 import { resolveCodexViewModel } from '../formatters/view-model';
 import { getAllQuotas } from '../providers';
@@ -53,19 +52,6 @@ function buildAmpTui(provider: ProviderQuota): string[] {
   return rendered.split('\n');
 }
 
-function buildCopilotTui(provider: ProviderQuota): string[] {
-  const rendered = renderColorize(
-    buildCopilotLines(provider, {
-      mode: 'remaining',
-      headerTitle: 'Copilot',
-      headerWidth: 56,
-      labelColor: 'blue',
-      footer: undefined,
-    }),
-  );
-  return rendered.split('\n');
-}
-
 export async function showListAll(): Promise<void> {
   const s = p.spinner();
   s.start('Loading quotas...');
@@ -86,9 +72,6 @@ export async function showListAll(): Promise<void> {
         break;
       case 'codex':
         sections.push(buildCodexTui(provider));
-        break;
-      case 'copilot':
-        sections.push(buildCopilotTui(provider));
         break;
       case 'amp':
         sections.push(buildAmpTui(provider));

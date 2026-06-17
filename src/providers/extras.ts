@@ -1,4 +1,4 @@
-import type { AmpQuotaExtra, ClaudeQuotaExtra, CodexQuotaExtra, CopilotQuotaExtra, ProviderQuota } from './types';
+import type { AmpQuotaExtra, ClaudeQuotaExtra, CodexQuotaExtra, ProviderQuota } from './types';
 
 // These getters concentrate the `extra` casts that were previously scattered across
 // the formatters. The cast is unavoidable: `ProviderQuota` includes `GenericQuota`,
@@ -18,9 +18,4 @@ export function getCodexExtra(q: ProviderQuota): CodexQuotaExtra | undefined {
 /** Returns the Amp-specific `extra` payload, or undefined for other providers. */
 export function getAmpExtra(q: ProviderQuota): AmpQuotaExtra | undefined {
   return q.provider === 'amp' ? (q.extra as AmpQuotaExtra | undefined) : undefined;
-}
-
-/** Returns the Copilot-specific `extra` payload, or undefined for other providers. */
-export function getCopilotExtra(q: ProviderQuota): CopilotQuotaExtra | undefined {
-  return q.provider === 'copilot' ? (q.extra as CopilotQuotaExtra | undefined) : undefined;
 }

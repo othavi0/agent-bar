@@ -70,7 +70,6 @@ throwing. Keep messages stable; tests assert exact strings in several places.
 | --- | --- |
 | Claude | reads Claude Code OAuth credentials and fetches Anthropic usage API |
 | Codex | prefers `codex app-server`, falls back to recent session `.jsonl` rate-limit events |
-| Copilot | uses the official Copilot CLI account quota endpoint |
 | Amp | runs `amp usage` and parses stdout |
 
 ## Standard Not Logged In Message

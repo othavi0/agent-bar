@@ -36,7 +36,6 @@ export const ONE_DARK = {
 export const PROVIDER_HEX = {
   claude: ONE_DARK.orange,
   codex: ONE_DARK.green,
-  copilot: ONE_DARK.brightBlue,
   amp: ONE_DARK.magenta,
 } as const;
 
@@ -64,7 +63,6 @@ export const ANSI = {
 export const PROVIDER_ANSI = {
   claude: ANSI.orange,
   codex: ANSI.green,
-  copilot: ANSI.brightBlue,
   amp: ANSI.magenta,
 } as const;
 

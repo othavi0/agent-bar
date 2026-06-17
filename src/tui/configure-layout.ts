@@ -18,7 +18,6 @@ const SEPARATOR_STYLES = [
 const PROVIDER_NAMES: Record<string, string> = {
   claude: 'Claude',
   codex: 'Codex',
-  copilot: 'Copilot',
   amp: 'Amp',
 };
 

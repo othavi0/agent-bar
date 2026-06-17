@@ -1,14 +1,12 @@
 export { AmpProvider } from './amp';
 export { ClaudeProvider } from './claude';
 export { CodexProvider } from './codex';
-export { CopilotProvider } from './copilot';
 export { getRegisteredProvider, getRegisteredProviderIds, getRegisteredProviders, registerProvider } from './registry';
 export * from './types';
 
 // Side-effect imports: each provider self-registers via registerProvider()
 import './claude';
 import './codex';
-import './copilot';
 import './amp';
 
 import { logger } from '../logger';

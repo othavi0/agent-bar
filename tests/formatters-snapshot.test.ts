@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { formatForTerminal } from '../src/formatters/terminal';
 import { formatForWaybar, formatProviderForWaybar } from '../src/formatters/waybar';
-import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota, CopilotQuota, ProviderQuota } from '../src/providers/types';
+import type { AllQuotas, AmpQuota, ClaudeQuota, CodexQuota, ProviderQuota } from '../src/providers/types';
 
 // ---------------------------------------------------------------------------
 // Sanitize dynamic values so snapshots remain stable across runs.
@@ -125,33 +125,6 @@ function ampError(): AmpQuota {
 
 function ampWithAccount(): AmpQuota {
   return { ...ampHealthy(), account: 'user@example.com' };
-}
-
-function copilotWithAccount(): CopilotQuota {
-  return {
-    provider: 'copilot',
-    displayName: 'Copilot',
-    available: true,
-    account: 'dev@example.com',
-    primary: { remaining: 80, resetsAt: FIXED_RESET },
-    models: {
-      'Premium requests': { remaining: 80, resetsAt: FIXED_RESET },
-    },
-    extra: {
-      quotaSnapshots: {
-        premium_interactions: {
-          isUnlimitedEntitlement: false,
-          entitlementRequests: 300,
-          usedRequests: 60,
-          usageAllowedWithExhaustedQuota: false,
-          overage: 0,
-          overageAllowedWithExhaustedQuota: false,
-          remainingPercentage: 80,
-          resetDate: FIXED_RESET,
-        },
-      },
-    },
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -409,11 +382,6 @@ describe('Terminal formatter snapshots — account field (C1)', () => {
     const result = sanitize(formatForTerminal(wrap(ampWithAccount())));
     expect(result).toMatchSnapshot();
   });
-
-  it('renders Copilot with account', () => {
-    const result = sanitize(formatForTerminal(wrap(copilotWithAccount())));
-    expect(result).toMatchSnapshot();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -427,13 +395,6 @@ describe('Waybar formatter snapshots — account field (C1)', () => {
     expect(sanitize(out.tooltip)).toMatchSnapshot();
     expect(out.class).toMatchSnapshot();
   });
-
-  it('renders Copilot with account', () => {
-    const out = formatForWaybar(wrap(copilotWithAccount()));
-    expect(sanitize(out.text)).toMatchSnapshot();
-    expect(sanitize(out.tooltip)).toMatchSnapshot();
-    expect(out.class).toMatchSnapshot();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -443,13 +404,6 @@ describe('Waybar formatter snapshots — account field (C1)', () => {
 describe('formatProviderForWaybar snapshots — account field (C1)', () => {
   it('renders Amp with account', () => {
     const out = formatProviderForWaybar(ampWithAccount());
-    expect(sanitize(out.text)).toMatchSnapshot();
-    expect(sanitize(out.tooltip)).toMatchSnapshot();
-    expect(out.class).toMatchSnapshot();
-  });
-
-  it('renders Copilot with account', () => {
-    const out = formatProviderForWaybar(copilotWithAccount());
     expect(sanitize(out.text)).toMatchSnapshot();
     expect(sanitize(out.tooltip)).toMatchSnapshot();
     expect(out.class).toMatchSnapshot();
