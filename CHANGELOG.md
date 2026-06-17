@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-06-17
+
+### Removed
+- **Provider Copilot removido por inteiro** (breaking). A interface
+  `--headless --stdio` do Copilot CLI é oculta/frágil (some sem aviso em
+  auto-updates) e não estava em uso. Saíram: provider, CLI locator, builder,
+  ícone, tipos `CopilotQuota*`, paths de config, registries (tooltip/terminal/
+  TUI), entrada em `WAYBAR_PROVIDERS`, e a migração de settings v1→v2 que só
+  existia para injetar Copilot. Providers suportados agora: Claude, Codex, Amp.
+
+### Added
+- **Notificações desktop de quota baixa/crítica** via `notify-send`: alerta
+  quando qualquer janela de quota cruza 90% usado (low) ou 95% (critical),
+  incluindo as semanais por-modelo do Claude. Piggyback no poll do Waybar com
+  dedup por estado (`~/.cache/agent-bar/notify-<provider>.json`), re-arma ao
+  recuperar, escala low→critical. Best-effort: não faz nada se `notify-send`
+  estiver ausente e só dispara quando a saída é consumida pelo Waybar.
+  Controlado por `notify.enabled` no settings.
+
+### Breaking
+- O provider `copilot` não existe mais. Settings que listavam `copilot` têm a
+  entrada removida automaticamente na carga; nenhuma ação necessária.
+- **Notificações vêm ligadas por padrão** (`notify.enabled: true`). Após
+  atualizar, alertas de quota baixa passam a aparecer sem opt-in — desligue com
+  `"notify": { "enabled": false }` em `~/.config/agent-bar/settings.json`.
+
 ## [4.2.0] - 2026-06-17
 
 ### Added
