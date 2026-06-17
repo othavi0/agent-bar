@@ -150,6 +150,12 @@ async function main() {
     logger.info('Cache invalidated');
   }
 
+  if (options.watch) {
+    const { startWatch } = await import('./watch');
+    await startWatch({ provider: options.provider, intervalMs: options.intervalSeconds * 1000 });
+    return;
+  }
+
   // Load settings
   const settings = await loadSettings();
 
