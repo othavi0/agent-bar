@@ -39,24 +39,15 @@ export async function startWatch(opts: StartWatchOptions): Promise<void> {
     process.stderr.write('[agent-bar] watch mode: output is NDJSON — pipe to a consumer\n');
   }
 
-  let stopping = false;
-  const stop = () => {
-    stopping = true;
-    process.exit(0);
-  };
-  process.on('SIGTERM', stop);
-  process.on('SIGINT', stop);
-
   const tick = async (): Promise<void> => {
-    if (stopping) return;
     try {
       const quotas = await fetchQuotas(opts.provider);
-      process.stdout.write(buildWatchLine(quotas), () => {
-        if (!stopping) setTimeout(tick, opts.intervalMs);
+      process.stdout.write(buildWatchLine(quotas), (writeErr?: Error | null) => {
+        if (!writeErr) setTimeout(tick, opts.intervalMs);
       });
     } catch (error) {
       logger.error('watch tick failed', { error });
-      if (!stopping) setTimeout(tick, opts.intervalMs);
+      setTimeout(tick, opts.intervalMs);
     }
   };
 
