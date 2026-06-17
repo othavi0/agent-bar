@@ -40,15 +40,37 @@ formatos não-JSON, qualquer mudança em providers ou cache.
 | `--watch` | **Implica `--format json`.** Processo longo; emite 1 envelope por linha (NDJSON) a cada intervalo. |
 | `--interval <segundos>` | Só com `--watch`; default **60**. Inteiro positivo. |
 
-Regras de combinação:
+Regras de combinação (validadas em um **bloco pós-parse** no fim de `parseArgs`,
+não dentro do `switch` sequencial — a checagem cruza flags):
 
 - `--watch` sem `--format` → assume `json`.
 - `--watch` com `--format waybar` explícito → erro stderr + exit 1
   (`--watch requires --format json`).
-- `--interval` fora de `--watch` → ignorado (sem efeito; não é erro).
+- `--interval` fora de `--watch` → **warning em stderr** (`--interval has no
+  effect without --watch`); não-fatal.
 - `--interval` não-numérico ou ≤ 0 → erro stderr + exit 1.
 - `--format` com valor inválido → erro stderr + exit 1.
 - Funciona com `--provider X` (single) ou sem (todos).
+
+`--format` é **ortogonal ao `command`**: `command` continua resolvendo pra
+`'waybar'` por default; o branch de output decide pela flag `options.format`,
+não pelo `command`. Hoje `--format` é uma option desconhecida que cai no
+`default` do parser e **degrada silenciosamente pra Waybar** — a implementação
+precisa adicionar os cases explicitamente (ver CliOptions abaixo).
+
+### CliOptions (parser)
+
+`CliOptions` em `src/cli.ts` ganha:
+
+```ts
+format: 'waybar' | 'json'; // default 'waybar'
+watch: boolean;            // default false
+intervalSeconds: number;   // default 60 (lido só em --watch)
+```
+
+Novos cases no `switch`: `--format` (usa `requireNextArg`, valida `waybar|json`),
+`--watch` (seta `watch=true`), `--interval` (usa `requireNextArg`, `parseInt`,
+valida `> 0`). O bloco pós-parse aplica as regras de combinação acima.
 
 Exemplos:
 
@@ -78,8 +100,7 @@ Envelope **sempre** o mesmo shape — mesmo com 1 provider (array de 1 elemento)
       "primary":   { "remaining": 30, "used": 70, "resetsAt": "2026-06-17T20:09:59Z", "windowMinutes": 300 },
       "secondary": { "remaining": 65, "resetsAt": "2026-06-19T22:59:59Z" },
       "models":    { "Sonnet": { "remaining": 89, "resetsAt": "2026-06-19T22:59:59Z" } },
-      "extra":     { "weeklyModels": { "Sonnet": { "remaining": 89, "resetsAt": "…" } } },
-      "error": null
+      "extra":     { "weeklyModels": { "Sonnet": { "remaining": 89, "resetsAt": "2026-06-19T22:59:59Z" } } }
     },
     {
       "provider": "amp",
@@ -126,16 +147,32 @@ interface JsonOutput {
 }
 ```
 
-Campos omitidos quando ausentes (não emitir `undefined`). `error: null` é
-aceitável no exemplo, mas a implementação **omite** `error` quando não há erro
-(consistente com o resto: campo ausente = sem valor). Documentar isso.
+**Convenção de ausência:** campo **omitido** quando ausente (nunca `null`
+explícito, nunca `undefined` serializado). Inclui `error` — provider sem erro
+não tem a chave `error` (consumidor checa `'error' in p`, não `p.error !== null`).
+
+**Estabilidade / `schemaVersion`:** os campos top-level e `primary`/`secondary`/
+`models` (tipo `JsonWindow`) são o **contrato estável** coberto pelo
+`schemaVersion`. O bloco `extra` espelha estruturas internas provider-specific
+(`weeklyModels`, `modelsDetailed` com `ModelWindows`, `extraUsage`, `meta`,
+`quotaSnapshots`) e é declarado **best-effort/instável**: pode mudar sem bump de
+`schemaVersion`. Documentar isso em destaque no `docs/json-output.md`.
+Política de bump: incrementar `schemaVersion` ao **remover** campo estável,
+**renomear**, ou **mudar o tipo/semântica** de um campo estável; **adicionar**
+campo opcional novo NÃO exige bump.
+
+**`fetchedAt`:** é o instante em que o agent-bar **produziu o snapshot** (a
+chamada `getAllQuotas`), não quando o dado foi buscado da rede. Em cache hit
+(comum em `--watch` com intervalo < TTL de 5min) o dado subjacente pode ser até
+~5min mais velho. Documentar essa semântica; expor idade real por-provider
+(`CacheEntry.fetchedAt`) fica para v2 (fora de escopo).
 
 ## Componentes
 
 | Arquivo | Mudança |
 | --- | --- |
 | `src/formatters/json.ts` (novo) | Puro, sem I/O. `toJsonOutput(quotas: AllQuotas): JsonOutput` e `toProviderOutput(p: ProviderQuota): JsonProvider`. **Cópia campo-a-campo explícita** (não spread), para que adicionar um campo interno NÃO vaze pro contrato sem decisão consciente. Esta é a fronteira de contrato. |
-| `src/index.ts` | Branch para `--format json` one-shot e para `--watch` (loop). Reusa `getAllQuotas()` / `getQuotaFor()`. |
+| `src/index.ts` | Branch para `--format json` one-shot e para `--watch` (loop). Reusa `getAllQuotas()` / `getQuotaFor()`. **Dois guards do caminho Waybar precisam ser desviados no modo json:** (1) o gate `if (!settings.waybar.providers.includes(options.provider))` que cospe o envelope *hidden* (atual `index.ts:152`) — pular quando `format==='json'`; (2) o filtro `if (options.command === 'waybar')` (atual `index.ts:172`) — passar a `if (options.command === 'waybar' && options.format !== 'json')`. Single-provider em json reusa o mesmo wrapping `{ providers: [quota], fetchedAt }` já feito pro Waybar (extrair helper para não duplicar). |
 | `src/cli.ts` | Parse de `--format`, `--watch`, `--interval`; validação; entradas no `--help`. Estende `CliOptions`. |
 | Providers, cache, settings, render-pango, builders | **Sem mudança.** |
 
@@ -159,22 +196,47 @@ parseArgs → format=json
 **watch:**
 
 ```
-emite imediatamente (tick 0), depois a cada `interval` segundos:
-  tick():
-    quotas = await (provider? getQuotaFor : getAllQuotas)
-    process.stdout.write(JSON.stringify(toJsonOutput(quotas)) + '\n')
-  loop com setTimeout reagendado APÓS cada tick terminar (evita overlap/drift
-  quando um fetch demora mais que o intervalo).
-  SIGTERM/SIGINT → para o timer e exit 0 (handlers já existem em index.ts).
+setup (uma vez):
+  process.stdout.on('error', e => { if (e.code === 'EPIPE') process.exit(0) })  // [H1]
+  se options.refresh → invalidar cache UMA vez antes do loop                     // [--refresh]
+  let stopping = false; SIGTERM/SIGINT → stopping = true; process.exit(0)
+
+tick():
+  quotas = await (provider ? wrap(getQuotaFor(p)) : getAllQuotas())
+  const line = JSON.stringify(toJsonOutput(quotas)) + '\n'   // linha ATÔMICA (1 write)
+  process.stdout.write(line, () => {                          // agenda no callback → backpressure-aware [M4]
+    if (!stopping) setTimeout(tick, intervalSeconds * 1000)
+  })
+
+start: tick()  // emite imediatamente (tick 0), depois reagenda
 ```
 
-- **Cache-aware** em ambos: `getAllQuotas`/`getQuotaFor` respeitam o cache (TTL
-  5min), então em watch com intervalo 60s a rede é tocada ~a cada 5min e os
-  ticks intermediários emitem dado cacheado. Sem hammer de API.
+- **Linha atômica:** cada tick faz **um** `write` da linha completa. Logo um
+  SIGTERM no meio do `await` só causa "falta a última linha", nunca uma linha
+  NDJSON parcial — não precisa esperar tick in-flight. [L5]
+- **EPIPE:** consumidor fechando o pipe (reload do bar, lock, logout) → handler
+  sai com 0 em vez de crash. [H1]
+- **Agendamento no callback do `write`** (não `setInterval`): serializa emissão
+  e scheduling e é sensível a backpressure; evita overlap/drift. [M4]
+- **`--interval` é um piso, não período exato:** cada provider tem timeout de
+  `PROVIDER_TIMEOUT_MS` (10s) + 1 retry; um tick lento pode levar ~21s, então o
+  período efetivo é `max(interval, duração do tick)`. Documentar no `--help` e na
+  doc; intervalos < ~10s não dão a cadência ingênua. [H3]
+- **`--refresh`** invalida o cache **uma vez** antes do loop (não por tick). [missing]
+- **`--verbose`** em watch emite debug por tick em **stderr** (stdout segue puro). [missing]
+
+Comum a one-shot e watch:
+
+- **Cache-aware:** `getAllQuotas`/`getQuotaFor` respeitam o cache (TTL 5min);
+  em watch com intervalo 60s a rede é tocada ~a cada 5min e os ticks
+  intermediários emitem dado cacheado. Sem hammer de API. O `inflight` Map do
+  `Cache` se limpa no `.then`/`.catch` → **sem leak** em processo longo. [missing]
 - **Seleção de providers:** json/watch emitem **todos os providers registrados**
-  (desacoplado de `settings.waybar.providers` — consumidor não-Waybar decide o
-  que mostrar). `--provider X` → envelope com 1 provider.
-- `fetchedAt` = momento do `getAllQuotas` daquele tick (já setado lá).
+  (desacoplado de `settings.waybar.providers`). `--provider X` → envelope com 1
+  provider (via `getQuotaFor` embrulhado em `AllQuotas`).
+- **TTY interativo:** rodar `agent-bar --watch` num terminal cospe NDJSON cru;
+  quando `process.stdout.isTTY`, emitir **uma** dica em stderr ("watch mode:
+  output is NDJSON — pipe to a consumer"). [missing]
 
 ## Tratamento de erro
 
@@ -197,39 +259,61 @@ emite imediatamente (tick 0), depois a cada `interval` segundos:
   - **ausência de Pango**: `expect(JSON.stringify(out)).not.toContain('<span')`;
   - mapeia primary/secondary/models/extra/used corretamente;
   - provider com erro: `available:false` + `error` presente, sem `primary`;
-  - campos ausentes são omitidos (não `undefined` serializado);
+  - provider OK: **chave `error` ausente** (`expect('error' in p).toBe(false)`),
+    não `null`; idem demais campos opcionais ausentes;
   - single (`--provider`) vs all.
 - **`tests/cli.test.ts`** (estende): parse de `--format json`, `--watch`
-  (implica json), `--interval N`; erros (`--format xpto`, `--interval abc`,
-  `--watch --format waybar`).
-- **watch**: extrair o corpo do tick numa função pura (`buildWatchLine` ou
-  `runTick`) e testá-la isolada; não testar `setTimeout`.
+  (implica json), `--interval N`; `--interval` sem `--watch` (warning, não erro);
+  erros (`--format xpto`, `--interval abc`, `--interval 0`, `--watch --format
+  waybar`).
+- **watch** (extrair `runTick()` puro que retorna a linha; não testar timers):
+  - `runTick` produz uma linha NDJSON válida terminada em `\n`;
+  - tick 0 emite imediatamente (chamar `runTick` uma vez sem timer);
+  - **não-overlap**: com `getAllQuotas` mockado com delay, garantir que o próximo
+    tick só agenda após o `write` callback (testar a função de agendamento, ou
+    documentar como limitação se inviável sem fake timers);
+  - **EPIPE**: simular `stdout` emitindo `error` com `code:'EPIPE'` → handler
+    chama `process.exit(0)` (spy em `process.exit`).
 - Regressão: `bun test && bun run typecheck && bun run lint` continuam verdes
   (matriz §2 do CLAUDE.md: contrato Waybar, formatters, cli).
 
 ## Docs
 
 - **`docs/json-output.md`** (novo): descrição do contrato; tabela de campos com
-  tipos e semântica; nota de estabilidade (`schemaVersion`, política de bump);
-  os modos (`--format json` one-shot, `--watch` NDJSON, `--interval`); **exemplo
-  QML Quickshell** — one-shot via `StdioCollector.onStreamFinished` + `JSON.parse`,
-  e stream via `Process` + `SplitParser` (delimitador `\n`) + `JSON.parse`,
-  lembrando que `command` é array (sem shell). Nota: plugin QML nativo do Omarchy
-  = passo futuro quando o v4 (Quickshell) sair.
+  tipos e semântica; **nota de estabilidade** (campos top-level + `JsonWindow`
+  são estáveis sob `schemaVersion`; `extra` é best-effort/instável — em destaque)
+  + política de bump (remover/renomear/mudar tipo de campo estável = bump;
+  adicionar opcional = não); semântica de `fetchedAt` (snapshot, não fetch);
+  os modos (`--format json` one-shot, `--watch` NDJSON, `--interval` como **piso**
+  com nota dos timeouts de provider); **exemplo QML Quickshell** — one-shot via
+  `StdioCollector.onStreamFinished` + `JSON.parse`, e stream via `Process` +
+  `SplitParser` (delimitador `\n`) + `JSON.parse`, lembrando que `command` é array
+  (sem shell). Nota: plugin QML nativo do Omarchy = passo futuro quando o v4
+  (Quickshell) sair.
 - Linkar em `README.md` (seção Docs) e `docs/README.md`.
 - Adicionar `docs/json-output.md` ao `files` do `package.json` (publicado no npm,
   como os outros docs) e ao teste `tests/package.test.ts`.
 
 ## Riscos e mitigações
 
+- **EPIPE no watch** (consumidor fecha o pipe) → `process.stdout.on('error')`
+  com saída 0 em EPIPE. [H1]
+- **`--format` degradar silenciosamente pra Waybar** (option desconhecida cai no
+  `default` do parser) → adicionar cases explícitos + bloco de validação. [H4]
+- **`--provider X` + json bater no gate de `waybar.providers`** (cospe envelope
+  hidden) → desviar os guards do `index.ts` no modo json. [H2/M7]
 - **Acoplamento do contrato ao tipo interno** → mapper com cópia campo-a-campo
-  explícita + `schemaVersion` + doc de estabilidade.
-- **Drift de intervalo / overlap em watch** → reagendar `setTimeout` após o tick
-  terminar (não `setInterval`).
-- **Vazamento de log no stdout em watch** → logger silent por default; teste de
-  ausência de Pango/ruído onde viável.
+  explícita + `schemaVersion` + `extra` marcado instável na doc.
+- **Drift/overlap/backpressure em watch** → agendar próximo tick no callback do
+  `write` (não `setInterval`); `--interval` é piso, documentado. [M4/H3]
+- **`fetchedAt` enganar em cache hit** → documentar que é hora do snapshot, não do
+  fetch de rede. [M3]
+- **Vazamento de log no stdout em watch** → logger silent por default; debug só
+  com `--verbose`, sempre em stderr.
 - **Pango vazar pro JSON** → o mapper parte de `ProviderQuota` (pré-render); teste
   explícito `not.toContain('<span')`.
+- **Divergência de seleção de providers** (json mostra desabilitados no Waybar) →
+  decisão consciente (consumidor não-Waybar é independente); documentar.
 
 ## Fora de escopo (futuro)
 
