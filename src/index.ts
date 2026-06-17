@@ -214,6 +214,13 @@ async function main() {
       } else {
         outputWaybar(quotas, mode);
       }
+
+      // Desktop notifications on low/critical quota (best-effort, after output so
+      // the bar updates promptly). Waybar path only — not terminal/json/watch.
+      if (settings.notify?.enabled) {
+        const { checkAndNotify } = await import('./notify');
+        await checkAndNotify(quotas);
+      }
       break;
   }
 }

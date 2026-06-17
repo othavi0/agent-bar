@@ -46,6 +46,8 @@ export interface Settings {
   models?: Record<string, string[]>;
   /** Per-provider window visibility policy. */
   windowPolicy?: Record<string, WindowPolicy>;
+  /** Desktop notifications when a quota window crosses low (>=90% used) or critical (>=95% used). */
+  notify?: { enabled: boolean };
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -62,6 +64,7 @@ const DEFAULT_SETTINGS: Settings = {
   windowPolicy: {
     codex: 'both',
   },
+  notify: { enabled: true },
 };
 
 function isValidDisplayMode(value: unknown): value is DisplayMode {
@@ -83,6 +86,7 @@ function normalizeSettings(data: Partial<Settings> | undefined): Settings {
     tooltip: { ...DEFAULT_SETTINGS.tooltip, ...data?.tooltip },
     models: { ...DEFAULT_SETTINGS.models, ...data?.models },
     windowPolicy: { ...DEFAULT_SETTINGS.windowPolicy, ...data?.windowPolicy },
+    notify: { enabled: data?.notify?.enabled !== false },
   };
 
   // Validate separators
