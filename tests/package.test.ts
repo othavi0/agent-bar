@@ -36,6 +36,7 @@ describe('npm package contract', () => {
       'docs/waybar-contract.md',
       'docs/troubleshooting.md',
       'docs/new-provider.md',
+      'docs/json-output.md',
       'docs/assets/agent-bar-banner.png',
     ]);
   });

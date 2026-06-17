@@ -13,6 +13,7 @@ Operational docs for `agent-bar`.
 
 - [Waybar contract](waybar-contract.md) — generated modules, CSS, assets, and classes.
 - [New provider guide](new-provider.md) — provider implementation checklist.
+- [JSON output](json-output.md) — `--format json` / `--watch` contract for non-Waybar bars (Quickshell, Eww).
 
 ## Source Of Truth
 

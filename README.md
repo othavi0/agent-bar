@@ -74,3 +74,4 @@ and tells you to use `git pull`.
 - [Waybar contract](docs/waybar-contract.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [New provider guide](docs/new-provider.md)
+- [JSON output (Quickshell/Eww)](docs/json-output.md)
