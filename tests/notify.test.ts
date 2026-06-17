@@ -86,4 +86,33 @@ describe('planNotifications', () => {
     expect(plan.fires).toHaveLength(0);
     expect(plan.nextStates.amp).toBeUndefined();
   });
+
+  it('dedups a primary that aliases a models entry (no double notification)', () => {
+    // Amp/Codex set primary = the same window that also appears in models.
+    const amp: ProviderQuota = {
+      provider: 'amp',
+      displayName: 'Amp',
+      available: true,
+      primary: { remaining: 8, resetsAt: '2026-06-17T20:00:00Z' },
+      models: {
+        'Free Tier': { remaining: 8, resetsAt: '2026-06-17T20:00:00Z' },
+        Credits: { remaining: 100, resetsAt: null },
+      },
+    };
+    const plan = planNotifications(wrap(amp), {});
+    expect(plan.fires).toHaveLength(1);
+    expect(plan.fires[0]).toMatchObject({ label: 'Free Tier', level: 'low' });
+  });
+
+  it("fires for Claude's per-model weekly windows (extra.weeklyModels)", () => {
+    const c: ProviderQuota = {
+      provider: 'claude',
+      displayName: 'Claude',
+      available: true,
+      primary: { remaining: 50, resetsAt: null },
+      extra: { weeklyModels: { Opus: { remaining: 3, resetsAt: '2026-06-19T00:00:00Z' } } },
+    };
+    const plan = planNotifications(wrap(c), {});
+    expect(plan.fires.some((f) => f.label === 'Opus (weekly)' && f.level === 'critical')).toBe(true);
+  });
 });

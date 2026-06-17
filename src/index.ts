@@ -216,8 +216,9 @@ async function main() {
       }
 
       // Desktop notifications on low/critical quota (best-effort, after output so
-      // the bar updates promptly). Waybar path only — not terminal/json/watch.
-      if (settings.notify?.enabled) {
+      // the bar updates promptly). Only when stdout is piped (i.e. Waybar polling),
+      // never on an interactive terminal run; and not in json/terminal/watch modes.
+      if (settings.notify?.enabled && !process.stdout.isTTY) {
         const { checkAndNotify } = await import('./notify');
         await checkAndNotify(quotas);
       }

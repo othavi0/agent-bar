@@ -3,6 +3,7 @@ import { rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CONFIG } from './config';
 import { logger } from './logger';
+import { getClaudeExtra } from './providers/extras';
 import type { AllQuotas, ProviderQuota, QuotaWindow } from './providers/types';
 
 /** Used-percent thresholds for a quota window. */
@@ -42,15 +43,37 @@ export function levelFor(used: number): NotifyLevel {
   return 'ok';
 }
 
-/** All quota windows of a provider, each with a display label and used percent. */
-function windowsOf(p: ProviderQuota): { label: string; used: number }[] {
-  const out: { label: string; used: number }[] = [];
-  if (p.primary) out.push({ label: 'primary', used: usedOf(p.primary) });
-  if (p.secondary) out.push({ label: 'secondary', used: usedOf(p.secondary) });
+/**
+ * Distinct quota windows of a provider, each with a stable dedup `key`, a
+ * human `label`, and used percent.
+ *
+ * `primary`/`secondary` are frequently ALIASES of a `models` entry (Amp's
+ * Free Tier, Codex per-model) — emitting both would double-notify. We collect
+ * named windows first, then drop any later window whose (used, resetsAt)
+ * signature was already seen, so the friendly model label wins and the alias
+ * is dropped. Claude's per-model weekly limits live in `extra.weeklyModels`
+ * (never in `p.models`), so they are included explicitly.
+ */
+function windowsOf(p: ProviderQuota): { key: string; label: string; used: number }[] {
+  const raw: { key: string; label: string; w: QuotaWindow }[] = [];
   if (p.models) {
-    for (const [name, w] of Object.entries(p.models)) {
-      out.push({ label: name, used: usedOf(w) });
-    }
+    for (const [name, w] of Object.entries(p.models)) raw.push({ key: `m:${name}`, label: name, w });
+  }
+  const weekly = getClaudeExtra(p)?.weeklyModels;
+  if (weekly) {
+    for (const [name, w] of Object.entries(weekly)) raw.push({ key: `w:${name}`, label: `${name} (weekly)`, w });
+  }
+  if (p.primary) raw.push({ key: 'primary', label: 'primary', w: p.primary });
+  if (p.secondary) raw.push({ key: 'secondary', label: 'secondary', w: p.secondary });
+
+  const seen = new Set<string>();
+  const out: { key: string; label: string; used: number }[] = [];
+  for (const { key, label, w } of raw) {
+    const used = usedOf(w);
+    const sig = `${Math.round(used)}|${w.resetsAt ?? ''}`;
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    out.push({ key, label, used });
   }
   return out;
 }
@@ -70,11 +93,14 @@ export function planNotifications(quotas: AllQuotas, prevStates: Record<string, 
     if (!p.available) continue;
 
     const prev = prevStates[p.provider]?.windows ?? {};
-    const next: Record<string, NotifyLevel> = { ...prev };
+    const next: Record<string, NotifyLevel> = {};
 
-    for (const { label, used } of windowsOf(p)) {
+    for (const { key, label, used } of windowsOf(p)) {
       const current = levelFor(used);
-      const previous = prev[label] ?? 'ok';
+      // Sanitize: a stale/hand-edited state value that isn't a known level
+      // must read as 'ok' so a real crossing can still fire.
+      const stored = prev[key];
+      const previous: NotifyLevel = stored === 'low' || stored === 'critical' ? stored : 'ok';
 
       if (RANK[current] > RANK[previous]) {
         // current outranks previous (>= 'ok'), so it is 'low' or 'critical'.
@@ -85,11 +111,15 @@ export function planNotifications(quotas: AllQuotas, prevStates: Record<string, 
           used,
           level: current as Exclude<NotifyLevel, 'ok'>,
         });
-        next[label] = current;
+        next[key] = current;
         changed.add(p.provider);
-      } else if (RANK[current] < RANK[previous]) {
-        next[label] = current;
+      } else if (current !== previous) {
+        // recovered (or sanitized down) → re-arm without notifying.
+        next[key] = current;
         changed.add(p.provider);
+      } else if (previous !== 'ok') {
+        // unchanged at low/critical → keep persisting the level.
+        next[key] = previous;
       }
     }
 
@@ -152,10 +182,18 @@ function fireNotification(fire: NotifyFire): void {
  * Best-effort: reads/writes per-provider dedup state and never throws.
  */
 export async function checkAndNotify(quotas: AllQuotas): Promise<void> {
+  // If notify-send is unavailable, do nothing — and crucially do NOT persist
+  // state, so a crossing fires once the user installs it (instead of being
+  // permanently marked as already-notified).
+  if (!Bun.which('notify-send')) return;
+
+  const available = quotas.providers.filter((p) => p.available);
   const prevStates: Record<string, ProviderNotifyState> = {};
-  for (const p of quotas.providers) {
-    if (p.available) prevStates[p.provider] = await readState(p.provider);
-  }
+  await Promise.all(
+    available.map(async (p) => {
+      prevStates[p.provider] = await readState(p.provider);
+    }),
+  );
 
   const plan = planNotifications(quotas, prevStates);
 
@@ -163,7 +201,5 @@ export async function checkAndNotify(quotas: AllQuotas): Promise<void> {
     fireNotification(fire);
   }
 
-  for (const provider of plan.changed) {
-    await writeState(provider, plan.nextStates[provider]);
-  }
+  await Promise.all([...plan.changed].map((provider) => writeState(provider, plan.nextStates[provider])));
 }

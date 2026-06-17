@@ -32,7 +32,27 @@ describe('settings', () => {
     expect(settings.waybar.providers).toEqual(['claude', 'codex', 'amp']);
     expect(settings.waybar.providerOrder).toEqual(['claude', 'codex', 'amp']);
     expect(settings.waybar.separators).toBe('gap');
+    expect(settings.notify?.enabled).toBe(true);
     expect(getSettingsPath()).toBe(join(testRoot, 'agent-bar', 'settings.json'));
+  });
+
+  it('preserves notify.enabled=false and defaults it to true otherwise', async () => {
+    const settingsDir = join(testRoot, 'agent-bar');
+    await mkdir(settingsDir, { recursive: true });
+    await writeFile(
+      join(settingsDir, 'settings.json'),
+      JSON.stringify({ version: 2, waybar: { providers: ['claude'] }, notify: { enabled: false } }),
+    );
+
+    const off = await loadSettings();
+    expect(off.notify?.enabled).toBe(false);
+
+    await writeFile(
+      join(settingsDir, 'settings.json'),
+      JSON.stringify({ version: 2, waybar: { providers: ['claude'] } }),
+    );
+    const on = await loadSettings();
+    expect(on.notify?.enabled).toBe(true);
   });
 
   it('saves and loads settings from the new namespace', async () => {
