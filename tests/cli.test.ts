@@ -271,6 +271,78 @@ describe('unknown commands', () => {
   });
 });
 
+describe('output format flags', () => {
+  it('defaults format to waybar, watch false, interval 60', () => {
+    const o = parseArgs([]);
+    expect(o.format).toBe('waybar');
+    expect(o.watch).toBe(false);
+    expect(o.intervalSeconds).toBe(60);
+  });
+
+  it('parses --format json', () => {
+    expect(parseArgs(['--format', 'json']).format).toBe('json');
+  });
+
+  it('--watch implies json', () => {
+    const o = parseArgs(['--watch']);
+    expect(o.watch).toBe(true);
+    expect(o.format).toBe('json');
+  });
+
+  it('parses --interval', () => {
+    expect(parseArgs(['--watch', '--interval', '30']).intervalSeconds).toBe(30);
+  });
+
+  function expectExit1(args: string[], needle: string) {
+    const origExit = process.exit;
+    const origErr = console.error;
+    const codes: number[] = [];
+    const errs: string[] = [];
+    process.exit = ((c?: number) => {
+      codes.push(c ?? 0);
+      throw new Error('__exit__');
+    }) as typeof process.exit;
+    console.error = (...a: unknown[]) => {
+      errs.push(a.join(' '));
+    };
+    try {
+      expect(() => parseArgs(args)).toThrow('__exit__');
+      expect(codes).toEqual([1]);
+      expect(errs.join('\n')).toContain(needle);
+    } finally {
+      process.exit = origExit;
+      console.error = origErr;
+    }
+  }
+
+  it('exits 1 on invalid --format', () => {
+    expectExit1(['--format', 'xml'], "--format must be");
+  });
+
+  it('exits 1 on invalid --interval', () => {
+    expectExit1(['--watch', '--interval', 'abc'], '--interval must be');
+  });
+
+  it('exits 1 on --watch with explicit --format waybar', () => {
+    expectExit1(['--watch', '--format', 'waybar'], '--watch requires --format json');
+  });
+
+  it('warns (no exit) on --interval without --watch', () => {
+    const origErr = console.error;
+    const errs: string[] = [];
+    console.error = (...a: unknown[]) => {
+      errs.push(a.join(' '));
+    };
+    try {
+      const o = parseArgs(['--interval', '30']);
+      expect(o.watch).toBe(false);
+      expect(errs.join('\n')).toContain('--interval has no effect without --watch');
+    } finally {
+      console.error = origErr;
+    }
+  });
+});
+
 describe('showHelp', () => {
   it('describes npm-era entrypoints and managed checkout updates', () => {
     const lines: string[] = [];

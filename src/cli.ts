@@ -23,6 +23,9 @@ export interface CliOptions {
   refresh: boolean;
   provider?: string;
   verbose: boolean;
+  format: 'waybar' | 'json';
+  watch: boolean;
+  intervalSeconds: number;
   waybarDir?: string;
   scriptsDir?: string;
   iconsDir?: string;
@@ -92,6 +95,9 @@ export function showHelp(): void {
   console.log(optLine('--refresh, -r', 'Invalidate cache before output'));
   console.log(optLine('--verbose, -v', 'Debug logging to stderr'));
   console.log(optLine('--version, -V', 'Print version and exit'));
+  console.log(optLine('--format <fmt>', 'Output format: waybar (default) | json'));
+  console.log(optLine('--watch', 'Stream NDJSON (implies --format json)'));
+  console.log(optLine('--interval <s>', 'Watch poll floor in seconds (default 60)'));
   console.log(optLine('--dry-run', 'Preview changes (doctor)'));
   console.log(optLine('--yes, -y', 'Assume yes (doctor/uninstall)'));
   console.log(optLine('--waybar-dir <path>', 'Assets install target'));
@@ -163,7 +169,13 @@ export function parseArgs(args: string[]): CliOptions {
     command: 'waybar',
     refresh: false,
     verbose: false,
+    format: 'waybar',
+    watch: false,
+    intervalSeconds: 60,
   };
+
+  let formatGiven = false;
+  let intervalGiven = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -240,6 +252,32 @@ export function parseArgs(args: string[]): CliOptions {
       case '-v':
         options.verbose = true;
         break;
+      case '--format': {
+        const val = requireNextArg(args, i, '--format');
+        if (val !== 'waybar' && val !== 'json') {
+          console.error(`Error: --format must be 'waybar' or 'json' (got '${val}')`);
+          process.exit(1);
+        }
+        options.format = val;
+        formatGiven = true;
+        i++;
+        break;
+      }
+      case '--watch':
+        options.watch = true;
+        break;
+      case '--interval': {
+        const val = requireNextArg(args, i, '--interval');
+        const n = Number.parseInt(val, 10);
+        if (!Number.isInteger(n) || n <= 0) {
+          console.error(`Error: --interval must be a positive integer (got '${val}')`);
+          process.exit(1);
+        }
+        options.intervalSeconds = n;
+        intervalGiven = true;
+        i++;
+        break;
+      }
       case '--waybar-dir':
         options.waybarDir = requireNextArg(args, i, '--waybar-dir');
         i++;
@@ -282,6 +320,17 @@ export function parseArgs(args: string[]): CliOptions {
           process.exit(1);
         }
     }
+  }
+
+  if (options.watch) {
+    if (formatGiven && options.format === 'waybar') {
+      console.error('Error: --watch requires --format json');
+      process.exit(1);
+    }
+    options.format = 'json';
+  }
+  if (intervalGiven && !options.watch) {
+    console.error('[agent-bar] --interval has no effect without --watch');
   }
 
   return options;
