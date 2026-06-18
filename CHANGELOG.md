@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-06-18
+
+### Added
+- **Saída Waybar single-provider expõe `percentage` e `alt`** para desbloquear
+  `format-icons`. `alt` carrega o health state (`ok` / `low` / `warn` /
+  `critical`, ou `disconnected`) para `format-icons` keyed por estado;
+  `percentage` é o valor displayMode-aware (o mesmo número do `text`), clampado
+  a `0..100`, para `{percentage}` no `format` ou `format-icons` em array. Ambos
+  são **omitidos** quando o provider está conectado mas sem dados de quota — um
+  window ausente nunca reporta `ok`. O módulo agregado e o contrato
+  `--format json` permanecem inalterados.
+- **Refresh sob demanda via `signal`** (opt-in). O novo setting `waybar.signal`
+  (`1..30`, default off) injeta `signal: N` em cada módulo gerado; o Waybar
+  re-executa o módulo ao receber `SIGRTMIN+N`. Como o `exec` do módulo lê o cache
+  de 5 min, um signal puro só re-renderiza dados cacheados — para forçar um fetch
+  **fresco** use o recipe documentado:
+  `agent-bar -p <provider> -r && pkill -RTMIN+<N> waybar` (com exemplo de Stop
+  hook do Claude Code em `docs/waybar-contract.md`).
+
+### Docs
+- `docs/waybar-contract.md`: campos de saída `percentage`/`alt`, exemplos de
+  `format-icons` (por estado via `alt` e por percentual via array), e a
+  configuração + recipe de refresh do `signal`.
+
 ## [5.1.0] - 2026-06-17
 
 ### Added
