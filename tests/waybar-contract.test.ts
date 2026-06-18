@@ -2,9 +2,11 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { APP_NAME } from '../src/app-identity';
 import {
   exportWaybarCss,
   exportWaybarModules,
+  getDefaultWaybarAssetPaths,
   normalizeProviderSelection,
   resolveAssetSourceRoot,
   type WaybarCssExportOptions,
@@ -205,5 +207,24 @@ describe('resolveAssetSourceRoot', () => {
       delete process.env.AGENT_BAR_FORCE_COMPILED;
       delete process.env.AGENT_BAR_ASSET_DIR;
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getDefaultWaybarAssetPaths().appBin
+// ---------------------------------------------------------------------------
+
+describe('getDefaultWaybarAssetPaths appBin', () => {
+  it('uses a PATH-resolved appBin under a compiled (system) binary', () => {
+    process.env.AGENT_BAR_FORCE_COMPILED = '1';
+    try {
+      expect(getDefaultWaybarAssetPaths().appBin).toBe('agent-bar');
+    } finally {
+      delete process.env.AGENT_BAR_FORCE_COMPILED;
+    }
+  });
+
+  it('uses the ~/.local/bin appBin otherwise', () => {
+    expect(getDefaultWaybarAssetPaths().appBin).toBe(`$HOME/.local/bin/${APP_NAME}`);
   });
 });

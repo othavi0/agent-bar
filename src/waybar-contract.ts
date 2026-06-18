@@ -213,7 +213,7 @@ export function getDefaultWaybarAssetPaths() {
     scriptsDir: join(waybarRoot, 'scripts'),
     iconsDir: join(waybarRoot, WAYBAR_NAMESPACE, 'icons'),
     terminalScript: join(waybarRoot, 'scripts', TERMINAL_HELPER_NAME),
-    appBin: `$HOME/.local/bin/${APP_NAME}`,
+    appBin: isCompiledBinary() ? APP_NAME : `$HOME/.local/bin/${APP_NAME}`,
   };
 }
 
