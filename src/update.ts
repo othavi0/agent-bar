@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
+import { isCompiledBinary } from './runtime';
 import { colorize, semantic } from './tui/colors';
 import { printCommandHeader, printKeyValues, printWarning } from './tui/terminal-ui';
 
@@ -37,7 +38,7 @@ export interface UpdateSummary {
 
 export type ManagedUpdateStatus = 'wrong-root' | 'up-to-date' | 'cancelled' | 'updated';
 
-export type InstallKind = 'managed-git' | 'dev-git' | 'npm';
+export type InstallKind = 'managed-git' | 'dev-git' | 'npm' | 'system';
 
 export interface ManagedUpdateResult {
   status: ManagedUpdateStatus;
@@ -113,6 +114,9 @@ export function isManagedInstallRoot(repoRoot: string, installRoot: string = joi
 }
 
 export function detectInstallKind(repoRoot: string, installRoot: string = join(homedir(), '.agent-bar')): InstallKind {
+  if (isCompiledBinary()) {
+    return 'system';
+  }
   if (!existsSync(join(repoRoot, '.git'))) {
     return 'npm';
   }
@@ -345,6 +349,13 @@ export async function main() {
   printCommandHeader('update', 'Updater for agent-bar');
 
   const installKind = detectInstallKind(REPO_ROOT);
+
+  if (installKind === 'system') {
+    p.log.info(colorize('Installed as a system package (standalone binary).', semantic.subtitle));
+    p.log.info(colorize('Update it with your package manager, e.g. `paru -Syu agent-bar-bin`.', semantic.subtitle));
+    p.outro(colorize('Nothing to do here', semantic.muted));
+    return;
+  }
 
   if (installKind === 'dev-git') {
     p.log.error(colorize('This is a development checkout, not a managed install.', semantic.danger));

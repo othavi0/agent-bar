@@ -268,3 +268,14 @@ describe('runNpmUpdate', () => {
     expect(commands).toEqual([]);
   });
 });
+
+describe("detectInstallKind 'system'", () => {
+  afterEach(() => {
+    delete process.env.AGENT_BAR_FORCE_COMPILED;
+  });
+
+  it("returns 'system' under a compiled (standalone) binary, regardless of .git", () => {
+    process.env.AGENT_BAR_FORCE_COMPILED = '1';
+    expect(detectInstallKind('/whatever')).toBe('system');
+  });
+});
