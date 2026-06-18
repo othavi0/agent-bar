@@ -109,6 +109,11 @@ calls `cache.getOrFetch` inline, and parses several quota windows
 `BaseProvider` would mean fighting the abstraction, so it manages its own cache
 call. Do not "normalize" it back into the template (see repo `CLAUDE.md`).
 
+From the same credentials it also reads `expiresAt` — to short-circuit a
+locally-expired access token (the API would reject it anyway, and agent-bar must
+never refresh it: the single-use refresh token races Claude Code) — and
+`rateLimitTier`, to surface the Max multiplier in the plan label (e.g. `Max 5x`).
+
 ## The Two Caches
 
 agent-bar has two independent caches at different layers and lifetimes. They are

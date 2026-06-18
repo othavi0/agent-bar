@@ -494,4 +494,117 @@ describe('ClaudeProvider', () => {
       expect(ttl).toBe(CONFIG.cache.ttlMs);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // deriveClaudePlan() — rate-limit tier enrichment
+  // -----------------------------------------------------------------------
+  describe('deriveClaudePlan()', () => {
+    it('appends the rate-limit multiplier to a bare subscription type', async () => {
+      const { deriveClaudePlan } = await import('../../src/providers/claude');
+      expect(deriveClaudePlan('max', 'default_claude_max_5x')).toBe('max 5x');
+      expect(deriveClaudePlan('max', 'default_claude_max_20x')).toBe('max 20x');
+    });
+
+    it('leaves the plan untouched when the tier has no multiplier', async () => {
+      const { deriveClaudePlan } = await import('../../src/providers/claude');
+      expect(deriveClaudePlan('pro', 'default_claude_pro')).toBe('pro');
+      expect(deriveClaudePlan('max', undefined)).toBe('max');
+    });
+
+    it("returns 'unknown' when subscriptionType is absent", async () => {
+      const { deriveClaudePlan } = await import('../../src/providers/claude');
+      expect(deriveClaudePlan(undefined, 'default_claude_max_5x')).toBe('unknown');
+      expect(deriveClaudePlan('', undefined)).toBe('unknown');
+    });
+
+    it('does not double-append when the multiplier is already present', async () => {
+      const { deriveClaudePlan } = await import('../../src/providers/claude');
+      expect(deriveClaudePlan('max_5x', 'default_claude_max_5x')).toBe('max_5x');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // getQuota() — plan tier enrichment
+  // -----------------------------------------------------------------------
+  describe('getQuota() plan tier enrichment', () => {
+    it("surfaces the Max multiplier as plan 'max 5x'", async () => {
+      bunFileSpy.mockReturnValue(
+        fakeFile({
+          exists: true,
+          json: {
+            claudeAiOauth: { accessToken: 'tok', subscriptionType: 'max', rateLimitTier: 'default_claude_max_5x' },
+          },
+        }) as any,
+      );
+      global.fetch = mock(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        } as Response),
+      );
+
+      const p = await createProvider();
+      const q = await p.getQuota();
+
+      expect(q.available).toBe(true);
+      expect(q.plan).toBe('max 5x');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // getQuota() — proactive token expiry short-circuit
+  // -----------------------------------------------------------------------
+  describe('getQuota() proactive token expiry', () => {
+    it('short-circuits without fetching when expiresAt is in the past', async () => {
+      bunFileSpy.mockReturnValue(
+        fakeFile({
+          exists: true,
+          json: {
+            claudeAiOauth: { accessToken: 'tok', subscriptionType: 'pro', expiresAt: Date.now() - 1_000 },
+          },
+        }) as any,
+      );
+      const fetchMock = mock(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        } as Response),
+      );
+      global.fetch = fetchMock;
+
+      const p = await createProvider();
+      const q = await p.getQuota();
+
+      expect(q.available).toBe(false);
+      expect(q.error).toBe('Token expired. Open `agent-bar menu` and choose Provider login.');
+      expect(q.plan).toBe('pro');
+      expect(fetchMock).toHaveBeenCalledTimes(0);
+      expect(cacheGetOrFetchMock).toHaveBeenCalledTimes(0);
+    });
+
+    it('fetches normally when expiresAt is in the future', async () => {
+      bunFileSpy.mockReturnValue(
+        fakeFile({
+          exists: true,
+          json: {
+            claudeAiOauth: { accessToken: 'tok', subscriptionType: 'pro', expiresAt: Date.now() + 3_600_000 },
+          },
+        }) as any,
+      );
+      const fetchMock = mock(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ five_hour: { utilization: 10 } }),
+        } as Response),
+      );
+      global.fetch = fetchMock;
+
+      const p = await createProvider();
+      const q = await p.getQuota();
+
+      expect(q.available).toBe(true);
+      expect(q.primary?.remaining).toBe(90);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });

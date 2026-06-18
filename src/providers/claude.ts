@@ -9,7 +9,27 @@ interface ClaudeCredentials {
   claudeAiOauth?: {
     accessToken: string;
     subscriptionType?: string;
+    /** OAuth rate-limit tier, e.g. `default_claude_max_5x` — carries the Max multiplier. */
+    rateLimitTier?: string;
+    /** Access-token expiry as epoch milliseconds. */
+    expiresAt?: number;
   };
+}
+
+/**
+ * Resolve the display plan from the subscription type plus the OAuth
+ * `rateLimitTier`. `subscriptionType` is coarse ("max"); the tier carries the
+ * multiplier ("default_claude_max_5x"), so we surface "max 5x" / "max 20x" when
+ * present. Plans without a multiplier (Pro, Free) are returned untouched.
+ */
+export function deriveClaudePlan(subscriptionType?: string, rateLimitTier?: string): string {
+  const sub = subscriptionType?.trim();
+  if (!sub) return 'unknown';
+  const mult = rateLimitTier?.match(/_(\d+)x$/i)?.[1];
+  if (mult && !sub.toLowerCase().includes(`${mult}x`)) {
+    return `${sub} ${mult}x`;
+  }
+  return sub;
 }
 
 interface ClaudeUsageResponse {
@@ -90,7 +110,15 @@ export class ClaudeProvider implements Provider {
       return { ...base, error: 'No access token' };
     }
 
-    const plan = creds.claudeAiOauth?.subscriptionType || 'unknown';
+    const plan = deriveClaudePlan(creds.claudeAiOauth?.subscriptionType, creds.claudeAiOauth?.rateLimitTier);
+
+    // Proactive expiry: a locally-expired access token will be rejected by the API
+    // anyway, and we must not refresh it ourselves (single-use refresh token races
+    // Claude Code). Short-circuit the guaranteed-failing request.
+    const expiresAt = creds.claudeAiOauth?.expiresAt;
+    if (typeof expiresAt === 'number' && expiresAt <= Date.now()) {
+      return { ...base, plan, error: `Token expired. Open \`${APP_NAME} menu\` and choose Provider login.` };
+    }
 
     // Fetch usage (cached)
     try {
