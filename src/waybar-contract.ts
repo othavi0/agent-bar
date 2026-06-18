@@ -1,6 +1,6 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   APP_HIDDEN_CLASS,
@@ -11,6 +11,7 @@ import {
   WAYBAR_SELECTOR_PREFIX,
 } from './app-identity';
 import { getRegisteredProviderIds } from './providers/registry';
+import { isCompiledBinary } from './runtime';
 import { ONE_DARK } from './theme';
 
 export const WAYBAR_PROVIDERS = ['claude', 'codex', 'amp'] as const;
@@ -56,6 +57,31 @@ export interface WaybarCssExportOptions {
 const HOME = homedir();
 const DEFAULT_REPO_ROOT = join(import.meta.dir, '..');
 const SURFACE = ONE_DARK.overlay;
+
+/** System asset prefix for a packaged (AUR) install. */
+const SYSTEM_ASSET_DIR = '/usr/share/agent-bar';
+
+/**
+ * Directory that holds the source `icons/` and `scripts/` to install into Waybar.
+ * Priority: an absolute `AGENT_BAR_ASSET_DIR` override → the system prefix
+ * (`/usr/share/agent-bar`, for AUR installs) → the repo root (checkout/npm only).
+ * In a compiled binary `DEFAULT_REPO_ROOT` is a `$bunfs/..` virtual path, so it
+ * is skipped and a clear error is thrown instead of leaking that path.
+ */
+export function resolveAssetSourceRoot(): string {
+  const hasIcons = (dir: string) => existsSync(join(dir, 'icons'));
+
+  const envDir = process.env.AGENT_BAR_ASSET_DIR;
+  if (envDir && isAbsolute(envDir) && hasIcons(envDir)) return envDir;
+
+  if (hasIcons(SYSTEM_ASSET_DIR)) return SYSTEM_ASSET_DIR;
+
+  if (!isCompiledBinary() && hasIcons(DEFAULT_REPO_ROOT)) return DEFAULT_REPO_ROOT;
+
+  throw new Error(
+    'Asset directory not found. Run `agent-bar setup` after installing, or set AGENT_BAR_ASSET_DIR to an absolute path containing icons/.',
+  );
+}
 
 function copyDir(src: string, dest: string): void {
   mkdirSync(dest, { recursive: true });
@@ -292,7 +318,7 @@ export function installWaybarAssets(options: InstallAssetsOptions): {
   iconsDir: string;
   terminalScript: string;
 } {
-  const repoRoot = options.repoRoot ?? DEFAULT_REPO_ROOT;
+  const repoRoot = options.repoRoot ?? resolveAssetSourceRoot();
   const appDir = options.waybarDir;
   const iconsSource = join(repoRoot, 'icons');
   const iconsDest = join(appDir, 'icons');

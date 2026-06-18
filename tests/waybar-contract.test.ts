@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   exportWaybarCss,
   exportWaybarModules,
   normalizeProviderSelection,
+  resolveAssetSourceRoot,
   type WaybarCssExportOptions,
 } from '../src/waybar-contract';
 
@@ -172,5 +176,34 @@ describe('exportWaybarCss', () => {
       expect(css).toContain('border-color: transparent');
       expect(css).toContain('margin: 0');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveAssetSourceRoot
+// ---------------------------------------------------------------------------
+
+describe('resolveAssetSourceRoot', () => {
+  it('honors an absolute AGENT_BAR_ASSET_DIR that contains icons/', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ab-assets-'));
+    mkdirSync(join(dir, 'icons'), { recursive: true });
+    process.env.AGENT_BAR_ASSET_DIR = dir;
+    try {
+      expect(resolveAssetSourceRoot()).toBe(dir);
+    } finally {
+      delete process.env.AGENT_BAR_ASSET_DIR;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws a clear error under a compiled binary with no assets', () => {
+    process.env.AGENT_BAR_FORCE_COMPILED = '1';
+    process.env.AGENT_BAR_ASSET_DIR = '/nonexistent-xyz';
+    try {
+      expect(() => resolveAssetSourceRoot()).toThrow(/Asset directory not found/);
+    } finally {
+      delete process.env.AGENT_BAR_FORCE_COMPILED;
+      delete process.env.AGENT_BAR_ASSET_DIR;
+    }
   });
 });
