@@ -5,7 +5,7 @@ on:
     types: [published]
 
 permissions:
-  contents: read
+  contents: write # gh release upload (anexar o binário standalone)
 
 jobs:
   publish:
@@ -40,3 +40,26 @@ jobs:
         env:
           # scripts/bun-publish-with-npm-token reads NPM_CONFIG_TOKEN (not NODE_AUTH_TOKEN)
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Standalone binary for the AUR -bin package. Sequential AFTER npm publish.
+      - name: Build standalone binary
+        run: |
+          VERSION=$(jq -r .version package.json)
+          bun build --compile --target=bun-linux-x64 --minify --outfile agent-bar src/index.ts
+          mkdir -p pkg/scripts pkg/icons
+          cp agent-bar pkg/
+          cp -r icons/. pkg/icons/
+          cp scripts/agent-bar-open-terminal pkg/scripts/
+          cp LICENSE pkg/
+          tar czf "agent-bar-${VERSION}-x86_64.tar.gz" -C pkg .
+          sha256sum "agent-bar-${VERSION}-x86_64.tar.gz" | tee "agent-bar-${VERSION}-x86_64.tar.gz.sha256"
+
+      - name: Attach binary to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(jq -r .version package.json)
+          gh release upload "v${VERSION}" \
+            "agent-bar-${VERSION}-x86_64.tar.gz" \
+            "agent-bar-${VERSION}-x86_64.tar.gz.sha256" \
+            --clobber
