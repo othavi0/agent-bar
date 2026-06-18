@@ -158,10 +158,7 @@ describe('settings', () => {
       await mkdir(settingsDir, { recursive: true });
       const settingsFile = join(settingsDir, 'settings.json');
       for (const bad of [0, -1, 3.5, 99, 'x']) {
-        await writeFile(
-          settingsFile,
-          JSON.stringify({ version: 2, waybar: { providers: ['claude'], signal: bad } }),
-        );
+        await writeFile(settingsFile, JSON.stringify({ version: 2, waybar: { providers: ['claude'], signal: bad } }));
         const s = await loadSettings();
         expect(s.waybar.signal).toBeUndefined();
       }
