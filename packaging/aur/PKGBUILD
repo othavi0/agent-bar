@@ -6,6 +6,9 @@ pkgdesc="LLM quota monitor for Waybar (Claude, Codex, Amp) — standalone binary
 arch=('x86_64')
 url="https://github.com/othavioquiliao/agent-bar"
 license=('MIT')
+# Prebuilt standalone binary: do not strip (would corrupt the embedded bun
+# runtime/VFS) and do not emit a debug package (no debug symbols).
+options=('!strip' '!debug')
 provides=('agent-bar') # futureproof for an eventual source-based agent-bar package
 conflicts=('agent-bar')
 optdepends=('waybar: status bar integration'
@@ -15,7 +18,7 @@ optdepends=('waybar: status bar integration'
 install="${pkgname}.install"
 source=("agent-bar-${pkgver}-x86_64.tar.gz::${url}/releases/download/v${pkgver}/agent-bar-${pkgver}-x86_64.tar.gz")
 # Filled per release from the CI-produced .sha256. Never 'SKIP' (that disables verification).
-sha256sums=('REPLACE_AT_RELEASE')
+sha256sums=('a066c52ec5a09b62de9b7a0a408b8cebf5c3f529968a240cebcfbc4fb56cb23a')
 
 package() {
   install -Dm755 "${srcdir}/agent-bar" "${pkgdir}/usr/bin/agent-bar"

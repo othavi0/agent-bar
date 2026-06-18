@@ -10,7 +10,9 @@ pkgbase = agent-bar-bin
 	optdepends = libnotify: desktop low/critical quota notifications
 	provides = agent-bar
 	conflicts = agent-bar
+	options = !strip
+	options = !debug
 	source = agent-bar-5.3.0-x86_64.tar.gz::https://github.com/othavioquiliao/agent-bar/releases/download/v5.3.0/agent-bar-5.3.0-x86_64.tar.gz
-	sha256sums = REPLACE_AT_RELEASE
+	sha256sums = a066c52ec5a09b62de9b7a0a408b8cebf5c3f529968a240cebcfbc4fb56cb23a
 
 pkgname = agent-bar-bin
