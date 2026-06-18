@@ -40,6 +40,8 @@ export interface Settings {
     separators: SeparatorStyle;
     providerOrder: string[];
     displayMode: DisplayMode;
+    /** Waybar SIGRTMIN+N signal number for on-demand refresh (1..30). Absent = disabled. */
+    signal?: number;
   };
   tooltip: Record<string, never>;
   /** Per-provider model visibility. Key = provider id, value = array of model names to show. Empty array = show all. */
@@ -79,6 +81,10 @@ function isValidWindowPolicy(value: unknown): value is WindowPolicy {
   return typeof value === 'string' && (VALID_WINDOW_POLICIES as readonly string[]).includes(value);
 }
 
+function isValidWaybarSignal(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 30;
+}
+
 function normalizeSettings(data: Partial<Settings> | undefined): Settings {
   const merged: Settings = {
     version: CURRENT_VERSION,
@@ -97,6 +103,11 @@ function normalizeSettings(data: Partial<Settings> | undefined): Settings {
   // Validate displayMode
   if (!isValidDisplayMode(merged.waybar.displayMode)) {
     merged.waybar.displayMode = DEFAULT_SETTINGS.waybar.displayMode;
+  }
+
+  // Validate optional Waybar refresh signal (drop invalid → disabled)
+  if (merged.waybar.signal !== undefined && !isValidWaybarSignal(merged.waybar.signal)) {
+    delete merged.waybar.signal;
   }
 
   // Validate window policies

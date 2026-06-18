@@ -135,4 +135,36 @@ describe('settings', () => {
       expect(reloaded.waybar.displayMode).toBe('used');
     });
   });
+
+  describe('Settings waybar.signal', () => {
+    it('is undefined by default', () => {
+      const s = loadSettingsSync();
+      expect(s.waybar.signal).toBeUndefined();
+    });
+
+    it('preserves a valid signal (1..30)', async () => {
+      const settingsDir = join(testRoot, 'agent-bar');
+      await mkdir(settingsDir, { recursive: true });
+      await writeFile(
+        join(settingsDir, 'settings.json'),
+        JSON.stringify({ version: 2, waybar: { providers: ['claude'], signal: 8 } }),
+      );
+      const s = await loadSettings();
+      expect(s.waybar.signal).toBe(8);
+    });
+
+    it('drops an invalid signal (0, negative, non-integer, out of range, wrong type)', async () => {
+      const settingsDir = join(testRoot, 'agent-bar');
+      await mkdir(settingsDir, { recursive: true });
+      const settingsFile = join(settingsDir, 'settings.json');
+      for (const bad of [0, -1, 3.5, 99, 'x']) {
+        await writeFile(
+          settingsFile,
+          JSON.stringify({ version: 2, waybar: { providers: ['claude'], signal: bad } }),
+        );
+        const s = await loadSettings();
+        expect(s.waybar.signal).toBeUndefined();
+      }
+    });
+  });
 });
