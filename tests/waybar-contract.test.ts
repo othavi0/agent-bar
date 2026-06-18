@@ -43,6 +43,19 @@ describe('exportWaybarModules', () => {
     expect(result.modules['custom/agent-bar-claude']).toBeDefined();
     expect(result.modules['custom/agent-bar-codex']).toBeUndefined();
   });
+
+  it('includes signal in each module when provided', () => {
+    const result = exportWaybarModules({ appBin: 'bin', terminalScript: 'term', signal: 8 }, ['claude', 'codex']);
+
+    expect(result.modules['custom/agent-bar-claude'].signal).toBe(8);
+    expect(result.modules['custom/agent-bar-codex'].signal).toBe(8);
+  });
+
+  it('omits signal when not provided', () => {
+    const result = exportWaybarModules({ appBin: 'bin', terminalScript: 'term' }, ['claude']);
+
+    expect('signal' in result.modules['custom/agent-bar-claude']).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

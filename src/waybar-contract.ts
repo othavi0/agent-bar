@@ -38,6 +38,8 @@ export interface InstallAssetsOptions {
 export interface WaybarModuleExportOptions {
   appBin: string;
   terminalScript: string;
+  /** Optional Waybar SIGRTMIN+N signal for on-demand refresh. Omitted from the module when absent. */
+  signal?: number;
 }
 
 export interface WaybarModulesExport {
@@ -71,8 +73,24 @@ function copyDir(src: string, dest: string): void {
   }
 }
 
-function moduleDefinition(provider: WaybarProviderId, appBin: string, terminalScript: string) {
-  return {
+interface WaybarModuleConfig {
+  exec: string;
+  'return-type': 'json';
+  interval: number;
+  'exec-on-event': boolean;
+  tooltip: boolean;
+  'on-click': string;
+  'on-click-right': string;
+  signal?: number;
+}
+
+function moduleDefinition(
+  provider: WaybarProviderId,
+  appBin: string,
+  terminalScript: string,
+  signal?: number,
+): WaybarModuleConfig {
+  const def: WaybarModuleConfig = {
     exec: `${appBin} --provider ${provider}`,
     'return-type': 'json',
     interval: 120,
@@ -81,6 +99,10 @@ function moduleDefinition(provider: WaybarProviderId, appBin: string, terminalSc
     'on-click': `${terminalScript} ${appBin} menu`,
     'on-click-right': `${terminalScript} ${appBin} action-right ${provider}`,
   };
+  if (typeof signal === 'number') {
+    def.signal = signal;
+  }
+  return def;
 }
 
 function separatorCss(providers: WaybarProviderId[], separatorStyle: WaybarCssExportOptions['separators']): string {
@@ -201,7 +223,12 @@ export function exportWaybarModules(
   const modules: Record<string, ReturnType<typeof moduleDefinition>> = {};
 
   for (const provider of providers) {
-    modules[`${WAYBAR_MODULE_PREFIX}${provider}`] = moduleDefinition(provider, options.appBin, options.terminalScript);
+    modules[`${WAYBAR_MODULE_PREFIX}${provider}`] = moduleDefinition(
+      provider,
+      options.appBin,
+      options.terminalScript,
+      options.signal,
+    );
   }
 
   return { providers, modules };
