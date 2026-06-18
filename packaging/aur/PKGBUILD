@@ -1,6 +1,6 @@
 # Maintainer: Othavio <obsidianlab3d@gmail.com>
 pkgname=agent-bar-bin
-pkgver=5.2.0
+pkgver=5.3.0
 pkgrel=1
 pkgdesc="LLM quota monitor for Waybar (Claude, Codex, Amp) — standalone binary"
 arch=('x86_64')

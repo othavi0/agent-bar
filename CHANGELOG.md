@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-06-18
+
+### Added
+- **Pacote AUR `agent-bar-bin`** (Arch). Instala um binário standalone
+  (`bun build --compile`) baixado do GitHub Release e verificado por sha256 — sem
+  exigir Bun no runtime do usuário e **sem build no PKGBUILD** (mitigação do vetor
+  de supply-chain "Atomic Arch"). Uso: `paru -S agent-bar-bin && agent-bar setup`.
+  O workflow de release agora compila e anexa o tarball
+  `agent-bar-<ver>-x86_64.tar.gz` (+ `.sha256`) ao GitHub Release. PKGBUILD,
+  `.install` e `.SRCINFO` versionados em `packaging/aur/`.
+
+### Changed
+- **Install de sistema reconhecido em todo o app.** Um binário compilado é
+  detectado por `isCompiledBinary()` (marcador `/$bunfs` do `bun --compile`):
+  `agent-bar setup` lê os assets de `/usr/share/agent-bar`, gera o módulo Waybar
+  com `exec: agent-bar` (resolvido via PATH) e **pula** o symlink `~/.local/bin`;
+  `agent-bar update` orienta o gerenciador de pacotes (ex.: `paru -Syu`) em vez de
+  tentar `bun add -g`. Os installs existentes (managed/npm/dev) ficam inalterados.
+
 ## [5.2.0] - 2026-06-18
 
 ### Added
