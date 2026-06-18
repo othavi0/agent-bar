@@ -381,5 +381,10 @@ git commit -m "docs: opção de install AUR + update de sistema"
 
 Not code tasks; the maintainer does these after merge:
 1. Cut a release (bump version, CHANGELOG, tag) → CI builds + attaches `agent-bar-<ver>-x86_64.tar.gz` + `.sha256`.
-2. Update `packaging/aur/PKGBUILD` `pkgver` + `sha256sums` (from the `.sha256`), regenerate `.SRCINFO`, commit.
+2. In `packaging/aur/`: bump `pkgver`, then run `updpkgsums` (downloads the release
+   tarball and fills `sha256sums` automatically — never hand-copy, never leave
+   `REPLACE_AT_RELEASE`), then `makepkg --printsrcinfo > .SRCINFO`, then commit.
+   The `check:pkgver` guard fails `release:check` if `pkgver` drifts; **before
+   pushing to AUR, eyeball that `sha256sums` is a 64-hex digest** (a leftover
+   placeholder breaks `makepkg` for every user).
 3. **Handoff (your AUR account):** push `PKGBUILD` + `.install` + `.SRCINFO` to `ssh://aur@aur.archlinux.org/agent-bar-bin.git`. Requires an AUR account + registered SSH key.
