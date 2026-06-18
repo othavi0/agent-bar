@@ -1,6 +1,6 @@
 {
   "name": "@noctuacore/agent-bar",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "LLM quota monitor for Waybar - Claude, Codex, Amp",
   "type": "module",
   "main": "dist/index.js",
@@ -19,6 +19,7 @@
     "LICENSE",
     "CHANGELOG.md",
     "docs/README.md",
+    "docs/architecture.md",
     "docs/commands.md",
     "docs/runtime.md",
     "docs/integration.md",

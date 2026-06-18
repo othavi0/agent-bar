@@ -30,6 +30,7 @@ describe('npm package contract', () => {
       'LICENSE',
       'CHANGELOG.md',
       'docs/README.md',
+      'docs/architecture.md',
       'docs/commands.md',
       'docs/runtime.md',
       'docs/integration.md',

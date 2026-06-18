@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-06-17
+
+### Added
+- **Claude: tier do plano no tooltip** (`Max 5x` / `Max 20x`). O cabeçalho do
+  tooltip do Claude agora lê `rateLimitTier` do `~/.claude/.credentials.json`
+  (ex.: `default_claude_max_5x`) e surfa o multiplicador que o `subscriptionType`
+  ("max") descartava — antes mostrava só "Max". Planos sem multiplicador (Pro,
+  Free) ficam inalterados. Lógica isolada em `deriveClaudePlan()`.
+- **`docs/architecture.md`**: data-flow completo (poll do Waybar → provider →
+  cache → formatter → saída JSON/Pango), a distinção entre os dois caches
+  (quota 5 min cross-process em `cache.ts` vs settings 5 s in-process em
+  `formatters/waybar.ts`), e `BaseProvider` vs `ClaudeProvider` direto. Passa a
+  ser publicado no pacote npm.
+- Documentação do comando interno `action-right` (right-click do Waybar) em
+  `docs/commands.md` e `docs/waybar-contract.md`, com a lógica de
+  refresh-ou-login e os campos do módulo gerado.
+
+### Changed
+- **Claude: short-circuit de token expirado.** Quando o `expiresAt` (epoch-ms
+  das credenciais) já passou, o provider devolve o erro de token expirado **sem**
+  chamar a API da Anthropic — a chamada falharia de qualquer forma e o agent-bar
+  nunca renova o token (o refresh single-use corre com o Claude Code). Mesma
+  string de erro e mesmo roteamento de login do `action-right`; apenas mais
+  rápido e funcional offline.
+
 ## [5.0.0] - 2026-06-17
 
 ### Removed
