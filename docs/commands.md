@@ -112,4 +112,6 @@ These are mostly for tests, packagers, and manual integration.
   re-applies setup.
 - **npm/Bun global install:** after confirmation, runs
   `bun add -g @noctuacore/agent-bar` and re-applies setup.
+- **System install (AUR `-bin`, standalone binary):** does not self-update —
+  directs you to your package manager (e.g. `paru -Syu agent-bar-bin`).
 - **Development checkout:** refuses and tells you to update with `git pull`.

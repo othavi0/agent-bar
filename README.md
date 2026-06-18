@@ -43,6 +43,18 @@ bun add -g @noctuacore/agent-bar && agent-bar setup
 > ⚠ Don't drop the `-g`. Without it, `bun add` writes `package.json` + `bun.lock`
 > to your current directory. If that happens, run `agent-bar doctor` to clean up.
 
+### Alternative: AUR (Arch)
+
+On Arch, install the prebuilt standalone binary from the AUR — no Bun runtime
+required:
+
+```bash
+paru -S agent-bar-bin   # or: yay -S agent-bar-bin
+agent-bar setup
+```
+
+Update it with your package manager (`paru -Syu`), not `agent-bar update`.
+
 For development (live edits reflected in Waybar on the next poll), see
 [CONTRIBUTING.md → Dev install](CONTRIBUTING.md#dev-install-live-edit--live-waybar).
 
