@@ -222,6 +222,35 @@ describe('formatProviderForWaybar', () => {
     expect(result.class).toContain('agent-bar-claude');
     expect(result.tooltip).toContain('Claude');
   });
+
+  it('emits alt (health state) and displayMode-aware percentage', () => {
+    const out = formatProviderForWaybar(mockClaudeQuota(70), 'remaining');
+    expect(out.alt).toBe('ok'); // 70 >= 60
+    expect(out.percentage).toBe(70);
+
+    const used = formatProviderForWaybar(mockClaudeQuota(70), 'used');
+    expect(used.percentage).toBe(30); // mirrors text in used mode
+    expect(used.alt).toBe('ok'); // health from raw remaining, not display value
+  });
+
+  it('maps health buckets to alt', () => {
+    expect(formatProviderForWaybar(mockClaudeQuota(50)).alt).toBe('low'); // 30..59
+    expect(formatProviderForWaybar(mockClaudeQuota(20)).alt).toBe('warn'); // 10..29
+    expect(formatProviderForWaybar(mockClaudeQuota(5)).alt).toBe('critical'); // < 10
+  });
+
+  it('marks disconnected and omits percentage', () => {
+    const quota: ProviderQuota = { provider: 'claude', available: false, error: 'x' } as ProviderQuota;
+    const out = formatProviderForWaybar(quota);
+    expect(out.alt).toBe('disconnected');
+    expect('percentage' in out).toBe(false);
+  });
+
+  it('aggregate output (formatForWaybar) emits no alt or percentage', () => {
+    const result = formatForWaybar(mockAllQuotas([mockClaudeQuota(80)]));
+    expect('alt' in result).toBe(false);
+    expect('percentage' in result).toBe(false);
+  });
 });
 
 describe('formatForTerminal displayMode=used', () => {

@@ -59,6 +59,10 @@ interface WaybarOutput {
   text: string;
   tooltip: string;
   class: string;
+  /** Health state for `format-icons` (single-provider only): ok/low/warn/critical/disconnected. */
+  alt?: string;
+  /** displayMode-aware quota value (single-provider only), omitted when no data. */
+  percentage?: number;
 }
 
 function colorFor(display: number | null, mode: DisplayMode): string {
@@ -211,6 +215,7 @@ export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode 
       text: `<span foreground='${ONE_DARK.red}'>󱘖</span>`,
       tooltip: buildProviderTooltip(quota, undefined, mode),
       class: `${APP_BASE_CLASS}-${quota.provider} disconnected`,
+      alt: 'disconnected',
     };
   }
 
@@ -224,5 +229,7 @@ export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode 
     text: pctColored(disp, mode),
     tooltip: buildProviderTooltip(quota, undefined, mode),
     class: `${APP_BASE_CLASS}-${quota.provider} ${status}`,
+    alt: status,
+    ...(disp !== null ? { percentage: Math.round(disp) } : {}),
   };
 }
