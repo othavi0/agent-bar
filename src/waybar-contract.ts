@@ -73,7 +73,7 @@ function copyDir(src: string, dest: string): void {
   }
 }
 
-interface WaybarModuleConfig {
+export interface WaybarModuleConfig {
   exec: string;
   'return-type': 'json';
   interval: number;

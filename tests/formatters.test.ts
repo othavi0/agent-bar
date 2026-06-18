@@ -251,6 +251,24 @@ describe('formatProviderForWaybar', () => {
     expect('alt' in result).toBe(false);
     expect('percentage' in result).toBe(false);
   });
+
+  it('omits alt and percentage when available but has no window data', () => {
+    const quota: ProviderQuota = { provider: 'claude', displayName: 'Claude', available: true } as ProviderQuota;
+    const out = formatProviderForWaybar(quota);
+    expect('alt' in out).toBe(false);
+    expect('percentage' in out).toBe(false);
+  });
+
+  it('clamps percentage to 100 on overage (used > 100)', () => {
+    const quota: ProviderQuota = {
+      provider: 'codex',
+      displayName: 'Codex',
+      available: true,
+      primary: { remaining: -7, used: 107, resetsAt: null },
+    } as ProviderQuota;
+    const out = formatProviderForWaybar(quota, 'used');
+    expect(out.percentage).toBe(100);
+  });
 });
 
 describe('formatForTerminal displayMode=used', () => {

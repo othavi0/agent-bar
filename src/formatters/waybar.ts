@@ -1,5 +1,5 @@
 import { APP_BASE_CLASS } from '../app-identity';
-import { getStatusForPercent } from '../config';
+import { getStatusForPercent, type HealthStatus } from '../config';
 import type { AllQuotas, ProviderQuota } from '../providers/types';
 import { type DisplayMode, loadSettingsSync } from '../settings';
 import { ONE_DARK } from '../theme';
@@ -59,9 +59,9 @@ interface WaybarOutput {
   text: string;
   tooltip: string;
   class: string;
-  /** Health state for `format-icons` (single-provider only): ok/low/warn/critical/disconnected. */
-  alt?: string;
-  /** displayMode-aware quota value (single-provider only), omitted when no data. */
+  /** Health state for `format-icons` (single-provider only). Omitted when available but no data. */
+  alt?: HealthStatus | 'disconnected';
+  /** displayMode-aware quota value (single-provider only), clamped 0..100, omitted when no data. */
   percentage?: number;
 }
 
@@ -229,7 +229,8 @@ export function formatProviderForWaybar(quota: ProviderQuota, mode: DisplayMode 
     text: pctColored(disp, mode),
     tooltip: buildProviderTooltip(quota, undefined, mode),
     class: `${APP_BASE_CLASS}-${quota.provider} ${status}`,
-    alt: status,
-    ...(disp !== null ? { percentage: Math.round(disp) } : {}),
+    // alt/percentage only when there is real data: a missing window must not
+    // report 'ok' (class keeps its pre-existing fallback for CSS).
+    ...(disp !== null ? { alt: status, percentage: Math.min(100, Math.round(disp)) } : {}),
   };
 }

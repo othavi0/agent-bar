@@ -132,11 +132,13 @@ and adds provider-scoped classes such as `claude-ok`, `codex-warn`, or
 Single-provider modules (`--provider <id>`) emit, in addition to `text`,
 `tooltip`, and `class`:
 
-- `alt` — the health state (`ok` / `low` / `warn` / `critical` / `disconnected`),
-  for `format-icons` keyed by state.
+- `alt` — the health state (`ok` / `low` / `warn` / `critical`), or
+  `disconnected`, for `format-icons` keyed by state. **Omitted** when the
+  provider is available but has no quota data (so a missing window never reports
+  `ok`).
 - `percentage` — the displayMode-aware quota value (the same number shown in
-  `text`), for `{percentage}` in `format` or `format-icons` arrays. **Omitted**
-  when there is no data or the provider is disconnected.
+  `text`), clamped to `0..100`, for `{percentage}` in `format` or `format-icons`
+  arrays. **Omitted** when there is no data or the provider is disconnected.
 
 The aggregate module (no `--provider`) does **not** emit `alt`/`percentage`.
 
