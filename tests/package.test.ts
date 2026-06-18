@@ -71,4 +71,12 @@ describe('npm package contract', () => {
     expect(helper).toContain('^//registry.npmjs.org/:_authToken=');
     expect(helper).toContain('exec bun publish "$@"');
   });
+
+  it('guards PKGBUILD pkgver against package.json drift in release:check', () => {
+    expect(pkg.scripts['release:check']).toContain('check:pkgver');
+    expect(pkg.scripts['check:pkgver']).toContain('packaging/aur/PKGBUILD');
+
+    const pkgbuild = readFileSync(join(repoRoot, 'packaging', 'aur', 'PKGBUILD'), 'utf8');
+    expect(pkgbuild).toContain(`pkgver=${pkg.version}`);
+  });
 });
