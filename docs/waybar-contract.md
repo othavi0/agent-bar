@@ -53,6 +53,34 @@ starts its login flow when it is disconnected. See
 [commands.md → Internal Commands](commands.md#internal-commands-waybar-triggered)
 for the `action-right` branch logic.
 
+### Signal (On-Demand Refresh)
+
+Set `"signal": <N>` under `waybar` in `~/.config/agent-bar/settings.json`
+(`N` between 1 and 30) to add `signal: N` to every generated module. Waybar then
+re-runs the module when it receives `SIGRTMIN+N`. **Off by default** (no `signal`
+key in the module unless set), so there is no collision risk out of the box.
+
+The module's `exec` is unchanged (`agent-bar --provider <provider>`), which reads
+the 5-minute quota cache — so a bare signal only re-renders cached data. To force
+a **fresh** fetch on demand, invalidate the cache first, then signal:
+
+```bash
+agent-bar -p claude -r && pkill -RTMIN+8 waybar
+```
+
+Wire that as a Claude Code Stop hook to refresh the bar when a task finishes
+(`~/.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "agent-bar -p claude -r && pkill -RTMIN+8 waybar" }] }
+    ]
+  }
+}
+```
+
 ## CSS Export
 
 ```bash
@@ -98,6 +126,35 @@ agent-bar
 
 and adds provider-scoped classes such as `claude-ok`, `codex-warn`, or
 `amp-critical`.
+
+## Output Fields (`alt` / `percentage`)
+
+Single-provider modules (`--provider <id>`) emit, in addition to `text`,
+`tooltip`, and `class`:
+
+- `alt` — the health state (`ok` / `low` / `warn` / `critical` / `disconnected`),
+  for `format-icons` keyed by state.
+- `percentage` — the displayMode-aware quota value (the same number shown in
+  `text`), for `{percentage}` in `format` or `format-icons` arrays. **Omitted**
+  when there is no data or the provider is disconnected.
+
+The aggregate module (no `--provider`) does **not** emit `alt`/`percentage`.
+
+Example `format-icons` keyed by state (`alt`) — replace the emoji with your own
+glyphs (e.g. Nerd Font):
+
+```jsonc
+"custom/agent-bar-claude": {
+  "format": "{icon} {percentage}%",
+  "format-icons": {
+    "ok": "🟢",
+    "low": "🟡",
+    "warn": "🟠",
+    "critical": "🔴",
+    "disconnected": "⚫"
+  }
+}
+```
 
 ## Asset Install
 
