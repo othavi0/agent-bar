@@ -59,28 +59,38 @@ const DEFAULT_REPO_ROOT = join(import.meta.dir, '..');
 const SURFACE = ONE_DARK.overlay;
 
 /** System asset prefix for a packaged (AUR) install. */
-const SYSTEM_ASSET_DIR = '/usr/share/agent-bar';
+const SYSTEM_ASSET_DIR = `/usr/share/${APP_NAME}`;
 
 /**
  * Directory that holds the source `icons/` and `scripts/` to install into Waybar.
- * Priority: an absolute `AGENT_BAR_ASSET_DIR` override → the system prefix
- * (`/usr/share/agent-bar`, for AUR installs) → the repo root (checkout/npm only).
- * In a compiled binary `DEFAULT_REPO_ROOT` is a `$bunfs/..` virtual path, so it
- * is skipped and a clear error is thrown instead of leaking that path.
+ *
+ * - An explicit `AGENT_BAR_ASSET_DIR` override always wins, but must be an
+ *   absolute path that contains `icons/` — an invalid override throws rather
+ *   than being silently ignored.
+ * - A compiled (system/AUR) binary reads from `/usr/share/<app>`; its
+ *   `DEFAULT_REPO_ROOT` is a `$bunfs/..` virtual path, so it is never consulted.
+ * - A source checkout / npm install reads from the repo root.
  */
 export function resolveAssetSourceRoot(): string {
   const hasIcons = (dir: string) => existsSync(join(dir, 'icons'));
 
   const envDir = process.env.AGENT_BAR_ASSET_DIR;
-  if (envDir && isAbsolute(envDir) && hasIcons(envDir)) return envDir;
+  if (envDir) {
+    if (!isAbsolute(envDir) || !hasIcons(envDir)) {
+      throw new Error(`AGENT_BAR_ASSET_DIR must be an absolute path containing icons/ (got: ${envDir}).`);
+    }
+    return envDir;
+  }
 
-  if (hasIcons(SYSTEM_ASSET_DIR)) return SYSTEM_ASSET_DIR;
+  if (isCompiledBinary()) {
+    if (hasIcons(SYSTEM_ASSET_DIR)) return SYSTEM_ASSET_DIR;
+    throw new Error(
+      `Asset directory not found at ${SYSTEM_ASSET_DIR}. Reinstall the package, or set AGENT_BAR_ASSET_DIR.`,
+    );
+  }
 
-  if (!isCompiledBinary() && hasIcons(DEFAULT_REPO_ROOT)) return DEFAULT_REPO_ROOT;
-
-  throw new Error(
-    'Asset directory not found. Run `agent-bar setup` after installing, or set AGENT_BAR_ASSET_DIR to an absolute path containing icons/.',
-  );
+  if (hasIcons(DEFAULT_REPO_ROOT)) return DEFAULT_REPO_ROOT;
+  throw new Error('Asset directory not found. Run `agent-bar setup` from a checkout, or set AGENT_BAR_ASSET_DIR.');
 }
 
 function copyDir(src: string, dest: string): void {

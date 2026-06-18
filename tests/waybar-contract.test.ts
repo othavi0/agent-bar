@@ -198,13 +198,27 @@ describe('resolveAssetSourceRoot', () => {
     }
   });
 
-  it('throws a clear error under a compiled binary with no assets', () => {
+  it('throws under a compiled binary when system assets are absent', () => {
     process.env.AGENT_BAR_FORCE_COMPILED = '1';
-    process.env.AGENT_BAR_ASSET_DIR = '/nonexistent-xyz';
     try {
       expect(() => resolveAssetSourceRoot()).toThrow(/Asset directory not found/);
     } finally {
       delete process.env.AGENT_BAR_FORCE_COMPILED;
+    }
+  });
+
+  it('throws (not silently falls through) when AGENT_BAR_ASSET_DIR is set but invalid', () => {
+    process.env.AGENT_BAR_ASSET_DIR = '/nonexistent-xyz';
+    try {
+      expect(() => resolveAssetSourceRoot()).toThrow(/AGENT_BAR_ASSET_DIR must be/);
+    } finally {
+      delete process.env.AGENT_BAR_ASSET_DIR;
+    }
+
+    process.env.AGENT_BAR_ASSET_DIR = 'relative/path';
+    try {
+      expect(() => resolveAssetSourceRoot()).toThrow(/AGENT_BAR_ASSET_DIR must be/);
+    } finally {
       delete process.env.AGENT_BAR_ASSET_DIR;
     }
   });

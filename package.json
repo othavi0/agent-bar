@@ -37,7 +37,7 @@
     "typecheck": "bun x tsc --noEmit",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "prepack": "bun run build",
-    "check:pkgver": "grep -q \"^pkgver=$(jq -r .version package.json)$\" packaging/aur/PKGBUILD || { echo 'PKGBUILD pkgver != package.json version'; exit 1; }",
+    "check:pkgver": "V=$(jq -r .version package.json); grep -qFx \"pkgver=$V\" packaging/aur/PKGBUILD && grep -qF \"pkgver = $V\" packaging/aur/.SRCINFO || { echo 'PKGBUILD/.SRCINFO pkgver out of sync with package.json'; exit 1; }",
     "release:check": "bun run check:pkgver && bun test && bun run typecheck && bun run lint && bun run build && bun pm pack --dry-run --ignore-scripts",
     "publish:dry-run": "bash ./scripts/bun-publish-with-npm-token --dry-run --access public",
     "publish:npm": "bash ./scripts/bun-publish-with-npm-token --access public",

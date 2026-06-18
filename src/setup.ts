@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { APP_NAME } from './app-identity';
 import { scan } from './doctor';
+import { isCompiledBinary } from './runtime';
 import { colorize, semantic } from './tui/colors';
 import { printCommandHeader } from './tui/terminal-ui';
 import { getDefaultWaybarAssetPaths, installWaybarAssets } from './waybar-contract';
@@ -55,6 +56,11 @@ export async function runSetup(options: SetupOptions = {}): Promise<boolean> {
 
   printCommandHeader('setup');
 
+  // A compiled (AUR/system) binary lives at /usr/bin/agent-bar (already on PATH)
+  // and reads assets from /usr/share/<app>; it needs neither the ~/.local/bin
+  // symlink nor the repo-root asset source.
+  const systemInstall = isCompiledBinary();
+
   const defaults = getDefaultWaybarAssetPaths();
   const integrationPaths = getDefaultWaybarIntegrationPaths();
 
@@ -63,11 +69,11 @@ export async function runSetup(options: SetupOptions = {}): Promise<boolean> {
       `This setup is theme-agnostic and fully managed by ${APP_NAME}.`,
       '',
       'It will:',
-      `  1. Install ${APP_NAME} icons + terminal helper`,
-      `  2. Create ~/.local/bin/${APP_NAME} symlink`,
-      `  3. Wire ${integrationPaths.waybarConfigPath}`,
-      `  4. Wire ${integrationPaths.waybarStylePath}`,
-      '  5. Reload Waybar',
+      `  • Install ${APP_NAME} icons + terminal helper`,
+      ...(systemInstall ? [] : [`  • Create ~/.local/bin/${APP_NAME} symlink`]),
+      `  • Wire ${integrationPaths.waybarConfigPath}`,
+      `  • Wire ${integrationPaths.waybarStylePath}`,
+      '  • Reload Waybar',
     ].join('\n'),
     colorize('Setup', semantic.title),
   );
@@ -91,13 +97,15 @@ export async function runSetup(options: SetupOptions = {}): Promise<boolean> {
     const assetResult = installWaybarAssets({
       waybarDir: defaults.waybarDir,
       scriptsDir: defaults.scriptsDir,
-      repoRoot: REPO_ROOT,
     });
     s.stop('Assets installed');
 
-    s.start('Creating symlink...');
-    const link = createSymlink();
-    s.stop('Symlink created');
+    let link: string | null = null;
+    if (!systemInstall) {
+      s.start('Creating symlink...');
+      link = createSymlink();
+      s.stop('Symlink created');
+    }
 
     s.start('Wiring Waybar config and styles...');
     const integrationResult = applyWaybarIntegration({
@@ -113,7 +121,7 @@ export async function runSetup(options: SetupOptions = {}): Promise<boolean> {
 
     p.log.success(colorize(`Icons: ${assetResult.iconsDir}`, semantic.good));
     p.log.success(colorize(`Helper: ${assetResult.terminalScript}`, semantic.good));
-    p.log.success(colorize(`Symlink: ${link}`, semantic.good));
+    if (link) p.log.success(colorize(`Symlink: ${link}`, semantic.good));
     p.log.success(
       colorize(
         integrationResult.configChanged
@@ -131,15 +139,17 @@ export async function runSetup(options: SetupOptions = {}): Promise<boolean> {
       ),
     );
 
-    const localBin = join(HOME, '.local', 'bin');
-    const pathDirs = (process.env.PATH ?? '').split(':');
-    if (!pathDirs.some((d) => resolve(d) === resolve(localBin))) {
-      p.log.warn(
-        colorize(
-          `~/.local/bin is not in your PATH. Add to your shell profile:\n  export PATH="$HOME/.local/bin:$PATH"`,
-          semantic.warning,
-        ),
-      );
+    if (!systemInstall) {
+      const localBin = join(HOME, '.local', 'bin');
+      const pathDirs = (process.env.PATH ?? '').split(':');
+      if (!pathDirs.some((d) => resolve(d) === resolve(localBin))) {
+        p.log.warn(
+          colorize(
+            `~/.local/bin is not in your PATH. Add to your shell profile:\n  export PATH="$HOME/.local/bin:$PATH"`,
+            semantic.warning,
+          ),
+        );
+      }
     }
 
     try {

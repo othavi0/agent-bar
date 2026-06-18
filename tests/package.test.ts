@@ -72,11 +72,14 @@ describe('npm package contract', () => {
     expect(helper).toContain('exec bun publish "$@"');
   });
 
-  it('guards PKGBUILD pkgver against package.json drift in release:check', () => {
+  it('guards PKGBUILD and .SRCINFO pkgver against package.json drift in release:check', () => {
     expect(pkg.scripts['release:check']).toContain('check:pkgver');
     expect(pkg.scripts['check:pkgver']).toContain('packaging/aur/PKGBUILD');
+    expect(pkg.scripts['check:pkgver']).toContain('packaging/aur/.SRCINFO');
 
     const pkgbuild = readFileSync(join(repoRoot, 'packaging', 'aur', 'PKGBUILD'), 'utf8');
     expect(pkgbuild).toContain(`pkgver=${pkg.version}`);
+    const srcinfo = readFileSync(join(repoRoot, 'packaging', 'aur', '.SRCINFO'), 'utf8');
+    expect(srcinfo).toContain(`pkgver = ${pkg.version}`);
   });
 });

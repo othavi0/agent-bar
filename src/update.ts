@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
+import { APP_NAME } from './app-identity';
 import { isCompiledBinary } from './runtime';
 import { colorize, semantic } from './tui/colors';
 import { printCommandHeader, printKeyValues, printWarning } from './tui/terminal-ui';
@@ -352,7 +353,7 @@ export async function main() {
 
   if (installKind === 'system') {
     p.log.info(colorize('Installed as a system package (standalone binary).', semantic.subtitle));
-    p.log.info(colorize('Update it with your package manager, e.g. `paru -Syu agent-bar-bin`.', semantic.subtitle));
+    p.log.info(colorize(`Update it with your AUR helper, e.g. \`paru -Syu ${APP_NAME}-bin\`.`, semantic.subtitle));
     p.outro(colorize('Nothing to do here', semantic.muted));
     return;
   }
