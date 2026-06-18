@@ -85,6 +85,7 @@ async function main() {
           {
             appBin: options.appBin ?? defaults.appBin,
             terminalScript: options.terminalScript ?? defaults.terminalScript,
+            signal: settings.waybar.signal,
           },
           settings.waybar.providerOrder as WaybarProviderId[],
         ),

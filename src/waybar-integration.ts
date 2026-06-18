@@ -383,17 +383,18 @@ export function applyWaybarIntegration(options: ApplyWaybarIntegrationOptions = 
 
   const providerOrder = resolveProviderOrder();
   const moduleIDs = getAppModuleIDs(providerOrder);
+  const settings = loadSettingsSync();
 
   const modules = exportWaybarModules(
     {
       appBin: options.appBin ?? defaults.appBin,
       terminalScript: options.terminalScript ?? defaults.terminalScript,
+      signal: settings.waybar.signal,
     },
     providerOrder,
   ).modules;
   writeText(paths.modulesIncludePath, JSON.stringify(modules, null, 2));
 
-  const settings = loadSettingsSync();
   const css = exportWaybarCss({
     iconsDir: options.iconsDir ?? defaults.iconsDir,
     providerOrder,
