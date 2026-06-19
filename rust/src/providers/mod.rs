@@ -1,4 +1,5 @@
 pub mod base;
+pub mod claude;
 pub mod error;
 pub mod extras;
 pub mod types;
@@ -59,7 +60,7 @@ pub trait Provider {
 
 /// Providers de produção. Cresce a cada plano (04a: Claude; 04b: Amp; 04c: Codex).
 pub fn registry() -> Vec<Box<dyn Provider>> {
-    Vec::new()
+    vec![Box::new(claude::ClaudeProvider)]
 }
 
 /// ISO-8601 UTC com 3 dígitos de milissegundo e sufixo `Z` — idêntico ao
@@ -275,7 +276,9 @@ mod tests {
     }
 
     #[test]
-    fn registry_is_empty_in_this_plan() {
-        assert_eq!(registry().len(), 0);
+    fn registry_has_claude() {
+        let r = registry();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].id(), "claude");
     }
 }
