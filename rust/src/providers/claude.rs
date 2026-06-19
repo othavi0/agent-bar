@@ -485,4 +485,179 @@ mod tests {
             Some("Token expired. Open `agent-bar menu` and choose Provider login.")
         );
     }
+
+    // ---- is_available variants ----
+
+    #[tokio::test]
+    async fn is_available_no_file_returns_false() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+        // nenhum arquivo de credenciais no tempdir
+        assert!(!ClaudeProvider.is_available(&ctx).await);
+    }
+
+    #[tokio::test]
+    async fn is_available_valid_token_returns_true() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok"}}),
+        );
+        assert!(ClaudeProvider.is_available(&ctx).await);
+    }
+
+    #[tokio::test]
+    async fn is_available_empty_token_returns_false() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":""}}),
+        );
+        assert!(!ClaudeProvider.is_available(&ctx).await);
+    }
+
+    #[tokio::test]
+    async fn is_available_no_oauth_section_returns_false() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+        write_creds(&ctx.paths.claude_credentials, json!({}));
+        assert!(!ClaudeProvider.is_available(&ctx).await);
+    }
+
+    // ---- invalid_credentials_file ----
+
+    #[tokio::test]
+    async fn invalid_credentials_file_returns_error() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+        std::fs::write(&ctx.paths.claude_credentials, b"{ not json").unwrap();
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(!q.available);
+        assert_eq!(q.error.as_deref(), Some("Invalid credentials file"));
+    }
+
+    // ---- no_access_token ----
+
+    #[tokio::test]
+    async fn no_access_token_returns_error_without_plan() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+        // claudeAiOauth presente mas sem accessToken
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"subscriptionType":"Pro"}}),
+        );
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(!q.available);
+        assert_eq!(q.error.as_deref(), Some("No access token"));
+        // early-return antes de derivar plano
+        assert!(q.plan.is_none());
+    }
+
+    // ---- non_round_utilization ----
+
+    #[tokio::test]
+    async fn non_round_utilization_rounds_correctly() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "five_hour": {"utilization": 33.7},
+                "seven_day": {"utilization": 10.4}
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        // 33.7 → round → 34 → remaining = 100 - 34 = 66
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 66.0);
+        // 10.4 → round → 10 → remaining = 100 - 10 = 90
+        assert_eq!(q.secondary.as_ref().unwrap().remaining, 90.0);
+    }
+
+    // ---- extra_usage_disabled_is_omitted ----
+
+    #[tokio::test]
+    async fn extra_usage_disabled_is_omitted() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "five_hour": {"utilization": 10.0},
+                "extra_usage": {
+                    "is_enabled": false,
+                    "monthly_limit": 5000.0,
+                    "used_credits": 100.0,
+                    "utilization": 50.0
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        // extra_usage desabilitado + sem weekly → extra deve ser None
+        assert!(q.extra.is_none());
+    }
+
+    // ---- resets_at_empty_string_becomes_none ----
+
+    #[tokio::test]
+    async fn resets_at_empty_string_becomes_none() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "five_hour": {"utilization": 20.0, "resets_at": ""}
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        // string vazia deve ser convertida para None
+        assert!(q.primary.as_ref().unwrap().resets_at.is_none());
+    }
 }
