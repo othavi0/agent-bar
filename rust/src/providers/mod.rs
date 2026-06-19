@@ -1,3 +1,4 @@
+pub mod amp_cli;
 pub mod base;
 pub mod claude;
 pub mod error;
