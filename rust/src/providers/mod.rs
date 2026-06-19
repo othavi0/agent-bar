@@ -2,6 +2,7 @@ pub mod amp;
 pub mod amp_cli;
 pub mod base;
 pub mod claude;
+pub mod codex;
 pub mod error;
 pub mod extras;
 pub mod types;
