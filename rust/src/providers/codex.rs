@@ -289,7 +289,7 @@ pub fn build_codex_quota(limits: &CodexRateLimits, base: ProviderQuota) -> Provi
         } else {
             Some(models)
         },
-        plan_type: limits.plan_type.clone(),
+        plan_type: limits.plan_type.clone().filter(|s| !s.is_empty()),
         plan,
         extra,
         ..base
@@ -960,6 +960,21 @@ mod tests {
     // -----------------------------------------------------------------------
     // Edge: empty buckets / skipped
     // -----------------------------------------------------------------------
+
+    #[test]
+    fn empty_plan_type_is_omitted() {
+        let limits = CodexRateLimits {
+            primary: Some(win(10.0, 300, 0)),
+            plan_type: Some("".into()),
+            ..Default::default()
+        };
+        let q = build_codex_quota(&limits, base());
+        assert!(
+            q.plan_type.is_none(),
+            "plan_type vazio deve ser omitido (casa o TS)"
+        );
+        assert!(q.plan.is_none());
+    }
 
     #[test]
     fn skips_bucket_with_no_primary_or_secondary() {
