@@ -39,6 +39,18 @@ pub enum HealthStatus {
     Critical,
 }
 
+impl HealthStatus {
+    /// Token lowercase para class CSS / `alt` do Waybar (= TS `type HealthStatus`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HealthStatus::Ok => "ok",
+            HealthStatus::Low => "low",
+            HealthStatus::Warn => "warn",
+            HealthStatus::Critical => "critical",
+        }
+    }
+}
+
 /// Bucket de saúde a partir do % restante cru. `None` → Ok (desconhecido).
 pub fn status_for_percent(pct: Option<f64>) -> HealthStatus {
     match pct {
@@ -169,5 +181,13 @@ mod tests {
         assert_eq!(default_ttl_secs("codex"), 90);
         assert_eq!(default_ttl_secs("amp"), 90);
         assert_eq!(default_ttl_secs("unknown"), 300);
+    }
+
+    #[test]
+    fn health_status_as_str() {
+        assert_eq!(HealthStatus::Ok.as_str(), "ok");
+        assert_eq!(HealthStatus::Low.as_str(), "low");
+        assert_eq!(HealthStatus::Warn.as_str(), "warn");
+        assert_eq!(HealthStatus::Critical.as_str(), "critical");
     }
 }
