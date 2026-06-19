@@ -82,6 +82,7 @@ impl Paths {
             env::var_os(var)
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from)
+                .filter(|p| p.is_absolute()) // XDG spec: ignore relative paths
                 .unwrap_or_else(|| home.join(fallback))
         };
 

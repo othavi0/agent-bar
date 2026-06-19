@@ -241,6 +241,7 @@ fn normalize(raw: RawSettings) -> Settings {
 
 /// Carrega + normaliza. Defaults em ausência/erro. Auto-repair se o conteúdo
 /// normalizado difere do arquivo bruto.
+/// Chaves desconhecidas no arquivo são removidas no auto-repair (intencional).
 pub fn load(paths: &Paths) -> Settings {
     let file = paths.settings_file();
     let bytes = match std::fs::read(&file) {
@@ -251,7 +252,7 @@ pub fn load(paths: &Paths) -> Settings {
     let raw_value: serde_json::Value = match serde_json::from_slice(&bytes) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("[agent-bar] Settings parse error (using defaults): {e}");
+            log::warn!("[agent-bar] settings parse error (using defaults): {e}");
             return normalize(RawSettings::default());
         }
     };
@@ -261,7 +262,9 @@ pub fn load(paths: &Paths) -> Settings {
 
     let norm_value = serde_json::to_value(&normalized).unwrap_or(serde_json::Value::Null);
     if norm_value != raw_value {
-        let _ = save(paths, &normalized);
+        if let Err(e) = save(paths, &normalized) {
+            log::warn!("[agent-bar] settings auto-repair save failed: {e}");
+        }
     }
 
     normalized
