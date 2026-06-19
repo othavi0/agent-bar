@@ -18,7 +18,7 @@
 - **Branch:** `rust-rewrite` (corta de `master` em `1eae7ac`; docs do spec/plano estão em `master` e na branch).
 - **Crate Rust vive em `rust/`** durante a migração (TS fica na raiz, rodável p/ paridade/shadow-mode; promove pra raiz no cutover do Plano 7).
 - **Verificação:** `cargo test --manifest-path rust/Cargo.toml` + `cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings`. (RTK trunca output multi-suíte — somar suítes com `grep -Eo "[0-9]+ passed"` ou `grep "test result"`.)
-- **Feito:** Planos 01 (foundation), 02 (render primitives), 03a (format/builder primitives), 03b (builders por-provider), **03c (assembly terminal/waybar + golden snapshots de paridade byte-exact)**. **180 testes** (5 suítes, golden inclusa), clippy clean. Branch @ `88c6389` (3c em review de branch Opus; se o review pedir fix, aplicar e re-stampar). **Toda a camada de formatação está completa e com paridade travada vs TS.** Próximo: **Plano 4 (providers async/tokio)**.
+- **Feito:** Planos 01 (foundation), 02 (render primitives), 03a (format/builder primitives), 03b (builders por-provider), **03c (assembly terminal/waybar + golden snapshots de paridade byte-exact)**. **181 testes** (5 suítes, 58 golden), clippy clean. Branch @ `fceb56d`. 3c review de branch Opus = "sólido para o Plano 4, SIM" (zero Critical/Important; D1 footer confirmado staleness). **Toda a camada de formatação está completa e com paridade byte-exact travada vs TS.** Próximo: **Plano 4 (providers async/tokio)** — a fase mais difícil (ainda a autorar).
 - **Toolchain:** Rust 1.95.0, cargo 1.95.0 (confirmado instalado).
 
 ## 2. Decisões TRAVADAS (não relitigar) + princípios invioláveis
