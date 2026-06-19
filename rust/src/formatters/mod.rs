@@ -1,3 +1,4 @@
+pub mod builders;
 pub mod clock;
 pub mod json;
 pub mod render_ansi;
