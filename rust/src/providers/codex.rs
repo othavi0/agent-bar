@@ -328,7 +328,9 @@ pub struct CodexAppServerLimitBucket {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexAppServerCredits {
+    #[serde(default)]
     pub has_credits: bool,
+    #[serde(default)]
     pub unlimited: bool,
     #[serde(default)]
     pub balance: Option<String>,
@@ -1981,5 +1983,13 @@ mod tests {
             CodexProvider.to_user_facing_error(&e),
             "Failed to fetch Codex usage"
         );
+    }
+
+    #[test]
+    fn appserver_credits_tolerates_missing_bool_fields() {
+        let c: CodexAppServerCredits = serde_json::from_str(r#"{"balance":"5"}"#).unwrap();
+        assert!(!c.has_credits);
+        assert!(!c.unlimited);
+        assert_eq!(c.balance.as_deref(), Some("5"));
     }
 }
