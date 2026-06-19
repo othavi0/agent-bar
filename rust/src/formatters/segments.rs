@@ -86,7 +86,6 @@ pub fn indicator_segments(display: Option<f64>, mode: DisplayMode) -> Line {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers::types::QuotaWindow;
     use crate::settings::DisplayMode;
     use crate::theme::ColorToken;
 
@@ -152,16 +151,5 @@ mod tests {
         let s = Segment::raw_text(" │ ");
         assert!(s.raw);
         assert_eq!(s.text, " │ ");
-    }
-
-    // Suppress unused import warning in tests
-    #[allow(dead_code)]
-    fn _use_quota_window() -> QuotaWindow {
-        QuotaWindow {
-            remaining: 0.0,
-            resets_at: None,
-            window_minutes: None,
-            used: None,
-        }
     }
 }

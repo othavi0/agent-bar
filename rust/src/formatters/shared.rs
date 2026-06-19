@@ -31,6 +31,7 @@ pub fn to_health(display_value: Option<f64>, mode: DisplayMode) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::types::QuotaWindow;
     use crate::settings::DisplayMode;
 
     #[test]
@@ -45,5 +46,21 @@ mod tests {
         assert_eq!(to_health(Some(30.0), DisplayMode::Used), Some(70.0));
         assert_eq!(to_health(Some(70.0), DisplayMode::Remaining), Some(70.0));
         assert_eq!(to_health(None, DisplayMode::Remaining), None);
+    }
+
+    #[test]
+    fn to_window_display_honours_provider_used() {
+        let w = QuotaWindow {
+            remaining: 30.0,
+            resets_at: None,
+            window_minutes: None,
+            used: Some(70.0),
+        };
+        assert_eq!(to_window_display(Some(&w), DisplayMode::Used), Some(70.0));
+        assert_eq!(
+            to_window_display(Some(&w), DisplayMode::Remaining),
+            Some(30.0)
+        );
+        assert_eq!(to_window_display(None, DisplayMode::Remaining), None);
     }
 }
