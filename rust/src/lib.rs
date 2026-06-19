@@ -6,6 +6,7 @@ pub mod config;
 pub mod formatters;
 pub mod http;
 pub mod logger;
+pub mod notify;
 pub mod providers;
 pub mod settings;
 pub mod theme;
