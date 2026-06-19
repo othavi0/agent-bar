@@ -8,7 +8,7 @@ use crate::formatters::segments::{
 };
 use crate::formatters::shared::{format_percent, to_display};
 use crate::providers::types::ProviderQuota;
-use crate::theme::ColorToken;
+use crate::theme::{box_chars, ColorToken};
 
 use super::shared::{build_footer_line, header_line, BuildOptions};
 
@@ -23,14 +23,14 @@ pub fn build_generic(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -
 
     if let Some(err) = p.error.as_deref() {
         lines.push(vec![
-            Segment::new(crate::theme::box_chars::V, ColorToken::Text),
+            Segment::new(box_chars::V, ColorToken::Text),
             Segment::raw_text("  "),
             Segment::new(err.to_string(), ColorToken::Red),
         ]);
     } else if let Some(primary) = p.primary.as_ref() {
         let disp = to_display(Some(primary.remaining), options.mode);
         let mut line: Line = vec![
-            Segment::new(crate::theme::box_chars::V, ColorToken::Text),
+            Segment::new(box_chars::V, ColorToken::Text),
             Segment::raw_text("  "),
         ];
         line.extend(indicator_segments(disp, options.mode));
