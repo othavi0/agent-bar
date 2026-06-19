@@ -135,6 +135,25 @@ mod tests {
     }
 
     #[test]
+    fn color_for_display_used_mode_inverts_via_health() {
+        // 30% usado → 70% restante → Ok/Green. Exercita to_health dentro de color_for_display.
+        assert_eq!(
+            color_for_display(Some(30.0), DisplayMode::Used),
+            ColorToken::Green
+        );
+        // 95% usado → 5% restante → Critical/Red.
+        assert_eq!(
+            color_for_display(Some(95.0), DisplayMode::Used),
+            ColorToken::Red
+        );
+        // bar_segments em used mode pega a cor pela saúde invertida.
+        assert_eq!(
+            bar_segments(Some(30.0), DisplayMode::Used)[0].color,
+            ColorToken::Green
+        );
+    }
+
+    #[test]
     fn indicator_open_dot_when_null() {
         assert_eq!(
             indicator_segments(None, DisplayMode::Remaining)[0].text,
