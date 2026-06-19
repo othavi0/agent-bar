@@ -50,10 +50,10 @@ pub fn ansi_truecolor(hex: &str) -> String {
     if clean.len() != 6 {
         return String::new();
     }
-    let comp = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0);
-    let r = comp(&clean[0..2]);
-    let g = comp(&clean[2..4]);
-    let b = comp(&clean[4..6]);
+    let comp = |s: &str| u8::from_str_radix(s, 16).ok();
+    let (Some(r), Some(g), Some(b)) = (comp(&clean[0..2]), comp(&clean[2..4]), comp(&clean[4..6])) else {
+        return String::new();
+    };
     format!("\x1b[38;2;{r};{g};{b}m")
 }
 
@@ -103,6 +103,7 @@ mod tests {
     fn ansi_truecolor_rejects_bad_hex() {
         assert_eq!(ansi_truecolor("nope"), "");
         assert_eq!(ansi_truecolor("#12"), "");
+        assert_eq!(ansi_truecolor("#zzzzzz"), ""); // 6 chars mas dígitos inválidos
     }
 
     #[test]
