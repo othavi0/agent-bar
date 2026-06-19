@@ -8,3 +8,4 @@ pub mod segments;
 pub mod shared;
 pub mod terminal;
 pub mod view_model;
+pub mod waybar;
