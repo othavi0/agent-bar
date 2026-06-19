@@ -80,6 +80,13 @@ pub fn normalize_plan(raw: Option<&str>) -> Option<String> {
     Some(mapped.to_string())
 }
 
+/// Label de plano para um quota: normaliza `plan` (ou `plan_type` como fallback);
+/// "Unknown" quando nenhum resolve.
+pub fn normalize_plan_label(p: &crate::providers::types::ProviderQuota) -> String {
+    normalize_plan(p.plan.as_deref().or(p.plan_type.as_deref()))
+        .unwrap_or_else(|| "Unknown".to_string())
+}
+
 /// Substitui `_`/`-` por espaço e capitaliza a 1ª letra de cada palavra.
 fn titlecase_plan(raw: &str) -> String {
     raw.split(['_', '-'])
@@ -135,6 +142,29 @@ mod helper_tests {
         );
         assert_eq!(normalize_plan(Some("  ")), None);
         assert_eq!(normalize_plan(None), None);
+    }
+
+    #[test]
+    fn normalize_plan_label_prefers_plan_then_type_then_unknown() {
+        use crate::providers::types::ProviderQuota;
+        let mut q = ProviderQuota {
+            provider: "codex".into(),
+            display_name: "Codex".into(),
+            available: true,
+            account: None,
+            plan: Some("pro".into()),
+            plan_type: Some("ignored".into()),
+            primary: None,
+            secondary: None,
+            models: None,
+            extra: None,
+            error: None,
+        };
+        assert_eq!(normalize_plan_label(&q), "Pro");
+        q.plan = None;
+        assert_eq!(normalize_plan_label(&q), "Ignored"); // titlecase do plan_type
+        q.plan_type = None;
+        assert_eq!(normalize_plan_label(&q), "Unknown");
     }
 
     #[test]
