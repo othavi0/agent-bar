@@ -349,6 +349,359 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
     Ok(opts)
 }
 
+// ---------------------------------------------------------------------------
+// Helpers internos de renderização para build_help
+// ---------------------------------------------------------------------------
+
+use crate::theme::{box_chars, ColorToken, ANSI_BOLD, ANSI_RESET};
+
+/// Aplica um código ANSI — retorna `""` quando `no_color == true`.
+#[inline]
+fn paint(code: &str, no_color: bool) -> &str {
+    if no_color {
+        ""
+    } else {
+        code
+    }
+}
+
+/// Versão de `ColorToken::ansi()` que respeita `no_color`.
+fn color(token: ColorToken, no_color: bool) -> String {
+    if no_color {
+        String::new()
+    } else {
+        token.ansi()
+    }
+}
+
+// Coluna de alinhamento (= COL1 do TS).
+const COL1: usize = 22;
+
+/// Linha vertical simples (equivale ao `v()` do TS).
+fn v_line(no_color: bool) -> String {
+    format!(
+        "{}{}{}",
+        color(ColorToken::Magenta, no_color),
+        box_chars::V,
+        paint(ANSI_RESET, no_color),
+    )
+}
+
+/// Header de seção com `◆` e negrito (equivale a `label()` do TS).
+fn label_line(text: &str, no_color: bool) -> String {
+    let mg = color(ColorToken::Magenta, no_color);
+    let bold = paint(ANSI_BOLD, no_color);
+    let rst = paint(ANSI_RESET, no_color);
+    format!(
+        "{mg}{lt}{h}{rst} {mg}{bold}{dia} {text}{rst}",
+        mg = mg,
+        lt = box_chars::LT,
+        h = box_chars::H,
+        rst = rst,
+        bold = bold,
+        dia = box_chars::DIAMOND,
+        text = text,
+    )
+}
+
+/// Linha de comando (verde) — equivale a `cmdLine()` do TS.
+fn cmd_line(name: &str, desc: &str, no_color: bool) -> String {
+    format!(
+        "{vl}  {gc}{dot}{rst} {tb}{name:<col1$}{rst}{mt}{desc}{rst}",
+        vl = v_line(no_color),
+        gc = color(ColorToken::Green, no_color),
+        dot = box_chars::DOT,
+        rst = paint(ANSI_RESET, no_color),
+        tb = color(ColorToken::TextBright, no_color),
+        name = name,
+        col1 = COL1,
+        mt = color(ColorToken::Muted, no_color),
+        desc = desc,
+    )
+}
+
+/// Linha de opção/flag (amarela) — equivale a `optLine()` do TS.
+fn opt_line(flags: &str, desc: &str, no_color: bool) -> String {
+    format!(
+        "{vl}  {yc}{dot}{rst} {tb}{flags:<col1$}{rst}{mt}{desc}{rst}",
+        vl = v_line(no_color),
+        yc = color(ColorToken::Yellow, no_color),
+        dot = box_chars::DOT,
+        rst = paint(ANSI_RESET, no_color),
+        tb = color(ColorToken::TextBright, no_color),
+        flags = flags,
+        col1 = COL1,
+        mt = color(ColorToken::Muted, no_color),
+        desc = desc,
+    )
+}
+
+/// Linha de informação (laranja) — equivale a `infoLine()` do TS.
+fn info_line(key: &str, val: &str, no_color: bool) -> String {
+    format!(
+        "{vl}  {oc}{dot}{rst} {oc}{key:<col1$}{rst}{cm}{val}{rst}",
+        vl = v_line(no_color),
+        oc = color(ColorToken::Orange, no_color),
+        dot = box_chars::DOT,
+        rst = paint(ANSI_RESET, no_color),
+        key = key,
+        col1 = COL1,
+        cm = color(ColorToken::Comment, no_color),
+        val = val,
+    )
+}
+
+/// Linha Waybar (ação → descrição) — equivale a `wbLine()` do TS.
+fn wb_line(action: &str, desc: &str, no_color: bool) -> String {
+    format!(
+        "{vl}  {tb}{action:<col1$}{rst}{cm}→{rst} {mt}{desc}{rst}",
+        vl = v_line(no_color),
+        tb = color(ColorToken::TextBright, no_color),
+        action = action,
+        col1 = COL1,
+        rst = paint(ANSI_RESET, no_color),
+        cm = color(ColorToken::Comment, no_color),
+        mt = color(ColorToken::Muted, no_color),
+        desc = desc,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// API pública: build_help / show_help
+// ---------------------------------------------------------------------------
+
+use crate::app_identity::VERSION;
+
+/// Monta o texto de ajuda completo (multilinha, terminado em `\n`).
+///
+/// Porta fiel de `showHelp()` de `src/cli.ts:62-116`.
+/// `no_color == true` elimina todos os códigos ANSI; texto e box chars ficam.
+pub fn build_help(no_color: bool) -> String {
+    let mg = color(ColorToken::Magenta, no_color);
+    let bold = paint(ANSI_BOLD, no_color);
+    let rst = paint(ANSI_RESET, no_color);
+    let cm = color(ColorToken::Comment, no_color);
+
+    let w: usize = 58;
+    // repeat de H no header: max(0, w - APP_NAME.len() - 8)
+    let h_count = w.saturating_sub(APP_NAME.len() + 8);
+    let h_repeat = box_chars::H.repeat(h_count);
+    // repeat de H no footer: w = 58
+    let footer_h = box_chars::H.repeat(w);
+
+    let mut out = String::new();
+
+    // Linha em branco antes do header
+    out.push('\n');
+
+    // Header: ┏━ agent-bar v<version> ━━━…
+    out.push_str(&format!(
+        "{mg}{tl}{h}{rst} {mg}{bold}{name}{rst} {cm}v{version}{rst} {mg}{h_repeat}{rst}\n",
+        mg = mg,
+        tl = box_chars::TL,
+        h = box_chars::H,
+        rst = rst,
+        bold = bold,
+        name = APP_NAME,
+        cm = cm,
+        version = VERSION,
+        h_repeat = h_repeat,
+    ));
+
+    out.push_str(&format!("{}\n", v_line(no_color)));
+
+    // Seção Commands
+    out.push_str(&format!("{}\n", label_line("Commands", no_color)));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line("menu", "Interactive TUI menu", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line("status", "Show quotas in terminal", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line(
+            "setup",
+            &format!("Install + wire {APP_NAME} in Waybar"),
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line("assets install", "Install icons/helper only", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line(
+            "export waybar-modules",
+            "Print Waybar JSON module contract",
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line(
+            "export waybar-css",
+            "Print Waybar CSS JSON contract",
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line(
+            "update",
+            "Update the install (npm or managed checkout)",
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line(
+            "uninstall",
+            &format!("Remove {APP_NAME} + integration"),
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line("remove", "Force remove without prompt", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line(
+            "doctor",
+            &format!("Detect & clean {APP_NAME} leftovers in $HOME"),
+            no_color
+        )
+    ));
+    out.push_str(&format!("{}\n", v_line(no_color)));
+
+    // Seção Waybar
+    out.push_str(&format!("{}\n", label_line("Waybar", no_color)));
+    out.push_str(&format!(
+        "{}\n",
+        wb_line("Left click", "Interactive menu", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        wb_line("Right click", "Refresh / Login", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        wb_line("Hover", "Detailed tooltip", no_color)
+    ));
+    out.push_str(&format!("{}\n", v_line(no_color)));
+
+    // Seção Flags
+    out.push_str(&format!("{}\n", label_line("Flags", no_color)));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line(
+            "--provider, -p <id>",
+            "Single provider (Waybar module)",
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--refresh, -r", "Invalidate cache before output", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--verbose, -v", "Debug logging to stderr", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--version, -V", "Print version and exit", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line(
+            "--format <fmt>",
+            "Output format: waybar (default) | json",
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--watch", "Stream NDJSON (implies --format json)", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line(
+            "--interval <s>",
+            "Watch poll floor in seconds (default 60)",
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--dry-run", "Preview changes (doctor)", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--yes, -y", "Assume yes (doctor/uninstall)", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--waybar-dir <path>", "Assets install target", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--scripts-dir <path>", "Terminal helper target", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--icons-dir <path>", "CSS export icon directory", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line("--app-bin <path>", "Modules export app binary", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        opt_line(
+            "--terminal-script <path>",
+            "Modules export launcher",
+            no_color
+        )
+    ));
+    out.push_str(&format!("{}\n", v_line(no_color)));
+
+    // Seção Info
+    out.push_str(&format!("{}\n", label_line("Info", no_color)));
+    out.push_str(&format!(
+        "{}\n",
+        info_line(
+            "Run with",
+            &format!("{APP_NAME}  or  bun run start"),
+            no_color
+        )
+    ));
+    out.push_str(&format!("{}\n", v_line(no_color)));
+
+    // Footer: ┗━━…
+    out.push_str(&format!(
+        "{mg}{bl}{footer_h}{rst}\n",
+        mg = mg,
+        bl = box_chars::BL,
+        footer_h = footer_h,
+        rst = rst,
+    ));
+
+    // Linha em branco após footer
+    out.push('\n');
+
+    out
+}
+
+/// Imprime `build_help` em stdout.
+pub fn show_help(no_color: bool) {
+    print!("{}", build_help(no_color));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -798,5 +1151,70 @@ mod tests {
     #[test]
     fn suggest_command_returns_setup_for_setip() {
         assert_eq!(suggest_command("setip"), Some("setup"));
+    }
+
+    // -----------------------------------------------------------------------
+    // build_help / show_help — porta de cli.test.ts:354-372
+    // -----------------------------------------------------------------------
+
+    /// Needle 1: texto verbatim da linha `update` (contrato de cli.test.ts:365).
+    #[test]
+    fn build_help_contains_update_description() {
+        let help = build_help(false);
+        assert!(
+            help.contains("Update the install (npm or managed checkout)"),
+            "Texto 'Update the install (npm or managed checkout)' não encontrado no help"
+        );
+    }
+
+    /// Needle 2: linha Info — APP_NAME + dois espaços (contrato de cli.test.ts:369).
+    #[test]
+    fn build_help_contains_run_with_line() {
+        let help = build_help(false);
+        assert!(
+            help.contains("agent-bar  or  bun run start"),
+            "Texto 'agent-bar  or  bun run start' não encontrado no help"
+        );
+    }
+
+    /// Com no_color=true os 2 needles de texto devem permanecer.
+    #[test]
+    fn build_help_no_color_preserves_text_needles() {
+        let help = build_help(true);
+        assert!(
+            help.contains("Update the install (npm or managed checkout)"),
+            "no_color=true: texto 'Update the install (npm or managed checkout)' ausente"
+        );
+        assert!(
+            help.contains("agent-bar  or  bun run start"),
+            "no_color=true: texto 'agent-bar  or  bun run start' ausente"
+        );
+    }
+
+    /// Com no_color=true NÃO deve haver nenhum escape ANSI (ESC = \x1b).
+    #[test]
+    fn build_help_no_color_has_no_ansi_escapes() {
+        let help = build_help(true);
+        assert!(
+            !help.contains('\x1b'),
+            "no_color=true: escape ANSI encontrado no help"
+        );
+    }
+
+    /// Com no_color=false o help DEVE conter escapes ANSI (sanidade).
+    #[test]
+    fn build_help_with_color_has_ansi_escapes() {
+        let help = build_help(false);
+        assert!(
+            help.contains('\x1b'),
+            "no_color=false: escape ANSI ausente — cores não foram emitidas"
+        );
+    }
+
+    /// Deve terminar em `\n` (para que println! não adicione linha extra).
+    #[test]
+    fn build_help_ends_with_newline() {
+        let help = build_help(false);
+        assert!(help.ends_with('\n'), "build_help deve terminar em '\\n'");
     }
 }
