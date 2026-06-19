@@ -145,6 +145,120 @@ mod helper_tests {
     }
 }
 
+use crate::formatters::clock::Clock;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
+fn parse_iso(iso: &str) -> Option<OffsetDateTime> {
+    OffsetDateTime::parse(iso, &Rfc3339).ok()
+}
+
+/// `Full` se remaining==100; `?` sem iso; `0h 00m` se já passou; `{d}d {hh}h` ou `{h}h {mm}m`.
+pub fn format_eta(clock: &Clock, iso: Option<&str>, remaining: f64) -> String {
+    if remaining == 100.0 {
+        return "Full".to_string();
+    }
+    let Some(iso) = iso else {
+        return "?".to_string();
+    };
+    let Some(dt) = parse_iso(iso) else {
+        return "?".to_string();
+    };
+    let diff = dt - clock.now;
+    if diff.is_negative() {
+        return "0h 00m".to_string();
+    }
+    let secs = diff.whole_seconds();
+    let d = secs / 86_400;
+    let h = (secs % 86_400) / 3_600;
+    let m = (secs % 3_600) / 60;
+    if d > 0 {
+        format!("{d}d {h:02}h")
+    } else {
+        format!("{h}h {m:02}m")
+    }
+}
+
+/// `` se remaining==100; `(??:??)` sem iso; senão `({HH}:{MM})` em horário LOCAL.
+pub fn format_reset_time(clock: &Clock, iso: Option<&str>, remaining: f64) -> String {
+    if remaining == 100.0 {
+        return String::new();
+    }
+    let Some(iso) = iso else {
+        return "(??:??)".to_string();
+    };
+    let Some(dt) = parse_iso(iso) else {
+        return "(??:??)".to_string();
+    };
+    let local = dt.to_offset(clock.local_offset);
+    format!("({:02}:{:02})", local.hour(), local.minute())
+}
+
+/// `just now` (<60s); `{m}m ago` (<60min); senão `{h}h ago`.
+pub fn format_ago(clock: &Clock, iso: &str) -> String {
+    let Some(dt) = parse_iso(iso) else {
+        return "?".to_string();
+    };
+    let diff = clock.now - dt;
+    if diff.whole_milliseconds() < 60_000 {
+        return "just now".to_string();
+    }
+    let mins = diff.whole_minutes();
+    if mins < 60 {
+        format!("{mins}m ago")
+    } else {
+        format!("{}h ago", mins / 60)
+    }
+}
+
+#[cfg(test)]
+mod time_tests {
+    use super::*;
+    use crate::formatters::clock::Clock;
+    use time::macros::datetime;
+
+    // Clock fixo: agora = 2026-06-19 12:00:00 UTC, offset local = +03:00.
+    fn fixed_clock() -> Clock {
+        Clock {
+            now: datetime!(2026-06-19 12:00:00 UTC),
+            local_offset: time::UtcOffset::from_hms(3, 0, 0).unwrap(),
+        }
+    }
+
+    #[test]
+    fn format_eta_cases() {
+        let c = fixed_clock();
+        assert_eq!(format_eta(&c, None, 50.0), "?");
+        assert_eq!(format_eta(&c, Some("2026-06-19T14:05:00Z"), 50.0), "2h 05m");
+        assert_eq!(format_eta(&c, Some("2026-06-21T13:00:00Z"), 50.0), "2d 01h");
+        assert_eq!(format_eta(&c, Some("2026-06-19T11:00:00Z"), 50.0), "0h 00m"); // passado
+        assert_eq!(format_eta(&c, Some("2026-06-19T14:00:00Z"), 100.0), "Full");
+    }
+
+    #[test]
+    fn format_reset_time_uses_local_offset() {
+        let c = fixed_clock();
+        // 14:05 UTC + offset +03:00 = 17:05 local
+        assert_eq!(
+            format_reset_time(&c, Some("2026-06-19T14:05:00Z"), 50.0),
+            "(17:05)"
+        );
+        assert_eq!(format_reset_time(&c, None, 50.0), "(??:??)");
+        assert_eq!(
+            format_reset_time(&c, Some("2026-06-19T14:00:00Z"), 100.0),
+            ""
+        );
+    }
+
+    #[test]
+    fn format_ago_cases() {
+        let c = fixed_clock();
+        assert_eq!(format_ago(&c, "2026-06-19T11:59:30Z"), "just now"); // 30s
+        assert_eq!(format_ago(&c, "2026-06-19T11:30:00Z"), "30m ago");
+        assert_eq!(format_ago(&c, "2026-06-19T09:00:00Z"), "3h ago");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
