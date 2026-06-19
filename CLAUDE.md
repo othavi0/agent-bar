@@ -115,3 +115,20 @@ commitar, criar GitHub Release com tag `v<version>`.
 - `docs/superpowers/plans/`, `docs/superpowers/specs/` — histórico de refactors
   fase 1-3 e publicação automática (contexto, não regras vigentes).
 - `CHANGELOG.md` — histórico; só editar ao cortar release.
+
+## Agent skills
+
+### Issue tracker
+
+Issues vivem no GitHub Issues de `othavioquiliao/agent-bar` (via `gh` CLI). PRs
+externos não são superfície de triage. Ver `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Vocabulário canônico, sem overrides: `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`. Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` na raiz (criados lazy). Ver
+`docs/agents/domain.md`.
