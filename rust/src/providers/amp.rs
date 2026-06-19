@@ -2,13 +2,22 @@
 //! Port fiel de `src/providers/amp.ts`. NÃO há `amp usage --json` → regex no texto.
 
 use std::collections::BTreeMap;
+use std::path::Path;
+use std::process::Stdio;
 use std::sync::OnceLock;
+use std::time::Duration;
 
+use async_trait::async_trait;
 use indexmap::IndexMap;
 use regex::Regex;
 
+use super::base::{base_get_quota, QuotaSource};
+use super::error::{AmpError, ProviderError};
 use super::iso_from_ms;
 use super::types::{AmpQuotaExtra, ProviderExtra, ProviderQuota, QuotaWindow};
+use super::{Ctx, Provider};
+use crate::config::HTTP_TIMEOUT_SECS;
+use crate::providers::amp_cli::find_amp_bin;
 
 fn re(cell: &'static OnceLock<Option<Regex>>, pattern: &str) -> Option<&'static Regex> {
     cell.get_or_init(|| Regex::new(pattern).ok()).as_ref()
@@ -145,6 +154,108 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
     }
 }
 
+/// Roda `amp usage` e devolve o stdout cru. Lança (sem cachear) em auth-fail.
+/// `wait_with_output` drena stdout E stderr concorrentemente (sem deadlock de
+/// pipe); `kill_on_drop` garante kill no timeout.
+async fn run_amp_usage(bin: &Path) -> Result<String, ProviderError> {
+    let mut cmd = tokio::process::Command::new(bin);
+    cmd.arg("usage")
+        .env("NO_COLOR", "1")
+        .env("TERM", "dumb")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let child = cmd.spawn().map_err(|_| AmpError::Generic)?;
+    let output = match tokio::time::timeout(
+        Duration::from_secs(HTTP_TIMEOUT_SECS),
+        child.wait_with_output(),
+    )
+    .await
+    {
+        Ok(Ok(o)) => o,
+        Ok(Err(_)) => return Err(AmpError::Generic.into()),
+        // timeout: kill_on_drop mata o filho; espelha o TS (kill→exit≠0→não-logado).
+        Err(_) => return Err(AmpError::NotLoggedIn.into()),
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let signed = lazy_re!(RE_SIGNED, r"Signed in as (\S+)")
+        .map(|r| r.is_match(&stdout))
+        .unwrap_or(false);
+    if !output.status.success() || !signed {
+        return Err(AmpError::NotLoggedIn.into());
+    }
+    Ok(stdout)
+}
+
+pub struct AmpProvider;
+
+#[async_trait(?Send)]
+impl QuotaSource for AmpProvider {
+    type Raw = String;
+
+    fn id(&self) -> &'static str {
+        "amp"
+    }
+
+    fn name(&self) -> &'static str {
+        "Amp"
+    }
+
+    fn cache_key(&self) -> &'static str {
+        "amp-quota"
+    }
+
+    async fn is_available(&self, ctx: &Ctx<'_>) -> bool {
+        find_amp_bin(&ctx.home.to_string_lossy()).is_some()
+    }
+
+    async fn fetch_raw(&self, ctx: &Ctx<'_>) -> Result<String, ProviderError> {
+        let bin = find_amp_bin(&ctx.home.to_string_lossy()).ok_or(AmpError::Generic)?;
+        run_amp_usage(&bin).await
+    }
+
+    fn build_quota(&self, raw: String, base: ProviderQuota, ctx: &Ctx<'_>) -> ProviderQuota {
+        parse_usage(&raw, base, ctx.now_ms)
+    }
+
+    fn unavailable_error(&self) -> String {
+        AmpError::NotInstalled.to_string()
+    }
+
+    fn to_user_facing_error(&self, error: &ProviderError) -> String {
+        match error {
+            ProviderError::Amp(AmpError::NotLoggedIn) => AmpError::NotLoggedIn.to_string(),
+            _ => AmpError::Generic.to_string(),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Provider for AmpProvider {
+    fn id(&self) -> &'static str {
+        "amp"
+    }
+
+    fn name(&self) -> &'static str {
+        "Amp"
+    }
+
+    fn cache_key(&self) -> &'static str {
+        "amp-quota"
+    }
+
+    async fn is_available(&self, ctx: &Ctx<'_>) -> bool {
+        QuotaSource::is_available(self, ctx).await
+    }
+
+    async fn get_quota(&self, ctx: &Ctx<'_>) -> ProviderQuota {
+        base_get_quota(self, ctx).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,5 +379,74 @@ mod tests {
             meta_of(&q).get("creditsBalance").map(String::as_str),
             Some("$0")
         );
+    }
+
+    // --- Testes de spawn (run_amp_usage com script-fake executável) ---
+
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::tempdir;
+
+    /// Escreve um script `amp` fake executável que imprime `body` e sai com `code`.
+    fn fake_amp(dir: &Path, body: &str, code: i32) -> std::path::PathBuf {
+        let p = dir.join("amp");
+        let mut f = std::fs::File::create(&p).unwrap();
+        write!(f, "#!/bin/sh\ncat <<'EOF'\n{body}\nEOF\nexit {code}\n").unwrap();
+        let mut perms = std::fs::metadata(&p).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&p, perms).unwrap();
+        p
+    }
+
+    #[tokio::test]
+    async fn run_amp_usage_ok_on_signed_in() {
+        let dir = tempdir().unwrap();
+        let bin = fake_amp(
+            dir.path(),
+            "Signed in as me@x.com\nAmp Free: $5.00/$5.00 remaining",
+            0,
+        );
+        let out = run_amp_usage(&bin).await.unwrap();
+        assert!(out.contains("Signed in as me@x.com"));
+    }
+
+    #[tokio::test]
+    async fn run_amp_usage_errs_on_nonzero_exit() {
+        let dir = tempdir().unwrap();
+        let bin = fake_amp(dir.path(), "boom", 1);
+        let err = run_amp_usage(&bin).await.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Not logged in. Open `agent-bar menu` and choose Provider login."
+        );
+    }
+
+    #[tokio::test]
+    async fn run_amp_usage_errs_when_no_signed_in_line() {
+        let dir = tempdir().unwrap();
+        let bin = fake_amp(dir.path(), "some unexpected output", 0);
+        let err = run_amp_usage(&bin).await.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Not logged in. Open `agent-bar menu` and choose Provider login."
+        );
+    }
+
+    #[tokio::test]
+    async fn build_quota_orchestration_with_mocked_stdout() {
+        use crate::providers::base::quota_base;
+        use crate::providers::test_support::{ctx_for, settings};
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, NOW);
+        // build_quota direto (sem spawn) com stdout mockado.
+        let q = AmpProvider.build_quota(
+            "Signed in as me@x.com\nAmp Free: $5.00/$5.00 remaining".to_string(),
+            quota_base("amp", "Amp"),
+            &ctx,
+        );
+        assert!(q.available);
+        assert_eq!(q.account.as_deref(), Some("me@x.com"));
     }
 }
