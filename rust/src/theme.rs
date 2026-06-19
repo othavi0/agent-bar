@@ -51,7 +51,8 @@ pub fn ansi_truecolor(hex: &str) -> String {
         return String::new();
     }
     let comp = |s: &str| u8::from_str_radix(s, 16).ok();
-    let (Some(r), Some(g), Some(b)) = (comp(&clean[0..2]), comp(&clean[2..4]), comp(&clean[4..6])) else {
+    let (Some(r), Some(g), Some(b)) = (comp(&clean[0..2]), comp(&clean[2..4]), comp(&clean[4..6]))
+    else {
         return String::new();
     };
     format!("\x1b[38;2;{r};{g};{b}m")
