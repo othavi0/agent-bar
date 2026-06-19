@@ -688,6 +688,109 @@ pub fn extract_rate_limits(path: &Path) -> Option<CodexRateLimits> {
     None
 }
 
+// ---- Provider (QuotaSource + Provider impls) ----
+
+use std::process::Stdio;
+
+use super::base::{base_get_quota, QuotaSource};
+use super::error::{CodexError, ProviderError};
+use super::{Ctx, Provider};
+use async_trait::async_trait;
+
+async fn fetch_via_appserver(version: &str) -> Option<CodexRateLimits> {
+    let mut child = tokio::process::Command::new("codex")
+        .arg("app-server")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .ok()?;
+    let stdout = child.stdout.take()?;
+    let stdin = child.stdin.take()?;
+    let result =
+        run_appserver_protocol(stdout, stdin, version, std::time::Duration::from_secs(4)).await;
+    let _ = child.start_kill();
+    result
+}
+
+pub struct CodexProvider;
+
+#[async_trait(?Send)]
+impl QuotaSource for CodexProvider {
+    type Raw = CodexRateLimits;
+
+    fn id(&self) -> &'static str {
+        "codex"
+    }
+
+    fn name(&self) -> &'static str {
+        "Codex"
+    }
+
+    fn cache_key(&self) -> &'static str {
+        "codex-quota"
+    }
+
+    async fn is_available(&self, ctx: &Ctx<'_>) -> bool {
+        ctx.paths.codex_auth.exists()
+    }
+
+    async fn fetch_raw(&self, ctx: &Ctx<'_>) -> Result<CodexRateLimits, ProviderError> {
+        if let Some(limits) = fetch_via_appserver(ctx.version).await {
+            return Ok(limits);
+        }
+        log::warn!("Codex app-server unavailable, falling back to session log");
+        let session =
+            find_latest_session_file(&ctx.paths.codex_sessions, ctx.now_ms, ctx.local_offset)
+                .ok_or(CodexError::NoSessionData)?;
+        extract_rate_limits(&session).ok_or(ProviderError::Codex(CodexError::NoRateLimitData))
+    }
+
+    fn build_quota(
+        &self,
+        raw: CodexRateLimits,
+        base: ProviderQuota,
+        _ctx: &Ctx<'_>,
+    ) -> ProviderQuota {
+        build_codex_quota(&raw, base)
+    }
+
+    fn unavailable_error(&self) -> String {
+        CodexError::NotLoggedIn.to_string()
+    }
+
+    fn to_user_facing_error(&self, error: &ProviderError) -> String {
+        match error {
+            ProviderError::Codex(e) => e.to_string(),
+            _ => CodexError::Generic.to_string(),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Provider for CodexProvider {
+    fn id(&self) -> &'static str {
+        "codex"
+    }
+
+    fn name(&self) -> &'static str {
+        "Codex"
+    }
+
+    fn cache_key(&self) -> &'static str {
+        "codex-quota"
+    }
+
+    async fn is_available(&self, ctx: &Ctx<'_>) -> bool {
+        QuotaSource::is_available(self, ctx).await
+    }
+
+    async fn get_quota(&self, ctx: &Ctx<'_>) -> ProviderQuota {
+        base_get_quota(self, ctx).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1841,5 +1944,42 @@ mod tests {
         assert_eq!(limits.primary.as_ref().unwrap().used_percent, 30.0);
         // plan_type None porque account não foi recebido
         assert!(limits.plan_type.is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // CodexProvider — Task 5
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn codex_provider_is_available_when_auth_exists() {
+        use crate::providers::test_support::{ctx_for, settings};
+        let tmp = tempfile::tempdir().unwrap();
+        let settings = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(tmp.path(), &settings, &client, 0);
+        // codex_auth does not exist yet → false
+        assert!(!QuotaSource::is_available(&CodexProvider, &ctx).await);
+        // create the file → true
+        std::fs::write(&ctx.paths.codex_auth, b"{}").unwrap();
+        assert!(QuotaSource::is_available(&CodexProvider, &ctx).await);
+    }
+
+    #[test]
+    fn codex_provider_to_user_facing_error_codex_variant() {
+        let e = ProviderError::Codex(CodexError::NoSessionData);
+        assert_eq!(
+            CodexProvider.to_user_facing_error(&e),
+            "No session data found"
+        );
+    }
+
+    #[test]
+    fn codex_provider_to_user_facing_error_non_codex_variant() {
+        use crate::providers::error::AmpError;
+        let e = ProviderError::Amp(AmpError::Generic);
+        assert_eq!(
+            CodexProvider.to_user_facing_error(&e),
+            "Failed to fetch Codex usage"
+        );
     }
 }

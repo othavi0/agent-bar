@@ -65,7 +65,11 @@ pub trait Provider {
 
 /// Providers de produção. Cresce a cada plano (04a: Claude; 04b: Amp; 04c: Codex).
 pub fn registry() -> Vec<Box<dyn Provider>> {
-    vec![Box::new(claude::ClaudeProvider), Box::new(amp::AmpProvider)]
+    vec![
+        Box::new(claude::ClaudeProvider),
+        Box::new(amp::AmpProvider),
+        Box::new(codex::CodexProvider),
+    ]
 }
 
 /// ISO-8601 UTC com 3 dígitos de milissegundo e sufixo `Z` — idêntico ao
@@ -282,10 +286,12 @@ mod tests {
     }
 
     #[test]
-    fn registry_has_claude_and_amp() {
+    fn registry_has_claude_amp_and_codex() {
         let r = registry();
-        assert_eq!(r.len(), 2);
+        assert_eq!(r.len(), 3);
         assert_eq!(r[0].id(), "claude");
         assert_eq!(r[1].id(), "amp");
+        assert_eq!(r[2].id(), "codex");
+        assert!(r.iter().any(|p| p.id() == "codex"));
     }
 }
