@@ -12,3 +12,4 @@ pub mod notify;
 pub mod providers;
 pub mod settings;
 pub mod theme;
+pub mod watch;
