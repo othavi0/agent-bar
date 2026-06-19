@@ -127,7 +127,7 @@ git commit -m "feat(rust): HealthStatus::as_str + APP_BASE_CLASS"
 
 **Interfaces:**
 - Consumes: builders `build_{claude,codex,amp,generic}`; `render_ansi`; `view_model::resolve_codex_view_model_from`; `shared::normalize_plan_label`; `theme::{ColorToken, ANSI_RESET}`; `settings::{Settings, DisplayMode}`; `clock::Clock`; `providers::types::{AllQuotas, ProviderQuota}`; `builders::shared::{BuildOptions, AmpLayout}`.
-- Produces: `pub fn format_for_terminal(clock: &Clock, quotas: &AllQuotas, settings: &Settings, mode: DisplayMode) -> String`.
+- Produces: `pub fn format_for_terminal(clock: &Clock, quotas: &AllQuotas, settings: &Settings, mode: DisplayMode, no_color: bool) -> String`. **`no_color` é INJETADO** (o `render_ansi` do Plano 02 recebe `no_color: bool`); o CLI lê `NO_COLOR` do env no Plano 5 e repassa — a função NÃO lê ambiente (mantém pureza).
 
 Port FIEL de `src/formatters/terminal.ts`. Cada builder por-provider monta seu `BuildOptions` (ver Global Constraints). Empty → `{comment_ansi}No providers connected{reset}`. Seções juntadas por `\n\n`.
 
@@ -324,12 +324,13 @@ pub fn format_for_terminal(
     quotas: &AllQuotas,
     settings: &Settings,
     mode: DisplayMode,
+    no_color: bool,
 ) -> String {
     let sections: Vec<String> = quotas
         .providers
         .iter()
         .filter(|p| p.available || p.error.is_some())
-        .map(|p| terminal_section(clock, p, settings, mode))
+        .map(|p| terminal_section(clock, p, settings, mode, no_color))
         .collect();
 
     if sections.is_empty() {
@@ -865,6 +866,7 @@ fn terminal_claude_healthy() {
             &wrap(vec![claude_healthy()]),
             &settings(),
             DisplayMode::Remaining,
+            false, // no_color injetado; o filtro de strip ANSI sanitiza pro golden TS
         );
         insta::assert_snapshot!(out);
     });

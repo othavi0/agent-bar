@@ -1,5 +1,6 @@
 //! Assembly da superfície terminal (ANSI). Port fiel de `src/formatters/terminal.ts`.
-//! Funções puras: recebem Settings e Clock injetados.
+//! Funções puras: Settings, Clock e o gate `no_color` são injetados (o CLI lê
+//! NO_COLOR do ambiente no Plano 5 e repassa) — sem leitura de ambiente aqui.
 
 use crate::formatters::builders::amp::build_amp;
 use crate::formatters::builders::claude::build_claude;
@@ -106,8 +107,8 @@ pub fn format_for_terminal(
     quotas: &AllQuotas,
     settings: &Settings,
     mode: DisplayMode,
+    no_color: bool,
 ) -> String {
-    let no_color = std::env::var("NO_COLOR").is_ok();
     let sections: Vec<String> = quotas
         .providers
         .iter()
@@ -183,7 +184,7 @@ mod tests {
             providers: vec![claude()],
             fetched_at: "2026-03-28T12:00:00Z".into(),
         };
-        let out = format_for_terminal(&clk(), &q, &settings(), DisplayMode::Remaining);
+        let out = format_for_terminal(&clk(), &q, &settings(), DisplayMode::Remaining, false);
         assert!(out.contains("Claude"));
         assert!(out.contains("75%"));
     }
@@ -194,7 +195,7 @@ mod tests {
             providers: vec![],
             fetched_at: "2026-03-28T12:00:00Z".into(),
         };
-        let out = format_for_terminal(&clk(), &q, &settings(), DisplayMode::Remaining);
+        let out = format_for_terminal(&clk(), &q, &settings(), DisplayMode::Remaining, false);
         assert!(out.contains("No providers connected"));
     }
 
@@ -207,7 +208,7 @@ mod tests {
             providers: vec![c],
             fetched_at: "2026-03-28T12:00:00Z".into(),
         };
-        let out = format_for_terminal(&clk(), &q, &settings(), DisplayMode::Remaining);
+        let out = format_for_terminal(&clk(), &q, &settings(), DisplayMode::Remaining, false);
         assert!(out.contains("No providers connected"));
     }
 }
