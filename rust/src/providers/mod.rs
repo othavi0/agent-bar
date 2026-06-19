@@ -30,6 +30,8 @@ pub struct Ctx<'a> {
     pub claude_usage_url: String,
     /// `clientInfo.version` do app-server do Codex.
     pub version: &'static str,
+    /// `$HOME` resolvido (candidatos de binário do Amp ficam sob ele).
+    pub home: std::path::PathBuf,
 }
 
 impl Ctx<'_> {
@@ -179,6 +181,7 @@ pub(crate) mod test_support {
             local_offset: UtcOffset::UTC,
             claude_usage_url: "http://127.0.0.1:0/api/oauth/usage".to_string(),
             version: "0.0.0-test",
+            home: dir.to_path_buf(),
         }
     }
 }

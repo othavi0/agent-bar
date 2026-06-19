@@ -61,7 +61,7 @@ pub trait QuotaSource {
     async fn is_available(&self, ctx: &Ctx<'_>) -> bool;
     /// Dado cru cacheável; `Err` nunca é cacheado.
     async fn fetch_raw(&self, ctx: &Ctx<'_>) -> Result<Self::Raw, ProviderError>;
-    fn build_quota(&self, raw: Self::Raw, base: ProviderQuota) -> ProviderQuota;
+    fn build_quota(&self, raw: Self::Raw, base: ProviderQuota, ctx: &Ctx<'_>) -> ProviderQuota;
     fn unavailable_error(&self) -> String;
     fn to_user_facing_error(&self, error: &ProviderError) -> String;
 }
@@ -85,7 +85,7 @@ pub async fn base_get_quota<S: QuotaSource>(source: &S, ctx: &Ctx<'_>) -> Provid
     )
     .await;
     match result {
-        Ok(raw) => source.build_quota(raw, base),
+        Ok(raw) => source.build_quota(raw, base, ctx),
         Err(e) => {
             log::error!(
                 "Provider quota fetch error: provider={} error={e}",
@@ -137,7 +137,7 @@ mod tests {
                 Ok("RAW".to_string())
             }
         }
-        fn build_quota(&self, raw: String, base: ProviderQuota) -> ProviderQuota {
+        fn build_quota(&self, raw: String, base: ProviderQuota, _ctx: &Ctx<'_>) -> ProviderQuota {
             ProviderQuota {
                 available: true,
                 account: Some(raw),
