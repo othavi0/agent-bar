@@ -4,3 +4,4 @@ pub mod app_identity;
 pub mod cache;
 pub mod config;
 pub mod logger;
+pub mod settings;
