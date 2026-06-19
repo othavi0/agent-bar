@@ -13,6 +13,7 @@ use agent_bar::providers::types::{
     ProviderExtra, ProviderQuota, QuotaWindow,
 };
 use agent_bar::settings::{load, DisplayMode, Settings};
+use indexmap::IndexMap;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use tempfile::tempdir;
@@ -136,7 +137,7 @@ fn codex_healthy() -> ProviderQuota {
             other: None,
         },
     );
-    let mut models = BTreeMap::new();
+    let mut models = IndexMap::new();
     models.insert("Codex".to_string(), qw(60.0, FIXED_RESET, Some(300)));
 
     ProviderQuota {
@@ -174,7 +175,7 @@ fn codex_error() -> ProviderQuota {
 }
 
 fn amp_healthy() -> ProviderQuota {
-    let mut models = BTreeMap::new();
+    let mut models = IndexMap::new();
     models.insert("Free Tier".to_string(), qw(70.0, FIXED_RESET, None));
 
     let mut meta = BTreeMap::new();
@@ -220,7 +221,7 @@ fn amp_with_account() -> ProviderQuota {
 }
 
 fn claude_with_extras() -> ProviderQuota {
-    let mut weekly_models = BTreeMap::new();
+    let mut weekly_models = IndexMap::new();
     weekly_models.insert(
         "claude-opus-4-5".to_string(),
         qw(40.0, FIXED_RESET, Some(10080)),
@@ -254,7 +255,7 @@ fn claude_with_extras() -> ProviderQuota {
 }
 
 fn amp_with_credits() -> ProviderQuota {
-    let mut models = BTreeMap::new();
+    let mut models = IndexMap::new();
     models.insert("Free Tier".to_string(), qw(30.0, FIXED_RESET, None));
     models.insert("Credits".to_string(), qw(75.0, FIXED_RESET, None));
 
@@ -280,7 +281,7 @@ fn amp_with_credits() -> ProviderQuota {
 }
 
 fn amp_unknown_models() -> ProviderQuota {
-    let mut models = BTreeMap::new();
+    let mut models = IndexMap::new();
     models.insert("Custom Plan A".to_string(), qw(45.0, FIXED_RESET, None));
     models.insert("Custom Plan B".to_string(), qw(80.0, FIXED_RESET, None));
 

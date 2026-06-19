@@ -318,6 +318,7 @@ mod tests {
     use crate::providers::types::{AmpQuotaExtra, ProviderExtra, ProviderQuota, QuotaWindow};
     use crate::settings::DisplayMode;
     use crate::theme::ColorToken;
+    use indexmap::IndexMap;
     use std::collections::BTreeMap;
     use time::macros::datetime;
 
@@ -351,7 +352,7 @@ mod tests {
     }
 
     fn amp_with_free_and_credits() -> ProviderQuota {
-        let mut models = BTreeMap::new();
+        let mut models = IndexMap::new();
         models.insert("Free Tier".to_string(), win(30.0));
         models.insert("Credits".to_string(), win(75.0));
         let mut meta = BTreeMap::new();

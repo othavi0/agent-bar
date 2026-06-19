@@ -105,6 +105,7 @@ pub fn apply_codex_model_filter(
 mod tests {
     use super::*;
     use crate::providers::types::{CodexQuotaExtra, ProviderExtra, ProviderQuota, QuotaWindow};
+    use indexmap::IndexMap;
     use std::collections::BTreeMap;
 
     fn win(remaining: f64, minutes: Option<i64>) -> QuotaWindow {
@@ -116,7 +117,7 @@ mod tests {
         }
     }
 
-    fn quota_with_models(models: BTreeMap<String, QuotaWindow>) -> ProviderQuota {
+    fn quota_with_models(models: IndexMap<String, QuotaWindow>) -> ProviderQuota {
         ProviderQuota {
             provider: "codex".into(),
             display_name: "Codex".into(),
@@ -134,7 +135,7 @@ mod tests {
 
     #[test]
     fn classifies_and_sorts_by_severity() {
-        let mut m = BTreeMap::new();
+        let mut m = IndexMap::new();
         m.insert("gpt-5".to_string(), win(80.0, Some(300))); // fiveHour, sev 80
         m.insert("o3".to_string(), win(20.0, Some(10080))); // sevenDay, sev 20
         let entries = codex_models_from_quota(&quota_with_models(m));
@@ -154,7 +155,7 @@ mod tests {
 
     #[test]
     fn fallback_to_codex_from_primary_secondary() {
-        let mut q = quota_with_models(BTreeMap::new());
+        let mut q = quota_with_models(IndexMap::new());
         q.models = None;
         q.primary = Some(win(60.0, Some(300)));
         q.secondary = Some(win(50.0, Some(10080)));
@@ -184,7 +185,7 @@ mod tests {
             md
         };
         let mut q = quota_with_models({
-            let mut m = BTreeMap::new();
+            let mut m = IndexMap::new();
             m.insert("gpt-5".to_string(), win(40.0, Some(300)));
             m
         });
@@ -203,7 +204,7 @@ mod tests {
 
     #[test]
     fn filter_keeps_only_allowed() {
-        let mut m = BTreeMap::new();
+        let mut m = IndexMap::new();
         m.insert("gpt-5".to_string(), win(80.0, Some(300)));
         m.insert("o3".to_string(), win(20.0, Some(300)));
         let all = codex_models_from_quota(&quota_with_models(m));
@@ -215,7 +216,7 @@ mod tests {
 
     #[test]
     fn empty_filter_is_passthrough() {
-        let mut m = BTreeMap::new();
+        let mut m = IndexMap::new();
         m.insert("gpt-5".to_string(), win(80.0, Some(300)));
         let all = codex_models_from_quota(&quota_with_models(m));
         let n = all.len();

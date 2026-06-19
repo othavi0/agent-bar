@@ -31,7 +31,7 @@ mod tests {
     use crate::config::Paths;
     use crate::providers::types::{ProviderQuota, QuotaWindow};
     use crate::settings::{load, WindowPolicy};
-    use std::collections::BTreeMap;
+    use indexmap::IndexMap;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
@@ -48,7 +48,7 @@ mod tests {
     }
 
     fn codex_quota() -> ProviderQuota {
-        let mut m = BTreeMap::new();
+        let mut m = IndexMap::new();
         m.insert(
             "gpt-5".to_string(),
             QuotaWindow {

@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 
+use indexmap::IndexMap;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -42,7 +43,7 @@ pub struct ExtraUsage {
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeQuotaExtra {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub weekly_models: Option<BTreeMap<String, QuotaWindow>>,
+    pub weekly_models: Option<IndexMap<String, QuotaWindow>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_usage: Option<ExtraUsage>,
 }
@@ -90,7 +91,7 @@ pub struct ProviderQuota {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secondary: Option<QuotaWindow>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub models: Option<BTreeMap<String, QuotaWindow>>,
+    pub models: Option<IndexMap<String, QuotaWindow>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<ProviderExtra>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -107,7 +108,7 @@ pub struct AllQuotas {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
+    use indexmap::IndexMap;
 
     fn window(remaining: f64) -> QuotaWindow {
         QuotaWindow {
@@ -185,7 +186,7 @@ mod tests {
 
     #[test]
     fn provider_extra_serializes_untagged() {
-        let mut weekly = BTreeMap::new();
+        let mut weekly = IndexMap::new();
         weekly.insert("Opus".to_string(), window(50.0));
         let extra = ProviderExtra::Claude(ClaudeQuotaExtra {
             weekly_models: Some(weekly),

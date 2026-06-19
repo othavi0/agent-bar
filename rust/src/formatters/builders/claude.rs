@@ -161,7 +161,7 @@ mod tests {
     };
     use crate::settings::DisplayMode;
     use crate::theme::ColorToken;
-    use std::collections::BTreeMap;
+    use indexmap::IndexMap;
     use time::macros::datetime;
 
     fn clk() -> Clock {
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn renders_all_sections_in_order() {
         let mut q = base();
-        let mut weekly = BTreeMap::new();
+        let mut weekly = IndexMap::new();
         weekly.insert("claude-opus-4-5".to_string(), win(40.0, Some(10080)));
         weekly.insert("claude-sonnet-4-5".to_string(), win(65.0, Some(10080)));
         q.extra = Some(ProviderExtra::Claude(ClaudeQuotaExtra {
@@ -231,7 +231,7 @@ mod tests {
         let iws = out.find("Weekly limit (shared)").unwrap();
         let ie = out.find("Extra Usage").unwrap();
         assert!(i5 < iw && iw < iws && iws < ie);
-        // weeklyModels em ordem alfabética (BTreeMap)
+        // weeklyModels em ordem de inserção (IndexMap = Object.entries do TS)
         assert!(out.find("claude-opus-4-5").unwrap() < out.find("claude-sonnet-4-5").unwrap());
         // extraUsage formata centavos
         assert!(out.contains("$22.50/$50.00"));
