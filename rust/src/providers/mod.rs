@@ -130,6 +130,23 @@ async fn fetch_one(provider: &dyn Provider, ctx: &Ctx<'_>) -> ProviderQuota {
     }
 }
 
+/// Provider de produção por id (espelha `getProvider` do TS). `None` se desconhecido.
+pub fn get_provider(id: &str) -> Option<Box<dyn Provider>> {
+    registry().into_iter().find(|p| p.id() == id)
+}
+
+/// Ids registrados na ordem do registry (espelha `getRegisteredProviderIds`).
+/// Retorna `["claude", "amp", "codex"]`.
+pub fn registered_provider_ids() -> Vec<&'static str> {
+    registry().iter().map(|p| p.id()).collect()
+}
+
+/// Quota de um único provider (espelha `getQuotaFor`). `None` se id desconhecido.
+pub async fn get_quota_for(id: &str, ctx: &Ctx<'_>) -> Option<ProviderQuota> {
+    let provider = get_provider(id)?;
+    Some(provider.get_quota(ctx).await)
+}
+
 /// Fan-out concorrente sobre os providers (1 thread, `join_all`).
 pub async fn fetch_all(providers: &[Box<dyn Provider>], ctx: &Ctx<'_>) -> AllQuotas {
     let futures = providers.iter().map(|p| fetch_one(p.as_ref(), ctx));
@@ -293,5 +310,33 @@ mod tests {
         assert_eq!(r[1].id(), "amp");
         assert_eq!(r[2].id(), "codex");
         assert!(r.iter().any(|p| p.id() == "codex"));
+    }
+
+    // --- Task 3: get_provider / registered_provider_ids / get_quota_for ---
+
+    #[test]
+    fn get_provider_returns_some_for_known_ids() {
+        assert!(get_provider("claude").is_some());
+        assert!(get_provider("amp").is_some());
+        assert!(get_provider("codex").is_some());
+    }
+
+    #[test]
+    fn get_provider_returns_none_for_unknown_id() {
+        assert!(get_provider("nope").is_none());
+    }
+
+    #[test]
+    fn registered_provider_ids_matches_registry_order() {
+        assert_eq!(registered_provider_ids(), vec!["claude", "amp", "codex"]);
+    }
+
+    #[tokio::test]
+    async fn get_quota_for_unknown_is_none() {
+        let dir = tempdir().unwrap();
+        let settings = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &settings, &client, 0);
+        assert!(get_quota_for("nope", &ctx).await.is_none());
     }
 }
