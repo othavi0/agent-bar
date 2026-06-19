@@ -4,6 +4,7 @@ pub mod app_identity;
 pub mod cache;
 pub mod config;
 pub mod formatters;
+pub mod http;
 pub mod logger;
 pub mod providers;
 pub mod settings;

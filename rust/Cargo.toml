@@ -19,6 +19,12 @@ time = { version = "0.3", features = ["serde-well-known", "local-offset", "forma
 tempfile = "3"
 log = "0.4"
 env_logger = "0.11"
+tokio = { version = "1", features = ["rt", "macros", "time", "process", "io-util"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+async-trait = "0.1"
+futures = "0.3"
+regex = "1"
+indexmap = { version = "2", features = ["serde"] }
 
 [dev-dependencies]
 assert_cmd = "2"
@@ -26,6 +32,8 @@ predicates = "3"
 serial_test = "3"
 temp-env = "0.3"
 insta = { version = "1", features = ["filters"] }
+wiremock = "0.6"
+tokio = { version = "1", features = ["test-util", "macros", "rt"] }
 
 [profile.release]
 opt-level = "z"
