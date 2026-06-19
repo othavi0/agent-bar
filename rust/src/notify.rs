@@ -3,6 +3,7 @@
 //! Os GATES de quando notificar (TTY, settings, comando) ficam no CALLER (Plano 5).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -165,6 +166,89 @@ pub fn plan_notifications(
         fires,
         next_states,
         changed,
+    }
+}
+
+// ── IO layer ─────────────────────────────────────────────────────────────────
+
+fn state_path(cache_dir: &Path, provider: &str) -> PathBuf {
+    cache_dir.join(format!("notify-{provider}.json"))
+}
+
+fn read_state(cache_dir: &Path, provider: &str) -> ProviderNotifyState {
+    std::fs::read(state_path(cache_dir, provider))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<ProviderNotifyState>(&b).ok())
+        .unwrap_or_default()
+}
+
+fn write_state(cache_dir: &Path, provider: &str, state: &ProviderNotifyState) {
+    use std::io::Write;
+    let _ = std::fs::create_dir_all(cache_dir);
+    let json = match serde_json::to_string(state) {
+        Ok(j) => j,
+        Err(_) => return,
+    };
+    if let Ok(mut tmp) = tempfile::NamedTempFile::new_in(cache_dir) {
+        if tmp.write_all(json.as_bytes()).is_ok() {
+            let _ = tmp.persist(state_path(cache_dir, provider));
+        }
+    }
+}
+
+/// Dispara `notify-send` (fire-and-forget). stdio ignorado; erros engolidos.
+fn fire_notification(fire: &NotifyFire) {
+    use std::process::Stdio;
+    let left = (100.0_f64 - fire.used.round()).max(0.0);
+    let is_critical = fire.level == NotifyLevel::Critical;
+    let title = format!(
+        "{} quota {}",
+        fire.display_name,
+        if is_critical { "critical" } else { "low" }
+    );
+    let body = format!(
+        "{}: {}% used ({}% left)",
+        fire.label,
+        fire.used.round(),
+        left
+    );
+    // spawn sem kill_on_drop (queremos que sobreviva ao drop do Child).
+    let _ = tokio::process::Command::new("notify-send")
+        .arg(format!("--app-name={}", crate::app_identity::APP_NAME))
+        .arg(format!(
+            "--urgency={}",
+            if is_critical { "critical" } else { "normal" }
+        ))
+        .arg(title)
+        .arg(body)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+}
+
+/// Checa janelas e emite notificações nas escaladas. Best-effort: nunca panica.
+/// Se `notify-send` ausente → no-op SEM persistir (dispara quando o user instalar).
+pub async fn check_and_notify(quotas: &AllQuotas, cache_dir: &Path) {
+    if crate::providers::amp_cli::which_in_path("notify-send").is_none() {
+        return;
+    }
+    let prev_states: HashMap<String, ProviderNotifyState> = quotas
+        .providers
+        .iter()
+        .filter(|p| p.available)
+        .map(|p| (p.provider.clone(), read_state(cache_dir, &p.provider)))
+        .collect();
+
+    let plan = plan_notifications(quotas, &prev_states);
+
+    for fire in &plan.fires {
+        fire_notification(fire);
+    }
+    for provider in &plan.changed {
+        if let Some(state) = plan.next_states.get(provider) {
+            write_state(cache_dir, provider, state);
+        }
     }
 }
 
@@ -398,5 +482,43 @@ mod tests {
             .fires
             .iter()
             .any(|f| f.label == "Opus (weekly)" && f.level == NotifyLevel::Critical));
+    }
+
+    // ── IO tests ─────────────────────────────────────────────────────────────
+
+    use tempfile::tempdir;
+
+    #[test]
+    fn state_roundtrip() {
+        let dir = tempdir().unwrap();
+        let st = ProviderNotifyState {
+            windows: BTreeMap::from([("primary".to_string(), "low".to_string())]),
+        };
+        write_state(dir.path(), "claude", &st);
+        let got = read_state(dir.path(), "claude");
+        assert_eq!(got.windows.get("primary").map(String::as_str), Some("low"));
+    }
+
+    #[test]
+    fn read_state_missing_or_corrupt_is_default() {
+        let dir = tempdir().unwrap();
+        assert!(read_state(dir.path(), "nope").windows.is_empty());
+        std::fs::write(dir.path().join("notify-bad.json"), b"{ not json").unwrap();
+        assert!(read_state(dir.path(), "bad").windows.is_empty());
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn no_op_and_no_persist_when_notify_send_absent() {
+        let dir = tempdir().unwrap();
+        let cache = dir.path().join("cache");
+        std::fs::create_dir_all(&cache).unwrap();
+        temp_env::async_with_vars([("PATH", Some(""))], async {
+            let q = wrap(vec![claude(3.0)]); // escalaria, mas notify-send ausente
+            check_and_notify(&q, &cache).await;
+        })
+        .await;
+        // nenhum estado gravado
+        assert!(!cache.join("notify-claude.json").exists());
     }
 }
