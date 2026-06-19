@@ -3,9 +3,11 @@
 //! `src/providers/codex.ts`.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
 use super::iso_from_ms;
 use super::types::{
@@ -448,6 +450,82 @@ pub fn normalize_appserver_rate_limits(
             Some(buckets)
         },
     })
+}
+
+// ---- Fallback session-log ----
+
+/// Acha o `.jsonl` mais recente em `sessions_dir/YYYY/MM/DD` (hoje ou ontem, hora local).
+pub fn find_latest_session_file(
+    sessions_dir: &Path,
+    now_ms: u64,
+    offset: UtcOffset,
+) -> Option<PathBuf> {
+    let now = OffsetDateTime::from_unix_timestamp_nanos((now_ms as i128) * 1_000_000)
+        .ok()?
+        .to_offset(offset);
+    for day_offset in 0..2i64 {
+        let date = now - TimeDuration::days(day_offset);
+        let dir = sessions_dir
+            .join(format!("{:04}", date.year()))
+            .join(format!("{:02}", date.month() as u8))
+            .join(format!("{:02}", date.day()));
+        let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                continue;
+            }
+            let mtime = match entry.metadata().and_then(|m| m.modified()) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            if newest.as_ref().map(|(t, _)| mtime > *t).unwrap_or(true) {
+                newest = Some((mtime, path));
+            }
+        }
+        if let Some((_, path)) = newest {
+            return Some(path);
+        }
+    }
+    None
+}
+
+#[derive(Deserialize)]
+struct SessionEvent {
+    #[serde(default)]
+    payload: Option<SessionPayload>,
+}
+
+#[derive(Deserialize)]
+struct SessionPayload {
+    #[serde(rename = "type", default)]
+    kind: Option<String>,
+    #[serde(default)]
+    rate_limits: Option<CodexRateLimits>,
+}
+
+/// Lê o arquivo de sessão, faz scan reverso e retorna o primeiro `token_count` com `rate_limits`.
+pub fn extract_rate_limits(path: &Path) -> Option<CodexRateLimits> {
+    let content = std::fs::read_to_string(path).ok()?;
+    for line in content.trim().lines().rev() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(ev) = serde_json::from_str::<SessionEvent>(line) {
+            if let Some(p) = ev.payload {
+                if p.kind.as_deref() == Some("token_count") {
+                    if let Some(rl) = p.rate_limits {
+                        return Some(rl);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -1382,5 +1460,122 @@ mod tests {
         let result = normalize_appserver_rate_limits(&raw, None).expect("Some");
         let buckets = result.buckets.expect("buckets");
         assert!(buckets.contains_key("codex"));
+    }
+
+    // -----------------------------------------------------------------------
+    // session-log fallback — Task 3
+    // -----------------------------------------------------------------------
+
+    fn make_session_dir(
+        base: &std::path::Path,
+        now_ms: u64,
+        offset: UtcOffset,
+    ) -> std::path::PathBuf {
+        use time::OffsetDateTime;
+        let dt = OffsetDateTime::from_unix_timestamp_nanos((now_ms as i128) * 1_000_000)
+            .unwrap()
+            .to_offset(offset);
+        base.join(format!("{:04}", dt.year()))
+            .join(format!("{:02}", dt.month() as u8))
+            .join(format!("{:02}", dt.day()))
+    }
+
+    const TOKEN_COUNT_LINE: &str = r#"{"payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":40,"window_minutes":300,"resets_at":0}}}}"#;
+
+    #[test]
+    fn find_and_extract_session_log_basic() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now_ms: u64 = 1_750_000_000_000; // um timestamp fixo qualquer
+        let offset = UtcOffset::UTC;
+        let dir = make_session_dir(tmp.path(), now_ms, offset);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("session.jsonl");
+        std::fs::write(&file, TOKEN_COUNT_LINE).unwrap();
+
+        let found = find_latest_session_file(tmp.path(), now_ms, offset);
+        assert_eq!(found.as_deref(), Some(file.as_path()));
+
+        let rl = extract_rate_limits(found.as_ref().unwrap()).unwrap();
+        assert_eq!(rl.primary.as_ref().unwrap().used_percent, 40.0);
+        assert_eq!(rl.primary.as_ref().unwrap().window_minutes, 300);
+    }
+
+    #[test]
+    fn find_session_multiple_files_picks_newest_mtime() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now_ms: u64 = 1_750_000_000_000;
+        let offset = UtcOffset::UTC;
+        let dir = make_session_dir(tmp.path(), now_ms, offset);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let old_file = dir.join("old.jsonl");
+        let new_file = dir.join("new.jsonl");
+        std::fs::write(&old_file, TOKEN_COUNT_LINE).unwrap();
+        std::fs::write(&new_file, TOKEN_COUNT_LINE).unwrap();
+
+        // set old_file mtime to past
+        let past = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        filetime::set_file_mtime(&old_file, filetime::FileTime::from_system_time(past)).unwrap();
+        let future = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2_000_000);
+        filetime::set_file_mtime(&new_file, filetime::FileTime::from_system_time(future)).unwrap();
+
+        let found = find_latest_session_file(tmp.path(), now_ms, offset).unwrap();
+        assert_eq!(found, new_file);
+    }
+
+    #[test]
+    fn extract_rate_limits_scan_reverse_skips_non_token_count() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now_ms: u64 = 1_750_000_000_000;
+        let offset = UtcOffset::UTC;
+        let dir = make_session_dir(tmp.path(), now_ms, offset);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let content = [
+            r#"{"payload":{"type":"other_event"}}"#,
+            TOKEN_COUNT_LINE,
+            r#"{"payload":{"type":"something_else"}}"#,
+        ]
+        .join("\n");
+        let file = dir.join("session.jsonl");
+        std::fs::write(&file, &content).unwrap();
+
+        let rl = extract_rate_limits(&file).unwrap();
+        assert_eq!(rl.primary.as_ref().unwrap().used_percent, 40.0);
+    }
+
+    #[test]
+    fn find_session_falls_back_to_yesterday() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Usar now_ms tal que hoje não tem dir, mas ontem tem
+        let now_ms: u64 = 1_750_000_000_000;
+        let offset = UtcOffset::UTC;
+
+        // Cria dir de ontem
+        use time::{Duration as TimeDuration, OffsetDateTime};
+        let now = OffsetDateTime::from_unix_timestamp_nanos((now_ms as i128) * 1_000_000)
+            .unwrap()
+            .to_offset(offset);
+        let yesterday = now - TimeDuration::days(1);
+        let yesterday_dir = tmp
+            .path()
+            .join(format!("{:04}", yesterday.year()))
+            .join(format!("{:02}", yesterday.month() as u8))
+            .join(format!("{:02}", yesterday.day()));
+        std::fs::create_dir_all(&yesterday_dir).unwrap();
+        let file = yesterday_dir.join("session.jsonl");
+        std::fs::write(&file, TOKEN_COUNT_LINE).unwrap();
+
+        // Não cria dir de hoje → deve cair no fallback
+        let found = find_latest_session_file(tmp.path(), now_ms, offset);
+        assert_eq!(found.as_deref(), Some(file.as_path()));
+    }
+
+    #[test]
+    fn find_session_returns_none_when_no_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now_ms: u64 = 1_750_000_000_000;
+        let found = find_latest_session_file(tmp.path(), now_ms, UtcOffset::UTC);
+        assert!(found.is_none());
     }
 }

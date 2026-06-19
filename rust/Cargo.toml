@@ -34,6 +34,7 @@ temp-env = "0.3"
 insta = { version = "1", features = ["filters"] }
 wiremock = "0.6"
 tokio = { version = "1", features = ["test-util", "macros", "rt"] }
+filetime = "0.2"
 
 [profile.release]
 opt-level = "z"
