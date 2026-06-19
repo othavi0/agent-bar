@@ -6,3 +6,4 @@ pub mod config;
 pub mod logger;
 pub mod providers;
 pub mod settings;
+pub mod theme;
