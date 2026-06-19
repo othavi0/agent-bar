@@ -296,6 +296,160 @@ pub fn build_codex_quota(limits: &CodexRateLimits, base: ProviderQuota) -> Provi
     }
 }
 
+// ---- Tipos do app-server (camelCase, Deserialize) ----
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexAppServerWindow {
+    pub used_percent: f64,
+    #[serde(default)]
+    pub window_duration_mins: Option<i64>,
+    #[serde(default)]
+    pub resets_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexAppServerLimitBucket {
+    #[serde(default)]
+    pub limit_id: Option<String>,
+    #[serde(default)]
+    pub limit_name: Option<String>,
+    #[serde(default)]
+    pub primary: Option<CodexAppServerWindow>,
+    #[serde(default)]
+    pub secondary: Option<CodexAppServerWindow>,
+    #[serde(default)]
+    pub plan_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexAppServerCredits {
+    pub has_credits: bool,
+    pub unlimited: bool,
+    #[serde(default)]
+    pub balance: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexAppServerRateLimitsReadResult {
+    #[serde(default)]
+    pub rate_limits: Option<CodexAppServerLimitBucket>,
+    #[serde(default)]
+    pub rate_limits_by_limit_id: Option<IndexMap<String, CodexAppServerLimitBucket>>,
+    #[serde(default)]
+    pub credits: Option<CodexAppServerCredits>,
+    #[serde(default)]
+    pub plan_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexAppServerAccount {
+    #[serde(default)]
+    pub plan_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CodexAppServerAccountReadResult {
+    #[serde(default)]
+    pub account: Option<CodexAppServerAccount>,
+}
+
+// ---- Normalização app-server → CodexRateLimits ----
+
+fn to_raw_window(raw: &CodexAppServerWindow, fallback_minutes: i64) -> CodexWindowRaw {
+    CodexWindowRaw {
+        used_percent: raw.used_percent,
+        window_minutes: raw.window_duration_mins.unwrap_or(fallback_minutes),
+        resets_at: raw.resets_at.unwrap_or(0),
+    }
+}
+
+fn normalize_bucket(
+    raw: &CodexAppServerLimitBucket,
+    fallback_id: Option<&str>,
+) -> Option<CodexLimitBucket> {
+    let limit_id = raw
+        .limit_id
+        .clone()
+        .or_else(|| fallback_id.map(str::to_string))?;
+    let primary = raw.primary.as_ref().map(|w| to_raw_window(w, 300));
+    let secondary = raw.secondary.as_ref().map(|w| to_raw_window(w, 10080));
+    if primary.is_none() && secondary.is_none() {
+        return None;
+    }
+    Some(CodexLimitBucket {
+        limit_id,
+        limit_name: raw.limit_name.clone(),
+        primary,
+        secondary,
+    })
+}
+
+pub fn normalize_appserver_rate_limits(
+    raw: &CodexAppServerRateLimitsReadResult,
+    account_plan_type: Option<&str>,
+) -> Option<CodexRateLimits> {
+    let mut buckets: IndexMap<String, CodexLimitBucket> = IndexMap::new();
+    if let Some(by_id) = raw.rate_limits_by_limit_id.as_ref() {
+        for (limit_id, bucket) in by_id {
+            if let Some(n) = normalize_bucket(bucket, Some(limit_id)) {
+                buckets.insert(n.limit_id.clone(), n);
+            }
+        }
+    }
+    let root = raw.rate_limits.as_ref();
+    let root_bucket = root.and_then(|r| {
+        let fallback = r.limit_id.as_deref().unwrap_or("codex");
+        normalize_bucket(r, Some(fallback))
+    });
+    if let Some(rb) = root_bucket.as_ref() {
+        if !buckets.contains_key(&rb.limit_id) {
+            buckets.insert(rb.limit_id.clone(), rb.clone());
+        }
+    }
+
+    let first = buckets.values().next();
+    let primary = root_bucket
+        .as_ref()
+        .and_then(|b| b.primary.clone())
+        .or_else(|| first.and_then(|b| b.primary.clone()));
+    let secondary = root_bucket
+        .as_ref()
+        .and_then(|b| b.secondary.clone())
+        .or_else(|| first.and_then(|b| b.secondary.clone()));
+
+    if primary.is_none() && secondary.is_none() && buckets.is_empty() {
+        return None;
+    }
+
+    let credits = raw.credits.as_ref().map(|c| CodexCredits {
+        has_credits: c.has_credits,
+        unlimited: c.unlimited,
+        balance: c.balance.clone().unwrap_or_else(|| "0".to_string()),
+    });
+
+    let plan_type = account_plan_type
+        .map(str::to_string)
+        .or_else(|| raw.plan_type.clone())
+        .or_else(|| root.and_then(|r| r.plan_type.clone()));
+
+    Some(CodexRateLimits {
+        primary,
+        secondary,
+        credits,
+        plan_type,
+        buckets: if buckets.is_empty() {
+            None
+        } else {
+            Some(buckets)
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1006,5 +1160,227 @@ mod tests {
         let md = codex_extra(&q).models_detailed.as_ref().unwrap();
         assert!(md.contains_key("Valid Bucket"));
         assert!(!md.contains_key("empty") && !md.contains_key("Empty"));
+    }
+
+    // -----------------------------------------------------------------------
+    // normalize_appserver_rate_limits — Task 2
+    // -----------------------------------------------------------------------
+
+    fn app_win(
+        used_percent: f64,
+        window_duration_mins: Option<i64>,
+        resets_at: Option<i64>,
+    ) -> CodexAppServerWindow {
+        CodexAppServerWindow {
+            used_percent,
+            window_duration_mins,
+            resets_at,
+        }
+    }
+
+    #[test]
+    fn normalize_root_rate_limits_simple() {
+        // rateLimits simples (usedPercent 30, windowDurationMins 300)
+        // → CodexRateLimits com primary{used_percent 30, window 300}
+        let raw = CodexAppServerRateLimitsReadResult {
+            rate_limits: Some(CodexAppServerLimitBucket {
+                limit_id: None,
+                limit_name: None,
+                primary: Some(app_win(30.0, Some(300), None)),
+                secondary: None,
+                plan_type: None,
+            }),
+            rate_limits_by_limit_id: None,
+            credits: None,
+            plan_type: None,
+        };
+        let result = normalize_appserver_rate_limits(&raw, None).expect("deve retornar Some");
+        let primary = result.primary.expect("primary deve existir");
+        assert_eq!(primary.used_percent, 30.0);
+        assert_eq!(primary.window_minutes, 300);
+        assert_eq!(primary.resets_at, 0);
+    }
+
+    #[test]
+    fn normalize_rate_limits_by_limit_id_single_bucket() {
+        // rateLimitsByLimitId com 1 bucket
+        let mut by_id = IndexMap::new();
+        by_id.insert(
+            "codex-mini".to_string(),
+            CodexAppServerLimitBucket {
+                limit_id: Some("codex-mini".into()),
+                limit_name: Some("Codex Mini".into()),
+                primary: Some(app_win(50.0, Some(300), Some(1893456000))),
+                secondary: Some(app_win(20.0, Some(10080), Some(1893456000))),
+                plan_type: None,
+            },
+        );
+        let raw = CodexAppServerRateLimitsReadResult {
+            rate_limits: None,
+            rate_limits_by_limit_id: Some(by_id),
+            credits: None,
+            plan_type: None,
+        };
+        let result = normalize_appserver_rate_limits(&raw, None).expect("deve retornar Some");
+        let buckets = result.buckets.expect("buckets deve existir");
+        assert_eq!(buckets.len(), 1);
+        let bucket = &buckets["codex-mini"];
+        assert_eq!(bucket.limit_id, "codex-mini");
+        assert_eq!(bucket.limit_name.as_deref(), Some("Codex Mini"));
+        let p = bucket.primary.as_ref().expect("primary do bucket");
+        assert_eq!(p.used_percent, 50.0);
+        assert_eq!(p.window_minutes, 300);
+    }
+
+    #[test]
+    fn normalize_credits_camelcase_to_snake() {
+        // credits camelCase → snake_case; balance None → "0"
+        let raw = CodexAppServerRateLimitsReadResult {
+            rate_limits: Some(CodexAppServerLimitBucket {
+                limit_id: None,
+                limit_name: None,
+                primary: Some(app_win(10.0, Some(300), None)),
+                secondary: None,
+                plan_type: None,
+            }),
+            rate_limits_by_limit_id: None,
+            credits: Some(CodexAppServerCredits {
+                has_credits: true,
+                unlimited: false,
+                balance: Some("42.5".into()),
+            }),
+            plan_type: None,
+        };
+        let result = normalize_appserver_rate_limits(&raw, None).expect("deve retornar Some");
+        let credits = result.credits.expect("credits deve existir");
+        assert!(credits.has_credits);
+        assert!(!credits.unlimited);
+        assert_eq!(credits.balance, "42.5");
+    }
+
+    #[test]
+    fn normalize_credits_balance_none_defaults_to_zero_string() {
+        let raw = CodexAppServerRateLimitsReadResult {
+            rate_limits: Some(CodexAppServerLimitBucket {
+                limit_id: None,
+                limit_name: None,
+                primary: Some(app_win(0.0, Some(300), None)),
+                secondary: None,
+                plan_type: None,
+            }),
+            rate_limits_by_limit_id: None,
+            credits: Some(CodexAppServerCredits {
+                has_credits: false,
+                unlimited: false,
+                balance: None,
+            }),
+            plan_type: None,
+        };
+        let result = normalize_appserver_rate_limits(&raw, None).expect("deve retornar Some");
+        let credits = result.credits.expect("credits deve existir");
+        assert_eq!(credits.balance, "0");
+    }
+
+    #[test]
+    fn normalize_plan_type_priority_account_over_raw_over_root() {
+        // account_plan_type > raw.planType > root.planType
+        let raw = CodexAppServerRateLimitsReadResult {
+            rate_limits: Some(CodexAppServerLimitBucket {
+                limit_id: None,
+                limit_name: None,
+                primary: Some(app_win(10.0, Some(300), None)),
+                secondary: None,
+                plan_type: Some("root-plan".into()),
+            }),
+            rate_limits_by_limit_id: None,
+            credits: None,
+            plan_type: Some("raw-plan".into()),
+        };
+
+        // account_plan_type vence
+        let r1 = normalize_appserver_rate_limits(&raw, Some("account-plan")).expect("Some");
+        assert_eq!(r1.plan_type.as_deref(), Some("account-plan"));
+
+        // sem account → raw.planType
+        let r2 = normalize_appserver_rate_limits(&raw, None).expect("Some");
+        assert_eq!(r2.plan_type.as_deref(), Some("raw-plan"));
+
+        // sem account, sem raw.planType → root.planType
+        let raw_no_raw_plan = CodexAppServerRateLimitsReadResult {
+            rate_limits: Some(CodexAppServerLimitBucket {
+                limit_id: None,
+                limit_name: None,
+                primary: Some(app_win(10.0, Some(300), None)),
+                secondary: None,
+                plan_type: Some("root-plan".into()),
+            }),
+            rate_limits_by_limit_id: None,
+            credits: None,
+            plan_type: None,
+        };
+        let r3 = normalize_appserver_rate_limits(&raw_no_raw_plan, None).expect("Some");
+        assert_eq!(r3.plan_type.as_deref(), Some("root-plan"));
+    }
+
+    #[test]
+    fn normalize_returns_none_when_everything_empty() {
+        let raw = CodexAppServerRateLimitsReadResult::default();
+        assert!(normalize_appserver_rate_limits(&raw, None).is_none());
+    }
+
+    #[test]
+    fn normalize_root_inserted_only_if_key_absent() {
+        // root com limitId "codex" e by_id já tem "codex" → root NÃO sobrescreve
+        let mut by_id = IndexMap::new();
+        by_id.insert(
+            "codex".to_string(),
+            CodexAppServerLimitBucket {
+                limit_id: Some("codex".into()),
+                limit_name: None,
+                primary: Some(app_win(70.0, Some(300), None)),
+                secondary: None,
+                plan_type: None,
+            },
+        );
+        let raw = CodexAppServerRateLimitsReadResult {
+            rate_limits: Some(CodexAppServerLimitBucket {
+                limit_id: Some("codex".into()),
+                limit_name: None,
+                primary: Some(app_win(10.0, Some(300), None)),
+                secondary: None,
+                plan_type: None,
+            }),
+            rate_limits_by_limit_id: Some(by_id),
+            credits: None,
+            plan_type: None,
+        };
+        let result = normalize_appserver_rate_limits(&raw, None).expect("Some");
+        let buckets = result.buckets.expect("buckets");
+        assert_eq!(buckets.len(), 1);
+        // O bucket do by_id (70%) vence, root (10%) não sobrescreve
+        assert_eq!(
+            buckets["codex"].primary.as_ref().unwrap().used_percent,
+            70.0
+        );
+    }
+
+    #[test]
+    fn normalize_fallback_id_codex_when_root_limit_id_absent() {
+        // root sem limitId → fallback "codex"
+        let raw = CodexAppServerRateLimitsReadResult {
+            rate_limits: Some(CodexAppServerLimitBucket {
+                limit_id: None,
+                limit_name: None,
+                primary: Some(app_win(55.0, Some(300), None)),
+                secondary: None,
+                plan_type: None,
+            }),
+            rate_limits_by_limit_id: None,
+            credits: None,
+            plan_type: None,
+        };
+        let result = normalize_appserver_rate_limits(&raw, None).expect("Some");
+        let buckets = result.buckets.expect("buckets");
+        assert!(buckets.contains_key("codex"));
     }
 }
