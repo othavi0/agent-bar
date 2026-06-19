@@ -452,6 +452,166 @@ pub fn normalize_appserver_rate_limits(
     })
 }
 
+// ---- Protocolo app-server (JSON-RPC sobre AsyncRead/AsyncWrite) ----
+
+use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+
+#[derive(serde::Deserialize)]
+struct AppServerResponse {
+    #[serde(default)]
+    id: Option<i64>,
+    #[serde(default)]
+    result: Option<serde_json::Value>,
+}
+
+async fn write_json<W: AsyncWrite + Unpin>(
+    w: &mut W,
+    v: &serde_json::Value,
+) -> std::io::Result<()> {
+    let mut s = serde_json::to_string(v).unwrap_or_default();
+    s.push('\n');
+    w.write_all(s.as_bytes()).await
+}
+
+/// Roda o handshake JSON-RPC sobre `reader`/`writer` genéricos e retorna
+/// `Some(CodexRateLimits)` em caso de sucesso ou `None` em timeout/EOF/erro.
+/// Port de `fetchRateLimitsViaAppServer` (codex.ts ~359-453).
+pub async fn run_appserver_protocol<R, W>(
+    reader: R,
+    mut writer: W,
+    version: &str,
+    timeout: std::time::Duration,
+) -> Option<CodexRateLimits>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    use crate::app_identity::APP_NAME;
+
+    let init = serde_json::json!({
+        "method": "initialize",
+        "id": 0,
+        "params": {
+            "clientInfo": {
+                "name": APP_NAME,
+                "title": APP_NAME,
+                "version": version
+            }
+        }
+    });
+    write_json(&mut writer, &init).await.ok()?;
+
+    let mut lines = BufReader::new(reader).lines();
+    // None = não recebido ainda; Some(None) = recebido mas sem plan_type
+    let mut account_plan: Option<Option<String>> = None;
+    let mut rate_limits: Option<CodexAppServerRateLimitsReadResult> = None;
+
+    let hard = tokio::time::sleep(timeout);
+    tokio::pin!(hard);
+    // grace começa longe no futuro (timeout + 1s) para nunca disparar antes de ser armado.
+    let grace = tokio::time::sleep(timeout + std::time::Duration::from_secs(1));
+    tokio::pin!(grace);
+    let mut grace_armed = false;
+
+    loop {
+        tokio::select! {
+            _ = &mut hard => return None,
+            _ = &mut grace, if grace_armed => {
+                return rate_limits.as_ref().and_then(|r| {
+                    let plan = account_plan.as_ref().and_then(|o| o.as_deref());
+                    normalize_appserver_rate_limits(r, plan)
+                });
+            }
+            line = lines.next_line() => {
+                let line = match line {
+                    Ok(Some(l)) => l,
+                    _ => return None,
+                };
+                let msg: AppServerResponse = match serde_json::from_str(&line) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                match msg.id {
+                    Some(0) if msg.result.is_some() => {
+                        let _ = write_json(
+                            &mut writer,
+                            &serde_json::json!({"method": "initialized", "params": {}}),
+                        )
+                        .await;
+                        let _ = write_json(
+                            &mut writer,
+                            &serde_json::json!({
+                                "method": "account/read",
+                                "id": 1,
+                                "params": {"refreshToken": false}
+                            }),
+                        )
+                        .await;
+                        let _ = write_json(
+                            &mut writer,
+                            &serde_json::json!({
+                                "method": "account/rateLimits/read",
+                                "id": 2,
+                                "params": {}
+                            }),
+                        )
+                        .await;
+                    }
+                    Some(1) => {
+                        let plan = msg
+                            .result
+                            .as_ref()
+                            .and_then(|v| {
+                                serde_json::from_value::<CodexAppServerAccountReadResult>(
+                                    v.clone(),
+                                )
+                                .ok()
+                            })
+                            .and_then(|a| a.account)
+                            .and_then(|a| a.plan_type);
+                        account_plan = Some(plan);
+                        if let Some(r) = rate_limits.as_ref() {
+                            let plan_ref =
+                                account_plan.as_ref().and_then(|o| o.as_deref());
+                            return normalize_appserver_rate_limits(r, plan_ref);
+                        }
+                    }
+                    Some(2) => {
+                        let parsed = msg.result.as_ref().and_then(|v| {
+                            serde_json::from_value::<CodexAppServerRateLimitsReadResult>(
+                                v.clone(),
+                            )
+                            .ok()
+                        });
+                        if let Some(r) = parsed {
+                            let has_data =
+                                r.rate_limits.is_some() || r.rate_limits_by_limit_id.is_some();
+                            if has_data {
+                                rate_limits = Some(r);
+                                if account_plan.is_some() {
+                                    if let Some(rr) = rate_limits.as_ref() {
+                                        let plan_ref = account_plan
+                                            .as_ref()
+                                            .and_then(|o| o.as_deref());
+                                        return normalize_appserver_rate_limits(rr, plan_ref);
+                                    }
+                                } else {
+                                    grace.as_mut().reset(
+                                        tokio::time::Instant::now()
+                                            + std::time::Duration::from_millis(200),
+                                    );
+                                    grace_armed = true;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
 // ---- Fallback session-log ----
 
 /// Acha o `.jsonl` mais recente em `sessions_dir/YYYY/MM/DD` (hoje ou ontem, hora local).
@@ -1577,5 +1737,109 @@ mod tests {
         let now_ms: u64 = 1_750_000_000_000;
         let found = find_latest_session_file(tmp.path(), now_ms, UtcOffset::UTC);
         assert!(found.is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // run_appserver_protocol — Task 4
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn appserver_happy_path() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let (client, server) = tokio::io::duplex(8192);
+        let (cr, cw) = tokio::io::split(client);
+        tokio::spawn(async move {
+            let (sr, mut sw) = tokio::io::split(server);
+            let mut lines = BufReader::new(sr).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let v: serde_json::Value = match serde_json::from_str(&line) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                match v.get("id").and_then(|i| i.as_i64()) {
+                    Some(0) => {
+                        let _ = sw
+                            .write_all(b"{\"id\":0,\"result\":{\"capabilities\":{}}}\n")
+                            .await;
+                    }
+                    Some(1) => {
+                        let _ = sw
+                            .write_all(
+                                b"{\"id\":1,\"result\":{\"account\":{\"planType\":\"pro\"}}}\n",
+                            )
+                            .await;
+                    }
+                    Some(2) => {
+                        let _ = sw
+                            .write_all(b"{\"id\":2,\"result\":{\"rateLimits\":{\"limitId\":\"codex-default\",\"primary\":{\"usedPercent\":30,\"windowDurationMins\":300,\"resetsAt\":1700000000}}}}\n")
+                            .await;
+                    }
+                    _ => {}
+                }
+            }
+        });
+        let out = run_appserver_protocol(cr, cw, "test", std::time::Duration::from_secs(4)).await;
+        let limits = out.expect("should resolve");
+        assert_eq!(limits.primary.as_ref().unwrap().used_percent, 30.0);
+        assert_eq!(limits.plan_type.as_deref(), Some("pro"));
+    }
+
+    #[tokio::test]
+    async fn appserver_timeout_returns_none() {
+        let (client, _server) = tokio::io::duplex(8192);
+        let (cr, cw) = tokio::io::split(client);
+        // _server nunca responde
+        let out =
+            run_appserver_protocol(cr, cw, "test", std::time::Duration::from_millis(100)).await;
+        assert!(out.is_none());
+    }
+
+    #[tokio::test]
+    async fn appserver_eof_returns_none() {
+        // Cria um duplex e dropa o server imediatamente → client lê EOF
+        let (client, server) = tokio::io::duplex(8192);
+        let (cr, cw) = tokio::io::split(client);
+        drop(server);
+        let out = run_appserver_protocol(cr, cw, "test", std::time::Duration::from_secs(4)).await;
+        assert!(out.is_none());
+    }
+
+    #[tokio::test]
+    async fn appserver_grace_resolves_without_account() {
+        // Responde id0 (capabilities) e id2 (rateLimits) mas NÃO id1 (account).
+        // Após grace 200ms deve resolver com Some (plan_type None).
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let (client, server) = tokio::io::duplex(8192);
+        let (cr, cw) = tokio::io::split(client);
+        tokio::spawn(async move {
+            let (sr, mut sw) = tokio::io::split(server);
+            let mut lines = BufReader::new(sr).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let v: serde_json::Value = match serde_json::from_str(&line) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                match v.get("id").and_then(|i| i.as_i64()) {
+                    Some(0) => {
+                        let _ = sw
+                            .write_all(b"{\"id\":0,\"result\":{\"capabilities\":{}}}\n")
+                            .await;
+                    }
+                    // id1 (account/read) intencionalmente ignorado
+                    Some(2) => {
+                        let _ = sw
+                            .write_all(b"{\"id\":2,\"result\":{\"rateLimits\":{\"limitId\":\"codex-default\",\"primary\":{\"usedPercent\":30,\"windowDurationMins\":300,\"resetsAt\":1700000000}}}}\n")
+                            .await;
+                    }
+                    _ => {}
+                }
+            }
+        });
+        // timeout de 2s; grace de 200ms deve disparar antes
+        let out = run_appserver_protocol(cr, cw, "test", std::time::Duration::from_secs(2)).await;
+        let limits = out.expect("grace deve resolver");
+        assert_eq!(limits.primary.as_ref().unwrap().used_percent, 30.0);
+        // plan_type None porque account não foi recebido
+        assert!(limits.plan_type.is_none());
     }
 }
