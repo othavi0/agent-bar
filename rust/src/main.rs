@@ -1,10 +1,10 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 use std::io::IsTerminal as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use agent_bar::app_identity;
+use agent_bar::app_identity::{self, APP_NAME};
 use agent_bar::cache;
 use agent_bar::cli::{self, Command, Format};
 use agent_bar::config::{self, Paths};
@@ -19,6 +19,9 @@ use agent_bar::providers::{
 };
 use agent_bar::settings::{self, Settings};
 use agent_bar::watch;
+use agent_bar::{
+    doctor, runtime, setup, term_prompt, uninstall, update, waybar_contract, waybar_integration,
+};
 
 // ---------------------------------------------------------------------------
 // Helpers puros e testáveis
@@ -89,45 +92,421 @@ async fn main() {
             println!("{}", app_identity::VERSION);
             std::process::exit(0);
         }
-        // Stubs Plano 6 — comandos de instalação/TUI ainda não portados.
+        // Menu: stub — TUI será implementada no Plano 7.
         Command::Menu => {
-            log::error!("'menu' ainda não implementado na reescrita Rust (Plano 6).");
+            log::error!("'menu' abre a TUI (Plano 7) — ainda não implementado.");
             std::process::exit(1);
         }
-        Command::Setup => {
-            log::error!("'setup' ainda não implementado na reescrita Rust (Plano 6).");
-            std::process::exit(1);
-        }
+
+        // ----------------------------------------------------------------
+        // Comandos de instalação — não precisam de Ctx HTTP.
+        // ----------------------------------------------------------------
         Command::AssetsInstall => {
-            log::error!("'assets install' ainda não implementado na reescrita Rust (Plano 6).");
-            std::process::exit(1);
+            let defaults = waybar_contract::get_default_waybar_asset_paths();
+            let waybar_dir = opts
+                .waybar_dir
+                .as_deref()
+                .map(PathBuf::from)
+                .unwrap_or(defaults.waybar_dir);
+            let scripts_dir = opts
+                .scripts_dir
+                .as_deref()
+                .map(PathBuf::from)
+                .unwrap_or(defaults.scripts_dir);
+            match waybar_contract::install_waybar_assets(&waybar_dir, &scripts_dir, None) {
+                Ok(r) => {
+                    println!("{}", serde_json::to_string(&r).unwrap_or_default());
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            }
         }
+
         Command::ExportWaybarModules => {
-            log::error!(
-                "'export waybar-modules' ainda não implementado na reescrita Rust (Plano 6)."
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let settings = settings::load(&paths);
+            let defaults = waybar_contract::get_default_waybar_asset_paths();
+            let app_bin = opts.app_bin.clone().unwrap_or(defaults.app_bin);
+            let terminal_script = opts
+                .terminal_script
+                .as_deref()
+                .map(PathBuf::from)
+                .unwrap_or(defaults.terminal_script);
+            let term_str = terminal_script.to_string_lossy().to_string();
+            let export = waybar_contract::export_waybar_modules(
+                &app_bin,
+                &term_str,
+                settings.waybar.signal,
+                &settings.waybar.provider_order,
             );
-            std::process::exit(1);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&export).unwrap_or_default()
+            );
+            std::process::exit(0);
         }
+
         Command::ExportWaybarCss => {
-            log::error!("'export waybar-css' ainda não implementado na reescrita Rust (Plano 6).");
-            std::process::exit(1);
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let settings = settings::load(&paths);
+            let defaults = waybar_contract::get_default_waybar_asset_paths();
+            let icons_dir = opts
+                .icons_dir
+                .as_deref()
+                .map(PathBuf::from)
+                .unwrap_or(defaults.icons_dir);
+            let css = waybar_contract::export_waybar_css(
+                &icons_dir.to_string_lossy(),
+                &settings.waybar.provider_order,
+                settings.waybar.separators,
+            );
+            let wrapped = serde_json::json!({ "css": css });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&wrapped).unwrap_or_default()
+            );
+            std::process::exit(0);
         }
-        Command::Update => {
-            log::error!("'update' ainda não implementado na reescrita Rust (Plano 6).");
-            std::process::exit(1);
+
+        Command::Setup => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let settings = settings::load(&paths);
+            let asset_paths = waybar_contract::get_default_waybar_asset_paths();
+            let ipaths = waybar_integration::get_default_waybar_integration_paths();
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let cfg = setup::SetupConfig {
+                asset_paths: Some(asset_paths),
+                integration_paths: Some(ipaths),
+                repo_root: None,
+                home,
+                skip_reload: false,
+                system_install: runtime::is_system_install(),
+            };
+            match setup::run_setup(&settings, cfg, true, true) {
+                Ok(_) => std::process::exit(0),
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            }
         }
-        Command::Uninstall => {
-            log::error!("'uninstall' ainda não implementado na reescrita Rust (Plano 6).");
-            std::process::exit(1);
-        }
-        Command::Remove => {
-            log::error!("'remove' ainda não implementado na reescrita Rust (Plano 6).");
-            std::process::exit(1);
-        }
+
         Command::Doctor => {
-            log::error!("'doctor' ainda não implementado na reescrita Rust (Plano 6).");
-            std::process::exit(1);
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let dry_run = opts.dry_run;
+            let yes = opts.yes;
+            let confirm = |f: &doctor::DoctorFindings| {
+                let items: Vec<String> = [
+                    f.package_json_path
+                        .as_ref()
+                        .filter(|_| f.package_json_orphan)
+                        .map(|p| p.to_string_lossy().into_owned()),
+                    f.node_modules_dir
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().into_owned()),
+                ]
+                .into_iter()
+                .flatten()
+                .chain(f.lockfiles.iter().map(|p| p.to_string_lossy().into_owned()))
+                .collect();
+                if !items.is_empty() {
+                    term_prompt::note(&format!(
+                        "Leftovers encontrados:\n  • {}",
+                        items.join("\n  • ")
+                    ));
+                }
+                let msg = if dry_run {
+                    "Show what would be removed?"
+                } else {
+                    "Remove the leftovers above?"
+                };
+                term_prompt::confirm(msg, true)
+            };
+            let result = doctor::run_doctor(doctor::DoctorOptions {
+                home: &home,
+                dry_run,
+                yes,
+                confirm: &confirm,
+            });
+            match result.status {
+                doctor::DoctorStatus::Clean => {
+                    term_prompt::status("OK", "Nothing to clean");
+                }
+                doctor::DoctorStatus::Cleaned => {
+                    term_prompt::status("OK", &format!("{} paths removidos", result.removed.len()));
+                }
+                doctor::DoctorStatus::MixedOnly => {
+                    term_prompt::status(
+                        "Info",
+                        "package.json tem outras dependências além do agent-bar; remoção pulada",
+                    );
+                }
+                doctor::DoctorStatus::Cancelled => {
+                    term_prompt::status("Cancelado", "Doctor não aplicou mudanças");
+                }
+            }
+            std::process::exit(0);
         }
+
+        Command::Update => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let settings = settings::load(&paths);
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            // repo_root = pai do CARGO_MANIFEST_DIR (i.e., raiz do repo)
+            let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_default();
+            let install_root = home.join(format!(".{APP_NAME}"));
+
+            fn run_real_command(cmd: &str, args: &[String], cwd: &Path) -> update::CommandResult {
+                match std::process::Command::new(cmd)
+                    .args(args)
+                    .current_dir(cwd)
+                    .output()
+                {
+                    Ok(out) => {
+                        let mut combined = String::from_utf8_lossy(&out.stdout).into_owned();
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        if !stderr.is_empty() {
+                            if !combined.is_empty() {
+                                combined.push('\n');
+                            }
+                            combined.push_str(&stderr);
+                        }
+                        update::CommandResult {
+                            ok: out.status.success(),
+                            output: combined,
+                        }
+                    }
+                    Err(e) => update::CommandResult {
+                        ok: false,
+                        output: e.to_string(),
+                    },
+                }
+            }
+
+            match update::detect_install_kind(&repo_root, &install_root) {
+                update::InstallKind::System => {
+                    term_prompt::status(
+                        "Info",
+                        "Instalação de sistema detectada. Use o AUR helper (ex: yay -Syu agent-bar) para atualizar.",
+                    );
+                    std::process::exit(0);
+                }
+                update::InstallKind::DevGit => {
+                    log::error!(
+                        "Dev checkout detectado. Use `git pull` na raiz do repositório para atualizar."
+                    );
+                    std::process::exit(1);
+                }
+                update::InstallKind::Npm => {
+                    let settings_for_setup = settings.clone();
+                    let repo_root_for_setup = repo_root.clone();
+                    let home_for_setup = home.clone();
+                    let run_setup = || {
+                        let asset_paths = waybar_contract::get_default_waybar_asset_paths();
+                        let ipaths = waybar_integration::get_default_waybar_integration_paths();
+                        let cfg = setup::SetupConfig {
+                            asset_paths: Some(asset_paths),
+                            integration_paths: Some(ipaths),
+                            repo_root: Some(repo_root_for_setup.clone()),
+                            home: home_for_setup.clone(),
+                            skip_reload: false,
+                            system_install: runtime::is_system_install(),
+                        };
+                        if let Err(e) = setup::run_setup(&settings_for_setup, cfg, false, false) {
+                            log::error!("Setup falhou após update: {e}");
+                        }
+                    };
+                    let confirm_npm = |summary: &update::NpmUpdateSummary| {
+                        term_prompt::confirm(
+                            &format!(
+                                "Atualizar {} (versão atual: {})?",
+                                summary.package_name, summary.current_version
+                            ),
+                            true,
+                        )
+                    };
+                    match update::run_npm_update(update::NpmUpdateOptions {
+                        repo_root: &repo_root,
+                        run_command: &run_real_command,
+                        run_setup: &run_setup,
+                        confirm_npm: &confirm_npm,
+                    }) {
+                        Ok(r) => {
+                            match r.status {
+                                update::NpmUpdateStatus::Updated => {
+                                    term_prompt::status(
+                                        "OK",
+                                        &format!("{} atualizado", r.summary.package_name),
+                                    );
+                                }
+                                update::NpmUpdateStatus::Cancelled => {
+                                    term_prompt::status("Cancelado", "Update não aplicado");
+                                }
+                            }
+                            std::process::exit(0);
+                        }
+                        Err(e) => {
+                            log::error!("{e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                update::InstallKind::ManagedGit => {
+                    let settings_for_setup = settings.clone();
+                    let repo_root_for_setup = repo_root.clone();
+                    let home_for_setup = home.clone();
+                    let run_setup = || {
+                        let asset_paths = waybar_contract::get_default_waybar_asset_paths();
+                        let ipaths = waybar_integration::get_default_waybar_integration_paths();
+                        let cfg = setup::SetupConfig {
+                            asset_paths: Some(asset_paths),
+                            integration_paths: Some(ipaths),
+                            repo_root: Some(repo_root_for_setup.clone()),
+                            home: home_for_setup.clone(),
+                            skip_reload: false,
+                            system_install: runtime::is_system_install(),
+                        };
+                        if let Err(e) = setup::run_setup(&settings_for_setup, cfg, false, false) {
+                            log::error!("Setup falhou após update: {e}");
+                        }
+                    };
+                    let confirm_managed = |summary: &update::UpdateSummary| {
+                        if !summary.commits.is_empty() {
+                            term_prompt::note(&format!(
+                                "Commits disponíveis:\n  {}",
+                                summary.commits.join("\n  ")
+                            ));
+                        }
+                        term_prompt::confirm("Aplicar update?", true)
+                    };
+                    match update::run_managed_update(update::ManagedUpdateOptions {
+                        repo_root: &repo_root,
+                        install_root: &install_root,
+                        run_command: &run_real_command,
+                        run_setup: &run_setup,
+                        confirm: &confirm_managed,
+                    }) {
+                        Ok(r) => {
+                            match r.status {
+                                update::ManagedUpdateStatus::Updated => {
+                                    term_prompt::status("OK", "Update aplicado");
+                                }
+                                update::ManagedUpdateStatus::UpToDate => {
+                                    term_prompt::status("OK", "Já na versão mais recente");
+                                }
+                                update::ManagedUpdateStatus::Cancelled => {
+                                    term_prompt::status("Cancelado", "Update não aplicado");
+                                }
+                                update::ManagedUpdateStatus::WrongRoot => {
+                                    log::error!("Diretório de instalação não corresponde ao repo.");
+                                    std::process::exit(1);
+                                }
+                            }
+                            std::process::exit(0);
+                        }
+                        Err(e) => {
+                            log::error!("{e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
+        }
+
+        Command::Uninstall => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let settings_dir = home.join(".config").join(APP_NAME);
+            let ipaths = waybar_integration::get_default_waybar_integration_paths();
+            match uninstall::run_uninstall(
+                &settings_dir,
+                &paths.cache_dir,
+                &home,
+                false,
+                &format!("{APP_NAME} uninstall"),
+                &ipaths,
+            ) {
+                Ok(()) => std::process::exit(0),
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        Command::Remove => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let settings_dir = home.join(".config").join(APP_NAME);
+            let ipaths = waybar_integration::get_default_waybar_integration_paths();
+            match uninstall::run_uninstall(
+                &settings_dir,
+                &paths.cache_dir,
+                &home,
+                true,
+                &format!("{APP_NAME} remove"),
+                &ipaths,
+            ) {
+                Ok(()) => std::process::exit(0),
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
         // Outros comandos prosseguem abaixo.
         _ => {}
     }
