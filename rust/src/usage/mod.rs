@@ -146,24 +146,20 @@ pub fn records_since(opts: AggregateOptions, cutoff: OffsetDateTime) -> Vec<Usag
         .collect()
 }
 
-/// Agrega TODOS os records em `UsageSummary` (sem filtragem temporal — agrega o
-/// histórico inteiro; pra visões por janela, filtre antes com [`records_since`]).
+/// Agrega um `Vec<UsageRecord>` já filtrado em `UsageSummary`.
 /// - Records agrupados por `(provider, model_or_"unknown")`.
 /// - `cost` por modelo = soma de `cost_usd_of` dos records (modelo desconhecido → `None`).
 /// - `ProviderUsage.cost` = soma dos `ModelUsage.cost` conhecidos; `None` se nenhum.
 /// - `brl = usd * fx_rate`.
 /// - Se `amp_meta` Some → adiciona `ProviderUsage { provider:"amp", amp_dollars: Some(...) }`.
-pub fn aggregate(opts: AggregateOptions) -> UsageSummary {
-    let fx_rate = opts.fx_rate;
-    let amp_meta = opts.amp_meta;
-
-    let all = records(AggregateOptions {
-        claude_dir: opts.claude_dir,
-        codex_dir: opts.codex_dir,
-        fx_rate,
-        amp_meta: None, // amp não tem records de token
-    });
-
+///
+/// Use [`aggregate`] quando quiser o histórico inteiro (sem filtro temporal).
+/// Use [`records_since`] + `aggregate_records` para visões por janela (hoje, 7d, etc.).
+pub fn aggregate_records(
+    records: Vec<UsageRecord>,
+    fx_rate: f64,
+    amp_meta: Option<&BTreeMap<String, String>>,
+) -> UsageSummary {
     // Agrupa por (provider, model_key).
     // BTreeMap garante ordem determinística nos testes.
     use std::collections::BTreeMap as Map;
@@ -180,7 +176,7 @@ pub fn aggregate(opts: AggregateOptions) -> UsageSummary {
 
     let mut groups: Map<GroupKey, Group> = Map::new();
 
-    for rec in &all {
+    for rec in &records {
         let model_label = rec.model.clone().unwrap_or_else(|| "unknown".to_string());
         let key = (rec.provider.clone(), model_label);
         let cost_delta = cost_usd_of(rec); // None se modelo desconhecido
@@ -298,6 +294,23 @@ pub fn aggregate(opts: AggregateOptions) -> UsageSummary {
         },
         fx_rate,
     }
+}
+
+/// Agrega TODOS os records em `UsageSummary` (sem filtragem temporal — agrega o
+/// histórico inteiro; pra visões por janela, filtre antes com [`records_since`]
+/// e passe o resultado para [`aggregate_records`]).
+pub fn aggregate(opts: AggregateOptions) -> UsageSummary {
+    let fx_rate = opts.fx_rate;
+    let amp_meta = opts.amp_meta;
+
+    let all = records(AggregateOptions {
+        claude_dir: opts.claude_dir,
+        codex_dir: opts.codex_dir,
+        fx_rate,
+        amp_meta: None, // amp não tem records de token
+    });
+
+    aggregate_records(all, fx_rate, amp_meta)
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +490,44 @@ mod tests {
         let dollars = amp.amp_dollars.as_ref().unwrap();
         assert_eq!(dollars.remaining, Some(3.5));
         assert_eq!(dollars.total, Some(5.0));
+    }
+
+    // --- Test: aggregate_records sem I/O ---
+
+    #[test]
+    fn aggregate_records_sums_tokens_and_cost_directly() {
+        use time::macros::datetime;
+        let rec = UsageRecord {
+            provider: "claude".to_string(),
+            model: Some("claude-opus-4-8".to_string()),
+            input: 1_000_000,
+            output: 1_000_000,
+            cache_read: 0,
+            cache_write: 0,
+            ts: datetime!(2026-06-20 09:00 UTC),
+        };
+        let summary = aggregate_records(vec![rec], 5.0, None);
+
+        let cl = summary
+            .providers
+            .iter()
+            .find(|p| p.provider == "claude")
+            .unwrap();
+        assert_eq!(cl.total_input, 1_000_000);
+        assert_eq!(cl.total_output, 1_000_000);
+        // Opus 4.8: 1M in + 1M out = $5 + $25 = $30; brl = 30*5 = 150.
+        let c = cl.cost.as_ref().unwrap();
+        assert!((c.usd - 30.0).abs() < 1e-6, "usd={}", c.usd);
+        assert!((c.brl - 150.0).abs() < 1e-6, "brl={}", c.brl);
+        assert!((summary.total_cost.usd - 30.0).abs() < 1e-6);
+        assert_eq!(summary.fx_rate, 5.0);
+    }
+
+    #[test]
+    fn aggregate_records_empty_yields_empty_summary() {
+        let summary = aggregate_records(vec![], 5.0, None);
+        assert!(summary.providers.is_empty());
+        assert_eq!(summary.total_cost.usd, 0.0);
     }
 
     // --- Test: empty dirs yield empty summary ---

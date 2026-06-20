@@ -8,7 +8,7 @@ use crate::providers::extras::get_amp_extra;
 use crate::providers::{fetch_all, registry, Ctx};
 use crate::settings;
 use crate::setup;
-use crate::usage::{self, AggregateOptions};
+use crate::usage;
 use crate::waybar_integration::{self, get_default_waybar_integration_paths, ApplyOptions};
 
 use super::action::Action;
@@ -38,9 +38,10 @@ fn load_and_dispatch_history(state: &mut AppState, ctx: &Ctx<'_>) {
     update(state, Action::HistoryLoaded(records));
 }
 
-/// Calcula o UsageSummary a partir dos logs locais e despacha Action::UsageComputed.
-/// Roda no mesmo arm do data_tick (sincrono, aceitavel no v1 — cache incremental
-/// do engine amortiza o custo). Pode ser revisitado pra thread separada se lento.
+/// Calcula o UsageSummary escopado a HOJE (meia-noite local até agora) e despacha
+/// Action::UsageComputed. O offset local é injetado via Ctx (nunca now_local() — pode
+/// falhar sem TZ). Roda no mesmo arm do data_tick (sincrono, aceitavel no v1 — cache
+/// incremental do engine amortiza o custo). Pode ser revisitado pra thread separada se lento.
 fn compute_and_dispatch_usage(state: &mut AppState, ctx: &Ctx<'_>) {
     // Extrai amp_meta do ProviderView do Amp, se disponivel.
     let amp_meta = state
@@ -53,12 +54,25 @@ fn compute_and_dispatch_usage(state: &mut AppState, ctx: &Ctx<'_>) {
     let claude_dir = ctx.home.join(".claude").join("projects");
     let codex_dir = ctx.home.join(".codex").join("sessions");
 
-    let summary = usage::aggregate(AggregateOptions {
-        claude_dir: &claude_dir,
-        codex_dir: &codex_dir,
-        fx_rate: ctx.settings.fx_rate,
-        amp_meta,
-    });
+    // Calcula o início do dia local de hoje (meia-noite no offset do usuário).
+    // from_unix_timestamp_nanos: nanos → OffsetDateTime UTC; convertemos pro offset local.
+    let today_start =
+        time::OffsetDateTime::from_unix_timestamp_nanos((ctx.now_ms as i128) * 1_000_000)
+            .map(|t| t.to_offset(ctx.local_offset))
+            .map(|t| t.replace_time(time::Time::MIDNIGHT))
+            .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+
+    let filtered = usage::records_since(
+        usage::AggregateOptions {
+            claude_dir: &claude_dir,
+            codex_dir: &codex_dir,
+            fx_rate: ctx.settings.fx_rate,
+            amp_meta: None,
+        },
+        today_start,
+    );
+
+    let summary = usage::aggregate_records(filtered, ctx.settings.fx_rate, amp_meta);
 
     update(state, Action::UsageComputed(summary));
 }
