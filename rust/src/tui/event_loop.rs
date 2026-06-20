@@ -1,63 +1,14 @@
 use futures::StreamExt as _;
 use ratatui::crossterm::event::{Event, EventStream};
-use ratatui::widgets::{Block, List, ListItem, Tabs};
-use ratatui::{DefaultTerminal, Frame};
+use ratatui::DefaultTerminal;
 use tokio::time::{interval, Duration};
 
 use crate::providers::{fetch_all, registry, Ctx};
 
 use super::action::Action;
+use super::render::render;
 use super::state::{AppState, FetchStatus};
 use super::update::update;
-
-/// Render minimo para T2: abas no topo + lista de nomes dos providers na lateral.
-fn render_min(state: &AppState, frame: &mut Frame) {
-    use ratatui::layout::{Constraint, Direction, Layout};
-
-    let area = frame.area();
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(area);
-
-    // Tab bar
-    let tab_titles: Vec<&str> = ["Dashboard", "Waybar", "History", "Login"].to_vec();
-    let selected_tab = state.tab.index();
-    let tabs = Tabs::new(tab_titles)
-        .select(selected_tab)
-        .block(Block::default());
-    frame.render_widget(tabs, chunks[0]);
-
-    // Provider list in the body
-    let status_line = match &state.status {
-        FetchStatus::Idle => "Idle".to_string(),
-        FetchStatus::Loading => "Loading...".to_string(),
-        FetchStatus::Loaded => {
-            let ts = state
-                .last_update
-                .map(|t| format!("{:02}:{:02}:{:02}", t.hour(), t.minute(), t.second()))
-                .unwrap_or_default();
-            format!("Updated {ts}")
-        }
-        FetchStatus::Failed(msg) => format!("Error: {msg}"),
-    };
-
-    let mut items: Vec<ListItem> = state
-        .providers
-        .iter()
-        .enumerate()
-        .map(|(i, pv)| {
-            let prefix = if i == state.selected { "> " } else { "  " };
-            ListItem::new(format!("{prefix}{}", pv.quota.display_name))
-        })
-        .collect();
-
-    items.push(ListItem::new(status_line));
-
-    let list = List::new(items).block(Block::bordered().title("agent-bar"));
-    frame.render_widget(list, chunks[1]);
-}
 
 /// Event loop principal. Corre até `state.should_quit`.
 pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
@@ -72,7 +23,7 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
     let mut initial_fetch = true;
 
     loop {
-        terminal.draw(|f| render_min(&state, f))?;
+        terminal.draw(|f| render(&state, f))?;
 
         if state.should_quit {
             break;
