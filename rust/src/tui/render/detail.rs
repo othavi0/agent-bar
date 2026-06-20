@@ -7,6 +7,8 @@ use ratatui::Frame;
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
+use crate::tui::widgets::quota_gauge::block_bar;
+use crate::tui::widgets::severity::severity_color as sev_color;
 use crate::usage::{ModelUsage, ProviderUsage};
 
 /// Width (chars) of the block bar for window gauges.
@@ -22,28 +24,6 @@ fn find_model_usage<'a>(by_model: &'a [ModelUsage], quota_name: &str) -> Option<
     by_model
         .iter()
         .find(|mu| mu.model.to_lowercase().contains(&lower))
-}
-
-/// Builds a block bar string: filled (█) = remaining; empty (░) = consumed.
-fn block_bar(remaining_pct: f64, width: usize) -> String {
-    let remaining = remaining_pct.clamp(0.0, 100.0);
-    let filled = ((remaining / 100.0) * width as f64).round() as usize;
-    let filled = filled.min(width);
-    let empty = width - filled;
-    format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
-}
-
-/// Returns a severity color for the given remaining percentage.
-fn severity_color(remaining_pct: f64) -> ratatui::style::Color {
-    if remaining_pct >= 60.0 {
-        to_ratatui(ColorToken::Green)
-    } else if remaining_pct >= 30.0 {
-        to_ratatui(ColorToken::Yellow)
-    } else if remaining_pct >= 10.0 {
-        to_ratatui(ColorToken::Orange)
-    } else {
-        to_ratatui(ColorToken::Red)
-    }
 }
 
 /// Formats a reset time string from an ISO timestamp or raw string.
@@ -97,7 +77,7 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
     if let Some(primary) = &q.primary {
         let rem = primary.remaining;
         let bar = block_bar(rem, BAR_WIDTH);
-        let color = severity_color(rem);
+        let color = sev_color(Some(rem));
         let pct_str = format!("{:3.0}%", rem);
         let reset_str = fmt_reset(primary.resets_at.as_deref());
 
@@ -119,7 +99,7 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
     if let Some(secondary) = &q.secondary {
         let rem = secondary.remaining;
         let bar = block_bar(rem, BAR_WIDTH);
-        let color = severity_color(rem);
+        let color = sev_color(Some(rem));
         let pct_str = format!("{:3.0}%", rem);
         let reset_str = fmt_reset(secondary.resets_at.as_deref());
 
@@ -157,7 +137,7 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
             for (model_name, window) in models {
                 let rem = window.remaining;
                 let bar = block_bar(rem, MINI_BAR_WIDTH);
-                let color = severity_color(rem);
+                let color = sev_color(Some(rem));
                 let pct_str = format!("{:3.0}%", rem);
                 // Truncate model name to 8 chars for alignment
                 let name_trunc: &str = if model_name.len() > 8 {

@@ -4,6 +4,7 @@ pub mod render;
 pub mod state;
 pub mod theme_bridge;
 pub mod update;
+pub mod widgets;
 
 use anyhow::Context as _;
 

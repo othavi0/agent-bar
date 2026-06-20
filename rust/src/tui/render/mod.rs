@@ -10,7 +10,8 @@ use ratatui::Frame;
 
 use crate::theme::ColorToken;
 use crate::tui::state::{AppState, FetchStatus, Panel};
-use crate::tui::theme_bridge::{provider_color, to_ratatui};
+use crate::tui::theme_bridge::to_ratatui;
+use crate::tui::widgets::provider_list::provider_list_item;
 
 use self::dashboard::render_dashboard;
 use self::detail::render_detail;
@@ -119,38 +120,7 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
             .providers
             .iter()
             .enumerate()
-            .map(|(i, pv)| {
-                let q = &pv.quota;
-                let remaining = q.primary.as_ref().map(|w| w.remaining).unwrap_or(0.0);
-                let pct = format!("{:3.0}%", remaining);
-                let p_color = provider_color(&q.provider);
-
-                // Inner width = 13 (sidebar=15 - 2 borders).
-                // Layout: glyph(1) + space(1) + name(7) + pct(4) = 13
-                let name_trunc: &str = if q.display_name.len() > 7 {
-                    &q.display_name[..7]
-                } else {
-                    &q.display_name
-                };
-
-                if i == state.selected {
-                    // Selected: diamond prefix + bold
-                    let name_part = format!("\u{25c6} {:<7}", name_trunc);
-                    ListItem::new(Line::from(vec![
-                        Span::styled(
-                            name_part,
-                            Style::default().fg(p_color).add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(pct, Style::default().fg(to_ratatui(ColorToken::TextBright))),
-                    ]))
-                } else {
-                    let name_part = format!("\u{25cf} {:<7}", name_trunc);
-                    ListItem::new(Line::from(vec![
-                        Span::styled(name_part, Style::default().fg(p_color)),
-                        Span::styled(pct, Style::default().fg(to_ratatui(ColorToken::Muted))),
-                    ]))
-                }
-            })
+            .map(|(i, pv)| provider_list_item(pv, i == state.selected))
             .collect();
 
         // Loading/error status indicator

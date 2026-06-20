@@ -7,35 +7,15 @@ use ratatui::Frame;
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
+use crate::tui::widgets::quota_gauge::block_bar;
+use crate::tui::widgets::severity::severity_color as sev_color;
 use crate::usage::ProviderUsage;
 
 /// Builds a 7-char block bar string for remaining quota.
-/// filled (█) = remaining; empty (░) = consumed.
-/// 100% remaining → all filled; 0% remaining → all empty.
+/// Delegates to `quota_gauge::block_bar` with width=7.
+/// Public for tests in render/mod.rs.
 pub fn quota_bar_pub(remaining_pct: f64) -> String {
-    quota_bar(remaining_pct)
-}
-
-fn quota_bar(remaining_pct: f64) -> String {
-    let total = 7usize;
-    let remaining = remaining_pct.clamp(0.0, 100.0);
-    let filled = ((remaining / 100.0) * total as f64).round() as usize;
-    let filled = filled.min(total);
-    let empty = total - filled;
-    format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
-}
-
-/// Selects a severity color based on remaining percentage.
-fn severity_color(remaining_pct: f64) -> ratatui::style::Color {
-    if remaining_pct >= 60.0 {
-        to_ratatui(ColorToken::Green)
-    } else if remaining_pct >= 30.0 {
-        to_ratatui(ColorToken::Yellow)
-    } else if remaining_pct >= 10.0 {
-        to_ratatui(ColorToken::Orange)
-    } else {
-        to_ratatui(ColorToken::Red)
-    }
+    block_bar(remaining_pct, 7)
 }
 
 /// Formata o custo de um provider para a coluna custo do dashboard.
@@ -81,9 +61,9 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
         .map(|pv| {
             let q = &pv.quota;
             let remaining = q.primary.as_ref().map(|w| w.remaining).unwrap_or(0.0);
-            let bar = quota_bar(remaining);
+            let bar = block_bar(remaining, 7);
             let pct_str = format!("{:3.0}%", remaining);
-            let bar_color = severity_color(remaining);
+            let bar_color = sev_color(Some(remaining));
             let p_color = provider_color(&q.provider);
 
             let reset_str = q
