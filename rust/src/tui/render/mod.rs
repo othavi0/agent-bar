@@ -1,4 +1,5 @@
 pub mod dashboard;
+pub mod detail;
 pub mod status_bar;
 
 use ratatui::layout::{Constraint, Direction, Layout};
@@ -12,6 +13,7 @@ use crate::tui::state::{AppState, FetchStatus, Panel};
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 
 use self::dashboard::render_dashboard;
+use self::detail::render_detail;
 use self::status_bar::render_status_bar;
 
 /// Top-level render: lays out the full TUI and dispatches to sub-renders.
@@ -175,12 +177,13 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
     frame.render_widget(list, area);
 }
 
-/// Dispatches content rendering based on current tab.
+/// Dispatches content rendering based on current tab and mode.
 fn render_content(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
-    use crate::tui::state::Tab;
+    use crate::tui::state::{Mode, Tab};
 
-    match state.tab {
-        Tab::Dashboard => render_dashboard(state, frame, area),
+    match (&state.tab, &state.mode) {
+        (Tab::Dashboard, Mode::Detail) => render_detail(state, frame, area),
+        (Tab::Dashboard, _) => render_dashboard(state, frame, area),
         _ => render_placeholder(state, frame, area),
     }
 }
