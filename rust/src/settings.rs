@@ -8,6 +8,28 @@ use crate::config::Paths;
 
 pub const CURRENT_VERSION: u32 = 2;
 
+/// Modo de glyph para a TUI.
+///
+/// - `Box` (padrão): box-drawing universal, funciona em qualquer terminal.
+/// - `Nerd`: opt-in para glyphs nerd-font (degrada para Box se a fonte não tiver).
+///
+/// Em v1, `Nerd` é aceito no settings mas não altera o render (infra pronta;
+/// glyphs nerd-font específicos serão adicionados em iterações futuras).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GlyphMode {
+    Box,
+    Nerd,
+}
+
+fn glyph_mode_from_str(s: &str) -> Option<GlyphMode> {
+    Some(match s {
+        "box" => GlyphMode::Box,
+        "nerd" => GlyphMode::Nerd,
+        _ => return None,
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SeparatorStyle {
@@ -101,6 +123,9 @@ pub struct Settings {
     pub window_policy: BTreeMap<String, WindowPolicy>,
     pub notify: Notify,
     pub cache: CacheSettings,
+    /// Modo de glyph para a TUI (box-drawing universal ou nerd-font opt-in).
+    /// Default: Box. Configurável em settings.json como "glyphMode": "box" | "nerd".
+    pub glyph_mode: GlyphMode,
 }
 
 // ---- Schema bruto (deserialize leniente) ----
@@ -113,6 +138,8 @@ struct RawSettings {
     window_policy: Option<BTreeMap<String, String>>,
     notify: Option<RawNotify>,
     cache: Option<RawCache>,
+    #[serde(rename = "glyphMode")]
+    glyph_mode: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -218,6 +245,12 @@ fn normalize(raw: RawSettings) -> Settings {
         }
     }
 
+    let glyph_mode = raw
+        .glyph_mode
+        .as_deref()
+        .and_then(glyph_mode_from_str)
+        .unwrap_or(GlyphMode::Box);
+
     Settings {
         version: CURRENT_VERSION,
         waybar: Waybar {
@@ -236,6 +269,7 @@ fn normalize(raw: RawSettings) -> Settings {
             enabled: raw.notify.and_then(|n| n.enabled) != Some(false),
         },
         cache: CacheSettings { ttl },
+        glyph_mode,
     }
 }
 
@@ -378,5 +412,32 @@ mod tests {
         save(&p, &s1).unwrap();
         let s2 = load(&p);
         assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn glyph_mode_defaults_to_box() {
+        let dir = tempdir().unwrap();
+        let s = load(&paths_in(dir.path()));
+        assert_eq!(s.glyph_mode, GlyphMode::Box);
+    }
+
+    #[test]
+    fn glyph_mode_nerd_is_accepted() {
+        let dir = tempdir().unwrap();
+        let p = paths_in(dir.path());
+        std::fs::create_dir_all(&p.config_dir).unwrap();
+        std::fs::write(p.settings_file(), r#"{"glyphMode":"nerd"}"#).unwrap();
+        let s = load(&p);
+        assert_eq!(s.glyph_mode, GlyphMode::Nerd);
+    }
+
+    #[test]
+    fn glyph_mode_invalid_falls_back_to_box() {
+        let dir = tempdir().unwrap();
+        let p = paths_in(dir.path());
+        std::fs::create_dir_all(&p.config_dir).unwrap();
+        std::fs::write(p.settings_file(), r#"{"glyphMode":"emoji"}"#).unwrap();
+        let s = load(&p);
+        assert_eq!(s.glyph_mode, GlyphMode::Box);
     }
 }

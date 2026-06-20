@@ -15,7 +15,14 @@ use crate::tui::theme_bridge::{provider_color, to_ratatui};
 ///
 /// - Selected → ◆ (U+25C6) prefix, bold provider color, bright pct
 /// - Unselected → ● (U+25CF) prefix, muted provider color, muted pct
-pub fn provider_list_item(pv: &ProviderView, selected: bool) -> ListItem<'static> {
+/// - `is_critical`: remaining < 10% → animação D (pulse): blink lento do ●
+/// - `blink_visible`: frame atual do blink (true=visível, false=dim)
+pub fn provider_list_item(
+    pv: &ProviderView,
+    selected: bool,
+    is_critical: bool,
+    blink_visible: bool,
+) -> ListItem<'static> {
     let q = &pv.quota;
     let remaining = q.primary.as_ref().map(|w| w.remaining).unwrap_or(0.0);
     let pct = format!("{:3.0}%", remaining);
@@ -39,9 +46,16 @@ pub fn provider_list_item(pv: &ProviderView, selected: bool) -> ListItem<'static
             Span::styled(pct, Style::default().fg(to_ratatui(ColorToken::TextBright))),
         ]))
     } else {
+        // Animação D (pulse crítico): ● pisca devagar quando remaining < 10%.
+        // blink_visible=false → dim (Comment); blink_visible=true → cor normal.
+        let dot_style = if is_critical && !blink_visible {
+            Style::default().fg(to_ratatui(ColorToken::Comment))
+        } else {
+            Style::default().fg(p_color)
+        };
         let name_part = format!("\u{25cf} {:<7}", name_trunc);
         ListItem::new(Line::from(vec![
-            Span::styled(name_part, Style::default().fg(p_color)),
+            Span::styled(name_part, dot_style),
             Span::styled(pct, Style::default().fg(to_ratatui(ColorToken::Muted))),
         ]))
     }

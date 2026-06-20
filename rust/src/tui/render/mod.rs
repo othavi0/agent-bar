@@ -7,6 +7,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Tabs};
 use ratatui::Frame;
+use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 
 use crate::theme::ColorToken;
 use crate::tui::state::{AppState, FetchStatus, Panel};
@@ -115,21 +116,48 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
         .border_style(Style::default().fg(border_color))
         .title(Span::styled("PROVIDERS", title_style));
 
+    // Animação D (pulse crítico): blink lento ~450ms.
+    // 30ms/tick → 450ms = 15 ticks. Visível nos primeiros 7-8 ticks, dim nos seguintes.
+    let blink_visible = (state.anim_frame / 15) % 2 == 0;
+
     let items: Vec<ListItem<'_>> = {
         let mut v: Vec<ListItem<'_>> = state
             .providers
             .iter()
             .enumerate()
-            .map(|(i, pv)| provider_list_item(pv, i == state.selected))
+            .map(|(i, pv)| {
+                let remaining = pv
+                    .quota
+                    .primary
+                    .as_ref()
+                    .map(|w| w.remaining)
+                    .unwrap_or(0.0);
+                let is_critical = remaining < 10.0;
+                provider_list_item(pv, i == state.selected, is_critical, blink_visible)
+            })
             .collect();
 
-        // Loading/error status indicator
+        // Animação C (throbber): indicador de carregamento enquanto Loading.
         match &state.status {
             FetchStatus::Loading => {
-                v.push(ListItem::new(Span::styled(
-                    " ...",
-                    Style::default().fg(to_ratatui(ColorToken::Cyan)),
-                )));
+                // Constrói o throbber braille com o índice do estado de animação.
+                let throbber_widget = Throbber::default()
+                    .throbber_set(BRAILLE_SIX)
+                    .throbber_style(
+                        Style::default()
+                            .fg(to_ratatui(ColorToken::Cyan))
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .use_type(throbber_widgets_tui::WhichUse::Spin);
+                let mut throbber_state = ThrobberState::default();
+                // Sincroniza o índice com o estado de animação do AppState.
+                for _ in 0..state.throbber.index {
+                    throbber_state.calc_next();
+                }
+                let symbol_span = throbber_widget.to_symbol_span(&throbber_state);
+                // Prefixo " " para alinhamento com os itens da lista.
+                let line = Line::from(vec![Span::raw(" "), symbol_span]);
+                v.push(ListItem::new(line));
             }
             FetchStatus::Failed(_) => {
                 v.push(ListItem::new(Span::styled(

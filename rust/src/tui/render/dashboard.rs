@@ -61,7 +61,10 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
         .map(|pv| {
             let q = &pv.quota;
             let remaining = q.primary.as_ref().map(|w| w.remaining).unwrap_or(0.0);
-            let bar = block_bar(remaining, 7);
+            // Animação A (gauge lerp): usa display_ratio (animado) para a barra,
+            // mas mostra o percentual bruto (remaining) no texto — só a barra desliza.
+            let bar_pct = pv.display_ratio * 100.0;
+            let bar = block_bar(bar_pct, 7);
             let pct_str = format!("{:3.0}%", remaining);
             let bar_color = sev_color(Some(remaining));
             let p_color = provider_color(&q.provider);

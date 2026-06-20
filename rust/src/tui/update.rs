@@ -123,7 +123,20 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
-        Action::Tick | Action::AnimTick => vec![],
+        Action::Tick => vec![],
+
+        Action::AnimTick => {
+            // Animação A (gauge lerp): cada provider avança display_ratio → target.
+            for pv in &mut state.providers {
+                let target = pv.target_ratio();
+                pv.display_ratio += (target - pv.display_ratio) * 0.20;
+            }
+            // Animação C (throbber): avança o frame do spinner braille.
+            state.throbber.advance();
+            // Animação D (pulse): contador de frames para blink do ● crítico.
+            state.anim_frame = state.anim_frame.wrapping_add(1);
+            vec![]
+        }
     }
 }
 
@@ -238,6 +251,80 @@ mod tests {
         assert!(
             state.should_quit,
             "should_quit should be true after Key('q')"
+        );
+    }
+
+    #[test]
+    fn anim_tick_lerps_display_ratio_toward_target() {
+        use crate::providers::types::QuotaWindow;
+
+        // Cria provider com remaining=80% → target_ratio=0.80
+        let mut q = fake_quota("claude");
+        q.primary = Some(QuotaWindow {
+            remaining: 80.0,
+            resets_at: None,
+            window_minutes: None,
+            used: Some(20.0),
+        });
+        let mut state = AppState::new();
+        // Inicializa com 0 (forçamos display_ratio inicial diferente do target)
+        let mut pv = crate::tui::state::ProviderView::new(q);
+        pv.display_ratio = 0.0; // ponto de partida artificial para testar a convergência
+        state.providers = vec![pv];
+
+        // Após 20 AnimTicks, display_ratio deve convergir próximo a 0.80
+        for _ in 0..20 {
+            update(&mut state, Action::AnimTick);
+        }
+
+        let display = state.providers[0].display_ratio;
+        let target = 0.80_f64;
+        let diff = (display - target).abs();
+        assert!(
+            diff < 0.01,
+            "display_ratio {display:.4} deve estar próximo de {target:.2} após 20 ticks (diff={diff:.4})"
+        );
+    }
+
+    #[test]
+    fn anim_tick_increments_anim_frame_and_throbber() {
+        let mut state = AppState::new();
+        assert_eq!(state.anim_frame, 0);
+        assert_eq!(state.throbber.index, 0);
+
+        update(&mut state, Action::AnimTick);
+        assert_eq!(state.anim_frame, 1);
+        assert_eq!(state.throbber.index, 1);
+
+        for _ in 0..5 {
+            update(&mut state, Action::AnimTick);
+        }
+        // throbber wraps at 6: 1+5 = 6 → 6 % 6 = 0
+        assert_eq!(
+            state.throbber.index, 0,
+            "throbber deve voltar a 0 após 6 ticks"
+        );
+        assert_eq!(state.anim_frame, 6);
+    }
+
+    #[test]
+    fn display_ratio_initializes_to_target() {
+        use crate::providers::types::QuotaWindow;
+        let mut q = fake_quota("codex");
+        q.primary = Some(QuotaWindow {
+            remaining: 42.0,
+            resets_at: None,
+            window_minutes: None,
+            used: Some(58.0),
+        });
+        let pv = crate::tui::state::ProviderView::new(q);
+        // Na inicialização, display_ratio deve ser igual ao target (sem animação no 1º frame).
+        let expected = 42.0 / 100.0;
+        let diff = (pv.display_ratio - expected).abs();
+        assert!(
+            diff < 1e-10,
+            "display_ratio={} mas esperado={expected}",
+            pv.display_ratio
         );
     }
 }
