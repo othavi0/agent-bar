@@ -18,6 +18,7 @@ pub mod term_prompt;
 pub mod theme;
 pub mod uninstall;
 pub mod update;
+pub mod usage;
 pub mod watch;
 pub mod waybar_contract;
 pub mod waybar_integration;
