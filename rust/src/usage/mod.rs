@@ -342,16 +342,17 @@ mod tests {
 
         let cl = s.providers.iter().find(|p| p.provider == "claude").unwrap();
         assert_eq!(cl.total_input, 1_000_000);
-        // Opus 1M in + 1M out = $90; brl = 90*5 = 450.
+        // Opus 4.8: 1M in + 1M out = $5 + $25 = $30; brl = 30*5 = 150.
         let c = cl.cost.as_ref().unwrap();
-        assert!((c.usd - 90.0).abs() < 1e-6);
-        assert!((c.brl - 450.0).abs() < 1e-6);
+        assert!((c.usd - 30.0).abs() < 1e-6);
+        assert!((c.brl - 150.0).abs() < 1e-6);
 
         let cx = s.providers.iter().find(|p| p.provider == "codex").unwrap();
         assert_eq!(cx.total_input, 1_000_000);
         assert!(cx.cost.is_some());
 
-        assert!(s.total_cost.usd > 90.0); // claude + codex
+        // claude $30 + codex (gpt-5.5: 1M in = $5) = $35.
+        assert!((s.total_cost.usd - 35.0).abs() < 1e-6);
         assert_eq!(s.fx_rate, 5.0);
     }
 

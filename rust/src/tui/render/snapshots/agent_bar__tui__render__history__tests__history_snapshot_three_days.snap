@@ -1,5 +1,6 @@
 ---
 source: src/tui/render/history.rs
+assertion_line: 547
 expression: terminal.backend()
 ---
 "┏ Historico (7 dias) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -10,8 +11,8 @@ expression: terminal.backend()
 "┃                                                              ┃"
 "┃                                                              ┃"
 "┃provider  tokens (7d)  custo (7d)  tendencia                  ┃"
-"┃claude    2.2M         $35.10      ▄▃▇                        ┃"
-"┃codex     750K         $2.25       ▄▇                         ┃"
+"┃claude    2.2M         $15.10      ▄▃▇                        ┃"
+"┃codex     750K         $7.50       ▄▇                         ┃"
 "┃                                                              ┃"
 "┃                                                              ┃"
 "┃                                                              ┃"
@@ -21,4 +22,4 @@ expression: terminal.backend()
 "┃                                                              ┃"
 "┃                                                              ┃"
 "┃                                                              ┃"
-"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Total 7d: 2.9M tokens / $37.35 ┛"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Total 7d: 2.9M tokens / $22.60 ┛"
