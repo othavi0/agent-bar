@@ -329,14 +329,15 @@ fn strip_managed_style_imports(content: &str) -> String {
     // Pattern 1: (?m)^\s*/\*\s*agent-bar managed import\s*\*/\n?
     let pat1 = [r"(?m)^\s*/\*\s*", app.as_str(), r" managed import\s*\*/\n?"].concat();
 
-    // Pattern 2: (?m)^\s*@import\s+url\((?:"\./<ns>/style\.css"|'\.<ns>/style\.css');?\n?
-    // Sem backreference: duas alternativas explícitas (aspas " e ')
+    // Pattern 2: (?m)^\s*@import\s+url\((?:"\./<ns>/style\.css"|'\./<ns>/style\.css')\);?\n?
+    // Sem backreference (regex crate não suporta \1): as DUAS alternativas completas
+    // ficam dentro do grupo `(?:...)`, com o `\)` do url() fora dele.
     let pat2 = [
-        r#"(?m)^\s*@import\s+url\((?:"\./)"#,
+        r#"(?m)^\s*@import\s+url\((?:"\./"#,
         ns.as_str(),
-        r#"/style\.css"|'\./)"#,
+        r#"/style\.css"|'\./"#,
         ns.as_str(),
-        r#"/style\.css'\);?\n?"#,
+        r#"/style\.css')\);?\n?"#,
     ]
     .concat();
 
@@ -683,6 +684,30 @@ mod tests {
     #[test]
     fn find_bracket_unbalanced_returns_none() {
         assert_eq!(find_matching_bracket(b"[ \"a\"", 0), None);
+    }
+
+    #[test]
+    fn strip_managed_import_removes_both_quote_styles() {
+        let ns = WAYBAR_NAMESPACE;
+        // Aspas duplas (o que o APP_STYLE_IMPORT gera) + comentário gerenciado.
+        let dq = format!(
+            "/* {APP_NAME} managed import */\n@import url(\"./{ns}/style.css\");\n\nwindow {{ color: red; }}\n"
+        );
+        let out_dq = strip_managed_style_imports(&dq);
+        assert!(
+            !out_dq.contains("@import"),
+            "double-quote import não removido: {out_dq}"
+        );
+        assert!(out_dq.contains("window { color: red; }"));
+
+        // Aspas simples (tolerância herdada do TS via `\1` backref).
+        let sq = format!("@import url('./{ns}/style.css');\nwindow {{ color: blue; }}\n");
+        let out_sq = strip_managed_style_imports(&sq);
+        assert!(
+            !out_sq.contains("@import"),
+            "single-quote import não removido: {out_sq}"
+        );
+        assert!(out_sq.contains("window { color: blue; }"));
     }
 
     #[test]
