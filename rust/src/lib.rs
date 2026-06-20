@@ -10,6 +10,8 @@ pub mod http;
 pub mod logger;
 pub mod notify;
 pub mod providers;
+pub mod runtime;
 pub mod settings;
 pub mod theme;
 pub mod watch;
+pub mod waybar_contract;
