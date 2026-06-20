@@ -13,7 +13,7 @@ use time::Date;
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
-use crate::tui::widgets::sparkline::{sparkline_str, sparkline_str_wide};
+use crate::tui::widgets::sparkline::sparkline_str_wide;
 use crate::usage::{pricing::cost_usd_of, UsageRecord};
 
 // ---------------------------------------------------------------------------
@@ -287,6 +287,10 @@ fn render_table(
         Cell::from("tendencia").style(header_style),
     ]);
 
+    // Fixed columns: provider(9) + tokens(12) + cost(11) + spacing(3) = 35.
+    // The "tendencia" column (Fill(1)) takes the remainder.
+    let spark_col_width = (area.width as usize).saturating_sub(35).max(7);
+
     let rows: Vec<Row<'_>> = provider_buckets
         .iter()
         .map(|(provider, buckets)| {
@@ -301,7 +305,7 @@ fn render_table(
             };
 
             let token_data: Vec<u64> = buckets.iter().map(|b| b.tokens).collect();
-            let spark = sparkline_str(&token_data);
+            let spark = sparkline_str_wide(&token_data, spark_col_width);
             let p_color = provider_color(provider);
 
             Row::new(vec![
