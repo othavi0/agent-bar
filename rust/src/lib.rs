@@ -14,6 +14,7 @@ pub mod providers;
 pub mod runtime;
 pub mod settings;
 pub mod theme;
+pub mod update;
 pub mod watch;
 pub mod waybar_contract;
 pub mod waybar_integration;
