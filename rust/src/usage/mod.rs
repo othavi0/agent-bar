@@ -136,7 +136,18 @@ pub fn records(opts: AggregateOptions) -> Vec<UsageRecord> {
     all
 }
 
-/// Agrega todos os records em `UsageSummary`.
+/// Como [`records`], mas só os com `ts >= cutoff` (ordenados por `ts` asc).
+/// Atalho de ergonomia pra a aba History fazer janelas (hoje / 5h / 7d) sem
+/// reimplementar o filtro temporal no consumidor.
+pub fn records_since(opts: AggregateOptions, cutoff: OffsetDateTime) -> Vec<UsageRecord> {
+    records(opts)
+        .into_iter()
+        .filter(|r| r.ts >= cutoff)
+        .collect()
+}
+
+/// Agrega TODOS os records em `UsageSummary` (sem filtragem temporal — agrega o
+/// histórico inteiro; pra visões por janela, filtre antes com [`records_since`]).
 /// - Records agrupados por `(provider, model_or_"unknown")`.
 /// - `cost` por modelo = soma de `cost_usd_of` dos records (modelo desconhecido → `None`).
 /// - `ProviderUsage.cost` = soma dos `ModelUsage.cost` conhecidos; `None` se nenhum.
@@ -408,6 +419,36 @@ mod tests {
         assert_eq!(recs[0].input, 100);
         // O segundo deve ser o de 11:30
         assert_eq!(recs[1].input, 200);
+    }
+
+    #[test]
+    fn records_since_filters_by_cutoff() {
+        use time::macros::datetime;
+        let claude = tempdir().unwrap();
+        let codex = tempdir().unwrap();
+        write(
+            claude.path(),
+            "a/later.jsonl",
+            r#"{"type":"assistant","timestamp":"2026-06-19T11:30:00Z","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":200,"output_tokens":100}}}"#,
+        );
+        write(
+            claude.path(),
+            "b/earlier.jsonl",
+            r#"{"type":"assistant","timestamp":"2026-06-19T10:00:00Z","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":100,"output_tokens":50}}}"#,
+        );
+
+        let cutoff = datetime!(2026-06-19 11:00 UTC);
+        let recs = records_since(
+            AggregateOptions {
+                claude_dir: claude.path(),
+                codex_dir: codex.path(),
+                fx_rate: 5.0,
+                amp_meta: None,
+            },
+            cutoff,
+        );
+        assert_eq!(recs.len(), 1); // só o de 11:30 (>= cutoff)
+        assert_eq!(recs[0].input, 200);
     }
 
     // --- Test: amp_meta adds amp ProviderUsage ---
