@@ -7,10 +7,11 @@ pub mod status_bar;
 
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Tabs};
 use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
+use tui_popup::Popup;
 
 use crate::theme::ColorToken;
 use crate::tui::state::{AppState, FetchStatus, Panel};
@@ -23,6 +24,177 @@ use self::detail::render_detail;
 use self::history::render_history;
 use self::login::render_login;
 use self::status_bar::render_status_bar;
+
+/// Constroi o conteudo do overlay de ajuda (atalhos de teclado).
+fn help_text() -> Text<'static> {
+    Text::from(vec![
+        Line::from(" Navegacao global ").centered(),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  [?] / Esc  ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "abre/fecha esta ajuda",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Tab / ->   ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "proxima aba",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Shift+Tab  ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "aba anterior",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  [q]        ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("sair", Style::default().fg(to_ratatui(ColorToken::Text))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  [r]        ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "atualizar quotas",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(" Dashboard ").centered(),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  up/down    ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "selecionar provider",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Enter      ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "abrir detalhe",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Esc        ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "voltar para lista",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(" Waybar Config ").centered(),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  up/down    ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "selecionar campo",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Enter      ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "editar campo",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  [s]        ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "salvar configuracao",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(" Login ").centered(),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  up/down    ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "selecionar provider",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Enter      ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "iniciar login do provider",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(""),
+    ])
+}
 
 /// Top-level render: lays out the full TUI and dispatches to sub-renders.
 pub fn render(state: &AppState, frame: &mut Frame) {
@@ -45,6 +217,23 @@ pub fn render(state: &AppState, frame: &mut Frame) {
     render_tab_bar(state, frame, tab_area);
     render_body(state, frame, body_area);
     render_status_bar(state, frame, status_area);
+
+    // Overlay de ajuda: renderizado por cima de tudo quando show_help=true.
+    if state.show_help {
+        // Fundo One Dark (#282c34) para contraste com o conteudo da tela.
+        let bg = ratatui::style::Color::Rgb(0x28, 0x2c, 0x34);
+        let content = help_text();
+        let popup = Popup::new(content)
+            .title(Line::from(Span::styled(
+                " agent-bar — atalhos ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::Blue))
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .style(Style::default().bg(bg).fg(to_ratatui(ColorToken::Text)))
+            .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)));
+        frame.render_widget(popup, area);
+    }
 }
 
 /// Renders the tab bar at the top.
@@ -356,5 +545,16 @@ mod tests {
             bar_0,
             "\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}"
         ); // all empty
+    }
+
+    #[test]
+    fn help_overlay_renders_snapshot() {
+        // Terminal largo para acomodar o popup centralizado sem truncamento.
+        let backend = ratatui::backend::TestBackend::new(80, 35);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.show_help = true;
+        terminal.draw(|f| render(&state, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
     }
 }

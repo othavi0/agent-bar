@@ -18,6 +18,7 @@ use agent_bar::providers::{
     fetch_all, get_provider, get_quota_for, iso_from_ms, registered_provider_ids, registry, Ctx,
 };
 use agent_bar::settings::{self, Settings};
+use agent_bar::tui;
 use agent_bar::watch;
 use agent_bar::{
     doctor, runtime, setup, term_prompt, uninstall, update, waybar_contract, waybar_integration,
@@ -92,12 +93,6 @@ async fn main() {
             println!("{}", app_identity::VERSION);
             std::process::exit(0);
         }
-        // Menu: stub — TUI será implementada no Plano 7.
-        Command::Menu => {
-            log::error!("'menu' abre a TUI (Plano 7) — ainda não implementado.");
-            std::process::exit(1);
-        }
-
         // ----------------------------------------------------------------
         // Comandos de instalação — não precisam de Ctx HTTP.
         // ----------------------------------------------------------------
@@ -534,7 +529,16 @@ async fn main() {
             .unwrap_or_default(),
     };
 
-    // 6. ActionRight.
+    // 6. Menu → abre a TUI.
+    if matches!(opts.command, Command::Menu) {
+        if let Err(e) = tui::run_tui(&ctx).await {
+            log::error!("TUI encerrou com erro: {e}");
+            std::process::exit(1);
+        }
+        std::process::exit(0);
+    }
+
+    // 6b. ActionRight.
     if matches!(opts.command, Command::ActionRight) {
         agent_bar::action_right::handle_action_right(
             opts.provider.as_deref().unwrap_or(""),
@@ -627,10 +631,13 @@ async fn main() {
             );
         }
         _ => {
-            // Waybar (default) — ou interativo sem args → ajuda.
+            // Waybar (default) — ou interativo sem args → TUI.
             let stdout_tty = std::io::stdout().is_terminal();
             if stdout_tty && raw.is_empty() {
-                cli::show_help(no_color);
+                if let Err(e) = tui::run_tui(&ctx).await {
+                    log::error!("TUI encerrou com erro: {e}");
+                    std::process::exit(1);
+                }
             } else {
                 if opts.provider.is_some() && quotas.providers.len() == 1 {
                     print_waybar(&format_provider_for_waybar(

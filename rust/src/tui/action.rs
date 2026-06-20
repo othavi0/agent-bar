@@ -51,4 +51,6 @@ pub enum Action {
     LoginRequested(String),
     /// Feedback do resultado do login (exibido como status na aba).
     LoginResult(Result<(), String>),
+    /// Abre/fecha o overlay de ajuda (atalhos de teclado).
+    ToggleHelp,
 }

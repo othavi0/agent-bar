@@ -189,6 +189,8 @@ pub struct AppState {
     pub login_status: Option<String>,
     /// Records da aba History (ultimos 7 dias). Carregado via HistoryLoaded.
     pub history: Option<Vec<UsageRecord>>,
+    /// Overlay de ajuda visivel (toggle via `?`, fecha com Esc ou `?`).
+    pub show_help: bool,
 }
 
 impl AppState {
@@ -209,6 +211,7 @@ impl AppState {
             login_selected: 0,
             login_status: None,
             history: None,
+            show_help: false,
         }
     }
 }

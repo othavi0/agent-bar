@@ -1,5 +1,6 @@
 ---
 source: src/tui/render/mod.rs
+assertion_line: 512
 expression: terminal.backend()
 ---
 "┏ agent-bar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -21,4 +22,4 @@ expression: terminal.backend()
 "┃             ┃┃                                               ┃"
 "┃             ┃┃                                               ┃"
 "┗━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-" ↑↓ provider · ←→ aba · Enter detalhe · [q]uit                  "
+" ↑↓ provider · ←→ aba · Enter detalhe · [q]uit · [?] ajuda      "

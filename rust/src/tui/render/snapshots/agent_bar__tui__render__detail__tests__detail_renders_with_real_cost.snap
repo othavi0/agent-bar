@@ -1,5 +1,6 @@
 ---
 source: src/tui/render/detail.rs
+assertion_line: 380
 expression: terminal.backend()
 ---
 "┏ agent-bar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -21,4 +22,4 @@ expression: terminal.backend()
 "┃             ┃┃                                               ┃"
 "┃             ┃┃                                               ┃"
 "┗━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-" ↑↓ provider · Esc volta · ←→ aba · [r]efresh                   "
+" ↑↓ provider · Esc volta · ←→ aba · [r]efresh · [?] ajuda       "

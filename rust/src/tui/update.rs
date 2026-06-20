@@ -24,6 +24,26 @@ pub fn key_to_action(key: KeyEvent) -> Option<Action> {
 /// Translates a KeyEvent into a semantic Action using current tab state for
 /// cyclic left/right tab switching.
 fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
+    // Se o overlay de ajuda esta aberto, qualquer tecla fecha (Esc ou '?').
+    if state.show_help {
+        return match key.code {
+            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => Some(Action::ToggleHelp),
+            _ => None,
+        };
+    }
+
+    // '?' global: abre o overlay de ajuda de qualquer contexto (exceto edicao).
+    let in_config_edit = state.tab == Tab::Waybar
+        && state
+            .config_state
+            .as_ref()
+            .map(|cs| cs.editing)
+            .unwrap_or(false);
+
+    if key.code == KeyCode::Char('?') && !in_config_edit {
+        return Some(Action::ToggleHelp);
+    }
+
     // Na aba Waybar com campo em edicao, delega ao input buffer (so Esc/Enter escapam).
     if state.tab == Tab::Waybar {
         if let Some(cs) = &state.config_state {
@@ -463,6 +483,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
 
         Action::HistoryLoaded(records) => {
             state.history = Some(records);
+            vec![]
+        }
+
+        Action::ToggleHelp => {
+            state.show_help = !state.show_help;
             vec![]
         }
 
