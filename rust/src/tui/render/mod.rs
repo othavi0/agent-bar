@@ -1,6 +1,7 @@
 pub mod config;
 pub mod dashboard;
 pub mod detail;
+pub mod history;
 pub mod login;
 pub mod status_bar;
 
@@ -19,6 +20,7 @@ use crate::tui::widgets::provider_list::provider_list_item;
 use self::config::render_config;
 use self::dashboard::render_dashboard;
 use self::detail::render_detail;
+use self::history::render_history;
 use self::login::render_login;
 use self::status_bar::render_status_bar;
 
@@ -187,27 +189,9 @@ fn render_content(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
         (Tab::Dashboard, Mode::Detail) => render_detail(state, frame, area),
         (Tab::Dashboard, _) => render_dashboard(state, frame, area),
         (Tab::Waybar, _) => render_config(state, frame, area),
+        (Tab::History, _) => render_history(state, frame, area),
         (Tab::Login, _) => render_login(state, None, frame, area),
-        _ => render_placeholder(state, frame, area),
     }
-}
-
-/// Placeholder for tabs not yet implemented.
-fn render_placeholder(_state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
-    use ratatui::widgets::Paragraph;
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)));
-
-    let p = Paragraph::new(Span::styled(
-        " Em breve",
-        Style::default().fg(to_ratatui(ColorToken::Muted)),
-    ))
-    .block(block);
-
-    frame.render_widget(p, area);
 }
 
 #[cfg(test)]

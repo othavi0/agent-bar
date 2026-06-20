@@ -2,7 +2,7 @@ use ratatui::crossterm::event::KeyEvent;
 
 use crate::providers::types::AllQuotas;
 use crate::settings::Settings;
-use crate::usage::UsageSummary;
+use crate::usage::{UsageRecord, UsageSummary};
 
 use super::state::Tab;
 
@@ -38,6 +38,9 @@ pub enum Action {
     SaveConfig,
     /// Feedback de resultado do save (exibido na status_msg da aba).
     ConfigSaveResult(Result<(), String>),
+    // --- Aba History ---
+    /// Records carregados via records_since (7d). IO acontece no event_loop.
+    HistoryLoaded(Vec<UsageRecord>),
     // --- Aba Login ---
     /// Navega para cima na lista de providers da aba Login.
     LoginUp,

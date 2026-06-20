@@ -17,6 +17,27 @@ use super::render::render;
 use super::state::{AppState, FetchStatus, Tab};
 use super::update::update;
 
+/// Carrega os records dos ultimos 7 dias e despacha Action::HistoryLoaded.
+/// IO fica no event_loop; o cutoff (relógio) também: `update` é puro.
+fn load_and_dispatch_history(state: &mut AppState, ctx: &Ctx<'_>) {
+    let claude_dir = ctx.home.join(".claude").join("projects");
+    let codex_dir = ctx.home.join(".codex").join("sessions");
+
+    let cutoff = time::OffsetDateTime::now_utc() - time::Duration::days(7);
+
+    let records = usage::records_since(
+        usage::AggregateOptions {
+            claude_dir: &claude_dir,
+            codex_dir: &codex_dir,
+            fx_rate: ctx.settings.fx_rate,
+            amp_meta: None, // Amp nao tem records de token
+        },
+        cutoff,
+    );
+
+    update(state, Action::HistoryLoaded(records));
+}
+
 /// Calcula o UsageSummary a partir dos logs locais e despacha Action::UsageComputed.
 /// Roda no mesmo arm do data_tick (sincrono, aceitavel no v1 — cache incremental
 /// do engine amortiza o custo). Pode ser revisitado pra thread separada se lento.
@@ -136,6 +157,7 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                     let follow_ups = update(&mut state, Action::DataFetched(quotas));
                     drain(&mut state, ctx, follow_ups);
                     compute_and_dispatch_usage(&mut state, ctx);
+                    load_and_dispatch_history(&mut state, ctx);
                 }
                 Err(_) => {
                     let follow_ups =
@@ -179,6 +201,7 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                         let follow_ups = update(&mut state, Action::DataFetched(quotas));
                         drain(&mut state, ctx, follow_ups);
                         compute_and_dispatch_usage(&mut state, ctx);
+                        load_and_dispatch_history(&mut state, ctx);
                     }
                     Err(_) => {
                         let follow_ups = update(

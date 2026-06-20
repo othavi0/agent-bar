@@ -1,6 +1,6 @@
 use crate::providers::types::ProviderQuota;
 use crate::settings::Settings;
-use crate::usage::UsageSummary;
+use crate::usage::{UsageRecord, UsageSummary};
 
 /// Animação C: estado do throbber braille (índice do frame).
 /// Avança via `AnimTick` no `update`.
@@ -187,6 +187,8 @@ pub struct AppState {
     pub login_selected: usize,
     /// Mensagem de status da aba Login (feedback de erro ou instrucao).
     pub login_status: Option<String>,
+    /// Records da aba History (ultimos 7 dias). Carregado via HistoryLoaded.
+    pub history: Option<Vec<UsageRecord>>,
 }
 
 impl AppState {
@@ -206,6 +208,7 @@ impl AppState {
             config_state: None,
             login_selected: 0,
             login_status: None,
+            history: None,
         }
     }
 }

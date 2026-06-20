@@ -461,6 +461,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
+        Action::HistoryLoaded(records) => {
+            state.history = Some(records);
+            vec![]
+        }
+
         Action::Tick => vec![],
 
         Action::AnimTick => {
