@@ -3,12 +3,43 @@ use ratatui::crossterm::event::{Event, EventStream};
 use ratatui::DefaultTerminal;
 use tokio::time::{interval, Duration};
 
+use crate::providers::extras::get_amp_extra;
 use crate::providers::{fetch_all, registry, Ctx};
+use crate::usage::{self, AggregateOptions};
 
 use super::action::Action;
 use super::render::render;
 use super::state::{AppState, FetchStatus};
 use super::update::update;
+
+/// Taxa de cambio padrao US$/BRL (configuravel via settings.fx_rate na T8).
+/// TODO: settings.fx_rate na T8
+const DEFAULT_FX_RATE: f64 = 5.50;
+
+/// Calcula o UsageSummary a partir dos logs locais e despacha Action::UsageComputed.
+/// Roda no mesmo arm do data_tick (sincrono, aceitavel no v1 — cache incremental
+/// do engine amortiza o custo). Pode ser revisitado pra thread separada se lento.
+fn compute_and_dispatch_usage(state: &mut AppState, ctx: &Ctx<'_>) {
+    // Extrai amp_meta do ProviderView do Amp, se disponivel.
+    let amp_meta = state
+        .providers
+        .iter()
+        .find(|pv| pv.quota.provider == "amp")
+        .and_then(|pv| get_amp_extra(&pv.quota))
+        .and_then(|amp_extra| amp_extra.meta.as_ref());
+
+    let claude_dir = ctx.home.join(".claude").join("projects");
+    let codex_dir = ctx.home.join(".codex").join("sessions");
+
+    let summary = usage::aggregate(AggregateOptions {
+        claude_dir: &claude_dir,
+        codex_dir: &codex_dir,
+        fx_rate: DEFAULT_FX_RATE,
+        amp_meta,
+    });
+
+    update(state, Action::UsageComputed(summary));
+}
 
 /// Event loop principal. Corre até `state.should_quit`.
 pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
@@ -39,6 +70,7 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                     for a in update(&mut state, Action::DataFetched(quotas)) {
                         update(&mut state, a);
                     }
+                    compute_and_dispatch_usage(&mut state, ctx);
                 }
                 Err(_) => {
                     for a in update(&mut state, Action::FetchFailed("fetch timeout".to_string())) {
@@ -72,6 +104,7 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                         for a in update(&mut state, Action::DataFetched(quotas)) {
                             update(&mut state, a);
                         }
+                        compute_and_dispatch_usage(&mut state, ctx);
                     }
                     Err(_) => {
                         for a in update(

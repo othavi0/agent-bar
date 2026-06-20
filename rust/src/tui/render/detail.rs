@@ -7,11 +7,22 @@ use ratatui::Frame;
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
+use crate::usage::{ModelUsage, ProviderUsage};
 
 /// Width (chars) of the block bar for window gauges.
 const BAR_WIDTH: usize = 18;
 /// Width (chars) of the block bar for model mini-gauges.
 const MINI_BAR_WIDTH: usize = 12;
+
+/// Encontra um ModelUsage cujo nome contem `quota_name` (case-insensitive).
+/// Necessario porque o nome no quota (ex "Opus") e curto, enquanto o nome no
+/// usage engine e completo (ex "claude-opus-4-8").
+fn find_model_usage<'a>(by_model: &'a [ModelUsage], quota_name: &str) -> Option<&'a ModelUsage> {
+    let lower = quota_name.to_lowercase();
+    by_model
+        .iter()
+        .find(|mu| mu.model.to_lowercase().contains(&lower))
+}
 
 /// Builds a block bar string: filled (█) = remaining; empty (░) = consumed.
 fn block_bar(remaining_pct: f64, width: usize) -> String {
@@ -126,6 +137,12 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
         ]));
     }
 
+    // Lookup usage data for this provider
+    let provider_usage: Option<&ProviderUsage> = state
+        .usage
+        .as_ref()
+        .and_then(|s| s.providers.iter().find(|pu| pu.provider == q.provider));
+
     // --- Models section ---
     if let Some(models) = &q.models {
         if !models.is_empty() {
@@ -149,6 +166,20 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
                     model_name.as_str()
                 };
 
+                // Lookup custo por modelo no usage engine
+                let model_cost_str: String = provider_usage
+                    .and_then(|pu| {
+                        // Match por prefixo: model_name do quota pode ser curto (ex "Opus"),
+                        // enquanto o model do usage e o nome completo (ex "claude-opus-4-8").
+                        // Estrategia: encontra o ModelUsage cujo nome contem o model_name (case-insensitive).
+                        find_model_usage(&pu.by_model, model_name)
+                    })
+                    .map(|mu| match &mu.cost {
+                        Some(c) => format!("  ${:.2}", c.usd),
+                        None => "  -".to_string(),
+                    })
+                    .unwrap_or_default();
+
                 lines.push(Line::from(vec![
                     Span::styled(
                         format!("   {:<8}  ", name_trunc),
@@ -159,13 +190,32 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
                         format!("  {}", pct_str),
                         Style::default().fg(to_ratatui(ColorToken::Muted)),
                     ),
+                    Span::styled(
+                        model_cost_str,
+                        Style::default().fg(to_ratatui(ColorToken::Comment)),
+                    ),
                 ]));
             }
         }
     }
 
-    // --- Footer placeholders ---
-    // Sparkline placeholder (T10) and cost placeholder (T5)
+    // --- Footer: sparkline placeholder (T10) + custo real (T5) ---
+    let cost_str: String = match provider_usage {
+        Some(pu) if pu.provider == "amp" => {
+            // Amp: mostra saldo de credito
+            pu.amp_dollars
+                .as_ref()
+                .and_then(|ad| ad.remaining)
+                .map(|r| format!("cr ${:.2} hoje", r))
+                .unwrap_or_else(|| "-".to_string())
+        }
+        Some(pu) => match &pu.cost {
+            Some(c) => format!("~${:.2} hoje", c.usd),
+            None => "-".to_string(),
+        },
+        None => "-".to_string(),
+    };
+
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled(
@@ -173,7 +223,7 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
             Style::default().fg(to_ratatui(ColorToken::Comment)),
         ),
         Span::styled(
-            "          ~$\u{2014} hoje",
+            format!("          {}", cost_str),
             Style::default().fg(to_ratatui(ColorToken::Muted)),
         ),
     ]));
@@ -211,6 +261,8 @@ mod tests {
     use crate::providers::types::{ProviderQuota, QuotaWindow};
     use crate::tui::render::render;
     use crate::tui::state::{AppState, FetchStatus, Mode, ProviderView};
+    use crate::usage::amp::AmpDollars;
+    use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageSummary};
 
     fn make_window(remaining: f64, resets_at: Option<&str>) -> QuotaWindow {
         QuotaWindow {
@@ -241,6 +293,86 @@ mod tests {
         })
     }
 
+    /// Constroi um UsageSummary falso para testes:
+    /// - claude: $2.10 / R$11.55; modelos opus($1.40) e sonnet(cost None)
+    /// - codex: tokens sem custo conhecido (cost None)
+    /// - amp: amp_dollars (remaining $4.19)
+    fn fake_usage() -> UsageSummary {
+        UsageSummary {
+            providers: vec![
+                ProviderUsage {
+                    provider: "claude".to_string(),
+                    total_input: 1_000_000,
+                    total_output: 200_000,
+                    total_cache_read: 0,
+                    total_cache_write: 0,
+                    cost: Some(Cost {
+                        usd: 2.10,
+                        brl: 11.55,
+                    }),
+                    by_model: vec![
+                        ModelUsage {
+                            model: "claude-opus-4-8".to_string(),
+                            input: 800_000,
+                            output: 100_000,
+                            cache_read: 0,
+                            cache_write: 0,
+                            cost: Some(Cost {
+                                usd: 1.40,
+                                brl: 7.70,
+                            }),
+                        },
+                        ModelUsage {
+                            model: "claude-sonnet-4-6".to_string(),
+                            input: 200_000,
+                            output: 100_000,
+                            cache_read: 0,
+                            cache_write: 0,
+                            cost: None,
+                        },
+                    ],
+                    amp_dollars: None,
+                },
+                ProviderUsage {
+                    provider: "codex".to_string(),
+                    total_input: 500_000,
+                    total_output: 80_000,
+                    total_cache_read: 0,
+                    total_cache_write: 0,
+                    cost: None,
+                    by_model: vec![ModelUsage {
+                        model: "gpt-5.5".to_string(),
+                        input: 500_000,
+                        output: 80_000,
+                        cache_read: 0,
+                        cache_write: 0,
+                        cost: None,
+                    }],
+                    amp_dollars: None,
+                },
+                ProviderUsage {
+                    provider: "amp".to_string(),
+                    total_input: 0,
+                    total_output: 0,
+                    total_cache_read: 0,
+                    total_cache_write: 0,
+                    cost: None,
+                    by_model: vec![],
+                    amp_dollars: Some(AmpDollars {
+                        spent: Some(0.81),
+                        remaining: Some(4.19),
+                        total: Some(5.0),
+                    }),
+                },
+            ],
+            total_cost: Cost {
+                usd: 2.10,
+                brl: 11.55,
+            },
+            fx_rate: 5.50,
+        }
+    }
+
     #[test]
     fn detail_renders_provider_windows_and_models() {
         let backend = ratatui::backend::TestBackend::new(64, 20);
@@ -250,6 +382,20 @@ mod tests {
         state.selected = 0;
         state.mode = Mode::Detail;
         state.status = FetchStatus::Loaded;
+        terminal.draw(|f| render(&state, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn detail_renders_with_real_cost() {
+        let backend = ratatui::backend::TestBackend::new(64, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![make_claude_provider()];
+        state.selected = 0;
+        state.mode = Mode::Detail;
+        state.status = FetchStatus::Loaded;
+        state.usage = Some(fake_usage());
         terminal.draw(|f| render(&state, f)).unwrap();
         insta::assert_snapshot!(terminal.backend());
     }

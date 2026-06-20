@@ -211,6 +211,8 @@ mod tests {
     use super::*;
     use crate::providers::types::{ProviderQuota, QuotaWindow};
     use crate::tui::state::{FetchStatus, ProviderView};
+    use crate::usage::amp::AmpDollars;
+    use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageSummary};
 
     fn make_quota(
         id: &str,
@@ -238,6 +240,69 @@ mod tests {
         }
     }
 
+    /// Constroi um UsageSummary falso para testes de dashboard:
+    /// - claude: $2.10 / R$11.55
+    /// - codex: tokens sem custo conhecido (cost None)
+    /// - amp: amp_dollars (remaining $4.19)
+    fn fake_usage() -> UsageSummary {
+        UsageSummary {
+            providers: vec![
+                ProviderUsage {
+                    provider: "claude".to_string(),
+                    total_input: 1_000_000,
+                    total_output: 200_000,
+                    total_cache_read: 0,
+                    total_cache_write: 0,
+                    cost: Some(Cost {
+                        usd: 2.10,
+                        brl: 11.55,
+                    }),
+                    by_model: vec![ModelUsage {
+                        model: "claude-opus-4-8".to_string(),
+                        input: 800_000,
+                        output: 100_000,
+                        cache_read: 0,
+                        cache_write: 0,
+                        cost: Some(Cost {
+                            usd: 1.40,
+                            brl: 7.70,
+                        }),
+                    }],
+                    amp_dollars: None,
+                },
+                ProviderUsage {
+                    provider: "codex".to_string(),
+                    total_input: 500_000,
+                    total_output: 80_000,
+                    total_cache_read: 0,
+                    total_cache_write: 0,
+                    cost: None,
+                    by_model: vec![],
+                    amp_dollars: None,
+                },
+                ProviderUsage {
+                    provider: "amp".to_string(),
+                    total_input: 0,
+                    total_output: 0,
+                    total_cache_read: 0,
+                    total_cache_write: 0,
+                    cost: None,
+                    by_model: vec![],
+                    amp_dollars: Some(AmpDollars {
+                        spent: Some(0.81),
+                        remaining: Some(4.19),
+                        total: Some(5.0),
+                    }),
+                },
+            ],
+            total_cost: Cost {
+                usd: 2.10,
+                brl: 11.55,
+            },
+            fx_rate: 5.50,
+        }
+    }
+
     #[test]
     fn dashboard_renders_providers_table() {
         let backend = ratatui::backend::TestBackend::new(64, 20);
@@ -259,6 +324,32 @@ mod tests {
             ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
         ];
         state.status = FetchStatus::Loaded;
+        terminal.draw(|f| render(&state, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn dashboard_renders_with_real_cost() {
+        let backend = ratatui::backend::TestBackend::new(64, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![
+            ProviderView::new(make_quota(
+                "claude",
+                "Claude",
+                26.0,
+                Some("2026-06-19T23:00:00Z"),
+            )),
+            ProviderView::new(make_quota(
+                "codex",
+                "Codex",
+                1.0,
+                Some("2026-06-20T01:28:00Z"),
+            )),
+            ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
+        ];
+        state.status = FetchStatus::Loaded;
+        state.usage = Some(fake_usage());
         terminal.draw(|f| render(&state, f)).unwrap();
         insta::assert_snapshot!(terminal.backend());
     }

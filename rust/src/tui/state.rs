@@ -1,4 +1,5 @@
 use crate::providers::types::ProviderQuota;
+use crate::usage::UsageSummary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tab {
@@ -73,6 +74,8 @@ pub struct AppState {
     pub status: FetchStatus,
     pub last_update: Option<time::OffsetDateTime>,
     pub should_quit: bool,
+    /// Resultado do engine de usage/custo (T5). None enquanto nao calculado.
+    pub usage: Option<UsageSummary>,
 }
 
 impl AppState {
@@ -86,6 +89,7 @@ impl AppState {
             status: FetchStatus::Idle,
             last_update: None,
             should_quit: false,
+            usage: None,
         }
     }
 }

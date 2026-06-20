@@ -1,6 +1,7 @@
 use ratatui::crossterm::event::KeyEvent;
 
 use crate::providers::types::AllQuotas;
+use crate::usage::UsageSummary;
 
 use super::state::Tab;
 
@@ -11,6 +12,8 @@ pub enum Action {
     AnimTick,
     DataFetched(AllQuotas),
     FetchFailed(String),
+    /// Engine de custo calculou UsageSummary; armazenar em AppState.usage.
+    UsageComputed(UsageSummary),
     Up,
     Down,
     OpenDetail,

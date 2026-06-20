@@ -118,6 +118,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
+        Action::UsageComputed(summary) => {
+            state.usage = Some(summary);
+            vec![]
+        }
+
         Action::Tick | Action::AnimTick => vec![],
     }
 }
