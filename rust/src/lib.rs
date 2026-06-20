@@ -15,3 +15,4 @@ pub mod settings;
 pub mod theme;
 pub mod watch;
 pub mod waybar_contract;
+pub mod waybar_integration;
