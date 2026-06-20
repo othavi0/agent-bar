@@ -1,12 +1,11 @@
 ---
 source: src/tui/render/history.rs
-assertion_line: 547
 expression: terminal.backend()
 ---
 "┏ Historico (7 dias) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃claude   ▄▃▇                                                  ┃"
+"┃claude   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇┃"
 "┃                                                              ┃"
-"┃codex    ▄▇                                                   ┃"
+"┃codex    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇┃"
 "┃                                                              ┃"
 "┃                                                              ┃"
 "┃                                                              ┃"

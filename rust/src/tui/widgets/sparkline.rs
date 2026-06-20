@@ -29,6 +29,32 @@ pub fn sparkline_str(data: &[u64]) -> String {
         .collect()
 }
 
+/// Renders a sparkline string expanded to fill `target_width` characters.
+/// Each data point is repeated `target_width / data.len()` times (min 1),
+/// with the remainder distributed left-to-right until `target_width` is reached.
+pub fn sparkline_str_wide(data: &[u64], target_width: usize) -> String {
+    if data.is_empty() || target_width == 0 {
+        return String::new();
+    }
+    let n = data.len();
+    let base = (target_width / n).max(1);
+    let extra = target_width.saturating_sub(base * n);
+
+    let max = *data.iter().max().unwrap_or(&1);
+    let max = max.max(1);
+
+    let mut out = String::with_capacity(target_width);
+    for (i, &v) in data.iter().enumerate() {
+        let idx = ((v as f64 / max as f64) * (BLOCKS.len() - 1) as f64).round() as usize;
+        let ch = BLOCKS[idx.min(BLOCKS.len() - 1)];
+        let repeat = if i < extra { base + 1 } else { base };
+        for _ in 0..repeat {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 /// Returns a `Span` styled in the Comment color for a sparkline string.
 pub fn sparkline_span(data: &[u64]) -> Span<'static> {
     let s = sparkline_str(data);

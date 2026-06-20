@@ -18,9 +18,16 @@ pub fn quota_bar_pub(remaining_pct: f64) -> String {
     block_bar(remaining_pct, 7)
 }
 
+/// Derives bar width from available area width.
+/// Fixed columns: provider(9) + reset(6) + cost(8) + column_spacing*3(3) + borders(2) + pct_label(5) = 33
+/// At least 7 chars for the bar itself.
+fn derive_bar_width(area_width: u16) -> usize {
+    (area_width as usize).saturating_sub(33).max(7)
+}
+
 /// Formata o custo de um provider para a coluna custo do dashboard.
-/// - Provider com cost Some(c) → "$X.XX"
-/// - Provider Amp com amp_dollars → "cr $X.XX" (credito restante)
+/// - Provider com cost Some(c) → ".XX"
+/// - Provider Amp com amp_dollars → "cr .XX" (credito restante)
 /// - Sem custo conhecido → "-"
 fn fmt_provider_cost(pu: &ProviderUsage) -> String {
     // Amp: mostra saldo de credito
@@ -47,6 +54,8 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
     let text_style = Style::default().fg(to_ratatui(ColorToken::Text));
     let muted_style = Style::default().fg(to_ratatui(ColorToken::Comment));
 
+    let bar_width = derive_bar_width(area.width);
+
     let header = Row::new(vec![
         Cell::from("provider").style(header_style),
         Cell::from("uso").style(header_style),
@@ -61,10 +70,10 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
         .map(|pv| {
             let q = &pv.quota;
             let remaining = q.primary.as_ref().map(|w| w.remaining).unwrap_or(0.0);
-            // Animação A (gauge lerp): usa display_ratio (animado) para a barra,
-            // mas mostra o percentual bruto (remaining) no texto — só a barra desliza.
+            // Animacao A (gauge lerp): usa display_ratio (animado) para a barra,
+            // mas mostra o percentual bruto (remaining) no texto - so a barra desliza.
             let bar_pct = pv.display_ratio * 100.0;
-            let bar = block_bar(bar_pct, 7);
+            let bar = block_bar(bar_pct, bar_width);
             let pct_str = format!("{:3.0}%", remaining);
             let bar_color = sev_color(Some(remaining));
             let p_color = provider_color(&q.provider);
@@ -135,9 +144,10 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
 
     let all_rows: Vec<Row<'_>> = rows;
 
+    // bar column = Fill(1) so it expands with the terminal; other columns are fixed.
     let widths = [
         Constraint::Length(9),
-        Constraint::Length(14),
+        Constraint::Fill(1),
         Constraint::Length(6),
         Constraint::Min(6),
     ];

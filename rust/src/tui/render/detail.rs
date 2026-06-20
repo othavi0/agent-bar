@@ -11,10 +11,17 @@ use crate::tui::widgets::quota_gauge::block_bar;
 use crate::tui::widgets::severity::severity_color as sev_color;
 use crate::usage::{ModelUsage, ProviderUsage};
 
-/// Width (chars) of the block bar for window gauges.
-const BAR_WIDTH: usize = 18;
-/// Width (chars) of the block bar for model mini-gauges.
-const MINI_BAR_WIDTH: usize = 12;
+/// Derives bar width from available area width for window gauges.
+/// Fixed prefix: " 5h  " (5) + "  PCT%  " (8) + "-> HH:MM" (8) + borders(2) = 23
+/// At least 18 chars for the bar.
+fn derive_bar_width(area_width: u16) -> usize {
+    (area_width as usize).saturating_sub(23).max(18)
+}
+
+/// Derives mini bar width (model gauges) as 2/3 of bar_width, at least 12.
+fn derive_mini_bar_width(bar_width: usize) -> usize {
+    (bar_width * 2 / 3).max(12)
+}
 
 /// Encontra um ModelUsage cujo nome contem `quota_name` (case-insensitive).
 /// Necessario porque o nome no quota (ex "Opus") e curto, enquanto o nome no
@@ -48,6 +55,8 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
     };
     let q = &provider.quota;
     let p_color = provider_color(&q.provider);
+    let bar_width = derive_bar_width(area.width);
+    let mini_bar_width = derive_mini_bar_width(bar_width);
 
     // Title: "Name · Plan" or just "Name"
     let title = match &q.plan {
@@ -76,7 +85,7 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
     // Primary (5h)
     if let Some(primary) = &q.primary {
         let rem = primary.remaining;
-        let bar = block_bar(rem, BAR_WIDTH);
+        let bar = block_bar(rem, bar_width);
         let color = sev_color(Some(rem));
         let pct_str = format!("{:3.0}%", rem);
         let reset_str = fmt_reset(primary.resets_at.as_deref());
@@ -98,7 +107,7 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
     // Secondary (wk)
     if let Some(secondary) = &q.secondary {
         let rem = secondary.remaining;
-        let bar = block_bar(rem, BAR_WIDTH);
+        let bar = block_bar(rem, bar_width);
         let color = sev_color(Some(rem));
         let pct_str = format!("{:3.0}%", rem);
         let reset_str = fmt_reset(secondary.resets_at.as_deref());
@@ -136,7 +145,7 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
 
             for (model_name, window) in models {
                 let rem = window.remaining;
-                let bar = block_bar(rem, MINI_BAR_WIDTH);
+                let bar = block_bar(rem, mini_bar_width);
                 let color = sev_color(Some(rem));
                 let pct_str = format!("{:3.0}%", rem);
                 // Truncate model name to 8 chars for alignment
@@ -369,6 +378,20 @@ mod tests {
     #[test]
     fn detail_renders_with_real_cost() {
         let backend = ratatui::backend::TestBackend::new(64, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![make_claude_provider()];
+        state.selected = 0;
+        state.mode = Mode::Detail;
+        state.status = FetchStatus::Loaded;
+        state.usage = Some(fake_usage());
+        terminal.draw(|f| render(&state, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn detail_renders_wide_160() {
+        let backend = ratatui::backend::TestBackend::new(160, 40);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.providers = vec![make_claude_provider()];

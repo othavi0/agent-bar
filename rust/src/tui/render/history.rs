@@ -13,7 +13,7 @@ use time::Date;
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
-use crate::tui::widgets::sparkline::sparkline_str;
+use crate::tui::widgets::sparkline::{sparkline_str, sparkline_str_wide};
 use crate::usage::{pricing::cost_usd_of, UsageRecord};
 
 // ---------------------------------------------------------------------------
@@ -243,7 +243,11 @@ fn render_sparklines(
         };
 
         let token_data: Vec<u64> = buckets.iter().map(|b| b.tokens).collect();
-        let spark = sparkline_str(&token_data);
+        // Fill available width: label is 9 chars, remainder goes to sparkline.
+        let spark_width = (row_area.width as usize)
+            .saturating_sub(9)
+            .max(token_data.len().max(1));
+        let spark = sparkline_str_wide(&token_data, spark_width);
 
         let p_color = provider_color(provider);
         let label = format!("{:<8}", provider);
@@ -314,7 +318,7 @@ fn render_table(
         Constraint::Length(9),
         Constraint::Length(12),
         Constraint::Length(11),
-        Constraint::Min(10),
+        Constraint::Fill(1),
     ];
 
     let table = Table::new(rows, widths).header(header).column_spacing(1);
@@ -571,6 +575,58 @@ pub mod tests {
         let mut state = AppState::new();
         state.tab = crate::tui::state::Tab::History;
         // history = None simula ainda-nao-carregado
+
+        terminal
+            .draw(|f| render_history(&state, f, f.area()))
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn history_renders_wide_160() {
+        let backend = ratatui::backend::TestBackend::new(160, 40);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+
+        let mut state = AppState::new();
+        state.tab = crate::tui::state::Tab::History;
+        state.history = Some(vec![
+            rec(
+                "claude",
+                Some("claude-sonnet-4-6"),
+                "2026-06-17T08:00:00Z",
+                500_000,
+                100_000,
+            ),
+            rec(
+                "claude",
+                Some("claude-sonnet-4-6"),
+                "2026-06-18T09:00:00Z",
+                300_000,
+                80_000,
+            ),
+            rec(
+                "codex",
+                Some("gpt-5.5"),
+                "2026-06-18T10:00:00Z",
+                200_000,
+                50_000,
+            ),
+            rec(
+                "claude",
+                Some("claude-opus-4-8"),
+                "2026-06-19T11:00:00Z",
+                1_000_000,
+                200_000,
+            ),
+            rec(
+                "codex",
+                Some("gpt-5.5"),
+                "2026-06-19T14:00:00Z",
+                400_000,
+                100_000,
+            ),
+        ]);
 
         terminal
             .draw(|f| render_history(&state, f, f.area()))

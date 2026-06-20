@@ -279,10 +279,10 @@ fn render_tab_bar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
 
 /// Renders the body: sidebar (providers) + content panel.
 fn render_body(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
-    // Horizontal split: [sidebar (15), content (fill)]
+    // Horizontal split: [sidebar (17), content (fill)]
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(15), Constraint::Min(0)])
+        .constraints([Constraint::Length(17), Constraint::Min(0)])
         .split(area);
 
     let sidebar_area = horiz[0];
@@ -554,6 +554,32 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.show_help = true;
+        terminal.draw(|f| render(&state, f)).unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn dashboard_renders_wide_160() {
+        let backend = ratatui::backend::TestBackend::new(160, 40);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![
+            ProviderView::new(make_quota(
+                "claude",
+                "Claude",
+                26.0,
+                Some("2026-06-19T23:00:00Z"),
+            )),
+            ProviderView::new(make_quota(
+                "codex",
+                "Codex",
+                1.0,
+                Some("2026-06-20T01:28:00Z"),
+            )),
+            ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
+        ];
+        state.status = FetchStatus::Loaded;
+        state.usage = Some(fake_usage());
         terminal.draw(|f| render(&state, f)).unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
