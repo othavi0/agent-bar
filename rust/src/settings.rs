@@ -126,6 +126,9 @@ pub struct Settings {
     /// Modo de glyph para a TUI (box-drawing universal ou nerd-font opt-in).
     /// Default: Box. Configurável em settings.json como "glyphMode": "box" | "nerd".
     pub glyph_mode: GlyphMode,
+    /// Taxa de cambio US$/BRL para exibicao de custo em R$ na TUI.
+    /// Default: 5.50. Configuravel em settings.json como "fxRate": <numero>.
+    pub fx_rate: f64,
 }
 
 // ---- Schema bruto (deserialize leniente) ----
@@ -140,6 +143,8 @@ struct RawSettings {
     cache: Option<RawCache>,
     #[serde(rename = "glyphMode")]
     glyph_mode: Option<String>,
+    #[serde(rename = "fxRate")]
+    fx_rate: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -251,6 +256,13 @@ fn normalize(raw: RawSettings) -> Settings {
         .and_then(glyph_mode_from_str)
         .unwrap_or(GlyphMode::Box);
 
+    // fx_rate: deve ser positivo e finito; invalido cai para o default.
+    const DEFAULT_FX_RATE: f64 = 5.50;
+    let fx_rate = raw
+        .fx_rate
+        .filter(|r| r.is_finite() && *r > 0.0)
+        .unwrap_or(DEFAULT_FX_RATE);
+
     Settings {
         version: CURRENT_VERSION,
         waybar: Waybar {
@@ -270,6 +282,7 @@ fn normalize(raw: RawSettings) -> Settings {
         },
         cache: CacheSettings { ttl },
         glyph_mode,
+        fx_rate,
     }
 }
 
@@ -439,5 +452,46 @@ mod tests {
         std::fs::write(p.settings_file(), r#"{"glyphMode":"emoji"}"#).unwrap();
         let s = load(&p);
         assert_eq!(s.glyph_mode, GlyphMode::Box);
+    }
+
+    #[test]
+    fn fx_rate_defaults_to_5_50() {
+        let dir = tempdir().unwrap();
+        let s = load(&paths_in(dir.path()));
+        let diff = (s.fx_rate - 5.50_f64).abs();
+        assert!(diff < 1e-10, "fx_rate esperado 5.50, obtido {}", s.fx_rate);
+    }
+
+    #[test]
+    fn fx_rate_valid_override_is_accepted() {
+        let dir = tempdir().unwrap();
+        let p = paths_in(dir.path());
+        std::fs::create_dir_all(&p.config_dir).unwrap();
+        std::fs::write(p.settings_file(), r#"{"fxRate":6.25}"#).unwrap();
+        let s = load(&p);
+        let diff = (s.fx_rate - 6.25_f64).abs();
+        assert!(diff < 1e-10, "fx_rate esperado 6.25, obtido {}", s.fx_rate);
+    }
+
+    #[test]
+    fn fx_rate_invalid_values_fall_back_to_default() {
+        let cases = [
+            r#"{"fxRate":-1.0}"#,
+            r#"{"fxRate":0.0}"#,
+            r#"{"fxRate":null}"#,
+        ];
+        for json in &cases {
+            let dir = tempdir().unwrap();
+            let p = paths_in(dir.path());
+            std::fs::create_dir_all(&p.config_dir).unwrap();
+            std::fs::write(p.settings_file(), json).unwrap();
+            let s = load(&p);
+            let diff = (s.fx_rate - 5.50_f64).abs();
+            assert!(
+                diff < 1e-10,
+                "input {json}: fx_rate esperado 5.50, obtido {}",
+                s.fx_rate
+            );
+        }
     }
 }

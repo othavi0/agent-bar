@@ -2,7 +2,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use time::OffsetDateTime;
 
 use super::action::Action;
-use super::state::{AppState, FetchStatus, Mode, ProviderView, Tab};
+use super::state::{AppState, ConfigField, ConfigState, FetchStatus, Mode, ProviderView, Tab};
 
 /// Translates a raw KeyEvent into a semantic Action, if applicable.
 pub fn key_to_action(key: KeyEvent) -> Option<Action> {
@@ -24,6 +24,39 @@ pub fn key_to_action(key: KeyEvent) -> Option<Action> {
 /// Translates a KeyEvent into a semantic Action using current tab state for
 /// cyclic left/right tab switching.
 fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
+    // Na aba Waybar com campo em edicao, delega ao input buffer (so Esc/Enter escapam).
+    if state.tab == Tab::Waybar {
+        if let Some(cs) = &state.config_state {
+            if cs.editing {
+                return match key.code {
+                    KeyCode::Esc => Some(Action::ConfigCancelEdit),
+                    KeyCode::Enter => Some(Action::ConfigConfirmEdit),
+                    _ => None, // o event_loop vai passar o evento cru ao Input
+                };
+            }
+        }
+        // Aba Waybar, fora do modo edicao.
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(Action::ConfigDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(Action::ConfigUp),
+            KeyCode::Enter => Some(Action::ConfigEnterEdit),
+            KeyCode::Char('s') => Some(Action::SaveConfig),
+            KeyCode::Esc => Some(Action::Back),
+            KeyCode::Left | KeyCode::BackTab => {
+                let idx = state.tab.index();
+                let next = if idx == 0 { 3 } else { idx - 1 };
+                Some(Action::SwitchTab(Tab::from_index(next)))
+            }
+            KeyCode::Right | KeyCode::Tab => {
+                let idx = state.tab.index();
+                let next = (idx + 1) % 4;
+                Some(Action::SwitchTab(Tab::from_index(next)))
+            }
+            KeyCode::Char('q') => Some(Action::Quit),
+            _ => None,
+        };
+    }
+
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
@@ -42,6 +75,121 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         KeyCode::Char('r') => Some(Action::Refresh),
         KeyCode::Char('q') => Some(Action::Quit),
         _ => None,
+    }
+}
+
+/// Retorna a representacao em string de um campo das edit_settings.
+fn field_value_string(field: ConfigField, cs: &ConfigState) -> String {
+    let s = &cs.edit_settings;
+    match field {
+        ConfigField::Providers => s.waybar.providers.join(", "),
+        ConfigField::ProviderOrder => s.waybar.provider_order.join(", "),
+        ConfigField::Separators => format!("{:?}", s.waybar.separators).to_lowercase(),
+        ConfigField::DisplayMode => format!("{:?}", s.waybar.display_mode).to_lowercase(),
+        ConfigField::FxRate => format!("{:.2}", s.fx_rate),
+        ConfigField::Signal => s
+            .waybar
+            .signal
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        ConfigField::Interval => s.waybar.interval.to_string(),
+    }
+}
+
+/// Aplica o valor textual do buffer de edicao ao campo das edit_settings.
+/// Retorna Err com mensagem descritiva se o valor e invalido.
+fn apply_field_edit(field: ConfigField, value: &str, cs: &mut ConfigState) -> Result<(), String> {
+    let s = &mut cs.edit_settings;
+    match field {
+        ConfigField::Providers => {
+            let providers: Vec<String> = value
+                .split(',')
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty())
+                .collect();
+            let (normalized, order) =
+                crate::settings::normalize_provider_selection(&providers, &s.waybar.provider_order);
+            s.waybar.providers = normalized;
+            s.waybar.provider_order = order;
+            Ok(())
+        }
+        ConfigField::ProviderOrder => {
+            let order: Vec<String> = value
+                .split(',')
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty())
+                .collect();
+            let (normalized, new_order) =
+                crate::settings::normalize_provider_selection(&s.waybar.providers, &order);
+            s.waybar.providers = normalized;
+            s.waybar.provider_order = new_order;
+            Ok(())
+        }
+        ConfigField::Separators => {
+            use crate::settings::SeparatorStyle;
+            let sep = match value.trim() {
+                "pill" => SeparatorStyle::Pill,
+                "gap" => SeparatorStyle::Gap,
+                "bare" => SeparatorStyle::Bare,
+                "glass" => SeparatorStyle::Glass,
+                "shadow" => SeparatorStyle::Shadow,
+                "none" => SeparatorStyle::None,
+                other => {
+                    return Err(format!(
+                        "separador invalido: '{other}' (pill/gap/bare/glass/shadow/none)"
+                    ))
+                }
+            };
+            s.waybar.separators = sep;
+            Ok(())
+        }
+        ConfigField::DisplayMode => {
+            use crate::settings::DisplayMode;
+            let mode = match value.trim() {
+                "remaining" => DisplayMode::Remaining,
+                "used" => DisplayMode::Used,
+                other => return Err(format!("modo invalido: '{other}' (remaining/used)")),
+            };
+            s.waybar.display_mode = mode;
+            Ok(())
+        }
+        ConfigField::FxRate => {
+            let rate: f64 = value
+                .trim()
+                .parse()
+                .map_err(|_| format!("fxRate invalido: '{value}' (numero esperado)"))?;
+            if !rate.is_finite() || rate <= 0.0 {
+                return Err(format!("fxRate deve ser positivo: '{value}'"));
+            }
+            s.fx_rate = rate;
+            Ok(())
+        }
+        ConfigField::Signal => {
+            let trimmed = value.trim();
+            if trimmed == "none" || trimmed.is_empty() {
+                s.waybar.signal = None;
+                return Ok(());
+            }
+            let n: i64 = trimmed
+                .parse()
+                .map_err(|_| format!("signal invalido: '{value}' (1-30 ou none)"))?;
+            if !(1..=30).contains(&n) {
+                return Err(format!("signal deve ser 1-30 ou none: '{value}'"));
+            }
+            s.waybar.signal = Some(n as u8);
+            Ok(())
+        }
+        ConfigField::Interval => {
+            let n: u32 = value
+                .trim()
+                .parse()
+                .map_err(|_| format!("interval invalido: '{value}' (inteiro positivo)"))?;
+            if n == 0 {
+                return Err(format!("interval deve ser > 0: '{value}'"));
+            }
+            s.waybar.interval = n;
+            Ok(())
+        }
     }
 }
 
@@ -82,8 +230,38 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::SwitchTab(tab) => {
+            let is_waybar = tab == Tab::Waybar;
             state.tab = tab;
             state.mode = Mode::List;
+            // Inicializa config_state ao entrar na aba Waybar pela 1a vez.
+            // Nao podemos acessar settings aqui (update e puro), entao sinalizamos.
+            if is_waybar && state.config_state.is_none() {
+                return vec![Action::InitConfig(
+                    // Usa as edit_settings se ja existirem (re-entrada), senao placeholder.
+                    // O event_loop vai enviar InitConfig com as settings reais.
+                    crate::settings::Settings {
+                        version: 0, // sentinela; event_loop sobrescreve com real
+                        waybar: crate::settings::Waybar {
+                            providers: vec![],
+                            show_percentage: true,
+                            separators: crate::settings::SeparatorStyle::Gap,
+                            provider_order: vec![],
+                            display_mode: crate::settings::DisplayMode::Remaining,
+                            signal: None,
+                            interval: 60,
+                        },
+                        tooltip: crate::settings::Tooltip {},
+                        models: Default::default(),
+                        window_policy: Default::default(),
+                        notify: crate::settings::Notify { enabled: true },
+                        cache: crate::settings::CacheSettings {
+                            ttl: Default::default(),
+                        },
+                        glyph_mode: crate::settings::GlyphMode::Box,
+                        fx_rate: 5.50,
+                    },
+                )];
+            }
             vec![]
         }
 
@@ -120,6 +298,105 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
 
         Action::UsageComputed(summary) => {
             state.usage = Some(summary);
+            vec![]
+        }
+
+        // --- Config tab actions ---
+        Action::InitConfig(settings) => {
+            // So inicializa se ainda nao existe (preserva edicoes em andamento).
+            if state.config_state.is_none() {
+                state.config_state = Some(ConfigState::new(&settings));
+            } else if let Some(cs) = state.config_state.as_mut() {
+                // Atualiza com as settings reais se ainda era o placeholder (version=0).
+                if cs.edit_settings.version == 0 {
+                    *cs = ConfigState::new(&settings);
+                }
+            }
+            vec![]
+        }
+
+        Action::ConfigUp => {
+            if let Some(cs) = state.config_state.as_mut() {
+                if !cs.editing && cs.selected_field > 0 {
+                    cs.selected_field -= 1;
+                }
+            }
+            vec![]
+        }
+
+        Action::ConfigDown => {
+            if let Some(cs) = state.config_state.as_mut() {
+                let max = ConfigField::ALL.len().saturating_sub(1);
+                if !cs.editing && cs.selected_field < max {
+                    cs.selected_field += 1;
+                }
+            }
+            vec![]
+        }
+
+        Action::ConfigEnterEdit => {
+            if let Some(cs) = state.config_state.as_mut() {
+                if !cs.editing {
+                    let field = ConfigField::ALL[cs.selected_field];
+                    let current = field_value_string(field, cs);
+                    cs.input = tui_input::Input::new(current);
+                    cs.editing = true;
+                    cs.status_msg = None;
+                }
+            }
+            vec![]
+        }
+
+        Action::ConfigCancelEdit => {
+            if let Some(cs) = state.config_state.as_mut() {
+                cs.editing = false;
+                cs.input = tui_input::Input::default();
+            }
+            vec![]
+        }
+
+        Action::ConfigConfirmEdit => {
+            if let Some(cs) = state.config_state.as_mut() {
+                if cs.editing {
+                    let field = ConfigField::ALL[cs.selected_field];
+                    let value = cs.input.value().to_string();
+                    match apply_field_edit(field, &value, cs) {
+                        Ok(()) => {
+                            cs.editing = false;
+                            cs.input = tui_input::Input::default();
+                            cs.status_msg =
+                                Some("Campo atualizado. Pressione [s] para salvar.".to_string());
+                        }
+                        Err(e) => {
+                            cs.status_msg = Some(format!("Erro: {e}"));
+                            // Mantem edicao aberta para correcao.
+                        }
+                    }
+                }
+            }
+            vec![]
+        }
+
+        Action::SaveConfig => {
+            // Sinaliza ao event_loop que deve persistir as edit_settings.
+            // O update e puro, nao faz IO.
+            if state.config_state.is_some() {
+                if let Some(cs) = state.config_state.as_mut() {
+                    cs.status_msg = Some("Salvando...".to_string());
+                }
+                vec![Action::SaveConfig] // re-enfileira; event_loop intercepta
+            } else {
+                vec![]
+            }
+        }
+
+        Action::ConfigSaveResult(result) => {
+            if let Some(cs) = state.config_state.as_mut() {
+                cs.status_msg = Some(match result {
+                    Ok(()) => "Configuracao salva e Waybar recarregado.".to_string(),
+                    Err(e) => format!("Erro ao salvar: {e}"),
+                });
+            }
             vec![]
         }
 
@@ -326,5 +603,166 @@ mod tests {
             "display_ratio={} mas esperado={expected}",
             pv.display_ratio
         );
+    }
+
+    // ---- Config tab tests ----
+
+    fn fake_settings() -> crate::settings::Settings {
+        use crate::settings::*;
+        use std::collections::BTreeMap;
+        Settings {
+            version: 2,
+            waybar: Waybar {
+                providers: vec!["claude".to_string(), "codex".to_string()],
+                show_percentage: true,
+                separators: SeparatorStyle::Gap,
+                provider_order: vec!["claude".to_string(), "codex".to_string()],
+                display_mode: DisplayMode::Remaining,
+                signal: Some(8),
+                interval: 60,
+            },
+            tooltip: Tooltip {},
+            models: BTreeMap::new(),
+            window_policy: BTreeMap::new(),
+            notify: Notify { enabled: true },
+            cache: CacheSettings {
+                ttl: BTreeMap::new(),
+            },
+            glyph_mode: GlyphMode::Box,
+            fx_rate: 5.50,
+        }
+    }
+
+    #[test]
+    fn init_config_creates_config_state() {
+        let mut state = AppState::new();
+        assert!(state.config_state.is_none());
+
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        assert!(state.config_state.is_some());
+        let cs = state.config_state.as_ref().unwrap();
+        let diff = (cs.edit_settings.fx_rate - 5.50_f64).abs();
+        assert!(
+            diff < 1e-10,
+            "fx_rate esperado 5.50, obtido {}",
+            cs.edit_settings.fx_rate
+        );
+    }
+
+    #[test]
+    fn config_navigate_down_and_up() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        update(&mut state, Action::ConfigDown);
+        assert_eq!(state.config_state.as_ref().unwrap().selected_field, 1);
+
+        update(&mut state, Action::ConfigDown);
+        assert_eq!(state.config_state.as_ref().unwrap().selected_field, 2);
+
+        update(&mut state, Action::ConfigUp);
+        assert_eq!(state.config_state.as_ref().unwrap().selected_field, 1);
+    }
+
+    #[test]
+    fn config_navigate_clamps_at_bounds() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        // Ja em 0, Up nao deve subtrair
+        update(&mut state, Action::ConfigUp);
+        assert_eq!(state.config_state.as_ref().unwrap().selected_field, 0);
+
+        // Vai ate o ultimo campo
+        let max = crate::tui::state::ConfigField::ALL.len() - 1;
+        for _ in 0..max + 5 {
+            update(&mut state, Action::ConfigDown);
+        }
+        assert_eq!(state.config_state.as_ref().unwrap().selected_field, max);
+    }
+
+    #[test]
+    fn config_enter_edit_sets_input_to_current_value() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        // Seleciona o campo FxRate (index 4)
+        state.config_state.as_mut().unwrap().selected_field = 4;
+        update(&mut state, Action::ConfigEnterEdit);
+
+        let cs = state.config_state.as_ref().unwrap();
+        assert!(cs.editing);
+        assert_eq!(cs.input.value(), "5.50");
+    }
+
+    #[test]
+    fn config_confirm_edit_updates_fx_rate() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+        state.config_state.as_mut().unwrap().selected_field = 4; // FxRate
+        update(&mut state, Action::ConfigEnterEdit);
+
+        // Simula o usuario digitando "6.25" no buffer
+        state.config_state.as_mut().unwrap().input = tui_input::Input::new("6.25".to_string());
+        update(&mut state, Action::ConfigConfirmEdit);
+
+        let cs = state.config_state.as_ref().unwrap();
+        assert!(!cs.editing, "edicao deve fechar apos confirmacao valida");
+        let diff = (cs.edit_settings.fx_rate - 6.25_f64).abs();
+        assert!(
+            diff < 1e-10,
+            "fx_rate deveria ser 6.25, obtido {}",
+            cs.edit_settings.fx_rate
+        );
+    }
+
+    #[test]
+    fn config_confirm_edit_invalid_fx_rate_keeps_editing() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+        state.config_state.as_mut().unwrap().selected_field = 4; // FxRate
+        update(&mut state, Action::ConfigEnterEdit);
+        state.config_state.as_mut().unwrap().input = tui_input::Input::new("negativo".to_string());
+        update(&mut state, Action::ConfigConfirmEdit);
+
+        let cs = state.config_state.as_ref().unwrap();
+        assert!(
+            cs.editing,
+            "edicao deve permanecer aberta apos valor invalido"
+        );
+        assert!(
+            cs.status_msg
+                .as_ref()
+                .map(|m| m.starts_with("Erro"))
+                .unwrap_or(false),
+            "status_msg deve conter 'Erro'"
+        );
+    }
+
+    #[test]
+    fn config_cancel_edit_clears_editing() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+        state.config_state.as_mut().unwrap().selected_field = 4; // FxRate
+        update(&mut state, Action::ConfigEnterEdit);
+        assert!(state.config_state.as_ref().unwrap().editing);
+
+        update(&mut state, Action::ConfigCancelEdit);
+        assert!(!state.config_state.as_ref().unwrap().editing);
+    }
+
+    #[test]
+    fn save_config_returns_save_config_action_and_sets_status() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        let follow_ups = update(&mut state, Action::SaveConfig);
+        // Deve re-enfileirar SaveConfig para o event_loop interceptar
+        let has_save_config = follow_ups.iter().any(|a| matches!(a, Action::SaveConfig));
+        assert!(has_save_config, "SaveConfig deve ser re-enfileirado");
+        // Status msg deve ser "Salvando..."
+        let msg = state.config_state.as_ref().unwrap().status_msg.as_deref();
+        assert_eq!(msg, Some("Salvando..."));
     }
 }

@@ -1,3 +1,4 @@
+pub mod config;
 pub mod dashboard;
 pub mod detail;
 pub mod status_bar;
@@ -14,6 +15,7 @@ use crate::tui::state::{AppState, FetchStatus, Panel};
 use crate::tui::theme_bridge::to_ratatui;
 use crate::tui::widgets::provider_list::provider_list_item;
 
+use self::config::render_config;
 use self::dashboard::render_dashboard;
 use self::detail::render_detail;
 use self::status_bar::render_status_bar;
@@ -182,6 +184,7 @@ fn render_content(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
     match (&state.tab, &state.mode) {
         (Tab::Dashboard, Mode::Detail) => render_detail(state, frame, area),
         (Tab::Dashboard, _) => render_dashboard(state, frame, area),
+        (Tab::Waybar, _) => render_config(state, frame, area),
         _ => render_placeholder(state, frame, area),
     }
 }

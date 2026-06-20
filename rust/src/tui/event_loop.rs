@@ -2,19 +2,19 @@ use futures::StreamExt as _;
 use ratatui::crossterm::event::{Event, EventStream};
 use ratatui::DefaultTerminal;
 use tokio::time::{interval, Duration};
+use tui_input::backend::crossterm::EventHandler as _;
 
 use crate::providers::extras::get_amp_extra;
 use crate::providers::{fetch_all, registry, Ctx};
+use crate::settings;
+use crate::setup;
 use crate::usage::{self, AggregateOptions};
+use crate::waybar_integration::{self, get_default_waybar_integration_paths, ApplyOptions};
 
 use super::action::Action;
 use super::render::render;
-use super::state::{AppState, FetchStatus};
+use super::state::{AppState, FetchStatus, Tab};
 use super::update::update;
-
-/// Taxa de cambio padrao US$/BRL (configuravel via settings.fx_rate na T8).
-/// TODO: settings.fx_rate na T8
-const DEFAULT_FX_RATE: f64 = 5.50;
 
 /// Calcula o UsageSummary a partir dos logs locais e despacha Action::UsageComputed.
 /// Roda no mesmo arm do data_tick (sincrono, aceitavel no v1 — cache incremental
@@ -34,14 +34,66 @@ fn compute_and_dispatch_usage(state: &mut AppState, ctx: &Ctx<'_>) {
     let summary = usage::aggregate(AggregateOptions {
         claude_dir: &claude_dir,
         codex_dir: &codex_dir,
-        fx_rate: DEFAULT_FX_RATE,
+        fx_rate: ctx.settings.fx_rate,
         amp_meta,
     });
 
     update(state, Action::UsageComputed(summary));
 }
 
-/// Event loop principal. Corre até `state.should_quit`.
+/// Persiste as edit_settings, aplica a integracao Waybar e recarrega o Waybar.
+/// Chamado do event_loop quando SaveConfig e interceptado (nao e puro — faz IO).
+fn handle_save_config(state: &mut AppState, ctx: &Ctx<'_>) {
+    let edited = match state.config_state.as_ref() {
+        Some(cs) => cs.edit_settings.clone(),
+        None => return,
+    };
+
+    let result: Result<(), String> = (|| {
+        settings::save(ctx.paths, &edited).map_err(|e| format!("save falhou: {e}"))?;
+
+        let paths = get_default_waybar_integration_paths();
+        let opts = ApplyOptions {
+            paths,
+            icons_dir: None,
+            app_bin: None,
+            terminal_script: None,
+        };
+        waybar_integration::apply_waybar_integration(&edited, opts)
+            .map_err(|e| format!("apply falhou: {e}"))?;
+
+        setup::reload_waybar();
+        Ok(())
+    })();
+
+    for a in update(state, Action::ConfigSaveResult(result)) {
+        update(state, a);
+    }
+}
+
+/// Despacha todas as follow-up actions retornadas por update (1 nivel de profundidade).
+/// SaveConfig e interceptado aqui para IO.
+fn drain(state: &mut AppState, ctx: &Ctx<'_>, actions: Vec<Action>) {
+    for a in actions {
+        match a {
+            // InitConfig com settings reais do ctx (sobrescreve o placeholder do update).
+            Action::InitConfig(_placeholder) => {
+                for sub in update(state, Action::InitConfig(ctx.settings.clone())) {
+                    update(state, sub);
+                }
+            }
+            // SaveConfig e interceptado: nao re-entra no update, faz IO aqui.
+            Action::SaveConfig => {
+                handle_save_config(state, ctx);
+            }
+            other => {
+                update(state, other);
+            }
+        }
+    }
+}
+
+/// Event loop principal. Corre ate `state.should_quit`.
 pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
     let mut state = AppState::new();
 
@@ -67,15 +119,14 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
             // Fetch inline: bloqueia o loop mas e aceitavel no v1 (timeout 10s por provider).
             match tokio::time::timeout(Duration::from_secs(30), fetch_all(&providers, ctx)).await {
                 Ok(quotas) => {
-                    for a in update(&mut state, Action::DataFetched(quotas)) {
-                        update(&mut state, a);
-                    }
+                    let follow_ups = update(&mut state, Action::DataFetched(quotas));
+                    drain(&mut state, ctx, follow_ups);
                     compute_and_dispatch_usage(&mut state, ctx);
                 }
                 Err(_) => {
-                    for a in update(&mut state, Action::FetchFailed("fetch timeout".to_string())) {
-                        update(&mut state, a);
-                    }
+                    let follow_ups =
+                        update(&mut state, Action::FetchFailed("fetch timeout".to_string()));
+                    drain(&mut state, ctx, follow_ups);
                 }
             }
             continue;
@@ -83,10 +134,20 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
 
         tokio::select! {
             maybe_ev = events.next() => {
-                if let Some(Ok(Event::Key(key))) = maybe_ev {
-                    let follow_ups = update(&mut state, Action::Key(key));
-                    for a in follow_ups {
-                        update(&mut state, a);
+                if let Some(Ok(ev)) = maybe_ev {
+                    if let Event::Key(key) = &ev {
+                        // Na aba Waybar em modo edicao, passa o evento cru ao Input antes
+                        // de traduzir em Action (permite edicao caracter a caracter).
+                        if state.tab == Tab::Waybar {
+                            if let Some(cs) = state.config_state.as_mut() {
+                                if cs.editing {
+                                    cs.input.handle_event(&ev);
+                                    // Nao dispatch Key normal: Esc/Enter sao tratados abaixo.
+                                }
+                            }
+                        }
+                        let follow_ups = update(&mut state, Action::Key(*key));
+                        drain(&mut state, ctx, follow_ups);
                     }
                 }
             }
@@ -101,18 +162,16 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                 .await
                 {
                     Ok(quotas) => {
-                        for a in update(&mut state, Action::DataFetched(quotas)) {
-                            update(&mut state, a);
-                        }
+                        let follow_ups = update(&mut state, Action::DataFetched(quotas));
+                        drain(&mut state, ctx, follow_ups);
                         compute_and_dispatch_usage(&mut state, ctx);
                     }
                     Err(_) => {
-                        for a in update(
+                        let follow_ups = update(
                             &mut state,
                             Action::FetchFailed("fetch timeout".to_string()),
-                        ) {
-                            update(&mut state, a);
-                        }
+                        );
+                        drain(&mut state, ctx, follow_ups);
                     }
                 }
             }

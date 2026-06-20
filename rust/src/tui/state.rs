@@ -1,4 +1,5 @@
 use crate::providers::types::ProviderQuota;
+use crate::settings::Settings;
 use crate::usage::UsageSummary;
 
 /// Animação C: estado do throbber braille (índice do frame).
@@ -43,6 +44,69 @@ impl Tab {
             1 => Tab::Waybar,
             2 => Tab::History,
             _ => Tab::Login,
+        }
+    }
+}
+
+/// Campo da aba Waybar config (ordem de exibicao = ordem dos enum variants).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigField {
+    Providers,
+    ProviderOrder,
+    Separators,
+    DisplayMode,
+    FxRate,
+    Signal,
+    Interval,
+}
+
+impl ConfigField {
+    pub const ALL: [ConfigField; 7] = [
+        ConfigField::Providers,
+        ConfigField::ProviderOrder,
+        ConfigField::Separators,
+        ConfigField::DisplayMode,
+        ConfigField::FxRate,
+        ConfigField::Signal,
+        ConfigField::Interval,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ConfigField::Providers => "providers",
+            ConfigField::ProviderOrder => "providerOrder",
+            ConfigField::Separators => "separators",
+            ConfigField::DisplayMode => "displayMode",
+            ConfigField::FxRate => "fxRate",
+            ConfigField::Signal => "signal",
+            ConfigField::Interval => "interval",
+        }
+    }
+}
+
+/// Estado da aba Waybar config.
+#[derive(Debug, Clone)]
+pub struct ConfigState {
+    /// Campo selecionado atualmente.
+    pub selected_field: usize,
+    /// Indica se o campo selecionado esta em modo de edicao.
+    pub editing: bool,
+    /// Buffer de edicao do campo atual (tui-input).
+    pub input: tui_input::Input,
+    /// Settings editadas (clone do original; salvas por SaveConfig).
+    pub edit_settings: Settings,
+    /// Mensagem de status (feedback de save).
+    pub status_msg: Option<String>,
+}
+
+impl ConfigState {
+    pub fn new(settings: &Settings) -> Self {
+        Self {
+            selected_field: 0,
+            editing: false,
+            input: tui_input::Input::default(),
+            edit_settings: settings.clone(),
+            status_msg: None,
         }
     }
 }
@@ -117,6 +181,8 @@ pub struct AppState {
     pub anim_frame: u64,
     /// Animação C: estado do throbber braille.
     pub throbber: ThrobberAnim,
+    /// Estado da aba Waybar config. None ate a aba ser aberta pela 1a vez.
+    pub config_state: Option<ConfigState>,
 }
 
 impl AppState {
@@ -133,6 +199,7 @@ impl AppState {
             usage: None,
             anim_frame: 0,
             throbber: ThrobberAnim::default(),
+            config_state: None,
         }
     }
 }

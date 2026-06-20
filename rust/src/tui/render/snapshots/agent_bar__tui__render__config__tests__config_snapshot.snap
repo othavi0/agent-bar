@@ -1,0 +1,24 @@
+---
+source: src/tui/render/config.rs
+expression: terminal.backend()
+---
+"┏ Waybar Config ━━━┓┏ providers  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃ > providers      ┃┃ claude, codex                            ┃"
+"┃   providerOrder  ┃┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+"┃   separators     ┃┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃   displayMode    ┃┃ IDs separados por virgula. Ex: claude, co┃"
+"┃   fxRate         ┃┃ Enter edita   [s] salva   j/k navega   q ┃"
+"┃   signal         ┃┃                                          ┃"
+"┃   interval       ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┃                  ┃┃                                          ┃"
+"┗━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
