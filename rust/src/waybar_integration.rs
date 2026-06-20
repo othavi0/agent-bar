@@ -487,7 +487,12 @@ struct BootstrapConfig<'a> {
 
 /// Constrói um config Waybar mínimo com os módulos e o include path.
 /// Port de `buildBootstrapConfig` (TS :340-353).
-fn build_bootstrap_config(module_ids: &[String], include_path: &str) -> String {
+///
+/// Retorna `Result` (em vez de engolir o erro com `unwrap_or_default`): esta
+/// string é o config INTEIRO do Waybar; um fallback `""` gravaria um config
+/// vazio/truncado e corromperia silenciosamente a barra do usuário. Falhar alto
+/// é o port fiel do `JSON.stringify` do TS (que também nunca falha p/ este tipo).
+fn build_bootstrap_config(module_ids: &[String], include_path: &str) -> anyhow::Result<String> {
     let config = BootstrapConfig {
         layer: "top",
         position: "top",
@@ -496,7 +501,8 @@ fn build_bootstrap_config(module_ids: &[String], include_path: &str) -> String {
         modules_right: module_ids,
         include: &[include_path.to_string()],
     };
-    serde_json::to_string_pretty(&config).unwrap_or_default()
+    serde_json::to_string_pretty(&config)
+        .map_err(|e| anyhow::anyhow!("bootstrap config serialization failed: {e}"))
 }
 
 /// Deriva a ordem de providers a partir das settings.
@@ -572,7 +578,7 @@ pub fn apply_waybar_integration(
 
     let current_config = read_text(&paths.waybar_config_path);
     let next_config = match &current_config {
-        None => build_bootstrap_config(&module_ids, &include_path_str),
+        None => build_bootstrap_config(&module_ids, &include_path_str)?,
         Some(existing) => {
             let (with_include, _) = ensure_include_path(existing, &include_path_str)?;
             let (with_modules, _) = ensure_modules_right(&with_include, &module_ids)?;
@@ -901,5 +907,32 @@ mod orchestration_tests {
         assert!(std::fs::read_to_string(&backup)
             .unwrap()
             .contains("window { color: red; }"));
+    }
+
+    #[test]
+    fn bootstrap_creates_valid_config_when_absent() {
+        // Branch "config inexistente" → build_bootstrap_config. Garante que um
+        // config válido (parseável, com módulos + include) é criado, exercitando
+        // o caminho do Result (I1).
+        let dir = tempdir().unwrap();
+        let p = test_paths(dir.path());
+        // NÃO escreve waybar_config_path → força o branch None/bootstrap.
+        let s = default_settings(dir.path());
+        let r = apply_waybar_integration(&s, apply_opts(&p)).unwrap();
+        assert!(r.config_changed);
+        let cfg: serde_json::Value = serde_json::from_str(&strip_jsonc(
+            &std::fs::read_to_string(&p.waybar_config_path).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(cfg["layer"], "top");
+        assert_eq!(cfg["position"], "top");
+        let mr = cfg["modules-right"].as_array().unwrap();
+        for id in get_app_module_ids(&["claude".into(), "codex".into(), "amp".into()]) {
+            assert!(mr.iter().any(|v| v.as_str() == Some(&id)), "missing {id}");
+        }
+        let inc = cfg["include"].as_array().unwrap();
+        assert!(inc
+            .iter()
+            .any(|v| v.as_str() == Some(p.modules_include_path.to_str().unwrap())));
     }
 }

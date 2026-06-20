@@ -105,6 +105,18 @@ pub fn run_setup(
     // 5. Symlink (somente em instalação dev)
     if !cfg.system_install {
         create_symlink(&cfg.home).map_err(|e| anyhow::anyhow!("Falha ao criar symlink: {e}"))?;
+
+        // Aviso de PATH ausente (port de setup.ts:142-152): em instalação dev o
+        // symlink fica em ~/.local/bin, que pode não estar no $PATH.
+        let local_bin = cfg.home.join(".local").join("bin");
+        let on_path = std::env::var("PATH")
+            .is_ok_and(|path| std::env::split_paths(&path).any(|dir| dir == local_bin));
+        if !on_path {
+            term_prompt::note(&format!(
+                "{} não está no seu PATH. Adicione ao perfil do shell:\n  export PATH=\"$HOME/.local/bin:$PATH\"",
+                local_bin.display()
+            ));
+        }
     }
 
     // 6. Wiring Waybar config e style
