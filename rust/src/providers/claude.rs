@@ -67,10 +67,17 @@ struct ClaudeWindowRaw {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClaudeExtraUsageRaw {
+    #[serde(default)]
     is_enabled: bool,
-    monthly_limit: f64,
-    used_credits: f64,
-    utilization: f64,
+    // A API do Claude passou a enviar estes como `null` (o modelo de crédito
+    // migrou para os blocos `spend`/`limits`). Antes eram `f64` obrigatórios —
+    // um `null` quebrava a desserialização do corpo INTEIRO (Claude indisponível).
+    #[serde(default)]
+    monthly_limit: Option<f64>,
+    #[serde(default)]
+    used_credits: Option<f64>,
+    #[serde(default)]
+    utilization: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,17 +135,30 @@ async fn fetch_usage(
             if e.is_timeout() {
                 ClaudeError::Timeout
             } else {
+                // Surfar a causa real (connect/TLS/dns) — não vaza o token (vai no header).
+                log::warn!("Claude fetch IO error: {e}");
                 ClaudeError::Generic
             }
         })?;
     let status = resp.status();
     if !status.is_success() {
+        // Lê até 256 bytes do corpo p/ diagnosticar 401/403/429/5xx sem vazar o token
+        // (o accessToken vai só no header Authorization, nunca no corpo de erro).
+        let snippet = resp
+            .bytes()
+            .await
+            .ok()
+            .map(|b| String::from_utf8_lossy(&b[..b.len().min(256)]).into_owned())
+            .unwrap_or_default();
+        log::warn!("Claude API non-2xx: status={status} body_prefix={snippet:?}");
         return Err(ClaudeError::Api(status.as_u16()));
     }
     resp.json::<ClaudeUsageResponse>().await.map_err(|e| {
         if e.is_timeout() {
             ClaudeError::Timeout
         } else {
+            // Erro de desserialização (shape do corpo mudou) ou IO no stream do corpo.
+            log::warn!("Claude usage decode error: {e}");
             ClaudeError::Generic
         }
     })
@@ -243,8 +263,8 @@ impl Provider for ClaudeProvider {
                     ..base
                 };
             }
-            Err(_) => {
-                log::error!("Claude API fetch error");
+            Err(e) => {
+                log::error!("Claude API fetch error: {e}");
                 return ProviderQuota {
                     plan: Some(plan),
                     error: Some(ClaudeError::Generic.to_string()),
@@ -280,11 +300,16 @@ impl Provider for ClaudeProvider {
             .extra_usage
             .as_ref()
             .filter(|e| e.is_enabled)
-            .map(|e| ExtraUsage {
-                enabled: true,
-                remaining: (100.0 - e.utilization).round(),
-                limit: e.monthly_limit,
-                used: e.used_credits.round(),
+            .and_then(|e| {
+                // A API nova pode mandar is_enabled=true com os 3 campos null
+                // (crédito migrou p/ `spend`). Só montamos ExtraUsage se houver
+                // dados reais — senão omitimos (não inventar 0%/$0).
+                Some(ExtraUsage {
+                    enabled: true,
+                    remaining: (100.0 - e.utilization?).round(),
+                    limit: e.monthly_limit?,
+                    used: e.used_credits?.round(),
+                })
             });
 
         let extra = if !weekly.is_empty() || extra_usage.is_some() {
@@ -432,6 +457,55 @@ mod tests {
         assert_eq!(eu.remaining, 55.0);
         assert_eq!(eu.used, 2250.0); // round(2250.4)
         assert_eq!(eu.limit, 5000.0);
+    }
+
+    /// Regressão: a API do Claude passou a mandar `extra_usage` com campos `null`
+    /// e novos blocos `limits`/`spend` + `*_dollars` nas janelas. Antes isso
+    /// quebrava a desserialização do corpo INTEIRO (Claude indisponível). O shape
+    /// abaixo é o real observado em 2026-06-20.
+    #[tokio::test]
+    async fn parses_new_api_shape_with_null_extra_usage() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "five_hour": {"utilization": 11.0, "resets_at": "2026-06-20T20:00:00Z",
+                    "limit_dollars": null, "used_dollars": null, "remaining_dollars": null},
+                "seven_day": {"utilization": 40.0, "resets_at": "2026-06-25T00:00:00Z",
+                    "limit_dollars": null, "used_dollars": null, "remaining_dollars": null},
+                "seven_day_oauth_apps": null,
+                "seven_day_opus": null,
+                "seven_day_sonnet": {"utilization": 35.0, "resets_at": "2026-06-25T00:00:00Z"},
+                "seven_day_cowork": null,
+                "extra_usage": {"is_enabled": true, "monthly_limit": null, "used_credits": null,
+                    "utilization": null, "currency": null, "daily": null, "weekly": null},
+                "limits": [{"kind": "five_hour", "group": "all", "percent": 11, "severity": "ok",
+                    "resets_at": "2026-06-20T20:00:00Z", "scope": null, "is_active": true}],
+                "spend": {"used": {"amount_minor": 0, "currency": "USD", "exponent": 2},
+                    "limit": null, "percent": 0, "severity": "ok", "enabled": false, "disabled_reason": null}
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"max"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        // O bug: isto retornava error="Failed to fetch Claude usage" (decode error).
+        assert!(q.available, "Claude deve estar disponível com o shape novo");
+        assert_eq!(q.error, None, "não deve haver erro de decode");
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 89.0); // 100 - 11
+                                                                 // extra_usage com campos null → omitido (não inventar 0%/$0).
+        if let Some(ProviderExtra::Claude(c)) = q.extra.as_ref() {
+            assert!(c.extra_usage.is_none(), "extra_usage null deve ser omitido");
+        }
     }
 
     #[tokio::test]
