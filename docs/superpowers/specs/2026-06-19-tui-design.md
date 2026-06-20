@@ -1,14 +1,14 @@
 # TUI (ratatui) — Design / Handoff completo
 
-> **Status:** design **aprovado pelo usuário** seção-a-seção (brainstorming concluído). Próximo passo do fluxo: usuário revisa este spec → `writing-plans` → execução subagent-driven. **Ainda NÃO há código de TUI** (fase de design). Este doc é a fonte da verdade do design + handoff de contexto.
+> **Status (v2, 2026-06-19):** design da TUI aprovado + **expandido** com o **engine de Usage/Custo (§4b)** após a decisão do usuário "tudo agora" e a investigação que confirmou que tokens/custo SÃO derivá­veis dos session logs locais. As 4 perguntas em aberto (§9) foram RESOLVIDAS. **Plano 6 (install) está FEITO** (branch @ `c6ed326`). Próximo passo: usuário revisa este spec v2 → `writing-plans` (Plano 7) → execução subagent-driven. **Ainda NÃO há código de TUI/usage** (fase de design).
 >
 > **Regra absoluta deste subsistema:** **ZERO emoji** em qualquer lugar (código, exemplos, UI). Só box-drawing, block elements (`█ ▓ ▒ ░`), sparkline braille (`▁▂▃▄▅▆▇`) e formas geométricas de apresentação-texto (`● ○ ◆ ┃`), sem variation selector VS16. (Preferência explícita e firme do usuário.)
 
 ## 0. Onde isto se encaixa (contexto macro)
 
-Projeto **agent-bar**: monitor de quotas LLM (Claude/Codex/Amp) pra Waybar. Em **reescrita TS/Bun → binário Rust estático único** (branch `rust-rewrite`). Estado da reescrita: **Planos 1–5 COMPLETOS** (formatação + providers async + CLI), 378 testes, branch @ `d1d5fed`. Faltam: **Plano 6 (install)**, **a TUI (este doc)**, **dist/cutover**. Ver `docs/superpowers/rust-rewrite-resume.md` (handoff mestre) e `.superpowers/sdd/progress.md` (ledger).
+Projeto **agent-bar**: monitor de quotas LLM (Claude/Codex/Amp) pra Waybar. Em **reescrita TS/Bun → binário Rust estático único** (branch `rust-rewrite`). Estado da reescrita: **Planos 1–6 COMPLETOS** (formatação + providers async + CLI + install), 433 testes, branch @ `c6ed326`. Faltam: **a TUI (este doc = Plano 7)**, **dist/cutover (Plano 8)**. Ver `docs/superpowers/rust-rewrite-resume.md` (handoff mestre) e `.superpowers/sdd/progress.md` (ledger).
 
-**Por que uma TUI agora:** hoje o app só exibe quota usada/restante na barra. O **norte do usuário** é evoluir pra uma **ferramenta de monitoramento** (consumo de tokens, valor gasto em R$/US$, tempo, histórico). Isso justifica `ratatui` (full-screen, espaço pra crescer) em vez de prompts simples. **O monitoramento profundo NÃO é v1** — v1 deixa a aba History plugada como semente.
+**Por que uma TUI agora:** hoje o app só exibe quota usada/restante na barra. O **norte do usuário** é uma **ferramenta de monitoramento** (consumo de tokens, valor gasto em R$/US$, tempo, histórico). Isso justifica `ratatui` (full-screen). **Decisão "tudo agora" (2026-06-19):** o monitoramento de custo/tokens É v1 (não mais semente) — a investigação confirmou que os tokens estão nos session logs locais (§4b). A aba History vira tendência real de custo/tokens no tempo.
 
 ## 1. Decisões TRAVADAS (não relitigar)
 
@@ -16,10 +16,13 @@ Projeto **agent-bar**: monitor de quotas LLM (Claude/Codex/Amp) pra Waybar. Em *
 2. **ZERO emoji.** (Regra do topo.)
 3. **Identidade visual compartilhada com a Waybar:** a TUI consome o **mesmo `rust/src/theme.rs`** (One Dark + box_chars + provider_hex). Uma ponte fina (`theme_bridge.rs`) converte `ColorToken` → `ratatui::Color::Rgb`. Um teste cruza `provider_color(id)` vs `provider_hex(id)` pra garantir que nunca divirjam.
 4. **Esqueleto de layout (aprovado):** barra de **abas globais** no topo (`Dashboard | Waybar | History | Login`) + **lateral SÓ com providers** (é o "qual provider") + painel de conteúdo à direita + footer de atalhos. Modelo de 2 eixos: **aba = aspecto, lateral = provider, direita = o cruzamento**. (A lateral NÃO repete Waybar/Login — esses vivem só nas abas; redundância removida a pedido do usuário.)
-5. **Escopo v1:** Dashboard (monitor: tabela + detalhe + refresh + animações), Login (lançar CLIs), Waybar (config de layout), History (placeholder com buffer em memória). `configure-models` e monitoramento persistido = futuro.
-6. **Sequência de planos (escolha do usuário):** `Plano 6 (install) → Plano 7: TUI → Plano 8: dist/cutover`. A TUI precisa estar pronta **antes do cutover** (senão o binário vira canônico com `menu` ainda stub) e depende de peças do Plano 6 (waybar-integration p/ a aba Config; locator/ensureCommand p/ a aba Login).
-7. **Entrypoint:** o comando `menu` (hoje stub do Plano 6 em `main.rs`) vira `tui::run_tui(&ctx)`.
+5. **Escopo v1 ("tudo agora" — decisão do usuário 2026-06-19):** Dashboard (monitor: tabela + detalhe + refresh + animações + **custo/tokens US$/R$**), Login (lançar CLIs), Waybar (config de layout), History (**REAL** — tendência de tokens/custo no tempo dos logs), **+ engine de Usage/Custo (§4b)**. `configure-models` e persistência de %-quota = futuro.
+6. **Sequência de planos:** `Plano 6 (install) ✅ FEITO → Plano 7: TUI (este) → Plano 8: dist/cutover`. A TUI precisa estar pronta **antes do cutover** e reusa peças do Plano 6 (waybar-integration p/ a aba Config; `install.rs`/locator p/ a aba Login — `install.rs` foi descopado do Plano 6 PRA CÁ).
+7. **Entrypoint:** `agent-bar` sem args num TTY **abre a TUI** (`tui::run_tui(&ctx)`); `menu` continua entrypoint explícito; `--help` p/ ajuda. (Hoje `menu` é stub do Plano 6 em `main.rs`.)
 8. **Runtime:** `tokio` current_thread (já é o do projeto). Sem `unwrap()`/`expect()` em produção. Snapshots via `insta` (mesmo padrão dos 58 goldens atuais).
+9. **Custo = tokens locais × preço público** (§4b): session logs têm os tokens (Claude/Codex); tabela de preço estática versionada; US$ exato + R$ via `fx_rate` configurável; modelo desconhecido → custo omitido (nunca chutar).
+10. **Glyphs:** box-drawing/block/geométrico universal + **nerd-font opt-in** (degrada gracioso). Zero emoji.
+11. **History vem dos logs** (não de persistência nova) — os timestamps dos session logs são a fonte do histórico de tokens/custo.
 
 ## 2. Seção 1 — Identidade visual
 
@@ -116,28 +119,62 @@ terminal.draw(|f| render(state, f))?;
 | Cada tela | `TestBackend` + `insta` snapshot (igual aos 58 goldens) |
 | Login spawn, animação, terminal real | smoke manual |
 
+## 4b. Engine de Usage/Custo (NOVO subsistema — v1, decisão "tudo agora")
+
+O norte do usuário (tokens consumidos + valor gasto R$/US$ no tempo) é alcançável lendo os **session logs locais**. Subsistema novo, separável da TUI (testável puro), vive em `rust/src/usage/`.
+
+**Fontes por provider (formatos REAIS, verificados 2026-06-19):**
+
+| Provider | Arquivo | Tokens | Modelo | Timestamp |
+| --- | --- | --- | --- | --- |
+| **Claude** | `~/.claude/projects/<hash>/<uuid>.jsonl` | linhas `type:"assistant"` → `message.usage.{input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens}` (por chamada) | `message.model` (ex `claude-opus-4-8`) na MESMA linha | `timestamp` ISO por linha |
+| **Codex** | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | `event_msg/token_count` → `payload.info.last_token_usage` (delta por chamada) e `total_token_usage` (acumulado da sessão) c/ `input/cached_input/output/reasoning/total` | NÃO no evento de token → vem de `session_meta` (1×) ou `turn_context` (N×) da sessão | `timestamp` ISO por evento |
+| **Amp** | `amp usage` (CLI, sem arquivo) | — (sem tokens) | — | — (saldo ao vivo) |
+
+**Normalização:** `UsageRecord { provider, model: Option<String>, input, output, cache_read, cache_write, ts: OffsetDateTime }`. Amp não gera `UsageRecord` (entra como $ direto, sem derivação de token).
+
+**Tabela de preços (estática, versionada em `usage/pricing.rs`):** `model → Pricing { input, output, cache_read, cache_write }` em **US$ por 1M tokens** (preço público; cache_read tem desconto). Cobre os modelos conhecidos (Claude opus/sonnet/haiku; Codex/gpt-5.x). **Modelo desconhecido → custo OMITIDO (mostra tokens, sem $) — NUNCA chutar preço silenciosamente** (mesmo princípio do "não reportar ok sem dado" do Waybar). Tabela é fácil de atualizar; comentar a data/fonte do preço.
+
+**Custo:** `cost_usd = Σ (tokens_tipo × preço_tipo / 1e6)`. **R$:** `cost_brl = cost_usd × fx_rate`, com `fx_rate` configurável em settings (default sensato, ex 5.50; editável; fetch de FX ao vivo = DEFERIDO, estático é o v1). Mostra **US$ exato como primário, R$ como secundário**.
+
+**Codex — atribuição de modelo:** usar o `total_token_usage` final da sessão (acumulado, evita double-count) atribuído ao modelo do `session_meta`/último `turn_context`. Pra buckets de tempo finos dentro da sessão, usar `last_token_usage` por evento com o `timestamp`.
+
+**Agregação:** por modelo, por provider, por janela de tempo (hoje / janela 5h / janela 7d / all-time). Powers o painel de custo (Dashboard/detalhe) + a aba History (tendência no tempo, dos timestamps).
+
+**Performance (CRÍTICO — log do Claude tem 12.8MB/sessão, ~1748 chamadas):** parsing **incremental com cache**. Cache de agregados em `~/.cache/agent-bar/usage/` keyed por (path do arquivo, size+mtime); no refresh, só re-parseia arquivos novos/que cresceram (lê do último offset p/ arquivos append-only). Os logs SÃO a fonte da verdade do histórico — sem DB próprio na v1.
+
+**Módulos `rust/src/usage/`:** `mod.rs` (API: `aggregate(ctx, window) -> UsageSummary`), `claude.rs`/`codex.rs`/`amp.rs` (parsers por fonte, PUROS sobre `&str`/linhas — testáveis com fixtures), `pricing.rs` (tabela + `cost_of(record) -> Option<Cost>`), `cache.rs` (índice incremental por size+mtime). Tudo síncrono/puro (não está no hot-path async; roda no tick de dados da TUI ou sob demanda).
+
+**Testabilidade:** parsers recebem linhas de fixture (1-2 linhas reais de cada formato, sanitizadas) → `UsageRecord` esperado; `pricing::cost_of` com tabela fixa → custo exato; modelo desconhecido → `None`. Sem tocar `~/.claude`/`~/.codex` reais nos testes (fixtures em `tests/` ou inline).
+
 ## 5. Seção 4 — Escopo v1 + tasks
 
-| Aba | v1 | Futuro |
+| Aba | v1 ("tudo agora" — custo incluso) | Futuro |
 | --- | --- | --- |
-| Dashboard | tabela + detalhe (Enter) + refresh ao vivo + 4 animações | — |
+| Dashboard | tabela + detalhe (Enter) + refresh ao vivo + 4 animações + **coluna de custo/tokens (US$/R$) do engine §4b** | — |
 | Login | lançar `claude`/`codex`/`amp login` | — |
 | Waybar | providers/ordem/separador/modo (porta `configure-layout`) | `configure-models` |
-| History | sparkline de buffer em memória (semente) | tokens/custo/tempo persistidos, gráficos, export |
+| History | **REAL: tendência de tokens/custo no tempo, agregada dos session logs** (§4b) — sparkline/bar por provider/dia | persistência de % de quota, export |
+| (engine) | **Usage/Custo §4b: parsers Claude/Codex/Amp + pricing US$/R$ + agregação + cache incremental** | fetch de FX ao vivo, mais modelos |
 
-Tasks (incremental, cada uma testável + commit):
+Tasks (incremental, cada uma testável + commit). **Bloco U = engine de custo (§4b); bloco T = TUI.** O engine é dependência do Dashboard-custo (T4b) e da History (T9):
 | # | Entrega | Teste |
 | --- | --- | --- |
-| T1 | Scaffold `tui/` + `theme_bridge` + setup/restore + panic hook (frame vazio, abre/fecha limpo) | unit: `provider_color` vs `provider_hex` |
-| T2 | `AppState`+`Action`+`update` puro + event loop (navegar abas/lista, sem dados) | unit: transições |
+| U1 | `usage/pricing.rs`: tabela estática + `cost_of(record) -> Option<Cost{usd,brl}>` (modelo desconhecido → None) | unit (custo exato + None) |
+| U2 | `usage/claude.rs`: parser `.claude/projects/**/*.jsonl` → `Vec<UsageRecord>` (model+tokens+ts) | unit c/ fixture real |
+| U3 | `usage/codex.rs`: parser `.codex/sessions/**` → `UsageRecord` (modelo de session_meta/turn_context + total_token_usage) | unit c/ fixture |
+| U4 | `usage/cache.rs` + `mod.rs`: índice incremental (path,size,mtime) + `aggregate(ctx, window) -> UsageSummary` (por modelo/provider/tempo) + Amp $ direto | unit (agregação + incremental) |
+| T1 | Scaffold `tui/` + `theme_bridge` + setup/restore + panic hook | unit: `provider_color` vs `provider_hex` |
+| T2 | `AppState`+`Action`+`update` puro + event loop (navegar abas/lista) | unit: transições |
 | T3 | Fetch via mpsc reusando `fetch_all`/`Ctx` + `FetchStatus` + aba Dashboard (tabela) | unit `update(DataFetched)` + snapshot |
 | T4 | Detalhe (Enter): gauges por severidade, modelos, reset, sparkline | snapshot |
+| T4b | Integra custo (§4b) no Dashboard/detalhe: coluna US$/R$ + breakdown por modelo | snapshot |
 | T5 | Widgets custom (`QuotaGauge`/`ProviderList`/`Sparkline`) + cores por severidade | snapshot |
-| T6 | Animações (lerp, throbber, coalesce, pulse) | unit (estado) + smoke |
+| T6 | Animações (lerp, throbber, coalesce, pulse) + glyph mode (box-drawing/nerd opt-in) | unit (estado) + smoke |
 | T7 | Aba Waybar Config: editar Settings via `tui-input` + salvar + aplicar (reusa Plano 6) | unit + snapshot |
 | T8 | Aba Login: trait `ProviderLogin` + `RealLogin` (suspend→spawn→restore) | unit (mock) + smoke |
-| T9 | Aba History (placeholder): sparkline de buffer em memória | snapshot |
-| T10 | `menu` → `run_tui`; footer de atalhos + overlay help (`?`); polish + review de branch | snapshot + smoke |
+| T9 | Aba History REAL: tendência tokens/custo no tempo (agregação §4b por dia/janela) | snapshot |
+| T10 | `agent-bar` sem-args/`menu` → `run_tui`; footer + overlay help (`?`); polish + review de branch | snapshot + smoke |
 
 ## 6. Mockups aprovados (ASCII, alinhamento verificado por script — 62 colunas, zero char wide)
 
@@ -200,17 +237,17 @@ Widgets ratatui usados: `Gauge`/`LineGauge` (quota), `Sparkline`/`Chart`/`BarCha
 - **3 direções de layout iniciais** (A dashboard-first, B tabbed, C master-detail) → o usuário curtiu **B (abas) + C (lateral)** → convergiu no esqueleto §1.4. Os mockups intermediários estão no histórico do chat (não re-derivar).
 - **`cursive`** (outro framework TUI): mais alto-nível, menos controle/testabilidade que ratatui pra dashboard+refresh. Rejeitado.
 
-## 9. Perguntas em aberto / minhas dúvidas (resolver no spec-review ou no plano)
+## 9. Perguntas em aberto — TODAS RESOLVIDAS (decisões do usuário, 2026-06-19)
 
-1. **Glyphs nerd-font na TUI?** A barra Waybar usa um glyph nerd-font (U+F1616). Na TUI, podemos usar ícones nerd-font (NÃO são emoji) ou ficar **só** em box-drawing/block? (Default seguro proposto: só box-drawing/block, pra não depender da fonte do terminal — mas o terminal do usuário tem nerd-font.) **Decidir.**
-2. **Estilo da aba ativa:** mantido `┃ativa┃`. O usuário cogitou "sublinhado/cor em vez de barras" — confirmar preferência final (o design atual usa bold+underline na cor + `┃` separador).
-3. **`menu` no TTY:** hoje `agent-bar` sem args num TTY mostra help; `menu` abre a TUI. Manter assim, ou `agent-bar` sem args num TTY já abrir a TUI? (Default: manter — `menu` é o entrypoint explícito.)
-4. **Sequência confirmada** (6→TUI→cutover), mas: fazer Plano 6 **inteiro** antes, ou adiantar só `waybar-integration`+locator (peças que a TUI Config/Login precisam) e intercalar? (Default: Plano 6 inteiro primeiro — mais limpo.)
+1. **Glyphs:** ✅ **box-drawing/block/geométrico como base UNIVERSAL** (funciona em qualquer terminal) **+ glyphs nerd-font como opt-in** que degrada gracioso (toggle em settings; auto-fallback p/ box-drawing se a fonte não tiver). Motivo: uma TUI NÃO pode embarcar/forçar fonte (quem decide o glyph é a fonte do terminal do usuário); o Omarchy do usuário tem nerd-font, mas a distribuição AUR não garante. ZERO emoji em qualquer caso.
+2. **Estilo da aba ativa:** ✅ mantido (bold+underline na cor `#e2e8f0` + separador `┃`).
+3. **`menu` no TTY:** ✅ **`agent-bar` sem args num TTY ABRE a TUI direto**; a ajuda passa a ser via `--help`. (Muda o default atual — o wiring do `main.rs` no Plano 8/cutover ajusta; `menu` continua como entrypoint explícito também.)
+4. **Sequência:** ✅ **Plano 6 (install) FEITO** (commits 8752dec..c6ed326). A TUI é o Plano 7, com o Plano 6 inteiro como base.
 
 ## 10. Problemas/riscos AINDA NÃO totalmente trazidos à tona
 
-1. **DADOS pro monitoramento (o norte) são LIMITADOS pela API upstream.** Hoje os providers expõem **% usado/restante + reset** (Claude/Codex) e **$ créditos/replenish** (Amp). NÃO expõem contagem de tokens nem $ gasto por período pra Claude/Codex. Então "valor gasto / tokens consumidos no tempo" pode ser **derivável só parcialmente** (ex.: variação de % ao longo do tempo + $ do Amp). **Antes de prometer o monitoramento de custo, validar o que cada API realmente dá.** Pode exigir estimativa (ex.: tokens≈f(uso%·limite_do_plano)) e/ou só Amp ter $ real. **Não-surfado até agora — é a maior incógnita do norte.**
-2. **History real precisa de PERSISTÊNCIA.** O buffer em memória da v1 é só semente; histórico de verdade exige persistir amostras (ex.: append JSONL ou SQLite em `cache_dir`) num tick. É uma camada nova de dados — fora da v1, mas precisa ser desenhada quando o monitoramento virar real.
+1. **DADOS pro monitoramento — RESOLVIDO (investigação 2026-06-19).** A API upstream de quota só dá %/reset, MAS os **session logs locais têm os tokens absolutos** — o norte de custo/tokens É alcançável (ver a nova **§4b. Engine de Usage/Custo**). Resumo: **Claude** (`~/.claude/projects/**/*.jsonl`) = goldmine (input/output/cache tokens + `message.model` + timestamp por chamada → custo de alta precisão); **Codex** (`~/.codex/sessions/**/*.jsonl`) = tokens nos eventos `token_count` + modelo no `session_meta`/`turn_context` (ex: `gpt-5.5`); **Amp** = sem tokens, mas o $ já é direto. **Decisão do usuário: engine de custo completo na v1 ("tudo agora").**
+2. **History real — RESOLVIDO: vem dos PRÓPRIOS LOGS.** Como os session logs têm timestamp por chamada, o histórico de tokens/custo no tempo é agregável direto dos logs (sem camada de persistência separada). Persistência de poll só seria necessária pro histórico de **% de quota** (que não está nos logs) — DEFERIDO (não-v1). Ver §4b.
 3. **Cross-dependência com o Plano 5 já entregue:** o `action_right.rs` tem um `login_stub` (log::error+wait_enter) que foi deixado **esperando a TUI**. Quando a TUI landar, esse stub deve chamar o `tui::login_spawn` (ou compartilhar o módulo). Anotar pra não esquecer o stub vivo.
 4. **`menu` é stub no `main.rs`** (Plano 6) — a TUI substitui. E as abas Config/Login dependem do Plano 6 (`waybar-integration`, locator). Por isso a sequência 6→TUI.
 5. **Versões das crates** (§7) vieram da pesquisa (jun/2026) — confirmar compat com ratatui 0.30 e pinar no momento da implementação (esp. `tachyonfx` que segue de perto as breaking changes do ratatui).
@@ -227,8 +264,8 @@ Widgets ratatui usados: `Gauge`/`LineGauge` (quota), `Sparkline`/`Chart`/`BarCha
 
 ## 12. Próximos passos (retomada)
 
-1. Usuário revisa este spec (gate do brainstorming).
-2. Resolver as 4 perguntas em aberto (§9) e validar a incógnita de dados do monitoramento (§10.1).
-3. `writing-plans` → plano de implementação da TUI (Plano 7) com as 10 tasks (§5).
-4. Executar via subagent-driven (mesmo loop dos Planos 4/5: implementer→verify-fs→review→ledger; snapshots `insta` por tela; review de branch Opus no fim).
-5. Lembrar: **Plano 6 (install) vem ANTES** da TUI na sequência travada.
+1. **Usuário revisa este spec v2** (gate do brainstorming) — esp. a §4b (engine de custo) e o escopo "tudo agora".
+2. ✅ As 4 perguntas (§9) e a incógnita de dados (§10.1) estão RESOLVIDAS.
+3. `writing-plans` → plano do **Plano 7** com as tasks U1-U4 (engine §4b) + T1-T10 (TUI §5), código exato por task.
+4. Executar via subagent-driven (mesmo loop dos Planos 4/5/6: implementer→verify-fs→review→ledger; snapshots `insta` por tela; review de branch Opus no fim).
+5. ✅ **Plano 6 (install) FEITO** — a TUI tem toda a base pronta. `install.rs` (locator/ensure_command p/ a aba Login) foi descopado do Plano 6 e entra aqui no Plano 7.
