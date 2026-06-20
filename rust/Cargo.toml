@@ -25,6 +25,12 @@ async-trait = "0.1"
 futures = "0.3"
 regex = "1"
 indexmap = { version = "2", features = ["serde"] }
+ratatui = "0.30.2"
+tui-input = "0.15.3"
+throbber-widgets-tui = "0.11.1"
+tui-popup = "0.7.6"
+tachyonfx = "0.25.0"
+tokio-util = { version = "0.7", features = ["rt"] }
 
 [dev-dependencies]
 assert_cmd = "2"

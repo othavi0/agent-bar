@@ -16,6 +16,7 @@ pub mod settings;
 pub mod setup;
 pub mod term_prompt;
 pub mod theme;
+pub mod tui;
 pub mod uninstall;
 pub mod update;
 pub mod usage;
