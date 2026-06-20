@@ -38,7 +38,7 @@ Ordem: **U1 (mod tipos + pricing) → U2 (claude) → U3 (codex) → U4 (cache +
 
 ---
 
-### Task U1: `usage/mod.rs` tipos núcleo + `usage/pricing.rs`
+### Task 1: `usage/mod.rs` tipos núcleo + `usage/pricing.rs`  (bloco U1)
 
 **Files:**
 - Create: `rust/src/usage/mod.rs`
@@ -193,7 +193,7 @@ git commit -m "feat(rust): usage — tipos núcleo + tabela de preço"
 
 ---
 
-### Task U2: `usage/claude.rs` — parser do session log do Claude
+### Task 2: `usage/claude.rs` — parser do session log do Claude  (bloco U2)
 
 **Files:**
 - Modify: `rust/src/usage/claude.rs`
@@ -317,7 +317,7 @@ git commit -m "feat(rust): usage — parser do log do Claude"
 
 ---
 
-### Task U3: `usage/codex.rs` — parser do session log do Codex
+### Task 3: `usage/codex.rs` — parser do session log do Codex  (bloco U3)
 
 **Files:**
 - Modify: `rust/src/usage/codex.rs`
@@ -459,7 +459,7 @@ git commit -m "feat(rust): usage — parser do log do Codex"
 
 ---
 
-### Task U4: `usage/cache.rs` + `usage/amp.rs` + `aggregate` em `mod.rs`
+### Task 4: `usage/cache.rs` + `usage/amp.rs` + `aggregate` em `mod.rs`  (bloco U4)
 
 **Files:**
 - Modify: `rust/src/usage/cache.rs`, `rust/src/usage/amp.rs`, `rust/src/usage/mod.rs`
