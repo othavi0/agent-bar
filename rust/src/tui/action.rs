@@ -38,4 +38,14 @@ pub enum Action {
     SaveConfig,
     /// Feedback de resultado do save (exibido na status_msg da aba).
     ConfigSaveResult(Result<(), String>),
+    // --- Aba Login ---
+    /// Navega para cima na lista de providers da aba Login.
+    LoginUp,
+    /// Navega para baixo na lista de providers da aba Login.
+    LoginDown,
+    /// Sinaliza ao event_loop que deve lancar o login do provider indicado.
+    /// O update e puro (nao spawna); o event_loop intercepta e chama RealLogin.
+    LoginRequested(String),
+    /// Feedback do resultado do login (exibido como status na aba).
+    LoginResult(Result<(), String>),
 }

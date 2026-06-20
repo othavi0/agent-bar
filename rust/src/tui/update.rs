@@ -57,6 +57,34 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         };
     }
 
+    // Aba Login: navegacao e acao de login.
+    if state.tab == Tab::Login {
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(Action::LoginDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(Action::LoginUp),
+            KeyCode::Enter => {
+                let id = match state.login_selected {
+                    0 => "claude",
+                    1 => "codex",
+                    _ => "amp",
+                };
+                Some(Action::LoginRequested(id.to_string()))
+            }
+            KeyCode::Left | KeyCode::BackTab => {
+                let idx = state.tab.index();
+                let next = if idx == 0 { 3 } else { idx - 1 };
+                Some(Action::SwitchTab(Tab::from_index(next)))
+            }
+            KeyCode::Right | KeyCode::Tab => {
+                let idx = state.tab.index();
+                let next = (idx + 1) % 4;
+                Some(Action::SwitchTab(Tab::from_index(next)))
+            }
+            KeyCode::Char('q') => Some(Action::Quit),
+            _ => None,
+        };
+    }
+
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
@@ -397,6 +425,39 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
                     Err(e) => format!("Erro ao salvar: {e}"),
                 });
             }
+            vec![]
+        }
+
+        // --- Aba Login ---
+        Action::LoginUp => {
+            if state.login_selected > 0 {
+                state.login_selected -= 1;
+            }
+            state.login_status = None;
+            vec![]
+        }
+
+        Action::LoginDown => {
+            // 3 providers: indices 0, 1, 2.
+            if state.login_selected < 2 {
+                state.login_selected += 1;
+            }
+            state.login_status = None;
+            vec![]
+        }
+
+        Action::LoginRequested(id) => {
+            // Puro: sinaliza ao event_loop para executar o IO (RealLogin).
+            // O event_loop intercepta e chama RealLogin::launch(id).
+            state.login_status = Some(format!("Abrindo login para {}...", id));
+            vec![Action::LoginRequested(id)]
+        }
+
+        Action::LoginResult(result) => {
+            state.login_status = Some(match result {
+                Ok(()) => "Login concluido. Pressione [r] para atualizar.".to_string(),
+                Err(e) => format!("Erro no login: {e}"),
+            });
             vec![]
         }
 

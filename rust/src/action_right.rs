@@ -70,13 +70,13 @@ fn wait_enter() {
     let _ = stdin.lock().read_line(&mut line);
 }
 
-/// Stub de login interativo (TUI não portado no Plano 5). Emite mensagem
-/// para stderr e aguarda Enter — o mesmo papel visual que `loginSingleProvider`.
+/// Lanca o login interativo para o provider, sem TUI ativa (contexto right-click).
+/// Usa `launch_login_no_tui` de `tui::login_spawn` para executar o CLI com
+/// stdio herdado. Em caso de erro, loga e aguarda Enter.
 fn login_stub(provider_id: &str) {
-    log::error!(
-        "Login interativo de '{}' ainda não disponível na reescrita Rust (TUI pendente).",
-        provider_id
-    );
+    if let Err(e) = crate::tui::login_spawn::launch_login_no_tui(provider_id) {
+        log::error!("Falha no login de '{}': {}", provider_id, e);
+    }
     wait_enter();
 }
 

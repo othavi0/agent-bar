@@ -1,6 +1,7 @@
 pub mod config;
 pub mod dashboard;
 pub mod detail;
+pub mod login;
 pub mod status_bar;
 
 use ratatui::layout::{Constraint, Direction, Layout};
@@ -18,6 +19,7 @@ use crate::tui::widgets::provider_list::provider_list_item;
 use self::config::render_config;
 use self::dashboard::render_dashboard;
 use self::detail::render_detail;
+use self::login::render_login;
 use self::status_bar::render_status_bar;
 
 /// Top-level render: lays out the full TUI and dispatches to sub-renders.
@@ -185,6 +187,7 @@ fn render_content(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
         (Tab::Dashboard, Mode::Detail) => render_detail(state, frame, area),
         (Tab::Dashboard, _) => render_dashboard(state, frame, area),
         (Tab::Waybar, _) => render_config(state, frame, area),
+        (Tab::Login, _) => render_login(state, None, frame, area),
         _ => render_placeholder(state, frame, area),
     }
 }

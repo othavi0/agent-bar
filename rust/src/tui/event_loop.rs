@@ -12,6 +12,7 @@ use crate::usage::{self, AggregateOptions};
 use crate::waybar_integration::{self, get_default_waybar_integration_paths, ApplyOptions};
 
 use super::action::Action;
+use super::login_spawn::RealLogin;
 use super::render::render;
 use super::state::{AppState, FetchStatus, Tab};
 use super::update::update;
@@ -71,8 +72,17 @@ fn handle_save_config(state: &mut AppState, ctx: &Ctx<'_>) {
     }
 }
 
+/// Executa o login de um provider (IO): suspende o terminal, spawna o CLI,
+/// restaura o terminal, e despacha LoginResult com o resultado.
+fn handle_login(state: &mut AppState, provider_id: String) {
+    use crate::tui::login_spawn::ProviderLogin as _;
+    let login = RealLogin;
+    let result = login.launch(&provider_id).map_err(|e| e.to_string());
+    update(state, Action::LoginResult(result));
+}
+
 /// Despacha todas as follow-up actions retornadas por update (1 nivel de profundidade).
-/// SaveConfig e interceptado aqui para IO.
+/// SaveConfig e LoginRequested sao interceptados aqui para IO.
 fn drain(state: &mut AppState, ctx: &Ctx<'_>, actions: Vec<Action>) {
     for a in actions {
         match a {
@@ -85,6 +95,10 @@ fn drain(state: &mut AppState, ctx: &Ctx<'_>, actions: Vec<Action>) {
             // SaveConfig e interceptado: nao re-entra no update, faz IO aqui.
             Action::SaveConfig => {
                 handle_save_config(state, ctx);
+            }
+            // LoginRequested e interceptado: nao re-entra no update, faz IO aqui.
+            Action::LoginRequested(id) => {
+                handle_login(state, id);
             }
             other => {
                 update(state, other);

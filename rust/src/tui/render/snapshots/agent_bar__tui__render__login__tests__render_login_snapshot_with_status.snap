@@ -1,0 +1,20 @@
+---
+source: src/tui/render/login.rs
+expression: terminal.backend()
+---
+"┏ Login ━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃ > Claude [--]      ┃┃ Claude                                 ┃"
+"┃   Codex [--]       ┃┃                                        ┃"
+"┃   Amp [ok]         ┃┃ Abre a REPL do Claude. Digite /login e ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃ [Enter] iniciar login    [j/k] navegar ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃ Erro no login: claude nao encontrado   ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"

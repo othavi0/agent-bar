@@ -183,6 +183,10 @@ pub struct AppState {
     pub throbber: ThrobberAnim,
     /// Estado da aba Waybar config. None ate a aba ser aberta pela 1a vez.
     pub config_state: Option<ConfigState>,
+    /// Indice selecionado na aba Login (0=claude, 1=codex, 2=amp).
+    pub login_selected: usize,
+    /// Mensagem de status da aba Login (feedback de erro ou instrucao).
+    pub login_status: Option<String>,
 }
 
 impl AppState {
@@ -200,6 +204,8 @@ impl AppState {
             anim_frame: 0,
             throbber: ThrobberAnim::default(),
             config_state: None,
+            login_selected: 0,
+            login_status: None,
         }
     }
 }

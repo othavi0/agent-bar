@@ -8,6 +8,7 @@ pub mod config;
 pub mod doctor;
 pub mod formatters;
 pub mod http;
+pub mod install;
 pub mod logger;
 pub mod notify;
 pub mod providers;
