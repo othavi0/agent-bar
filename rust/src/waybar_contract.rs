@@ -313,6 +313,74 @@ pub fn export_waybar_css(
 }
 
 // ---------------------------------------------------------------------------
+// install_waybar_assets
+// ---------------------------------------------------------------------------
+
+/// Assets copiados para o destino do Waybar. Espelha o retorno de `installWaybarAssets` do TS.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledAssets {
+    pub icons_dir: PathBuf,
+    pub terminal_script: PathBuf,
+}
+
+fn copy_dir(src: &Path, dest: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&src_path, &dest_path)?;
+        } else {
+            std::fs::copy(&src_path, &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copia `icons/` e o terminal helper para o destino do Waybar.
+/// `repo_root=None` resolve via `resolve_asset_source_root`.
+/// Espelha `installWaybarAssets` do TS (linhas 327-358).
+pub fn install_waybar_assets(
+    waybar_dir: &Path,
+    scripts_dir: &Path,
+    repo_root: Option<&Path>,
+) -> anyhow::Result<InstalledAssets> {
+    let repo_root: PathBuf = match repo_root {
+        Some(r) => r.to_path_buf(),
+        None => resolve_asset_source_root()?,
+    };
+    let icons_source = repo_root.join("icons");
+    let icons_dest = waybar_dir.join("icons");
+    let script_source = repo_root
+        .join("scripts")
+        .join(crate::app_identity::TERMINAL_HELPER_NAME);
+    let script_dest = scripts_dir.join(crate::app_identity::TERMINAL_HELPER_NAME);
+
+    if !icons_source.exists() {
+        anyhow::bail!("Icons folder not found: {}", icons_source.display());
+    }
+    if !script_source.exists() {
+        anyhow::bail!("Terminal helper not found: {}", script_source.display());
+    }
+
+    let _ = std::fs::remove_dir_all(&icons_dest); // rmSync recursive+force (ignora ausência)
+    std::fs::create_dir_all(waybar_dir)?;
+    copy_dir(&icons_source, &icons_dest)?;
+
+    std::fs::create_dir_all(scripts_dir)?;
+    std::fs::copy(&script_source, &script_dest)?;
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&script_dest, std::fs::Permissions::from_mode(0o755))?;
+
+    Ok(InstalledAssets {
+        icons_dir: icons_dest,
+        terminal_script: script_dest,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // WaybarAssetPaths
 // ---------------------------------------------------------------------------
 
@@ -562,5 +630,53 @@ mod tests {
                 "$HOME/.local/bin/agent-bar"
             );
         });
+    }
+
+    #[test]
+    fn install_copies_icons_and_helper_with_exec_perm() {
+        use std::os::unix::fs::PermissionsExt;
+        let src = tempfile::tempdir().unwrap();
+        // fixture: src/icons/a.png + src/scripts/agent-bar-open-terminal
+        std::fs::create_dir_all(src.path().join("icons")).unwrap();
+        std::fs::write(src.path().join("icons").join("a.png"), b"png").unwrap();
+        std::fs::create_dir_all(src.path().join("scripts")).unwrap();
+        std::fs::write(
+            src.path().join("scripts").join("agent-bar-open-terminal"),
+            b"#!/bin/sh\n",
+        )
+        .unwrap();
+
+        let dest = tempfile::tempdir().unwrap();
+        let waybar_dir = dest.path().join("agent-bar");
+        let scripts_dir = dest.path().join("scripts");
+
+        let r = install_waybar_assets(&waybar_dir, &scripts_dir, Some(src.path())).unwrap();
+        assert!(r.icons_dir.join("a.png").exists());
+        assert!(r.terminal_script.exists());
+        let mode = std::fs::metadata(&r.terminal_script)
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o755);
+    }
+
+    #[test]
+    fn install_errors_when_icons_source_missing() {
+        let src = tempfile::tempdir().unwrap(); // sem icons/
+        std::fs::create_dir_all(src.path().join("scripts")).unwrap();
+        std::fs::write(
+            src.path().join("scripts").join("agent-bar-open-terminal"),
+            b"x",
+        )
+        .unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let err = install_waybar_assets(
+            &dest.path().join("a"),
+            &dest.path().join("s"),
+            Some(src.path()),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("Icons folder not found"), "got: {err}");
     }
 }
