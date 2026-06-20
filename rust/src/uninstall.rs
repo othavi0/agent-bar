@@ -43,7 +43,7 @@ pub fn run_uninstall(
 
     // 1. Nota listando o que será removido
     term_prompt::note(&format!(
-        "{title} — paths que serão removidos:\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}",
+        "{title} — paths que serão removidos:\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}",
         integration_paths.waybar_config_path.display(),
         integration_paths.waybar_style_path.display(),
         integration_paths.modules_include_path.display(),
@@ -52,6 +52,7 @@ pub fn run_uninstall(
         asset_paths.terminal_script.display(),
         settings_dir.display(),
         cache_dir.display(),
+        app_symlink.display(),
     ));
 
     // 2. Confirmação (pula se force=true)
