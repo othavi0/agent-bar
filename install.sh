@@ -107,7 +107,9 @@ resolve_version() {
 
 install_binary() {
   local version="$1"
-  # Strip leading 'v' for the asset filename (tag = v6.0.0, asset = agent-bar-6.0.0-x86_64.tar.gz)
+  # Normaliza pra ter sempre o prefixo 'v' (a tag do Release é vX.Y.Z; AGENT_BAR_VERSION
+  # pode vir sem). base_url usa a tag (com 'v'); o asset usa a versão SEM 'v'.
+  [[ "$version" == v* ]] || version="v${version}"
   local ver_bare="${version#v}"
   local asset="agent-bar-${ver_bare}-x86_64.tar.gz"
   local base_url="https://github.com/${GITHUB_REPO}/releases/download/${version}"
@@ -118,7 +120,7 @@ install_binary() {
   trap "rm -rf '$tmpdir'" EXIT
 
   log "Downloading ${asset}..."
-  curl -fsSL --progress-bar "${base_url}/${asset}"        -o "${tmpdir}/${asset}"
+  curl -fL  --progress-bar "${base_url}/${asset}"        -o "${tmpdir}/${asset}"
   curl -fsSL               "${base_url}/${asset}.sha256"  -o "${tmpdir}/${asset}.sha256"
 
   log "Verifying checksum..."
@@ -144,6 +146,11 @@ install_binary() {
       "${DATA_DIR}/scripts/agent-bar-open-terminal"
   fi
   ok "Assets installed at ${DATA_DIR}"
+
+  # Limpa o tmpdir explicitamente: o `exec agent-bar setup` (caminho default) pula
+  # a EXIT trap, então a limpeza precisa acontecer aqui.
+  rm -rf "$tmpdir"
+  trap - EXIT
 }
 
 # --- PATH check ------------------------------------------------------------

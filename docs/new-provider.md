@@ -55,7 +55,7 @@ panicking. Keep messages stable; tests assert exact strings in several places.
 
 ## Availability Rules
 
-`isAvailable()` should be cheap:
+`is_available()` should be cheap:
 
 - file existence and small JSON checks are fine
 - `command -v` style binary checks are fine
