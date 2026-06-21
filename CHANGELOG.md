@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-06-21
+
+### Fixed
+- **`install.sh` corrompia o binário no `setup`.** `create_symlink` criava um symlink
+  `~/.local/bin/agent-bar` apontando pra si mesmo (dangling) quando o binário já
+  estava nesse caminho — caso do `install.sh` —, destruindo o executável. Agora
+  detecta (via `canonicalize`) que o binário já está no destino e pula o symlink.
+  `cargo install` / `cargo binstall` (instalam em `~/.cargo/bin`) não eram afetados.
+
 ## [6.0.0] - 2026-06-21
 
 Reescrita completa de TypeScript/Bun para **Rust** (binário único), preservando
