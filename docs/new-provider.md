@@ -5,37 +5,35 @@ calls a provider CLI, parses local session data, or fetches an API.
 
 ## Contract
 
-Implement `Provider` from `src/providers/types.ts`:
+Implement the `Provider` trait from `src/providers/types.rs`:
 
 | Field | Purpose |
 | --- | --- |
 | `id` | stable lowercase identifier, for example `claude` |
 | `name` | display name |
-| `cacheKey` | unique cache key using only letters, numbers, `_`, and `-` |
-| `isAvailable()` | fast local availability check, no network and no expensive work |
-| `getQuota()` | returns `ProviderQuota` |
+| `cache_key` | unique cache key using only letters, numbers, `_`, and `-` |
+| `is_available()` | fast local availability check, no network and no expensive work |
+| `get_quota()` | returns `ProviderQuota` |
 
-`getQuota()` should normally return errors in the `error` field instead of
-throwing. Keep messages stable; tests assert exact strings in several places.
+`get_quota()` should normally return errors in the `error` field instead of
+panicking. Keep messages stable; tests assert exact strings in several places.
 
 ## Add A Provider
 
-1. Create `src/providers/<name>.ts`.
-2. Register it at module scope with `registerProvider(new <Name>Provider())`.
-3. Export and side-effect import it from `src/providers/index.ts`.
-4. Add an icon under `icons/`.
-5. Add the provider ID to `WAYBAR_PROVIDERS` in `src/waybar-contract.ts`.
-6. Add provider styling/icon CSS in `exportWaybarCss()`.
-7. Add provider color entries in `src/theme.ts` when needed.
-8. Check TUI surfaces:
-   - `src/tui/login.ts`
-   - `src/tui/login-single.ts`
-   - `src/tui/list-all.ts`
-   - `src/tui/configure-layout.ts`
-9. Add a dedicated builder in `src/formatters/builders/<name>.ts` and register
-   it in the `terminal.ts` and `waybar.ts` dispatchers. An unregistered provider
+1. Create `src/providers/<name>.rs`.
+2. Register it in `src/providers/mod.rs`.
+3. Add an icon under `icons/`.
+4. Add the provider ID to `WAYBAR_PROVIDERS` in `src/waybar_contract.rs`.
+5. Add provider styling/icon CSS in `export_waybar_css()`.
+6. Add provider color entries in `src/theme.rs` when needed.
+7. Check TUI surfaces:
+   - `src/tui/login.rs`
+   - `src/tui/list_all.rs`
+   - `src/tui/configure_layout.rs`
+8. Add a dedicated builder in `src/formatters/builders/<name>.rs` and register
+   it in the `terminal.rs` and `waybar.rs` dispatchers. An unregistered provider
    falls back to the `generic` builder.
-10. Add tests in `tests/providers/<name>.test.ts`.
+9. Add tests in `tests/` covering the new provider.
 
 ## Data Rules
 
@@ -50,8 +48,8 @@ throwing. Keep messages stable; tests assert exact strings in several places.
 
 ## Cache Rules
 
-- use `cache.getOrFetch()` unless the provider needs finer control
-- default TTL is `CONFIG.cache.ttlMs`
+- use `cache.get_or_fetch()` unless the provider needs finer control
+- default TTL is `CONFIG.cache.ttl_ms`
 - failed fetches must not poison the cache
 - cache keys cannot contain dots, spaces, slashes, or traversal characters
 

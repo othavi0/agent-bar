@@ -6,29 +6,28 @@ Quick start for developers.
 
 | Tool | Minimum |
 |------|---------|
-| [Bun](https://bun.sh) | >= 1.0 |
+| [Rust](https://rustup.rs) | stable (1.75+) |
 | Git | recent |
 
-Bun is the only supported runtime. Node and Deno will not work.
+Rust + Cargo is the only supported toolchain.
 
-## Dev install (live edit → live Waybar)
+## Dev install (build from source → live Waybar)
 
-Wire your local checkout straight into Waybar so every edit shows up on the
-next poll, with no rebuild:
+Wire your local checkout straight into Waybar so every build shows up on the
+next poll:
 
 ```bash
 git clone git@github.com:othavioquiliao/agent-bar.git
 cd agent-bar
-bun install
-bun run start setup
+cargo build
+./target/debug/agent-bar setup
 ```
 
-`setup` symlinks `~/.local/bin/agent-bar` to `scripts/agent-bar` inside this
-checkout. The shim does `exec bun src/index.ts`, so saved changes apply on the
-next Waybar tick.
+`setup` symlinks `~/.local/bin/agent-bar` to the debug binary inside this
+checkout. Rebuild with `cargo build`; the next Waybar tick picks it up.
 
-If you already have a non-dev install (`~/.agent-bar`, npm global, or both),
-wipe it first to avoid the symlink fighting your changes:
+If you already have a non-dev install, wipe it first to avoid the symlink
+fighting your changes:
 
 ```bash
 unlink ~/.local/bin/agent-bar 2>/dev/null
@@ -41,16 +40,13 @@ rm -rf ~/.config/waybar/agent-bar
 ## Useful commands
 
 ```bash
-bun run start          # Run from source (equivalent to ./scripts/agent-bar)
-bun run dev            # Watch mode (restart on save)
-bun test               # Test suite (coverage via bunfig.toml)
-bun run typecheck      # bun x tsc --noEmit
-bun run lint           # biome check
-bun run lint:fix       # biome check --write
+cargo build                                      # Debug build
+cargo build --release                            # Release build
+cargo run -- status                              # Run from source
+cargo test                                       # Full test suite
+cargo clippy --all-targets -- -D warnings        # Lint (must pass clean)
+cargo fmt                                        # Format
 ```
-
-Do not run `bun ./scripts/agent-bar`. It is a Bash shim and Bun will try to
-parse it as JavaScript. Use `./scripts/agent-bar` or `bun run start`.
 
 ## Conventional Commits (in Portuguese)
 
@@ -80,48 +76,41 @@ test: cobre cenários de cache expirado
 
 ## Code style
 
-- TypeScript strict. Avoid `any`. Never `!` non-null assertion (use a guard
-  that throws explicitly).
-- Identifiers and file names in English, `camelCase`. Repo communication and
+- Rust stable. No `unsafe` without explicit justification. No `unwrap()` in
+  production paths — use explicit error handling that produces user-facing
+  messages.
+- Identifiers and file names in English, `snake_case`. Repo communication and
   commits in Portuguese.
-- No path aliases — use relative imports.
-- No build step at runtime. Bun runs TypeScript directly.
-- Biome enforces formatting (2 spaces, single quotes, 120 cols).
+- `cargo fmt` for formatting. `cargo clippy --all-targets -- -D warnings` must
+  pass clean.
 
 ## Tests
 
-`bun:test`. Tests in `tests/`, mirroring `src/`. No real credentials, no live
-CLIs, no network, no real Waybar — mock `fs`, `fetch`, `spawn`, app-server
-data.
+Tests live in `tests/`. No real credentials, no live CLIs, no network, no real
+Waybar — mock filesystem, fetch, spawn, and app-server data.
 
 ```bash
-bun test                       # All
-bun test tests/cache.test.ts   # One file
+cargo test                        # All
+cargo test cache                  # Filter by name
 ```
 
 When using `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` in a test, set them **before**
-importing `src/config.ts` or any module that imports it. Config reads env at
-import time.
+any code that reads config paths, since config resolves paths at initialization.
 
-Restore env and global state in `afterEach`.
+Restore env and global state after each test.
 
-## Releasing to npm
+## Releasing
 
-```bash
-bun run release:check     # tests + typecheck + lint + build + pack dry-run
-bun run publish:dry-run   # requires npm login in the environment
-bun run publish:npm       # real publish — manual, requires explicit approval
-```
-
-Publishing is normally done by the GitHub `publish.yml` workflow on
-`release: published` (uses `NPM_TOKEN` secret). See `CLAUDE.md` §8.
+Releases are cut by bumping `version` in `Cargo.toml`, updating `CHANGELOG.md`,
+committing, and creating a GitHub Release with tag `v<version>`. The
+`publish.yml` workflow triggers on `release: published`.
 
 ## Adding a provider
 
 See [`docs/new-provider.md`](docs/new-provider.md) for the full checklist.
-Short version: implement `Provider` from `src/providers/types.ts`, register in
-`src/providers/index.ts`, add tests under `tests/providers/`, drop an icon in
-`icons/`.
+Short version: implement the `Provider` trait from `src/providers/types.rs`,
+register it in `src/providers/mod.rs`, add tests under `tests/`, drop an icon
+in `icons/`.
 
 ## Links
 

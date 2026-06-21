@@ -7,7 +7,7 @@
 | `agent-bar` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
 | `agent-bar status` | Print the quota view in a terminal. | Cache only |
 | `agent-bar menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
-| `agent-bar update` | Update the install: managed `~/.agent-bar` checkout, or npm/Bun global package. | `~/.agent-bar` or global package, managed Waybar files |
+| `agent-bar update` | Update the install: managed `~/.agent-bar` checkout, or defers to system package manager. | `~/.agent-bar`, managed Waybar files |
 
 ## Internal Commands (Waybar-Triggered)
 
@@ -59,23 +59,13 @@ providers and the consumer decides what to show.
 
 ## `doctor`
 
-Detect and clean `@noctuacore/agent-bar` artifacts accidentally written to
-`$HOME` by a local install (`bun add` without `-g`).
+Detect and clean leftover agent-bar artifacts in `$HOME` from previous installs.
 
 ```bash
 agent-bar doctor              # interactive
 agent-bar doctor --dry-run    # report without removing
 agent-bar doctor --yes        # non-interactive, remove without prompting
 ```
-
-Removes:
-- `~/package.json` only when `@noctuacore/agent-bar` is the *only* dep.
-- `~/node_modules/@noctuacore/agent-bar/` always.
-- `~/bun.lock`, `~/bun.lockb`, `~/package-lock.json` when `package.json` is
-  orphan or absent.
-
-If `~/package.json` has other dependencies, it is preserved — only the
-agent-bar copy in `node_modules` is removed.
 
 ## Export And Assets
 
@@ -105,13 +95,9 @@ These are mostly for tests, packagers, and manual integration.
 
 `agent-bar update` detects the install type and updates accordingly:
 
-- **Managed `~/.agent-bar` checkout (install.sh path):** must run from
-  `~/.agent-bar`; fetches upstream, shows incoming commits and local changes,
-  and after confirmation runs `git reset --hard <upstream>` + `git clean -fd`,
-  installs dependencies when they changed or `node_modules` is missing, and
-  re-applies setup.
-- **npm/Bun global install:** after confirmation, runs
-  `bun add -g @noctuacore/agent-bar` and re-applies setup.
+- **Managed `~/.agent-bar` checkout (install.sh path):** fetches upstream, shows
+  incoming commits and local changes, and after confirmation runs
+  `git reset --hard <upstream>` + `git clean -fd`, and re-applies setup.
 - **System install (AUR `-bin`, standalone binary):** does not self-update —
   directs you to your package manager (e.g. `paru -Syu agent-bar-bin`).
 - **Development checkout:** refuses and tells you to update with `git pull`.
