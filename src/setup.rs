@@ -37,6 +37,15 @@ pub fn create_symlink(home: &Path) -> std::io::Result<PathBuf> {
     // `setup` (antes apontava pro shim bun `scripts/agent-bar`, removido no cutover).
     let target = std::env::current_exe()?;
 
+    // Se o binário JÁ está no destino do link (ex: `install.sh` instalou direto em
+    // ~/.local/bin/agent-bar e roda `setup` dali), NÃO symlinkar: removeríamos o
+    // binário e criaríamos um symlink apontando pra si mesmo (dangling). Já está no lugar.
+    if let (Ok(t), Ok(l)) = (target.canonicalize(), link.canonicalize()) {
+        if t == l {
+            return Ok(link);
+        }
+    }
+
     // Remove symlink anterior se existir (ignora erro de não-existência)
     let _ = std::fs::remove_file(&link);
 
