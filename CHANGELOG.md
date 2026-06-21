@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-06-21
+
+Reescrita completa de TypeScript/Bun para **Rust** (binário único), preservando
+paridade byte-exact do contrato Waybar/Pango e da saída `--format json`.
+
+### Changed
+- **Runtime Rust.** O monitor agora é um binário Rust único (tokio + reqwest/rustls)
+  no lugar do runtime TypeScript/Bun. Comportamento de Waybar/CLI inalterado —
+  paridade byte-exact travada por golden snapshots vs a saída do TS.
+- **TUI full-screen** reescrita em ratatui (abas Dashboard / Waybar / History /
+  Login) com engine de custo via session logs locais (US$/R$). O event loop faz o
+  parse de logs em background, mantendo a UI responsiva desde o boot.
+- **Distribuição via binário musl estático.** `install.sh` baixa o tarball prebuilt
+  do GitHub Release (verificado por sha256); o AUR (`agent-bar-bin`) e
+  `cargo binstall` também instalam o binário. Build de release via `cargo-zigbuild`.
+
+### Removed
+- **Bun / Node / npm no runtime.** Sem dependência de runtime JS. O pacote npm
+  `@noctuacore/agent-bar` foi descontinuado — a última versão TypeScript está
+  preservada na tag `v5.3.0-ts-final`.
+
+### Migração
+- Instalações npm antigas: `agent-bar doctor` detecta e limpa os resíduos;
+  reinstale via `install.sh`, AUR ou `cargo binstall`.
+
 ## [5.3.0] - 2026-06-18
 
 ### Added
