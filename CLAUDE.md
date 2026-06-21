@@ -114,6 +114,8 @@ AUR e `cargo binstall`.
 
 Para cortar release: bumpar `version` em `Cargo.toml`, atualizar
 `CHANGELOG.md`, commitar, criar GitHub Release com tag `v<version>`.
+**Runbook completo (passo a passo, incl. preenchimento do sha256 e push pro AUR):
+[`docs/releasing.md`](docs/releasing.md).**
 
 ## 9. Pointers
 
