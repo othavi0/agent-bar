@@ -1,13 +1,5 @@
-# Dependencies
-node_modules/
-bun.lock
-bun.lockb
-
 # Build
-dist/
-
-# Coverage
-coverage/
+/target
 
 # Cache
 .cache/
