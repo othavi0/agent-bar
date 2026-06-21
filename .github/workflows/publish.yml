@@ -24,6 +24,8 @@ jobs:
       # x86_64-linux-musl-gcc, que apt musl-tools NÃO fornece); `cargo zigbuild` OK.
       - name: Install zig + cargo-zigbuild
         uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0 # pinado à versão verificada localmente (sem build.zig.zon p/ resolver)
       - name: Install cargo-zigbuild
         run: cargo install cargo-zigbuild --locked
 
