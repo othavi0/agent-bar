@@ -5,6 +5,7 @@ edition = "2021"
 rust-version = "1.80"
 license = "MIT"
 description = "LLM quota monitor for Waybar - Claude, Codex, Amp"
+repository = "https://github.com/othavioquiliao/agent-bar"
 
 [[bin]]
 name = "agent-bar"
@@ -47,3 +48,10 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
+
+# cargo-binstall puxa o binário direto do GitHub Release (sem crates.io).
+# O tarball tem `agent-bar` na raiz do arquivo (ver .github/workflows/publish.yml).
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/agent-bar-{ version }-x86_64.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "agent-bar"
