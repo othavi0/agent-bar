@@ -1,0 +1,26 @@
+#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
+
+pub mod action_right;
+pub mod app_identity;
+pub mod cache;
+pub mod cli;
+pub mod config;
+pub mod doctor;
+pub mod formatters;
+pub mod http;
+pub mod install;
+pub mod logger;
+pub mod notify;
+pub mod providers;
+pub mod runtime;
+pub mod settings;
+pub mod setup;
+pub mod term_prompt;
+pub mod theme;
+pub mod tui;
+pub mod uninstall;
+pub mod update;
+pub mod usage;
+pub mod watch;
+pub mod waybar_contract;
+pub mod waybar_integration;

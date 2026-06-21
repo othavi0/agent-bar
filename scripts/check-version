@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Confere que Cargo.toml, PKGBUILD e (opcional) a tag passada batem.
+# Uso: scripts/check-version [vX.Y.Z]
+set -euo pipefail
+
+CARGO_VER="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+PKG_VER="$(grep -m1 '^pkgver=' packaging/aur/PKGBUILD | cut -d= -f2)"
+
+fail=0
+if [ "$CARGO_VER" != "$PKG_VER" ]; then
+  echo "MISMATCH: Cargo.toml=$CARGO_VER PKGBUILD=$PKG_VER" >&2
+  fail=1
+fi
+
+if [ "${1:-}" != "" ]; then
+  TAG="${1#v}"
+  if [ "$CARGO_VER" != "$TAG" ]; then
+    echo "MISMATCH: Cargo.toml=$CARGO_VER tag=$TAG" >&2
+    fail=1
+  fi
+fi
+
+[ "$fail" -eq 0 ] && echo "version OK: $CARGO_VER"
+exit "$fail"

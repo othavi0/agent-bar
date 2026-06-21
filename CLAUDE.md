@@ -7,10 +7,10 @@ Monitor de quotas LLM para Waybar (Claude, Codex, Amp).
 
 Quebrar qualquer uma quebra build, desktop do usuário, ou contrato de produto.
 
-- **Bun only.** Sem Node, npm, pnpm, yarn, ts-node, Deno em runtime ou testes.
-- **Nunca rodar `bun ./scripts/agent-bar`.** É shim Bash; rode `./scripts/agent-bar`
-  ou `bun run start`. Bun interpreta o shim como JS e falha.
-- **Nunca converter shims em `scripts/` para TypeScript.**
+- **Rust/cargo only.** Toolchain via rustup. Sem Node, npm, bun, pnpm, yarn,
+  ts-node, Deno em runtime ou testes.
+- **Nunca converter `scripts/agent-bar-open-terminal` para Rust.** É helper
+  Bash que abre terminal externo; permanece como script.
 - **Não mutar desktop ao vivo como verificação.** Não rodar `agent-bar setup`/
   `update`/`uninstall`/`remove` sem aprovação explícita. `assets install`
   apenas em paths injetados (temp dirs, `--waybar-dir`, `XDG_*`).
@@ -28,52 +28,59 @@ Quebrar qualquer uma quebra build, desktop do usuário, ou contrato de produto.
 
 Use a verificação mais estreita; só amplie se contrato compartilhado se moveu.
 
+**Gotcha RTK:** o hook RTK reformata output do cargo — a string `test result:`
+pode não aparecer. Use apenas um filtro posicional por invocação de `cargo test`.
+
 | Área da mudança | Comando |
 | --- | --- |
 | Docs / instruções de agente | `git diff --check` |
-| CLI parsing / help | `bun test tests/cli.test.ts` |
-| Cache | `bun test tests/cache.test.ts` |
-| Settings | `bun test tests/settings.test.ts` |
-| Um provider | `bun test tests/providers/<provider>.test.ts` (Codex inclui também `codex-appserver.test.ts`) |
-| `BaseProvider` orchestration | `bun test tests/providers/base.test.ts` |
-| Formatters / tooltips / classes | `bun test tests/formatters.test.ts tests/formatters-snapshot.test.ts tests/formatters-segments.test.ts` |
-| Waybar export contract | `bun test tests/waybar-contract.test.ts` |
-| Update flow | `bun test tests/update.test.ts` |
-| `package.json` `files`/`bin`/release | `bun test tests/package.test.ts` |
-| Theme / colors / identity | `bun test tests/theme.test.ts tests/colors.test.ts tests/config.test.ts tests/app-identity.test.ts` |
-| CLI locators | `bun test tests/amp-cli.test.ts` |
-| Contratos TypeScript | `bun run typecheck` |
-| Mudanças amplas antes de handoff | `bun test && bun run typecheck && bun run lint` |
+| CLI parsing / help | `cargo test cli` |
+| Cache | `cargo test cache` |
+| Settings | `cargo test settings` |
+| Config / paths | `cargo test config` |
+| Um provider | `cargo test providers::<provider>` (ex: `providers::claude`) |
+| `BaseProvider` orchestration | `cargo test providers::base` |
+| Formatters / tooltips / segments | `cargo test formatters` |
+| Golden / Waybar export contract | `cargo test --test golden` |
+| Waybar contract (módulos/CSS) | `cargo test waybar_contract` |
+| Waybar integration | `cargo test waybar_integration` |
+| Update flow | `cargo test update` |
+| Theme / colors / identity | `cargo test theme && cargo test app_identity` |
+| CLI locators (Amp CLI) | `cargo test providers::amp_cli` |
+| Contratos Rust | `cargo clippy --all-targets -- -D warnings` |
+| Mudanças amplas antes de handoff | `cargo test && cargo clippy --all-targets -- -D warnings` |
 
 ## 3. Project-Specific Rules
 
 - **Use as constantes de identidade** (`APP_NAME`, `WAYBAR_*`,
-  `TERMINAL_HELPER_NAME`, `BACKUP_SUFFIX` em `src/app-identity.ts`) em vez de
+  `TERMINAL_HELPER_NAME`, `BACKUP_SUFFIX` em `src/app_identity.rs`) em vez de
   hardcoded strings.
 - **Provider error strings são contrato.** Testes assertam strings verbatim;
   alterar uma é mudança de contrato. Mantenha úteis e estáveis.
-- **Nunca `!` non-null assertion.** Estreite com guard explícito que `throw`a.
-  *Why:* biome desativa `noNonNullAssertion` (linter permite), mas o projeto
-  bane. `!` esconde nulls que precisam virar erros explícitos.
+- **Nunca `unwrap()`/`expect()` em código de produção.** Estreite com guard
+  explícito que propaga erro (`?` ou `anyhow::bail!`). `unwrap` esconde panics
+  que precisam virar erros explícitos.
 - **`ClaudeProvider` implementa `Provider` direto, não estende `BaseProvider`.**
   Codex/Amp estendem. Não force Claude no template — ele gerencia
   cache inline porque o fluxo não cabe.
-- **XML-escape acontece SÓ em `render-pango.ts`.** Builders nunca escapam;
+- **XML-escape acontece SÓ em `render_pango.rs`.** Builders nunca escapam;
   segments `raw` bulam color-wrap E escape. Romper isso vira XSS no tooltip
   ou texto literal quebrado.
-- **Nunca round-trip live Waybar config via `JSON.parse`/`JSON.stringify`.**
-  Os `.jsonc` têm comentários e ordem que precisam sobreviver. `waybar-integration.ts`
-  patcha in-place.
-- **`waybar.ts` cacheia settings 5s** porque Waybar pulla em interval apertado.
+- **Nunca round-trip live Waybar config via `serde_json`.**
+  Os `.jsonc` têm comentários e ordem que precisam sobreviver.
+  `waybar_integration.rs` patcha in-place.
+- **`waybar_contract.rs` cacheia settings 5s** porque Waybar pulla em interval
+  apertado.
 
 ## 4. Testing Patterns
 
-- `bun:test`. Sem credenciais reais, sem CLIs vivas, sem rede, sem Waybar real.
-  Mock `fs`, `fetch`, `spawn`, dados de app-server/session.
-- **Set `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` ANTES de importar `src/config.ts`
-  ou qualquer módulo que o importe.** Config lê env no import-time; setar
-  depois não tem efeito.
-- Restaure env e global state em `afterEach`.
+- `#[tokio::test]` para async; `#[test]` para sync. Sem credenciais reais,
+  sem CLIs vivas, sem rede, sem Waybar real. Mock via seams (traits/fn
+  pointers); snapshots via `insta`.
+- **Set `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` ANTES de qualquer import que
+  leia `src/config.rs`.** Config lê env no carregamento; setar depois não
+  tem efeito.
+- Restaure env e global state em `drop`/`after_each`.
 - Snapshot terminal é sanitized (ANSI strip); Waybar é byte-for-byte (Pango
   importa). Atualize snapshots só quando o display contract mudar de propósito.
 
@@ -87,10 +94,10 @@ Use a verificação mais estreita; só amplie se contrato compartilhado se moveu
 
 ## 6. Conventions
 
-- TypeScript strict, ESM only. Biome aplica formatting (2 espaços, single
-  quote, 120 cols, unused import = erro).
-- Identificadores e nomes de arquivo em inglês. Comunicação de repo e
-  commits em português. Conventional Commits, subject ≤ 50 chars.
+- Rust strict + `cargo clippy -D warnings`. `cargo fmt` aplica formatting
+  (4 espaços, Rust style guide). Unused imports = erro de clippy.
+- Identificadores e nomes de arquivo em inglês (snake_case). Comunicação de
+  repo e commits em português. Conventional Commits, subject ≤ 50 chars.
 
 ## 7. Adicionar provider
 
@@ -100,12 +107,13 @@ de não-logado: `` Not logged in. Open `agent-bar menu` and choose Provider logi
 
 ## 8. Release
 
-Workflow `.github/workflows/publish.yml` dispara em `release: published` e roda
-`release:check` + `publish:npm`. Precisa do secret **`NPM_TOKEN`** (npm automation
-token — bypassa 2FA, requisito do CI).
+Workflow `.github/workflows/publish.yml` dispara em `release: published` e
+builda binário musl via `cargo-zigbuild`. Versão vem de `Cargo.toml`
+(`CARGO_PKG_VERSION`). Sem `NPM_TOKEN` — distribuição via `install.sh`,
+AUR e `cargo binstall`.
 
-Para cortar release: bumpar `package.json` version, atualizar `CHANGELOG.md`,
-commitar, criar GitHub Release com tag `v<version>`.
+Para cortar release: bumpar `version` em `Cargo.toml`, atualizar
+`CHANGELOG.md`, commitar, criar GitHub Release com tag `v<version>`.
 
 ## 9. Pointers
 

@@ -24,19 +24,18 @@ The app does not rewrite full Waybar files.
 
 ## Install Paths
 
-Four supported paths. The first three converge on the same
+Three supported paths. The first two converge on the same
 `~/.local/bin/agent-bar` symlink that generated Waybar modules invoke; the AUR
 binary lives at `/usr/bin/agent-bar` (in PATH) and its generated module invokes
 `agent-bar` directly.
 
 | Path | Source | Update |
 | --- | --- | --- |
-| Hosted installer (primary) | `curl -fsSL .../install.sh \| bash` clones into `~/.agent-bar` | `agent-bar update` (managed-git) |
-| Bun global | `bun add -g @noctuacore/agent-bar` | `agent-bar update` (npm) |
-| AUR `-bin` (Arch) | `paru -S agent-bar-bin` → standalone binary at `/usr/bin/agent-bar`, assets in `/usr/share/agent-bar/` | package manager (`paru -Syu`); `agent-bar update` defers to it |
-| Dev checkout | Manual `git clone` anywhere + `bun run start setup` | `git pull` (update refuses) |
+| Hosted installer (primary) | `curl -fsSL .../install.sh \| bash` installs binary to `~/.local/bin/agent-bar` | `agent-bar update` (managed-git) |
+| AUR `-bin` (Arch) | `yay -S agent-bar-bin` → standalone binary at `/usr/bin/agent-bar`, assets in `/usr/share/agent-bar/` | package manager (`paru -Syu`); `agent-bar update` defers to it |
+| Dev checkout | Manual `git clone` anywhere + `cargo build && ./target/debug/agent-bar setup` | `git pull` (update refuses) |
 
-For the first three, `agent-bar setup` creates `~/.local/bin/agent-bar` as the
+For the first two, `agent-bar setup` creates `~/.local/bin/agent-bar` as the
 stable command path (target depends on which install ran setup). The AUR binary
 is owned by the package manager; `setup` only writes the Waybar integration and
 reads assets from `/usr/share/agent-bar/`.

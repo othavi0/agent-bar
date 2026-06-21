@@ -1,13 +1,5 @@
-# Dependencies
-node_modules/
-bun.lock
-bun.lockb
-
 # Build
-dist/
-
-# Coverage
-coverage/
+/target
 
 # Cache
 .cache/
@@ -26,3 +18,4 @@ coverage/
 # Claude Code — settings.json is shared, the rest is per-user state
 .claude/scheduled_tasks.lock
 .claude/.task-output/
+.superpowers/

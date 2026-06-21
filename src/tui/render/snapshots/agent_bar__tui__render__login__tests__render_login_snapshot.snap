@@ -1,0 +1,20 @@
+---
+source: src/tui/render/login.rs
+expression: terminal.backend()
+---
+"┏ Login ━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃   Claude [--]      ┃┃ Codex                                  ┃"
+"┃ > Codex [--]       ┃┃                                        ┃"
+"┃   Amp [ok]         ┃┃ Executa `codex auth login` (fluxo OAuth┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃ [Enter] iniciar login    [j/k] navegar ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┃                    ┃┃                                        ┃"
+"┗━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"

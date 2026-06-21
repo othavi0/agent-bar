@@ -46,21 +46,18 @@ checkout that is not `~/.agent-bar`). Update a dev checkout with git directly:
 git pull
 ```
 
-For npm/Bun global installs and the managed `~/.agent-bar` checkout (the
-install.sh path), `agent-bar update` works without extra steps.
+For the managed `~/.agent-bar` checkout (the install.sh path), `agent-bar update`
+works without extra steps. For system installs (AUR), use the package manager
+(`paru -Syu agent-bar-bin`).
 
-## `$HOME` Pollution After Install
+## `$HOME` Pollution
 
-If `bun add` or `npm i` was run without `-g` in your home directory, a stray
-`package.json`, `bun.lock`, or `node_modules/@noctuacore/agent-bar/` ends up
-in `$HOME`. The bin shim warns about this on every invocation. To clean up:
+If leftover agent-bar artifacts are detected in `$HOME`, clean them up with:
 
 ```bash
 agent-bar doctor
 ```
 
-The doctor preserves `~/package.json` if it lists other dependencies (a real
-project), and only removes the `node_modules/@noctuacore/` copy in that case.
 See [Commands → `doctor`](commands.md) for flags.
 
 ## Provider Auth
