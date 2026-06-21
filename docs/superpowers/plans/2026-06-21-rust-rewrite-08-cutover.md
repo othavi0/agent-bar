@@ -284,7 +284,14 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup target add x86_64-unknown-linux-musl
-          sudo apt-get update && sudo apt-get install -y musl-tools
+
+      # cargo-zigbuild usa o zig como cross-compiler C → builda musl SEM musl-gcc.
+      # VERIFICADO LOCALMENTE: `cargo build --target musl` FALHA (o `ring` procura
+      # x86_64-linux-musl-gcc, que apt musl-tools NÃO fornece); `cargo zigbuild` OK.
+      - name: Install zig + cargo-zigbuild
+        uses: mlugg/setup-zig@v2   # IMPLEMENTER: confirme a action/versão atual (web/find-docs)
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
 
       - name: Verify version matches release tag
         env:
@@ -299,7 +306,7 @@ jobs:
           echo "Version $PKG_VERSION matches release tag $RELEASE_TAG"
 
       - name: Build static musl binary
-        run: cargo build --release --target x86_64-unknown-linux-musl
+        run: cargo zigbuild --release --target x86_64-unknown-linux-musl
 
       - name: Package tarball + sha256
         run: |
