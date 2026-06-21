@@ -17,64 +17,66 @@ use super::render::render;
 use super::state::{AppState, FetchStatus, Tab};
 use super::update::update;
 
-/// Carrega os records dos ultimos 7 dias e despacha Action::HistoryLoaded.
-/// IO fica no event_loop; o cutoff (relógio) também: `update` é puro.
-fn load_and_dispatch_history(state: &mut AppState, ctx: &Ctx<'_>) {
+/// Dispara o parse pesado dos session logs FORA do thread do event loop
+/// (`spawn_blocking`) e devolve os resultados via canal (`Action::UsageComputed` +
+/// `Action::HistoryLoaded`). O parse cold pode levar ~10-20s; mantê-lo aqui — e não
+/// inline no loop — deixa o `select!` livre p/ servir teclas/animação enquanto isso.
+fn spawn_usage_load(
+    bg_tx: &tokio::sync::mpsc::UnboundedSender<Action>,
+    ctx: &Ctx<'_>,
+    state: &AppState,
+) {
     let claude_dir = ctx.home.join(".claude").join("projects");
     let codex_dir = ctx.home.join(".codex").join("sessions");
+    let fx_rate = ctx.settings.fx_rate;
 
-    let cutoff = time::OffsetDateTime::now_utc() - time::Duration::days(7);
-
-    let records = usage::records_since(
-        usage::AggregateOptions {
-            claude_dir: &claude_dir,
-            codex_dir: &codex_dir,
-            fx_rate: ctx.settings.fx_rate,
-            amp_meta: None, // Amp nao tem records de token
-        },
-        cutoff,
-    );
-
-    update(state, Action::HistoryLoaded(records));
-}
-
-/// Calcula o UsageSummary escopado a HOJE (meia-noite local até agora) e despacha
-/// Action::UsageComputed. O offset local é injetado via Ctx (nunca now_local() — pode
-/// falhar sem TZ). Roda no mesmo arm do data_tick (sincrono, aceitavel no v1 — cache
-/// incremental do engine amortiza o custo). Pode ser revisitado pra thread separada se lento.
-fn compute_and_dispatch_usage(state: &mut AppState, ctx: &Ctx<'_>) {
-    // Extrai amp_meta do ProviderView do Amp, se disponivel.
-    let amp_meta = state
+    // amp_meta do ProviderView do Amp (clone OWNED p/ cruzar o spawn_blocking).
+    let amp_meta: Option<std::collections::BTreeMap<String, String>> = state
         .providers
         .iter()
         .find(|pv| pv.quota.provider == "amp")
         .and_then(|pv| get_amp_extra(&pv.quota))
-        .and_then(|amp_extra| amp_extra.meta.as_ref());
+        .and_then(|e| e.meta.clone());
 
-    let claude_dir = ctx.home.join(".claude").join("projects");
-    let codex_dir = ctx.home.join(".codex").join("sessions");
-
-    // Calcula o início do dia local de hoje (meia-noite no offset do usuário).
-    // from_unix_timestamp_nanos: nanos → OffsetDateTime UTC; convertemos pro offset local.
+    // Cutoffs no contexto async: clock injetado (ctx) p/ hoje; now_utc p/ a janela de 7d.
     let today_start =
         time::OffsetDateTime::from_unix_timestamp_nanos((ctx.now_ms as i128) * 1_000_000)
             .map(|t| t.to_offset(ctx.local_offset))
             .map(|t| t.replace_time(time::Time::MIDNIGHT))
             .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+    let history_cutoff = time::OffsetDateTime::now_utc() - time::Duration::days(7);
 
-    let filtered = usage::records_since(
-        usage::AggregateOptions {
-            claude_dir: &claude_dir,
-            codex_dir: &codex_dir,
-            fx_rate: ctx.settings.fx_rate,
-            amp_meta: None,
-        },
-        today_start,
-    );
+    // std::thread (NÃO tokio::spawn_blocking): thread detached, não-rastreada pelo
+    // runtime. Ao quitar a TUI o processo sai na hora — o runtime do tokio ESPERARIA
+    // um spawn_blocking terminar (o parse cold leva ~18s → quit travava). O parse é só
+    // estatística fire-and-forget; abandoná-lo no quit é correto.
+    let tx = bg_tx.clone();
+    std::thread::spawn(move || {
+        // Custo de HOJE (escopado a meia-noite local).
+        let today = usage::records_since(
+            usage::AggregateOptions {
+                claude_dir: &claude_dir,
+                codex_dir: &codex_dir,
+                fx_rate,
+                amp_meta: None,
+            },
+            today_start,
+        );
+        let summary = usage::aggregate_records(today, fx_rate, amp_meta.as_ref());
+        let _ = tx.send(Action::UsageComputed(summary));
 
-    let summary = usage::aggregate_records(filtered, ctx.settings.fx_rate, amp_meta);
-
-    update(state, Action::UsageComputed(summary));
+        // History dos últimos 7 dias (records crus p/ a aba History).
+        let records = usage::records_since(
+            usage::AggregateOptions {
+                claude_dir: &claude_dir,
+                codex_dir: &codex_dir,
+                fx_rate,
+                amp_meta: None,
+            },
+            history_cutoff,
+        );
+        let _ = tx.send(Action::HistoryLoaded(records));
+    });
 }
 
 /// Persiste as edit_settings, aplica a integracao Waybar e recarrega o Waybar.
@@ -146,12 +148,19 @@ fn drain(state: &mut AppState, ctx: &Ctx<'_>, actions: Vec<Action>) {
 pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
     let mut state = AppState::new();
 
+    // Canal p/ os resultados do parse em background (spawn_blocking). Mantém o loop livre.
+    let (bg_tx, mut bg_rx) = tokio::sync::mpsc::unbounded_channel::<Action>();
+
     let mut events = EventStream::new();
-    let mut data_tick = interval(Duration::from_secs(60));
+    // interval_at: 1º tick em +60s (NÃO imediato). O `initial_fetch` já faz a 1ª carga;
+    // o tick imediato do `interval` re-disparava fetch+parse redundante logo após o boot.
+    let mut data_tick = tokio::time::interval_at(
+        tokio::time::Instant::now() + Duration::from_secs(60),
+        Duration::from_secs(60),
+    );
     let mut anim_tick = interval(Duration::from_millis(30));
 
     // Tick imediato: dispara o fetch inicial sem esperar 60s.
-    // Marcamos como Loading e fazemos o fetch logo na 1a iteracao.
     let mut initial_fetch = true;
 
     loop {
@@ -165,13 +174,13 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
             initial_fetch = false;
             state.status = FetchStatus::Loading;
             let providers = registry();
-            // Fetch inline: bloqueia o loop mas e aceitavel no v1 (timeout 10s por provider).
+            // Fetch inline (async, ~sub-segundo). O parse pesado dos logs vai p/ background
+            // via spawn_usage_load, entao o loop chega no select! quase imediatamente.
             match tokio::time::timeout(Duration::from_secs(30), fetch_all(&providers, ctx)).await {
                 Ok(quotas) => {
                     let follow_ups = update(&mut state, Action::DataFetched(quotas));
                     drain(&mut state, ctx, follow_ups);
-                    compute_and_dispatch_usage(&mut state, ctx);
-                    load_and_dispatch_history(&mut state, ctx);
+                    spawn_usage_load(&bg_tx, ctx, &state);
                 }
                 Err(_) => {
                     let follow_ups =
@@ -214,8 +223,7 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                     Ok(quotas) => {
                         let follow_ups = update(&mut state, Action::DataFetched(quotas));
                         drain(&mut state, ctx, follow_ups);
-                        compute_and_dispatch_usage(&mut state, ctx);
-                        load_and_dispatch_history(&mut state, ctx);
+                        spawn_usage_load(&bg_tx, ctx, &state);
                     }
                     Err(_) => {
                         let follow_ups = update(
@@ -224,6 +232,12 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                         );
                         drain(&mut state, ctx, follow_ups);
                     }
+                }
+            }
+
+            bg = bg_rx.recv() => {
+                if let Some(action) = bg {
+                    update(&mut state, action);
                 }
             }
 
