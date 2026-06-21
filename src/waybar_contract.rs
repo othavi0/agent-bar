@@ -427,7 +427,7 @@ pub fn get_default_waybar_asset_paths() -> WaybarAssetPaths {
 /// Prioridade:
 /// 1. `AGENT_BAR_ASSET_DIR` env — deve ser absoluto e conter `icons/`.
 /// 2. Instalação de sistema: `/usr/share/agent-bar`.
-/// 3. Dev/checkout: diretório pai do `CARGO_MANIFEST_DIR` (raiz do repo).
+/// 3. Dev/checkout: o `CARGO_MANIFEST_DIR` (raiz do repo).
 pub fn resolve_asset_source_root() -> anyhow::Result<PathBuf> {
     let has_icons = |d: &Path| d.join("icons").exists();
 
@@ -453,11 +453,8 @@ pub fn resolve_asset_source_root() -> anyhow::Result<PathBuf> {
         );
     }
 
-    // Dev/checkout: raiz do repo = pai do manifest (`rust/`)
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
+    // Pós-cutover: o crate É a raiz do repo; CARGO_MANIFEST_DIR já aponta pra raiz.
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     if has_icons(&repo_root) {
         return Ok(repo_root);

@@ -25,7 +25,7 @@ pub fn reload_waybar() {
         .spawn();
 }
 
-/// Cria symlink `~/.local/bin/agent-bar` → `<repo_root>/scripts/agent-bar`.
+/// Cria symlink `~/.local/bin/agent-bar` → binário compilado (`current_exe`).
 /// Só chamado em instalações dev (não-system).
 pub fn create_symlink(home: &Path) -> std::io::Result<PathBuf> {
     let local_bin = home.join(".local").join("bin");
@@ -33,13 +33,9 @@ pub fn create_symlink(home: &Path) -> std::io::Result<PathBuf> {
 
     let link = local_bin.join(APP_NAME);
 
-    // repo_root = pai do CARGO_MANIFEST_DIR (i.e., raiz do repo, não `rust/`)
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    let target = repo_root.join("scripts").join(APP_NAME);
+    // Pós-cutover: o symlink dev aponta pro binário compilado que está rodando
+    // `setup` (antes apontava pro shim bun `scripts/agent-bar`, removido no cutover).
+    let target = std::env::current_exe()?;
 
     // Remove symlink anterior se existir (ignora erro de não-existência)
     let _ = std::fs::remove_file(&link);

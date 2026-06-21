@@ -280,11 +280,8 @@ async fn main() {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)
                 .unwrap_or_default();
-            // repo_root = pai do CARGO_MANIFEST_DIR (i.e., raiz do repo)
-            let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_default();
+            // Pós-cutover: o crate É a raiz do repo; CARGO_MANIFEST_DIR já aponta pra raiz.
+            let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             let install_root = home.join(format!(".{APP_NAME}"));
 
             fn run_real_command(cmd: &str, args: &[String], cwd: &Path) -> update::CommandResult {
