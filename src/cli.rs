@@ -674,11 +674,7 @@ pub fn build_help(no_color: bool) -> String {
     out.push_str(&format!("{}\n", label_line("Info", no_color)));
     out.push_str(&format!(
         "{}\n",
-        info_line(
-            "Run with",
-            &format!("{APP_NAME}  or  bun run start"),
-            no_color
-        )
+        info_line("Run with", &format!("{APP_NAME}  or  cargo run"), no_color)
     ));
     out.push_str(&format!("{}\n", v_line(no_color)));
 
@@ -1172,8 +1168,8 @@ mod tests {
     fn build_help_contains_run_with_line() {
         let help = build_help(false);
         assert!(
-            help.contains("agent-bar  or  bun run start"),
-            "Texto 'agent-bar  or  bun run start' não encontrado no help"
+            help.contains("agent-bar  or  cargo run"),
+            "Texto 'agent-bar  or  cargo run' não encontrado no help"
         );
     }
 
@@ -1186,8 +1182,8 @@ mod tests {
             "no_color=true: texto 'Update the install (npm or managed checkout)' ausente"
         );
         assert!(
-            help.contains("agent-bar  or  bun run start"),
-            "no_color=true: texto 'agent-bar  or  bun run start' ausente"
+            help.contains("agent-bar  or  cargo run"),
+            "no_color=true: texto 'agent-bar  or  cargo run' ausente"
         );
     }
 
