@@ -10,8 +10,8 @@ drift, but explicit enough that a fresh Codex session can bootstrap safely.
 ## Boot Order
 
 1. Read this file.
-2. Read [`CLAUDE.md`](CLAUDE.md) in full — it now fits comfortably under 200
-   lines after the 4.0.3 prune.
+2. Read [`CLAUDE.md`](CLAUDE.md) in full — it fits comfortably under 200
+   lines after the 6.0.0 Rust rewrite.
 3. Let `CLAUDE.md` define the repo contract. The code in `src/` still wins over
    docs when behavior and docs disagree.
 4. Translate Claude Code-specific tools and workflows to Codex equivalents using
@@ -21,11 +21,11 @@ drift, but explicit enough that a fresh Codex session can bootstrap safely.
 
 Use these before `CLAUDE.md` is fully loaded:
 
-- **Bun only** — no Node, npm, pnpm, yarn, ts-node, or Deno for runtime or test
-  workflows.
-- Run the CLI as `./scripts/agent-bar` or `bun run start`; **never**
-  `bun ./scripts/agent-bar` because it is a Bash shim.
-- Never convert the Bash shims in `scripts/` to TypeScript.
+- **Rust/cargo only** — no Node, npm, bun, pnpm, yarn, ts-node, or Deno for
+  runtime or test workflows.
+- Run the CLI as `cargo run -- <args>` during development, or the installed
+  `agent-bar` binary in production.
+- Never convert `scripts/agent-bar-open-terminal` (Bash helper) to Rust.
 - Do not run live-mutating commands (`agent-bar setup`, `update`, `uninstall`,
   `remove`) without explicit user approval.
 - Do not hand-edit live `~/.config/waybar` or `~/.config/agent-bar` for
@@ -59,7 +59,8 @@ Use these before `CLAUDE.md` is fully loaded:
 - For docs or agent-instruction-only edits, focused verification is
   `git diff --check`.
 - For code changes, use the verification matrix in `CLAUDE.md`; broaden to
-  `bun test && bun run typecheck && bun run lint` when shared contracts move.
+  `cargo test && cargo clippy --all-targets -- -D warnings` when shared
+  contracts move.
 - Do not commit or push unless the user explicitly asks.
 
 ## Repo Pointers
