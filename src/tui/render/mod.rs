@@ -551,8 +551,12 @@ mod tests {
         assert_eq!(hits.at(1, 9), Some(MouseTarget::Sidebar(3))); // History
         assert_eq!(hits.at(1, 10), Some(MouseTarget::Sidebar(4))); // Login
         assert_eq!(hits.at(1, 11), Some(MouseTarget::Sidebar(5))); // Waybar
-        // Fora da sidebar inteiramente (coluna do content_area, x=18).
-        assert_eq!(hits.at(50, 5), None);
+        // (50, 5) cai dentro do 1º card da Overview (Task 11: cards
+        // registram MouseTarget::Card) — deixou de ser "fora de qualquer
+        // zona" desde que o dashboard passou a ser cards clicáveis.
+        assert_eq!(hits.at(50, 5), Some(MouseTarget::Card(0)));
+        // Fora do frame inteiramente continua sem zona.
+        assert_eq!(hits.at(200, 5), None);
     }
 
     #[test]

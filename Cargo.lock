@@ -32,6 +32,7 @@ dependencies = [
  "tokio-util",
  "tui-input",
  "tui-popup",
+ "tui-scrollview",
  "wiremock",
 ]
 
@@ -2713,6 +2714,17 @@ dependencies = [
  "derive-getters",
  "derive_setters",
  "document-features",
+ "ratatui-core",
+ "ratatui-widgets",
+]
+
+[[package]]
+name = "tui-scrollview"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04907b1a2a41660933df8e64205abc7de4a4b320e808abcb00b9377069ac9d31"
+dependencies = [
+ "indoc",
  "ratatui-core",
  "ratatui-widgets",
 ]
