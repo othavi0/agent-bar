@@ -97,6 +97,7 @@ mod tests {
                 resets_at: None,
                 window_minutes: None,
                 used: None,
+                severity: None,
             }),
             secondary: None,
             models: None,

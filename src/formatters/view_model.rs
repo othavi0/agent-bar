@@ -56,6 +56,7 @@ mod tests {
                 resets_at: None,
                 window_minutes: Some(300),
                 used: None,
+                severity: None,
             },
         );
         ProviderQuota {

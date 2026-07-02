@@ -7,11 +7,13 @@ use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
 use ratatui::Frame;
 
 use crate::theme::ColorToken;
+use crate::tui::mouse::{ChipKind, HitMap};
 use crate::tui::state::{AppState, ConfigField, ConfigState};
 use crate::tui::theme_bridge::to_ratatui;
+use crate::tui::widgets::chips::{chips_line, register_chip_hits};
 
 /// Renders a aba Waybar config.
-pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect) {
+pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     // Layout: [field_list | detail_panel]
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
@@ -26,7 +28,7 @@ pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect) {
             // Ainda nao inicializado (primeira entrada na aba)
             let block = Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Thick)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)));
             let p = Paragraph::new(Span::styled(
                 " Carregando config...",
@@ -37,7 +39,7 @@ pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect) {
         }
         Some(cs) => {
             render_field_list(cs, frame, list_area);
-            render_field_detail(cs, frame, detail_area);
+            render_field_detail(cs, frame, detail_area, hits);
         }
     }
 }
@@ -70,7 +72,7 @@ fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
         .title(Span::styled(
             " Waybar Config ",
@@ -84,7 +86,7 @@ fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
 }
 
 /// Mostra o valor atual + editor inline no painel direito.
-fn render_field_detail(cs: &ConfigState, frame: &mut Frame, area: Rect) {
+fn render_field_detail(cs: &ConfigState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     // Vertical split: [value_row (3), help_row (1 fill)]
     let vert = Layout::default()
         .direction(Direction::Vertical)
@@ -121,7 +123,7 @@ fn render_field_detail(cs: &ConfigState, frame: &mut Frame, area: Rect) {
 
     let value_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
         .title(Span::styled(
             format!(" {} {} ", field.label(), edit_indicator),
@@ -136,7 +138,7 @@ fn render_field_detail(cs: &ConfigState, frame: &mut Frame, area: Rect) {
     frame.render_widget(value_paragraph, value_area);
 
     // Painel de ajuda + status
-    render_help_and_status(cs, frame, help_area);
+    render_help_and_status(cs, frame, help_area, hits);
 }
 
 /// Retorna o valor atual do campo como string.
@@ -157,8 +159,11 @@ fn field_current_value(field: ConfigField, cs: &ConfigState) -> String {
     }
 }
 
-/// Painel de ajuda e mensagem de status.
-fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect) {
+/// Painel de ajuda e mensagem de status. Rodapé: chips `[↵ editar] [s
+/// salvar] [esc voltar]` substituindo o hint-text antigo (T14) — só fora do
+/// modo edição (durante edição o campo tem foco do `tui_input`; os chips
+/// dariam a entender que o clique funciona ali, o que não é verdade).
+fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let muted = Style::default().fg(to_ratatui(ColorToken::Muted));
     let comment = Style::default().fg(to_ratatui(ColorToken::Comment));
 
@@ -170,15 +175,11 @@ fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect) {
         lines.push(Line::from(Span::styled(format!(" {}", hint), comment)));
     }
 
-    // Instrucoes de navegacao
+    // Instrucoes de navegacao (só em edição — fora dela, os chips do rodapé
+    // cobrem editar/salvar/voltar).
     if cs.editing {
         lines.push(Line::from(Span::styled(
             " Enter confirma   Esc cancela",
-            muted,
-        )));
-    } else {
-        lines.push(Line::from(Span::styled(
-            " Enter edita   [s] salva   j/k navega   q sai",
             muted,
         )));
     }
@@ -196,11 +197,25 @@ fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    let para = Paragraph::new(lines).block(block);
-    frame.render_widget(para, area);
+    let vert = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
+    frame.render_widget(Paragraph::new(lines), vert[0]);
+
+    if !cs.editing {
+        let chips: [(ChipKind, &str, &str); 3] = [
+            (ChipKind::EnterEdit, "\u{21b5}", "editar"),
+            (ChipKind::SaveConfig, "s", "salvar"),
+            (ChipKind::Back, "esc", "voltar"),
+        ];
+        let chips_area = vert[1];
+        let line = chips_line(&chips, chips_area.width);
+        frame.render_widget(Paragraph::new(line), chips_area);
+        register_chip_hits(&chips, chips_area, hits);
+    }
 }
 
 /// Dica por campo (None = sem dica especifica).
@@ -220,9 +235,10 @@ fn field_hint(field: ConfigField) -> Option<&'static str> {
 mod tests {
     use super::*;
     use crate::settings::{
-        CacheSettings, DisplayMode, GlyphMode, Notify, SeparatorStyle, Settings, Tooltip, Waybar,
+        CacheSettings, DisplayMode, GlyphMode, MenuSettings, Notify, SeparatorStyle, Settings,
+        Tooltip, Waybar,
     };
-    use crate::tui::state::{AppState, ConfigState, Tab};
+    use crate::tui::state::{AppState, ConfigState, Screen};
     use std::collections::BTreeMap;
 
     fn fake_settings() -> Settings {
@@ -244,6 +260,11 @@ mod tests {
             cache: CacheSettings {
                 ttl: BTreeMap::new(),
             },
+            menu: MenuSettings {
+                animations: true,
+                font_family: "IBM Plex Mono".to_string(),
+                font_size: 12,
+            },
             glyph_mode: GlyphMode::Box,
             fx_rate: 5.50,
         }
@@ -252,7 +273,7 @@ mod tests {
     fn state_on_waybar() -> AppState {
         let settings = fake_settings();
         let mut state = AppState::new();
-        state.tab = Tab::Waybar;
+        state.screen = Screen::Waybar;
         state.config_state = Some(ConfigState::new(&settings));
         state
     }
@@ -264,7 +285,7 @@ mod tests {
         let state = state_on_waybar();
         terminal
             .draw(|f| {
-                render_config(&state, f, f.area());
+                render_config(&state, f, f.area(), &mut HitMap::default());
             })
             .unwrap();
         // Se chegou aqui sem panico, o render esta basico OK.
@@ -276,7 +297,7 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let state = state_on_waybar();
         terminal
-            .draw(|f| render_config(&state, f, f.area()))
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -292,7 +313,7 @@ mod tests {
             cs.input = tui_input::Input::new("6.25".to_string());
         }
         terminal
-            .draw(|f| render_config(&state, f, f.area()))
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -306,7 +327,7 @@ mod tests {
             cs.status_msg = Some("Configuracao salva e Waybar recarregado.".to_string());
         }
         terminal
-            .draw(|f| render_config(&state, f, f.area()))
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }

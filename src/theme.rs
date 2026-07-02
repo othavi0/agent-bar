@@ -19,6 +19,11 @@ pub enum ColorToken {
     Cyan,
     Blue,
     BrightBlue,
+    Surface,
+    SelBg,
+    ChipBg,
+    EmptyTrack,
+    GreenHi,
 }
 
 impl ColorToken {
@@ -36,6 +41,11 @@ impl ColorToken {
             ColorToken::Cyan => "#56b6c2",
             ColorToken::Blue => "#61afef",
             ColorToken::BrightBlue => "#528bff",
+            ColorToken::Surface => "#1b202a",
+            ColorToken::SelBg => "#2c333f",
+            ColorToken::ChipBg => "#262d3a",
+            ColorToken::EmptyTrack => "#343b49",
+            ColorToken::GreenHi => "#b5e890",
         }
     }
 
@@ -126,5 +136,14 @@ mod tests {
         assert_eq!(box_chars::TL, "┏");
         assert_eq!(box_chars::V, "┃");
         assert_eq!(box_chars::DIAMOND, "◆");
+    }
+
+    #[test]
+    fn new_surface_tokens_hex() {
+        assert_eq!(ColorToken::Surface.hex(), "#1b202a");
+        assert_eq!(ColorToken::SelBg.hex(), "#2c333f");
+        assert_eq!(ColorToken::ChipBg.hex(), "#262d3a");
+        assert_eq!(ColorToken::EmptyTrack.hex(), "#343b49");
+        assert_eq!(ColorToken::GreenHi.hex(), "#b5e890");
     }
 }

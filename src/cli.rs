@@ -26,6 +26,10 @@ pub enum Command {
     Uninstall,
     Remove,
     Doctor,
+    /// Comando interno oculto — imprime `{font_family}\t{font_size}\n` de
+    /// `settings.menu` p/ o helper `scripts/agent-bar-open-terminal`. Não
+    /// aparece no help nem em `KNOWN_COMMANDS` (não é sugerido em typos).
+    MenuFont,
 }
 
 /// Formato de saída do módulo Waybar.
@@ -175,6 +179,8 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
             "menu" => opts.command = Command::Menu,
             "status" => opts.command = Command::Status,
             "setup" => opts.command = Command::Setup,
+            // Oculto: usado só pelo helper Bash (scripts/agent-bar-open-terminal).
+            "menu-font" => opts.command = Command::MenuFont,
 
             "assets" => {
                 if args.get(i + 1).map(|s| s.as_str()) == Some("install") {
@@ -806,6 +812,12 @@ mod tests {
             parse_args(&args(&["doctor"])).unwrap().command,
             Command::Doctor
         );
+    }
+
+    #[test]
+    fn menu_font_parses_as_command() {
+        let opts = parse_args(&args(&["menu-font"])).unwrap();
+        assert_eq!(opts.command, Command::MenuFont);
     }
 
     #[test]

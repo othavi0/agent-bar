@@ -51,6 +51,53 @@ impl Ctx<'_> {
     }
 }
 
+/// Ctx com ownership — cruza threads (fetch fora do event loop, Task 5).
+#[derive(Clone)]
+pub struct OwnedCtx {
+    pub client: reqwest::Client,
+    pub paths: Paths,
+    pub settings: Settings,
+    pub local_offset: UtcOffset,
+    pub claude_usage_url: String,
+    pub version: &'static str,
+    pub home: std::path::PathBuf,
+}
+
+impl OwnedCtx {
+    pub fn from_ctx(ctx: &Ctx<'_>) -> Self {
+        Self {
+            client: ctx.client.clone(),
+            paths: ctx.paths.clone(),
+            settings: ctx.settings.clone(),
+            local_offset: ctx.local_offset,
+            claude_usage_url: ctx.claude_usage_url.clone(),
+            version: ctx.version,
+            home: ctx.home.clone(),
+        }
+    }
+
+    pub fn as_ctx(&self, now_ms: u64) -> Ctx<'_> {
+        Ctx {
+            client: &self.client,
+            paths: &self.paths,
+            settings: &self.settings,
+            now_ms,
+            local_offset: self.local_offset,
+            claude_usage_url: self.claude_usage_url.clone(),
+            version: self.version,
+            home: self.home.clone(),
+        }
+    }
+
+    /// Epoch ms do relógio real (o fetch em thread não tem `ctx.now_ms` fresco).
+    pub fn now_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
+}
+
 #[async_trait(?Send)]
 pub trait Provider {
     fn id(&self) -> &'static str;
@@ -89,7 +136,7 @@ pub fn iso_from_ms(ms: u64) -> String {
     )
 }
 
-async fn fetch_one(provider: &dyn Provider, ctx: &Ctx<'_>) -> ProviderQuota {
+pub(crate) async fn fetch_one(provider: &dyn Provider, ctx: &Ctx<'_>) -> ProviderQuota {
     let timeout = Duration::from_secs(crate::config::PROVIDER_TIMEOUT_SECS);
     let mut attempt = 0u32;
     loop {
@@ -338,5 +385,22 @@ mod tests {
         let client = reqwest::Client::new();
         let ctx = ctx_for(dir.path(), &settings, &client, 0);
         assert!(get_quota_for("nope", &ctx).await.is_none());
+    }
+
+    // --- Task 4: OwnedCtx ---
+
+    #[test]
+    fn owned_ctx_round_trips_to_ctx() {
+        let dir = tempdir().unwrap();
+        let settings = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &settings, &client, 42);
+        let owned = OwnedCtx::from_ctx(&ctx);
+        let back = owned.as_ctx(43);
+        assert_eq!(back.now_ms, 43);
+        assert_eq!(back.claude_usage_url, ctx.claude_usage_url);
+        assert_eq!(back.home, ctx.home);
+        // Clonável (requisito para cruzar thread):
+        let _second = owned.clone();
     }
 }

@@ -113,6 +113,16 @@ pub struct CacheSettings {
     pub ttl: BTreeMap<String, u32>,
 }
 
+/// Configuração da UI do menu TUI (fonte/tamanho/animações). Consumida
+/// pela TUI a partir da Task 16.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MenuSettings {
+    pub animations: bool,
+    pub font_family: String,
+    pub font_size: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -123,6 +133,9 @@ pub struct Settings {
     pub window_policy: BTreeMap<String, WindowPolicy>,
     pub notify: Notify,
     pub cache: CacheSettings,
+    /// Configuração da UI do menu TUI. Default: animações on, "IBM Plex
+    /// Mono", 12pt. Configurável em settings.json como "menu": {...}.
+    pub menu: MenuSettings,
     /// Modo de glyph para a TUI (box-drawing universal ou nerd-font opt-in).
     /// Default: Box. Configurável em settings.json como "glyphMode": "box" | "nerd".
     pub glyph_mode: GlyphMode,
@@ -141,6 +154,7 @@ struct RawSettings {
     window_policy: Option<BTreeMap<String, String>>,
     notify: Option<RawNotify>,
     cache: Option<RawCache>,
+    menu: Option<RawMenu>,
     #[serde(rename = "glyphMode")]
     glyph_mode: Option<String>,
     #[serde(rename = "fxRate")]
@@ -167,6 +181,14 @@ struct RawNotify {
 #[derive(Debug, Default, Deserialize)]
 struct RawCache {
     ttl: Option<BTreeMap<String, u32>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawMenu {
+    animations: Option<bool>,
+    font_family: Option<String>,
+    font_size: Option<u32>,
 }
 
 fn default_providers() -> Vec<String> {
@@ -250,6 +272,16 @@ fn normalize(raw: RawSettings) -> Settings {
         }
     }
 
+    // menu: defaults mesclados com overrides do raw (leniente por campo).
+    let rm = raw.menu.unwrap_or_default();
+    let menu = MenuSettings {
+        animations: rm.animations.unwrap_or(true),
+        font_family: rm
+            .font_family
+            .unwrap_or_else(|| "IBM Plex Mono".to_string()),
+        font_size: rm.font_size.unwrap_or(12),
+    };
+
     let glyph_mode = raw
         .glyph_mode
         .as_deref()
@@ -281,6 +313,7 @@ fn normalize(raw: RawSettings) -> Settings {
             enabled: raw.notify.and_then(|n| n.enabled) != Some(false),
         },
         cache: CacheSettings { ttl },
+        menu,
         glyph_mode,
         fx_rate,
     }
@@ -452,6 +485,31 @@ mod tests {
         std::fs::write(p.settings_file(), r#"{"glyphMode":"emoji"}"#).unwrap();
         let s = load(&p);
         assert_eq!(s.glyph_mode, GlyphMode::Box);
+    }
+
+    #[test]
+    fn menu_settings_defaults() {
+        let dir = tempdir().unwrap();
+        let s = load(&paths_in(dir.path()));
+        assert!(s.menu.animations);
+        assert_eq!(s.menu.font_family, "IBM Plex Mono");
+        assert_eq!(s.menu.font_size, 12);
+    }
+
+    #[test]
+    fn menu_settings_from_json() {
+        let dir = tempdir().unwrap();
+        let p = paths_in(dir.path());
+        std::fs::create_dir_all(&p.config_dir).unwrap();
+        std::fs::write(
+            p.settings_file(),
+            r#"{"menu":{"animations":false,"fontFamily":"Geist Mono","fontSize":13}}"#,
+        )
+        .unwrap();
+        let s = load(&p);
+        assert!(!s.menu.animations);
+        assert_eq!(s.menu.font_family, "Geist Mono");
+        assert_eq!(s.menu.font_size, 13);
     }
 
     #[test]

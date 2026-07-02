@@ -209,6 +209,22 @@ async fn main() {
             }
         }
 
+        // Comando interno oculto — usado só pelo helper Bash para saber a
+        // fonte do menu. stdout LIMPO: exatamente 1 linha TSV (contrato do
+        // helper).
+        Command::MenuFont => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let settings = settings::load(&paths);
+            println!("{}\t{}", settings.menu.font_family, settings.menu.font_size);
+            std::process::exit(0);
+        }
+
         Command::Doctor => {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)

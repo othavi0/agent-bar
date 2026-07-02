@@ -19,6 +19,18 @@ pub fn severity_color(pct: Option<f64>) -> Color {
     to_ratatui(token)
 }
 
+/// Severidade com precedência da API (spec §4.1): valores conhecidos da API
+/// vencem o threshold local; desconhecido/ausente cai no cálculo local.
+pub fn severity_color_api(api: Option<&str>, remaining_pct: Option<f64>) -> Color {
+    use crate::theme::ColorToken;
+    match api.map(str::to_ascii_lowercase).as_deref() {
+        Some("normal") | Some("ok") => to_ratatui(ColorToken::Green),
+        Some("warning") | Some("elevated") | Some("high") => to_ratatui(ColorToken::Yellow),
+        Some("critical") | Some("exceeded") | Some("blocked") => to_ratatui(ColorToken::Red),
+        _ => severity_color(remaining_pct),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +72,32 @@ mod tests {
         assert_eq!(severity_color(Some(0.0)), color(ColorToken::Red));
         assert_eq!(severity_color(Some(1.0)), color(ColorToken::Red));
         assert_eq!(severity_color(Some(9.9)), color(ColorToken::Red));
+    }
+
+    #[test]
+    fn api_severity_takes_precedence() {
+        use crate::theme::ColorToken;
+        // API diz normal mesmo com pct baixo → verde (fonte oficial vence):
+        assert_eq!(
+            severity_color_api(Some("normal"), Some(5.0)),
+            to_ratatui(ColorToken::Green)
+        );
+        assert_eq!(
+            severity_color_api(Some("warning"), Some(90.0)),
+            to_ratatui(ColorToken::Yellow)
+        );
+        assert_eq!(
+            severity_color_api(Some("critical"), None),
+            to_ratatui(ColorToken::Red)
+        );
+        // Desconhecida/absent → fallback threshold local:
+        assert_eq!(
+            severity_color_api(Some("banana"), Some(5.0)),
+            severity_color(Some(5.0))
+        );
+        assert_eq!(
+            severity_color_api(None, Some(50.0)),
+            severity_color(Some(50.0))
+        );
     }
 }

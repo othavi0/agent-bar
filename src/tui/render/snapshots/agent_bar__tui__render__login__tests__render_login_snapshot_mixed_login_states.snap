@@ -1,0 +1,20 @@
+---
+source: src/tui/render/login.rs
+expression: terminal.backend()
+---
+"┏ Login ━━━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
+"┃ > ◆ Claude ✓ ok            ┃┃ Claude                         ┃"
+"┃   ● Codex  × sem token     ┃┃                                ┃"
+"┃   ● Amp    ! erro          ┃┃ Abre a REPL do Claude. Digite /┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃                                ┃"
+"┃                            ┃┃ ↵ iniciar login     esc voltar ┃"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
