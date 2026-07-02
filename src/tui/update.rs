@@ -335,6 +335,14 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             // re-disparar o efeito.
             if state.screen != old_screen {
                 state.fx_queue.push(FxEvent::ScreenChanged);
+                // `state.scroll` é compartilhado entre telas (ScrollView do
+                // Overview e, agora, a tabela do History) — sem reset, uma
+                // posição de scroll deixada numa tela (ex. Overview rolado)
+                // vaza pra outra tela sem relação nenhuma com aquele offset
+                // (History abriria com linhas de dado já puladas). Reseta
+                // só quando a tela de fato muda, não quando reativa a que
+                // já está ativa (mesmo critério do ScreenChanged acima).
+                state.scroll = 0;
             }
             follow_ups
         }
@@ -851,6 +859,28 @@ mod tests {
         assert_eq!(state.screen, Screen::Waybar);
         // Entrar na Waybar inicializa o config (comportamento atual do SwitchTab):
         assert!(matches!(fu.as_slice(), [Action::InitConfig(_)]));
+    }
+
+    #[test]
+    fn activate_screen_change_resets_scroll() {
+        // `state.scroll` e compartilhado entre telas (ScrollView do Overview
+        // e a tabela do History) — sem reset, uma posicao de scroll deixada
+        // numa tela vaza pra outra sem relacao nenhuma com aquele offset.
+        let mut state = AppState::new();
+        state.scroll = 12;
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        assert_eq!(state.scroll, 0, "trocar de tela deve zerar o scroll");
+
+        // Reativar a MESMA tela (ex. atalho 'h' de novo em cima de History)
+        // nao deve mexer no scroll do usuario ali dentro.
+        state.scroll = 5;
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        assert_eq!(
+            state.scroll, 5,
+            "reativar a tela ja ativa nao deve reset o scroll"
+        );
     }
 
     #[test]

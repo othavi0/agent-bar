@@ -110,6 +110,12 @@ fn help_text() -> Text<'static> {
     ));
     lines.push(Line::from(""));
 
+    lines.extend(help_section(
+        "Histórico",
+        &[("t", "alterna 24h/7d \u{b7} wheel rola a tabela")],
+    ));
+    lines.push(Line::from(""));
+
     lines.push(
         Line::from(Span::styled(
             "click seleciona \u{b7} wheel rola \u{b7} shift+drag seleciona texto",

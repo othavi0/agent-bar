@@ -227,7 +227,7 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
     .split(inner);
 
     render_chart(state, frame, vert[0], records, now, hours);
-    render_table(frame, vert[1], &provider_buckets, amp_dollars);
+    render_table(frame, vert[1], &provider_buckets, amp_dollars, state.scroll);
     render_footer_chips(frame, vert[2], hits);
 }
 
@@ -345,11 +345,22 @@ fn render_chart(
 /// de `bucket_by_provider_day`, cor da linha = marca do provider. Linha
 /// final do Amp (se `amp_dollars` presente): tokens "–", custo com o resumo
 /// de crédito + nota "sem logs locais de token" em Comment.
+///
+/// `scroll` (`state.scroll`, compartilhado com o ScrollView do Overview):
+/// offset vertical nas LINHAS DE DADOS — o header nunca rola (sempre ocupa
+/// a 1a linha de `area`). O layout externo (`render_history`) já entrega
+/// aqui a altura REAL concedida pelo solver de constraints (pode ser menor
+/// que `table_len`, o "tamanho desejado" usado só como hint); antes deste
+/// fix, `Table` sempre desenhava a partir do início do Vec e as linhas além
+/// da altura concedida ficavam inalcançáveis em terminal baixo — clamp
+/// local (nunca muta `state`) segue o mesmo padrão do `render_cards` do
+/// dashboard.
 fn render_table(
     frame: &mut Frame,
     area: Rect,
     provider_buckets: &BTreeMap<String, Vec<DayBucket>>,
     amp_dollars: Option<&AmpDollars>,
+    scroll: u16,
 ) {
     if area.height == 0 {
         return;
@@ -426,8 +437,77 @@ fn render_table(
         Constraint::Fill(1),
     ];
 
-    let table = Table::new(rows, widths).header(header).column_spacing(1);
+    // Clamp local: header reserva a 1a linha, o resto é viewport de dados.
+    let total_rows = rows.len();
+    let visible_rows = area.height.saturating_sub(1) as usize;
+    let max_scroll = total_rows.saturating_sub(visible_rows);
+    let scroll = (scroll as usize).min(max_scroll);
+    let hidden_above = scroll;
+    let visible: Vec<Row<'_>> = rows.into_iter().skip(scroll).take(visible_rows).collect();
+    let visible_len = visible.len();
+    let hidden_below = total_rows.saturating_sub(scroll + visible_len);
+
+    let table = Table::new(visible, widths).header(header).column_spacing(1);
     frame.render_widget(table, area);
+
+    render_overflow_indicators(frame, area, hidden_above, hidden_below, visible_len);
+}
+
+/// Indicador de overflow (`▲ +N` acima / `▼ +N` abaixo) quando o clamp de
+/// `render_table` esconde linhas fora do viewport — derive do clamp, nunca
+/// de um cálculo paralelo. Desenhado por cima da última coluna (Comment),
+/// alinhado à direita: só ocupa a largura do próprio texto, não a linha
+/// inteira (senão apagaria as células de dado daquela linha).
+fn render_overflow_indicators(
+    frame: &mut Frame,
+    area: Rect,
+    hidden_above: usize,
+    hidden_below: usize,
+    visible_len: usize,
+) {
+    if visible_len == 0 {
+        return;
+    }
+    let top = (hidden_above > 0).then(|| format!("\u{25b2} +{hidden_above}"));
+    let bottom = (hidden_below > 0).then(|| format!("\u{25bc} +{hidden_below}"));
+    // Linha 0 de `area` é o header; a 1a linha de dados visível é a linha 1,
+    // a última é `visible_len` (1-indexado a partir do header).
+    let last_row_offset = visible_len as u16;
+    match (top, bottom) {
+        (Some(t), Some(b)) if last_row_offset == 1 => {
+            // Só 1 linha visível: os dois indicadores caem na mesma linha —
+            // combina num único span em vez de um sobrescrever o outro.
+            render_overflow_span(frame, area, 1, &format!("{t} {b}"));
+        }
+        (top, bottom) => {
+            if let Some(t) = top {
+                render_overflow_span(frame, area, 1, &t);
+            }
+            if let Some(b) = bottom {
+                render_overflow_span(frame, area, last_row_offset, &b);
+            }
+        }
+    }
+}
+
+fn render_overflow_span(frame: &mut Frame, area: Rect, row_offset: u16, text: &str) {
+    let w = (text.chars().count() as u16).min(area.width);
+    if w == 0 || row_offset >= area.height {
+        return;
+    }
+    let rect = Rect::new(
+        area.x + area.width.saturating_sub(w),
+        area.y + row_offset,
+        w,
+        1,
+    );
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            text.to_string(),
+            Style::default().fg(to_ratatui(ColorToken::Comment)),
+        )),
+        rect,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -729,4 +809,92 @@ mod tests {
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
+
+    // -----------------------------------------------------------------
+    // Fix: `state.scroll` na tabela (dados inalcançáveis em terminal baixo)
+    // -----------------------------------------------------------------
+
+    /// Muitos providers/dias sintéticos numa área curta (100x20 — mesmo
+    /// terminal do smoke manual da spec) força a tabela a ter menos altura
+    /// do que `total_rows`. Antes do fix, a tabela sempre desenhava a
+    /// partir do topo do Vec e as linhas abaixo ficavam permanentemente
+    /// inalcançáveis; `state.scroll=5` prova que a janela desliza e os
+    /// indicadores ▲/▼ aparecem.
+    fn many_provider_day_records(now: time::OffsetDateTime) -> Vec<UsageRecord> {
+        let mut records = vec![];
+        for provider in ["claude", "codex", "amp2"] {
+            for d in 0..10 {
+                records.push(rec(
+                    provider,
+                    "m",
+                    now - time::Duration::days(d),
+                    1000 + d as u64,
+                ));
+            }
+        }
+        records
+    }
+
+    #[test]
+    fn history_table_scrolled() {
+        let backend = ratatui::backend::TestBackend::new(100, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
+        state.last_update = Some(now);
+        state.history = Some(many_provider_day_records(now));
+        state.scroll = 5;
+        terminal
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// Clamp local: scroll absurdamente além do fim não pode panicar nem
+    /// deixar a tabela vazia — trava na última página (mesmo padrão do
+    /// `render_cards` do dashboard, que faz `state.scroll.min(max_scroll)`
+    /// sem mutar `state`). Na última página só o indicador ▲ (linhas
+    /// acima) pode aparecer — ▼ nunca, já que não sobra nada abaixo.
+    #[test]
+    fn history_table_scroll_clamps_beyond_max() {
+        let backend = ratatui::backend::TestBackend::new(100, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
+        state.last_update = Some(now);
+        state.history = Some(many_provider_day_records(now));
+        state.scroll = u16::MAX;
+        terminal
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        let buf = terminal.backend().buffer().clone();
+        let mut lines: Vec<String> = Vec::new();
+        for y in 0..buf.area.height {
+            let mut line = String::new();
+            for x in 0..buf.area.width {
+                line.push_str(buf.cell((x, y)).unwrap().symbol());
+            }
+            lines.push(line);
+        }
+        let text = lines.join("\n");
+        assert!(
+            !text.contains('\u{25bc}'),
+            "não pode sobrar indicador ▼ na última página:\n{text}"
+        );
+        assert!(
+            text.contains('\u{25b2}'),
+            "esperava indicador ▲ (linhas ocultas acima) na última página:\n{text}"
+        );
+        // A última linha de dados sintética é a de "d=0" (mais recente,
+        // 07/02 = `now`, último provider em ordem alfabética "codex") —
+        // tem que estar visível na última página, senão o clamp cortou
+        // demais e escondeu dado alcançável.
+        assert!(
+            text.contains("07/02"),
+            "esperava a última linha de dados (d=0, 07/02) visível:\n{text}"
+        );
+    }
 }
+
