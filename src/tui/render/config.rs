@@ -7,11 +7,14 @@ use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
 use ratatui::Frame;
 
 use crate::theme::ColorToken;
+use crate::tui::mouse::HitMap;
 use crate::tui::state::{AppState, ConfigField, ConfigState};
 use crate::tui::theme_bridge::to_ratatui;
 
 /// Renders a aba Waybar config.
-pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect) {
+///
+/// `_hits`: repassado pelo dispatcher — usos reais nas Tasks 11-14.
+pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect, _hits: &mut HitMap) {
     // Layout: [field_list | detail_panel]
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
@@ -264,7 +267,7 @@ mod tests {
         let state = state_on_waybar();
         terminal
             .draw(|f| {
-                render_config(&state, f, f.area());
+                render_config(&state, f, f.area(), &mut HitMap::default());
             })
             .unwrap();
         // Se chegou aqui sem panico, o render esta basico OK.
@@ -276,7 +279,7 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let state = state_on_waybar();
         terminal
-            .draw(|f| render_config(&state, f, f.area()))
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -292,7 +295,7 @@ mod tests {
             cs.input = tui_input::Input::new("6.25".to_string());
         }
         terminal
-            .draw(|f| render_config(&state, f, f.area()))
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
@@ -306,7 +309,7 @@ mod tests {
             cs.status_msg = Some("Configuracao salva e Waybar recarregado.".to_string());
         }
         terminal
-            .draw(|f| render_config(&state, f, f.area()))
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }

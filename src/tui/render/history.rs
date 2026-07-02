@@ -10,6 +10,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Cell, Row, Table};
 use ratatui::Frame;
 
 use crate::theme::ColorToken;
+use crate::tui::mouse::HitMap;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::sparkline::sparkline_str_wide;
@@ -31,7 +32,9 @@ fn fmt_tokens(n: u64) -> String {
 }
 
 /// Renderiza a aba History: sparklines + tabela de totais por provider.
-pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect) {
+///
+/// `_hits`: repassado pelo dispatcher — usos reais nas Tasks 11-14.
+pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, _hits: &mut HitMap) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
@@ -336,7 +339,7 @@ pub mod tests {
         ]);
 
         terminal
-            .draw(|f| render_history(&state, f, f.area()))
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
 
         insta::assert_snapshot!(terminal.backend());
@@ -352,7 +355,7 @@ pub mod tests {
         state.history = Some(vec![]);
 
         terminal
-            .draw(|f| render_history(&state, f, f.area()))
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
 
         insta::assert_snapshot!(terminal.backend());
@@ -368,7 +371,7 @@ pub mod tests {
         // history = None simula ainda-nao-carregado
 
         terminal
-            .draw(|f| render_history(&state, f, f.area()))
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
 
         insta::assert_snapshot!(terminal.backend());
@@ -420,7 +423,7 @@ pub mod tests {
         ]);
 
         terminal
-            .draw(|f| render_history(&state, f, f.area()))
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
 
         insta::assert_snapshot!(terminal.backend());

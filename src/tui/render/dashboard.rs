@@ -5,6 +5,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Cell, Row, Table};
 use ratatui::Frame;
 
 use crate::theme::ColorToken;
+use crate::tui::mouse::HitMap;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::quota_gauge::gauge_spans;
@@ -50,7 +51,11 @@ fn fmt_provider_cost(pu: &ProviderUsage) -> String {
 }
 
 /// Renders the Dashboard tab: a table of all providers with usage bars.
-pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
+///
+/// `_hits`: repassado pelo dispatcher (`render/mod.rs`) — o content novo
+/// ainda nao registra zonas proprias aqui; usos reais chegam nas Tasks
+/// 11-14 quando esta tela ganha chips de acao.
+pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect, _hits: &mut HitMap) {
     let header_style = Style::default()
         .fg(to_ratatui(ColorToken::Muted))
         .add_modifier(Modifier::BOLD);

@@ -3,28 +3,30 @@ pub mod dashboard;
 pub mod detail;
 pub mod history;
 pub mod login;
-pub mod status_bar;
+pub mod sidebar;
 
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, BorderType, Borders, List, ListItem};
+use ratatui::widgets::{Block, BorderType, Borders};
 use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 use tui_popup::Popup;
 
 use crate::theme::ColorToken;
-use crate::tui::mouse::{HitMap, MouseTarget};
-use crate::tui::state::{AppState, FetchStatus, Screen};
+use crate::tui::mouse::HitMap;
+use crate::tui::state::{AppState, Screen};
 use crate::tui::theme_bridge::to_ratatui;
-use crate::tui::widgets::provider_list::provider_list_item;
 
 use self::config::render_config;
 use self::dashboard::render_dashboard;
 use self::detail::render_detail;
 use self::history::render_history;
 use self::login::render_login;
-use self::status_bar::render_status_bar;
+use self::sidebar::render_sidebar;
+
+/// Largura abaixo da qual a sidebar colapsa pra so a coluna de marcas.
+const NARROW_WIDTH: u16 = 80;
 
 /// Constroi o conteudo do overlay de ajuda (atalhos de teclado).
 fn help_text() -> Text<'static> {
@@ -209,7 +211,56 @@ fn help_text() -> Text<'static> {
     ])
 }
 
+/// Título direito da moldura externa: spinner (quando ha fetch em voo) +
+/// custo de hoje + relogio da ultima atualizacao.
+fn header_status(state: &AppState) -> Line<'static> {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+
+    if !state.fetch_pending.is_empty() {
+        let throbber_widget = Throbber::default()
+            .throbber_set(BRAILLE_SIX)
+            .throbber_style(
+                Style::default()
+                    .fg(to_ratatui(ColorToken::Cyan))
+                    .add_modifier(Modifier::BOLD),
+            )
+            .use_type(throbber_widgets_tui::WhichUse::Spin);
+        let mut throbber_state = ThrobberState::default();
+        for _ in 0..state.throbber.index {
+            throbber_state.calc_next();
+        }
+        spans.push(throbber_widget.to_symbol_span(&throbber_state));
+        spans.push(Span::raw(" \u{b7} "));
+    }
+
+    let cost = state
+        .usage
+        .as_ref()
+        .map(|u| format!("${:.2}", u.total_cost.usd))
+        .unwrap_or_else(|| "-".to_string());
+    spans.push(Span::styled(
+        cost,
+        Style::default().fg(to_ratatui(ColorToken::TextBright)),
+    ));
+
+    if let Some(dt) = state.last_update {
+        spans.push(Span::raw(" \u{b7} "));
+        spans.push(Span::styled(
+            format!("{:02}:{:02}", dt.hour(), dt.minute()),
+            Style::default().fg(to_ratatui(ColorToken::Comment)),
+        ));
+    }
+
+    spans.push(Span::raw(" "));
+    Line::from(spans).right_aligned()
+}
+
 /// Top-level render: lays out the full TUI and dispatches to sub-renders.
+///
+/// Moldura externa unica `BorderType::Rounded` com titulo ` agent-bar `
+/// (esquerda) + status (direita). Interna: `[sidebar | content]`
+/// horizontal — sidebar colapsa pra so a coluna de marcas quando o
+/// terminal e mais estreito que `NARROW_WIDTH`.
 ///
 /// `hits` acumula as zonas clicaveis do frame atual (Task 9) — o event_loop
 /// consulta via `HitMap::at` ao processar `MouseEvent`. O caller e
@@ -219,18 +270,31 @@ fn help_text() -> Text<'static> {
 pub fn render(state: &AppState, frame: &mut Frame, hits: &mut HitMap) {
     let area = frame.area();
 
-    // Vertical split: [body (fill), status_bar (1)]. Sem tab bar — navegacao
-    // e via sidebar unica (Task 8); o layout visual completo e a Task 10.
-    let vert = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
-        .split(area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)))
+        .title(Span::styled(
+            " agent-bar ",
+            Style::default()
+                .fg(to_ratatui(ColorToken::Blue))
+                .add_modifier(Modifier::BOLD),
+        ))
+        .title(header_status(state));
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
 
-    let body_area = vert[0];
-    let status_area = vert[1];
+    let sidebar_w: u16 = if area.width < NARROW_WIDTH { 3 } else { 17 };
+    let cols = Layout::horizontal([Constraint::Length(sidebar_w), Constraint::Min(0)]).split(inner);
 
-    render_body(state, frame, body_area, hits);
-    render_status_bar(state, frame, status_area);
+    render_sidebar(state, frame, cols[0], hits);
+    match state.screen {
+        Screen::Overview => render_dashboard(state, frame, cols[1], hits),
+        Screen::Detail => render_detail(state, frame, cols[1], hits),
+        Screen::History => render_history(state, frame, cols[1], hits),
+        Screen::Login => render_login(state, frame, cols[1], hits),
+        Screen::Waybar => render_config(state, frame, cols[1], hits),
+    }
 
     // Overlay de ajuda: renderizado por cima de tudo quando show_help=true.
     if state.show_help {
@@ -250,147 +314,11 @@ pub fn render(state: &AppState, frame: &mut Frame, hits: &mut HitMap) {
     }
 }
 
-/// Renders the body: sidebar (providers) + content panel.
-fn render_body(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
-    // Horizontal split: [sidebar (17), content (fill)]
-    let horiz = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(17), Constraint::Min(0)])
-        .split(area);
-
-    let sidebar_area = horiz[0];
-    let content_area = horiz[1];
-
-    render_sidebar(state, frame, sidebar_area, hits);
-    render_content(state, frame, content_area);
-}
-
-/// Renders the provider sidebar.
-///
-/// Registra no HitMap uma zona por linha visivel do painel PROVIDERS (Task
-/// 9). A sidebar visual atual so lista providers (nao Overview/History/
-/// Login/Waybar — isso e o redesign da Task 10); o indice logico registrado
-/// e `sidebar_items()[i+1]` (o item na posicao `i+1` porque `Overview`
-/// ocupa a posicao 0 sem ter uma linha propria hoje), consistente com o
-/// espaco de indices que `Action::Click(MouseTarget::Sidebar(_))` consome.
-fn render_sidebar(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
-    // Sidebar sempre em foco (nao ha mais painel de conteudo com foco
-    // proprio nesta versao minima — Task 10 redesenha o layout completo).
-    let border_color = to_ratatui(ColorToken::Blue);
-
-    let title_style = Style::default()
-        .fg(to_ratatui(ColorToken::TextBright))
-        .add_modifier(Modifier::BOLD);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(border_color))
-        .title(Span::styled("PROVIDERS", title_style));
-
-    // Area interna (sem as bordas) — usada abaixo para calcular a linha de
-    // cada zona clicavel. Calculado ANTES de `block` ser movido pro `List`.
-    let inner = block.inner(area);
-
-    // Animação D (pulse crítico): blink lento ~450ms.
-    // 30ms/tick → 450ms = 15 ticks. Visível nos primeiros 7-8 ticks, dim nos seguintes.
-    let blink_visible = (state.anim_frame / 15) % 2 == 0;
-
-    let items: Vec<ListItem<'_>> = {
-        let mut v: Vec<ListItem<'_>> = state
-            .providers
-            .iter()
-            .enumerate()
-            .map(|(i, pv)| {
-                let remaining = pv
-                    .quota
-                    .primary
-                    .as_ref()
-                    .map(|w| w.remaining)
-                    .unwrap_or(0.0);
-                let is_critical = remaining < 10.0;
-                provider_list_item(pv, i == state.selected, is_critical, blink_visible)
-            })
-            .collect();
-
-        // Animação C (throbber): indicador de carregamento enquanto Loading.
-        match &state.status {
-            FetchStatus::Loading => {
-                // Constrói o throbber braille com o índice do estado de animação.
-                let throbber_widget = Throbber::default()
-                    .throbber_set(BRAILLE_SIX)
-                    .throbber_style(
-                        Style::default()
-                            .fg(to_ratatui(ColorToken::Cyan))
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .use_type(throbber_widgets_tui::WhichUse::Spin);
-                let mut throbber_state = ThrobberState::default();
-                // Sincroniza o índice com o estado de animação do AppState.
-                for _ in 0..state.throbber.index {
-                    throbber_state.calc_next();
-                }
-                let symbol_span = throbber_widget.to_symbol_span(&throbber_state);
-                // Prefixo " " para alinhamento com os itens da lista.
-                let mut spans = vec![Span::raw(" "), symbol_span];
-                // Progresso por provider (Task 5): lista os ids ainda em voo
-                // enquanto o fetch assíncrono roda em thread própria.
-                if !state.fetch_pending.is_empty() {
-                    spans.push(Span::styled(
-                        format!(" atualizando: {}", state.fetch_pending.join(" ")),
-                        Style::default().fg(to_ratatui(ColorToken::Comment)),
-                    ));
-                }
-                let line = Line::from(spans);
-                v.push(ListItem::new(line));
-            }
-            FetchStatus::Failed(_) => {
-                v.push(ListItem::new(Span::styled(
-                    " err",
-                    Style::default().fg(to_ratatui(ColorToken::Red)),
-                )));
-            }
-            _ => {}
-        }
-
-        v
-    };
-
-    // Zonas clicaveis: uma por linha de provider visivel (a lista nao tem
-    // scroll — itens alem de `inner.height` sao clipados pelo widget e nao
-    // ficam clicaveis). A linha da throbber/err (abaixo, apendada ao final
-    // de `items`) nao registra zona: nao tem MouseTarget correspondente
-    // ainda.
-    for (i, _) in state.providers.iter().enumerate() {
-        if (i as u16) >= inner.height {
-            break;
-        }
-        let row = Rect::new(inner.x, inner.y + i as u16, inner.width, 1);
-        // sidebar_items() = [Overview, Provider(0), Provider(1), ..., History,
-        // Login, Waybar]; a linha visual `i` do provider corresponde ao
-        // indice logico `i + 1` (Overview ocupa o indice 0 sem linha propria).
-        hits.push(row, MouseTarget::Sidebar(i + 1));
-    }
-
-    let list = List::new(items).block(block);
-    frame.render_widget(list, area);
-}
-
-/// Dispatches content rendering based on the current screen.
-fn render_content(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
-    match state.screen {
-        Screen::Overview => render_dashboard(state, frame, area),
-        Screen::Detail => render_detail(state, frame, area),
-        Screen::History => render_history(state, frame, area),
-        Screen::Login => render_login(state, None, frame, area),
-        Screen::Waybar => render_config(state, frame, area),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::providers::types::{ProviderQuota, QuotaWindow};
+    use crate::tui::mouse::MouseTarget;
     use crate::tui::state::{FetchStatus, ProviderView};
     use crate::usage::amp::AmpDollars;
     use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageSummary};
@@ -599,7 +527,9 @@ mod tests {
 
     #[test]
     fn render_registers_sidebar_hit_zones() {
-        let backend = ratatui::backend::TestBackend::new(64, 20);
+        // Terminal largo (>=80) para exercitar a sidebar cheia (17 cols) —
+        // a colapsada tem teste dedicado em `sidebar_collapses_below_80_cols`.
+        let backend = ratatui::backend::TestBackend::new(90, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.providers = vec![
@@ -610,14 +540,35 @@ mod tests {
         let mut hits = HitMap::default();
         terminal.draw(|f| render(&state, f, &mut hits)).unwrap();
 
-        // Sidebar: x=0, largura 17, borda ALL -> inner comeca em (1,1).
-        // Linha visual 0 (claude) = indice logico 1 (Overview ocupa 0).
-        assert_eq!(hits.at(1, 1), Some(MouseTarget::Sidebar(1)));
-        // Linha visual 1 (codex) = indice logico 2.
-        assert_eq!(hits.at(1, 2), Some(MouseTarget::Sidebar(2)));
-        // Sem 3o provider — nao ha zona ali.
-        assert_eq!(hits.at(1, 3), None);
-        // Fora da sidebar inteiramente (coluna do content_area).
-        assert_eq!(hits.at(30, 1), None);
+        // Sidebar nova: TODOS os itens de sidebar_items() (Overview,
+        // Provider(0), Provider(1), History, Login, Waybar) tem zona
+        // clicavel 1:1 com o indice do cursor — nao so os providers como na
+        // sidebar antiga. Borda ALL Rounded -> inner comeca em (1,1);
+        // "VISAO" ocupa a 1a linha do inner, entao Overview cai na 2a.
+        assert_eq!(hits.at(1, 2), Some(MouseTarget::Sidebar(0))); // Overview
+        assert_eq!(hits.at(1, 5), Some(MouseTarget::Sidebar(1))); // claude
+        assert_eq!(hits.at(1, 6), Some(MouseTarget::Sidebar(2))); // codex
+        assert_eq!(hits.at(1, 9), Some(MouseTarget::Sidebar(3))); // History
+        assert_eq!(hits.at(1, 10), Some(MouseTarget::Sidebar(4))); // Login
+        assert_eq!(hits.at(1, 11), Some(MouseTarget::Sidebar(5))); // Waybar
+        // Fora da sidebar inteiramente (coluna do content_area, x=18).
+        assert_eq!(hits.at(50, 5), None);
+    }
+
+    #[test]
+    fn sidebar_collapses_below_80_cols() {
+        // < NARROW_WIDTH (80) -> sidebar Length(3), so a coluna de marcas.
+        let backend = ratatui::backend::TestBackend::new(70, 30);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let state = AppState::new();
+        let mut hits = HitMap::default();
+        terminal.draw(|f| render(&state, f, &mut hits)).unwrap();
+
+        // Overview e sempre o 1o item (1a linha do inner e o header VISAO,
+        // Overview cai na linha seguinte) — estavel independente do numero
+        // de providers. Borda ALL Rounded -> inner comeca em (1,1).
+        assert_eq!(hits.at(1, 2), Some(MouseTarget::Sidebar(0)));
+        assert_eq!(hits.at(3, 2), Some(MouseTarget::Sidebar(0))); // ultima col da sidebar colapsada (largura 3: x=1..4)
+        assert_eq!(hits.at(4, 2), None); // area de conteudo comeca na coluna 4
     }
 }

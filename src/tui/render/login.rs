@@ -8,19 +8,19 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
 use ratatui::Frame;
 
-use crate::config::Paths;
 use crate::theme::ColorToken;
 use crate::tui::login_state::{login_state_for, LoginState};
+use crate::tui::mouse::HitMap;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 
 /// Constantes dos providers da aba Login (id, nome de exibicao).
 const PROVIDERS: [(&str, &str); 3] = [("claude", "Claude"), ("codex", "Codex"), ("amp", "Amp")];
 
-/// Renderiza a aba Login completa. `_paths_opt` fica no signature so por
-/// compat com o dispatcher (`render/mod.rs`); o status de cada provider nao
-/// depende mais de paths de credencial — vem do `LoginState` (ultimo fetch).
-pub fn render_login(state: &AppState, _paths_opt: Option<&Paths>, frame: &mut Frame, area: Rect) {
+/// Renderiza a aba Login completa. O status de cada provider nao depende de
+/// paths de credencial — vem do `LoginState` (ultimo fetch real). `_hits`
+/// e repassado pelo dispatcher (`render/mod.rs`); usos reais nas Tasks 11-14.
+pub fn render_login(state: &AppState, frame: &mut Frame, area: Rect, _hits: &mut HitMap) {
     // Layout: [lista de providers | painel de detalhe/instrucao]
     // 28 cols cobre o pior caso sem truncar: prefixo " > " (3) + "Claude" (6)
     // + " [verificando…]" (15, o label mais longo) + 2 de borda = 26; +2 de
@@ -217,7 +217,7 @@ mod tests {
         terminal
             .draw(|f| {
                 let area = f.area();
-                render_login(&state, None, f, area);
+                render_login(&state, f, area, &mut HitMap::default());
             })
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
@@ -236,7 +236,7 @@ mod tests {
         terminal
             .draw(|f| {
                 let area = f.area();
-                render_login(&state, None, f, area);
+                render_login(&state, f, area, &mut HitMap::default());
             })
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
@@ -255,7 +255,7 @@ mod tests {
         terminal
             .draw(|f| {
                 let area = f.area();
-                render_login(&state, None, f, area);
+                render_login(&state, f, area, &mut HitMap::default());
             })
             .unwrap();
         insta::assert_snapshot!(terminal.backend());

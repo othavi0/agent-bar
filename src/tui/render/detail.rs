@@ -5,6 +5,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use ratatui::Frame;
 
 use crate::theme::ColorToken;
+use crate::tui::mouse::HitMap;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::quota_gauge::gauge_spans;
@@ -48,7 +49,9 @@ fn fmt_reset(resets_at: Option<&str>) -> String {
 }
 
 /// Renders the Detail view for the selected provider (Screen::Detail).
-pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
+///
+/// `_hits`: repassado pelo dispatcher — usos reais nas Tasks 11-14.
+pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect, _hits: &mut HitMap) {
     let provider = match state.providers.get(state.selected) {
         Some(pv) => pv,
         None => return render_empty(frame, area),
