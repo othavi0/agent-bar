@@ -8,7 +8,9 @@ use super::action::Action;
 
 /// Dispara o fetch (todos os providers, ou só `only`) numa thread própria com
 /// runtime tokio current_thread. Resultados chegam via `tx` como Actions.
-pub fn spawn_fetch(tx: &UnboundedSender<Action>, octx: OwnedCtx, only: Option<String>) {
+/// `silent` viaja até o `FetchCompleted` final (T16: gate do sweep — só
+/// ondas pedidas pelo usuário disparam o efeito, não o poll de 60s).
+pub fn spawn_fetch(tx: &UnboundedSender<Action>, octx: OwnedCtx, only: Option<String>, silent: bool) {
     let tx = tx.clone();
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Builder::new_current_thread()
@@ -43,6 +45,7 @@ pub fn spawn_fetch(tx: &UnboundedSender<Action>, octx: OwnedCtx, only: Option<St
             }
             let _ = tx.send(Action::FetchCompleted {
                 fetched_at: iso_from_ms(now),
+                silent,
             });
         });
     });

@@ -19,7 +19,12 @@ pub enum Action {
     /// variantes do enum (clippy::large_enum_variant).
     ProviderFetched(Box<ProviderQuota>),
     /// Todos terminaram. `fetched_at` ISO (mesmo formato do AllQuotas).
-    FetchCompleted { fetched_at: String },
+    /// `silent`: onda disparada pelo `data_tick` de 60s (poll de fundo) vs
+    /// onda pedida pelo usuário (load inicial, `r`/chip Refresh,
+    /// LoginFinished) — `update` só empurra `FxEvent::FetchLanded` (sweep,
+    /// T16) quando `!silent` (spec §8: sweep é feedback de ação do
+    /// usuário, não deve repetir a cada poll silencioso).
+    FetchCompleted { fetched_at: String, silent: bool },
     /// Pede ao event_loop para redisparar o parse de usage (interceptada).
     ReloadUsage,
     FetchFailed(String),

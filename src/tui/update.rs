@@ -416,11 +416,21 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
-        Action::FetchCompleted { fetched_at } => {
-            // Efeito sweep (T16): dispara sempre que uma onda de fetch
-            // termina, mesmo se outra onda sobreposta ainda estiver em voo
-            // (gatilho é a action chegando, não o status final agregado).
-            state.fx_queue.push(FxEvent::FetchLanded);
+        Action::FetchCompleted { fetched_at, silent } => {
+            // Efeito sweep (T16, fix pós-review): dispara quando uma onda
+            // de fetch termina, mesmo se outra onda sobreposta ainda
+            // estiver em voo (gatilho é a action chegando, não o status
+            // final agregado) — MAS só para ondas pedidas pelo usuário
+            // (load inicial, `r`/chip Refresh, LoginFinished). O poll
+            // silencioso de 60s (`silent=true`) NUNCA dispara o sweep
+            // (spec §8: efeito é feedback de ação, não deve repetir a cada
+            // minuto sem o usuário fazer nada). O resto do bookkeeping
+            // abaixo (last_update monotônico, status, ReloadUsage) é
+            // agnóstico à origem da onda — count-up do header pode
+            // continuar re-lerpando num poll silencioso, é sutil.
+            if !silent {
+                state.fx_queue.push(FxEvent::FetchLanded);
+            }
             // NAO limpa fetch_pending incondicionalmente: cada ProviderFetched
             // ja remove o proprio id. Se sobrar algo aqui, e porque outra onda
             // (Refresh/tick de 60s) ainda esta em voo — mantem Loading em vez
@@ -992,6 +1002,7 @@ mod tests {
             &mut state,
             Action::FetchCompleted {
                 fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
             },
         );
         assert_eq!(state.status, FetchStatus::Loaded);
@@ -1025,6 +1036,7 @@ mod tests {
             &mut state,
             Action::FetchCompleted {
                 fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
             },
         );
 
@@ -1053,6 +1065,7 @@ mod tests {
             &mut state,
             Action::FetchCompleted {
                 fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
             },
         );
         let after_first = state.last_update;
@@ -1070,6 +1083,7 @@ mod tests {
             &mut state,
             Action::FetchCompleted {
                 fetched_at: "2026-07-01T17:00:00.000Z".into(), // 1h antes
+                silent: false,
             },
         );
 
@@ -1130,6 +1144,7 @@ mod tests {
             &mut state,
             Action::FetchCompleted {
                 fetched_at: "2026-06-19T12:00:00.000Z".to_string(),
+                silent: false,
             },
         );
 
@@ -1256,9 +1271,29 @@ mod tests {
             &mut state,
             Action::FetchCompleted {
                 fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
             },
         );
         assert!(state.fx_queue.contains(&crate::tui::state::FxEvent::FetchLanded));
+    }
+
+    /// Fix pós-review (T16): `silent=true` (poll de 60s do `data_tick`) NÃO
+    /// deve disparar o sweep — spec §8 quer o efeito só em ondas pedidas
+    /// pelo usuário (load inicial, `r`/chip Refresh, LoginFinished).
+    #[test]
+    fn fetch_completed_silent_does_not_push_fetch_landed() {
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: true,
+            },
+        );
+        assert!(
+            !state.fx_queue.contains(&crate::tui::state::FxEvent::FetchLanded),
+            "onda silenciosa (poll de 60s) não deve empurrar FetchLanded"
+        );
     }
 
     #[test]

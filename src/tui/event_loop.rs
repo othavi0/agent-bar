@@ -145,15 +145,17 @@ fn drain(
             }
             // Refresh (tecla [r]) e interceptado: dispara refetch real fora do
             // event loop. update() ja garantiu que so re-enfileira quando nao
-            // ha fetch em voo (evita spawn_fetch duplicado).
+            // ha fetch em voo (evita spawn_fetch duplicado). silent=false:
+            // onda pedida pelo usuário — dispara o sweep (T16).
             Action::Refresh => {
-                super::fetch::spawn_fetch(bg_tx, octx.clone(), None);
+                super::fetch::spawn_fetch(bg_tx, octx.clone(), None, false);
             }
             // LoginFinished e interceptado: refetch so do provider que fez
             // login (nao passa por Refresh — o guard de fetch_pending
             // poderia engolir o refetch se uma onda cheia estiver em voo).
+            // silent=false: onda pedida pelo usuário (resultado do login).
             Action::LoginFinished(id) => {
-                super::fetch::spawn_fetch(bg_tx, octx.clone(), Some(id));
+                super::fetch::spawn_fetch(bg_tx, octx.clone(), Some(id), false);
             }
             other => {
                 update(state, other);
@@ -209,7 +211,9 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
 
     // Fetch inicial: dispara em thread propria e segue — o select! serve
     // teclado/animação já, sem esperar a rede (bug que esta task mata).
-    super::fetch::spawn_fetch(&bg_tx, octx.clone(), None);
+    // silent=false: primeiro load é ação do usuário (abrir o menu) —
+    // dispara o sweep (T16).
+    super::fetch::spawn_fetch(&bg_tx, octx.clone(), None, false);
 
     loop {
         terminal.draw(|f| {
@@ -289,9 +293,11 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
             _ = data_tick.tick() => {
                 // Guard igual ao Refresh: nao dispara uma 2a onda de fetch se
                 // a anterior ainda estiver em voo (evita ondas sobrepostas
-                // corromperem fetch_pending/status/last_update).
+                // corromperem fetch_pending/status/last_update). silent=true
+                // (fix pós-review T16): poll de fundo, sem ação do usuário —
+                // NÃO deve disparar o sweep a cada 60s (spec §8).
                 if state.fetch_pending.is_empty() {
-                    super::fetch::spawn_fetch(&bg_tx, octx.clone(), None);
+                    super::fetch::spawn_fetch(&bg_tx, octx.clone(), None, true);
                 }
             }
 
