@@ -323,6 +323,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
                             cache: crate::settings::CacheSettings {
                                 ttl: Default::default(),
                             },
+                            menu: crate::settings::MenuSettings {
+                                animations: true,
+                                font_family: "IBM Plex Mono".to_string(),
+                                font_size: 12,
+                            },
                             glyph_mode: crate::settings::GlyphMode::Box,
                             fx_rate: 5.50,
                         })]
@@ -1217,6 +1222,11 @@ mod tests {
             notify: Notify { enabled: true },
             cache: CacheSettings {
                 ttl: BTreeMap::new(),
+            },
+            menu: MenuSettings {
+                animations: true,
+                font_family: "IBM Plex Mono".to_string(),
+                font_size: 12,
             },
             glyph_mode: GlyphMode::Box,
             fx_rate: 5.50,

@@ -13,6 +13,7 @@ use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 use tui_scrollview::{ScrollView, ScrollViewState, ScrollbarVisibility};
 
 use crate::providers::types::QuotaWindow;
+use crate::settings::GlyphMode;
 use crate::theme::{provider_hex, ColorToken};
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap, MouseTarget};
@@ -20,6 +21,7 @@ use crate::tui::render::shared::series_now;
 use crate::tui::state::{AppState, ProviderView};
 use crate::tui::theme_bridge::{hex_to_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
+use crate::tui::widgets::icons::{glyph, Icon};
 use crate::tui::widgets::quota_gauge::gauge_spans;
 use crate::tui::widgets::severity::severity_color_api;
 use crate::tui::widgets::sparkline::sparkline_str;
@@ -110,22 +112,30 @@ fn render_cards(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitM
     }
 }
 
-fn login_status_span(logged: LoginState) -> Span<'static> {
+fn login_status_span(logged: LoginState, mode: GlyphMode) -> Span<'static> {
     match logged {
-        LoginState::Ok => Span::styled("\u{25cf} ok", Style::default().fg(to_ratatui(ColorToken::Green))),
+        LoginState::Ok => Span::styled(
+            format!("{} ok", glyph(Icon::Ok, mode)),
+            Style::default().fg(to_ratatui(ColorToken::Green)),
+        ),
+        // Checking nao tem Icon dedicado (estado transitorio): permanece ● literal.
         LoginState::Checking => Span::styled(
             "\u{25cf} verificando\u{2026}",
             Style::default().fg(to_ratatui(ColorToken::Yellow)),
         ),
         LoginState::NoToken => Span::styled(
-            "\u{25cf} sem token",
+            format!("{} sem token", glyph(Icon::NoToken, mode)),
             Style::default().fg(to_ratatui(ColorToken::Yellow)),
         ),
         LoginState::LoggedOut => Span::styled(
-            "\u{25cb} deslogado",
+            format!("{} deslogado", glyph(Icon::LoggedOut, mode)),
             Style::default().fg(to_ratatui(ColorToken::Red)),
         ),
-        LoginState::Error => Span::styled("\u{25cf} erro", Style::default().fg(to_ratatui(ColorToken::Red))),
+        // Falha nao-auth (parse/rede/API): erro real, mas nao pede re-login.
+        LoginState::Error => Span::styled(
+            format!("{} erro", glyph(Icon::Warn, mode)),
+            Style::default().fg(to_ratatui(ColorToken::Red)),
+        ),
     }
 }
 
@@ -225,7 +235,7 @@ fn render_provider_card(
             title,
             Style::default().fg(brand).add_modifier(Modifier::BOLD),
         ))
-        .title(Line::from(login_status_span(logged)).alignment(Alignment::Right));
+        .title(Line::from(login_status_span(logged, state.glyph_mode)).alignment(Alignment::Right));
 
     let inner = block.inner(card_rect);
     sv.render_widget(block, card_rect);

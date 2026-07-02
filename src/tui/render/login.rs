@@ -14,6 +14,7 @@ use crate::tui::mouse::{ChipKind, HitMap, MouseTarget};
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
+use crate::tui::widgets::icons::{glyph, Icon};
 
 /// Constantes dos providers da aba Login (id, nome de exibicao).
 const PROVIDERS: [(&str, &str); 3] = [("claude", "Claude"), ("codex", "Codex"), ("amp", "Amp")];
@@ -80,27 +81,36 @@ fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect, hits: &
                 "\u{25cf}"
             };
 
-            // Marca de status: ● preenchida quando há sessão/token de
-            // alguma forma (mesmo que rejeitado ou com erro não-auth), ○
-            // vazia quando não há sessão nenhuma, ◐ enquanto o fetch está
-            // em voo.
+            // Marca de status: ícone semântico (`tui::widgets::icons`) por
+            // LoginState — Ok/NoToken/LoggedOut mapeiam 1:1; Error (falha
+            // nao-auth: parse/rede/API — erro real, mas nao pede re-login)
+            // usa Warn; Checking nao tem Icon dedicado (estado transitorio,
+            // permanece ◐ literal).
             let (dot, label, status_fg, bold) = match login_state {
-                LoginState::Ok => ("\u{25cf}", "ok", to_ratatui(ColorToken::Green), true),
+                LoginState::Ok => (
+                    glyph(Icon::Ok, state.glyph_mode),
+                    "ok",
+                    to_ratatui(ColorToken::Green),
+                    true,
+                ),
                 LoginState::NoToken => (
-                    "\u{25cf}",
+                    glyph(Icon::NoToken, state.glyph_mode),
                     "sem token",
                     to_ratatui(ColorToken::Yellow),
                     false,
                 ),
                 LoginState::LoggedOut => (
-                    "\u{25cb}",
+                    glyph(Icon::LoggedOut, state.glyph_mode),
                     "deslogado",
                     to_ratatui(ColorToken::Muted),
                     false,
                 ),
-                // Falha nao-auth (parse/rede/API): erro real, mas nao pede
-                // re-login — cor de atencao distinta de "deslogado".
-                LoginState::Error => ("\u{25cf}", "erro", to_ratatui(ColorToken::Red), false),
+                LoginState::Error => (
+                    glyph(Icon::Warn, state.glyph_mode),
+                    "erro",
+                    to_ratatui(ColorToken::Red),
+                    false,
+                ),
                 LoginState::Checking => (
                     "\u{25d0}",
                     "verificando\u{2026}",

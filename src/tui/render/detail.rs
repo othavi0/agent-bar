@@ -13,6 +13,7 @@ use ratatui::Frame;
 
 use crate::providers::extras::get_claude_extra;
 use crate::providers::types::{ExtraUsage, ProviderQuota, QuotaWindow};
+use crate::settings::GlyphMode;
 use crate::theme::ColorToken;
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap};
@@ -20,6 +21,7 @@ use crate::tui::render::shared::{abbrev_tokens, series_now};
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
+use crate::tui::widgets::icons::{glyph, Icon};
 use crate::tui::widgets::quota_gauge::gauge_spans;
 use crate::tui::widgets::severity::{severity_color as sev_color, severity_color_api};
 use crate::tui::widgets::sparkline::sparkline_str_wide;
@@ -375,12 +377,12 @@ fn render_logged_out(q: &ProviderQuota, frame: &mut Frame, area: Rect) {
 /// Mensagem de erro tipado (falha não-auth: parse/rede/API) com ícone —
 /// NUNCA tela branca. `q.error` é a string verbatim do provider (contrato,
 /// ver `providers::error`).
-fn render_error(q: &ProviderQuota, frame: &mut Frame, area: Rect) {
+fn render_error(q: &ProviderQuota, mode: GlyphMode, frame: &mut Frame, area: Rect) {
     let msg = q.error.as_deref().unwrap_or("Erro desconhecido");
     let lines = vec![
         Line::from(""),
         Line::from(Span::styled(
-            " \u{2715} Erro ao carregar dados",
+            format!(" {} Erro ao carregar dados", glyph(Icon::Warn, mode)),
             Style::default()
                 .fg(to_ratatui(ColorToken::Red))
                 .add_modifier(Modifier::BOLD),
@@ -515,7 +517,9 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut
         LoginState::LoggedOut => render_logged_out(q, frame, content_area),
         // Falha não-auth (parse/rede/API): mensagem tipada + ícone — nunca
         // branco, nunca induz re-login (spec §10).
-        LoginState::NoToken | LoginState::Error => render_error(q, frame, content_area),
+        LoginState::NoToken | LoginState::Error => {
+            render_error(q, state.glyph_mode, frame, content_area)
+        }
         LoginState::Ok | LoginState::Checking => {
             let provider_usage: Option<&ProviderUsage> = state
                 .usage

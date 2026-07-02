@@ -304,6 +304,11 @@ mod tests {
             cache: CacheSettings {
                 ttl: BTreeMap::new(),
             },
+            menu: MenuSettings {
+                animations: true,
+                font_family: "IBM Plex Mono".to_string(),
+                font_size: 12,
+            },
             glyph_mode: GlyphMode::Box,
             fx_rate: 5.50,
         }

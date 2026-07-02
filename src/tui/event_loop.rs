@@ -170,6 +170,9 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     // UTC do AppState::new() e o pico do sparkline de 24h mostra hora UTC
     // rotulada como "local".
     state.local_offset = octx.local_offset;
+    // Glyph mode real (Task 15): sem isto, `glyph_mode` fica no default Box
+    // do AppState::new() mesmo com "glyphMode":"nerd" configurado.
+    state.glyph_mode = octx.settings.glyph_mode;
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).
     let mut hits = super::mouse::HitMap::default();

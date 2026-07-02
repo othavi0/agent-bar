@@ -235,7 +235,8 @@ fn field_hint(field: ConfigField) -> Option<&'static str> {
 mod tests {
     use super::*;
     use crate::settings::{
-        CacheSettings, DisplayMode, GlyphMode, Notify, SeparatorStyle, Settings, Tooltip, Waybar,
+        CacheSettings, DisplayMode, GlyphMode, MenuSettings, Notify, SeparatorStyle, Settings,
+        Tooltip, Waybar,
     };
     use crate::tui::state::{AppState, ConfigState, Screen};
     use std::collections::BTreeMap;
@@ -258,6 +259,11 @@ mod tests {
             notify: Notify { enabled: true },
             cache: CacheSettings {
                 ttl: BTreeMap::new(),
+            },
+            menu: MenuSettings {
+                animations: true,
+                font_family: "IBM Plex Mono".to_string(),
+                font_size: 12,
             },
             glyph_mode: GlyphMode::Box,
             fx_rate: 5.50,

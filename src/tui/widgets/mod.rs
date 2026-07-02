@@ -6,6 +6,7 @@
 //! ratatui's ownership model.
 
 pub mod chips;
+pub mod icons;
 pub mod key_hint;
 pub mod quota_gauge;
 pub mod severity;

@@ -1,5 +1,5 @@
 use crate::providers::types::ProviderQuota;
-use crate::settings::Settings;
+use crate::settings::{GlyphMode, Settings};
 use crate::usage::{UsageRecord, UsageSummary};
 
 use super::mouse::MouseTarget;
@@ -218,6 +218,11 @@ pub struct AppState {
     /// Default `UtcOffset::UTC` (mantém testes/snapshots determinísticos);
     /// `event_loop::run` sobrescreve com `octx.local_offset` no boot real.
     pub local_offset: time::UtcOffset,
+    /// Modo de glyph dos ícones semânticos da TUI (`tui::widgets::icons`).
+    /// Default `GlyphMode::Box` (mantém testes/snapshots determinísticos
+    /// com glyphs universais); `event_loop::run` sobrescreve com
+    /// `octx.settings.glyph_mode` no boot real.
+    pub glyph_mode: GlyphMode,
 }
 
 impl AppState {
@@ -245,6 +250,7 @@ impl AppState {
             pending_save: false,
             hover: None,
             local_offset: time::UtcOffset::UTC,
+            glyph_mode: GlyphMode::Box,
         }
     }
 }
