@@ -8,106 +8,12 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Cell, Row, Table};
 use ratatui::Frame;
-use time::Date;
 
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::sparkline::sparkline_str_wide;
-use crate::usage::{pricing::cost_usd_of, UsageRecord};
-
-// ---------------------------------------------------------------------------
-// Bucketing (pure, testable)
-// ---------------------------------------------------------------------------
-
-/// Um bucket diario: date, soma de tokens (input+output), custo opcional em USD.
-#[derive(Debug, Clone, PartialEq)]
-pub struct DayBucket {
-    pub date: Date,
-    pub tokens: u64,
-    pub cost_usd: Option<f64>,
-}
-
-/// Agrupa records por dia (ts.date()) somando tokens e custo.
-/// Records com modelo desconhecido contribuem tokens mas nao custo (igual ao engine).
-/// Retorna vec ordenado por data crescente.
-pub fn bucket_by_day(records: &[UsageRecord]) -> Vec<DayBucket> {
-    use std::collections::BTreeMap;
-
-    let mut map: BTreeMap<Date, (u64, Option<f64>)> = BTreeMap::new();
-
-    for rec in records {
-        let date = rec.ts.date();
-        let tokens = rec.input + rec.output;
-        let cost = cost_usd_of(rec);
-
-        let entry = map.entry(date).or_insert((0, None));
-        entry.0 += tokens;
-        match (cost, entry.1.as_mut()) {
-            (Some(c), Some(acc)) => *acc += c,
-            (Some(c), None) => entry.1 = Some(c),
-            (None, _) => {}
-        }
-    }
-
-    map.into_iter()
-        .map(|(date, (tokens, cost_usd))| DayBucket {
-            date,
-            tokens,
-            cost_usd,
-        })
-        .collect()
-}
-
-/// Agrupa records por (provider, day) para o grafico por-provider.
-/// Retorna BTreeMap<provider_name, Vec<DayBucket>> ordenado por data.
-pub fn bucket_by_provider_day(
-    records: &[UsageRecord],
-) -> std::collections::BTreeMap<String, Vec<DayBucket>> {
-    use std::collections::BTreeMap;
-
-    // (provider, date) -> (tokens, cost)
-    let mut map: BTreeMap<(String, Date), (u64, Option<f64>)> = BTreeMap::new();
-
-    for rec in records {
-        let date = rec.ts.date();
-        let tokens = rec.input + rec.output;
-        let cost = cost_usd_of(rec);
-        let key = (rec.provider.clone(), date);
-
-        let entry = map.entry(key).or_insert((0, None));
-        entry.0 += tokens;
-        match (cost, entry.1.as_mut()) {
-            (Some(c), Some(acc)) => *acc += c,
-            (Some(c), None) => entry.1 = Some(c),
-            (None, _) => {}
-        }
-    }
-
-    // Reorganiza por provider
-    let mut by_provider: BTreeMap<String, BTreeMap<Date, (u64, Option<f64>)>> = BTreeMap::new();
-    for ((provider, date), (tokens, cost)) in map {
-        by_provider
-            .entry(provider)
-            .or_default()
-            .insert(date, (tokens, cost));
-    }
-
-    by_provider
-        .into_iter()
-        .map(|(provider, date_map)| {
-            let buckets = date_map
-                .into_iter()
-                .map(|(date, (tokens, cost_usd))| DayBucket {
-                    date,
-                    tokens,
-                    cost_usd,
-                })
-                .collect();
-            (provider, buckets)
-        })
-        .collect()
-}
+use crate::usage::buckets::{bucket_by_day, bucket_by_provider_day, DayBucket};
 
 // ---------------------------------------------------------------------------
 // Render
@@ -356,7 +262,6 @@ fn render_empty(frame: &mut Frame, area: Rect) {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use time::macros::date;
 
     use crate::tui::state::AppState;
     use crate::usage::UsageRecord;
@@ -381,124 +286,6 @@ pub mod tests {
             cache_write: 0,
             ts,
         }
-    }
-
-    // ---- bucket_by_day unit tests ----
-
-    #[test]
-    fn bucket_by_day_empty_input() {
-        let result = bucket_by_day(&[]);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn bucket_by_day_single_record() {
-        let records = vec![rec(
-            "claude",
-            Some("claude-sonnet-4-6"),
-            "2026-06-17T10:00:00Z",
-            1000,
-            500,
-        )];
-        let buckets = bucket_by_day(&records);
-        assert_eq!(buckets.len(), 1);
-        assert_eq!(buckets[0].date, date!(2026 - 06 - 17));
-        assert_eq!(buckets[0].tokens, 1500);
-        assert!(buckets[0].cost_usd.is_some());
-    }
-
-    #[test]
-    fn bucket_by_day_three_days_correct_sums() {
-        let records = vec![
-            // Dia 17: 2 records de claude-sonnet → somados
-            rec(
-                "claude",
-                Some("claude-sonnet-4-6"),
-                "2026-06-17T08:00:00Z",
-                1000,
-                200,
-            ),
-            rec(
-                "claude",
-                Some("claude-sonnet-4-6"),
-                "2026-06-17T14:00:00Z",
-                500,
-                100,
-            ),
-            // Dia 18: 1 record de codex
-            rec("codex", Some("gpt-5.5"), "2026-06-18T10:00:00Z", 2000, 300),
-            // Dia 19: 1 record sem modelo (sem custo)
-            rec("claude", None, "2026-06-19T09:00:00Z", 800, 200),
-        ];
-
-        let buckets = bucket_by_day(&records);
-
-        // Deve ter 3 buckets (um por data unica)
-        assert_eq!(
-            buckets.len(),
-            3,
-            "esperado 3 buckets, obtido {}",
-            buckets.len()
-        );
-
-        // Ordenados por data crescente
-        assert_eq!(buckets[0].date, date!(2026 - 06 - 17));
-        assert_eq!(buckets[1].date, date!(2026 - 06 - 18));
-        assert_eq!(buckets[2].date, date!(2026 - 06 - 19));
-
-        // Dia 17: tokens = (1000+200) + (500+100) = 1800
-        assert_eq!(buckets[0].tokens, 1800, "dia 17 tokens incorretos");
-        assert!(
-            buckets[0].cost_usd.is_some(),
-            "dia 17 deve ter custo (sonnet conhecido)"
-        );
-
-        // Dia 18: tokens = 2000+300 = 2300
-        assert_eq!(buckets[1].tokens, 2300, "dia 18 tokens incorretos");
-        assert!(
-            buckets[1].cost_usd.is_some(),
-            "dia 18 deve ter custo (gpt-5 conhecido)"
-        );
-
-        // Dia 19: tokens = 800+200 = 1000, custo = None (modelo None)
-        assert_eq!(buckets[2].tokens, 1000, "dia 19 tokens incorretos");
-        assert!(
-            buckets[2].cost_usd.is_none(),
-            "dia 19 nao deve ter custo (modelo None)"
-        );
-    }
-
-    #[test]
-    fn bucket_by_day_same_day_different_providers_merged() {
-        // Records de providers diferentes no mesmo dia → somados no bucket total
-        let records = vec![
-            rec(
-                "claude",
-                Some("claude-sonnet-4-6"),
-                "2026-06-17T08:00:00Z",
-                1000,
-                0,
-            ),
-            rec("codex", Some("gpt-5.5"), "2026-06-17T12:00:00Z", 500, 0),
-        ];
-        let buckets = bucket_by_day(&records);
-        assert_eq!(buckets.len(), 1);
-        assert_eq!(
-            buckets[0].tokens, 1500,
-            "tokens de providers diferentes devem somar"
-        );
-    }
-
-    #[test]
-    fn bucket_by_day_unknown_model_contributes_tokens_not_cost() {
-        let records = vec![rec("claude", None, "2026-06-17T10:00:00Z", 1000, 200)];
-        let buckets = bucket_by_day(&records);
-        assert_eq!(buckets.len(), 1);
-        assert_eq!(buckets[0].tokens, 1200);
-        assert!(
-            buckets[0].cost_usd.is_none(),
-            "modelo None nao deve gerar custo"
-        );
     }
 
     // ---- snapshot test ----

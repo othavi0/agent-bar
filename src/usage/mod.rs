@@ -2,6 +2,7 @@
 //! Subsistema PURO (sem TUI/ratatui). Ver spec §4b.
 
 pub mod amp;
+pub mod buckets;
 pub mod cache;
 pub mod claude;
 pub mod codex;
