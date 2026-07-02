@@ -6,13 +6,12 @@ pub mod login;
 mod shared;
 pub mod sidebar;
 
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, BorderType, Borders};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
-use tui_popup::Popup;
 
 use crate::theme::ColorToken;
 use crate::tui::mouse::HitMap;
@@ -29,187 +28,157 @@ use self::sidebar::render_sidebar;
 /// Largura abaixo da qual a sidebar colapsa pra so a coluna de marcas.
 const NARROW_WIDTH: u16 = 80;
 
-/// Constroi o conteudo do overlay de ajuda (atalhos de teclado).
+/// Largura da coluna "tecla" na tabela de atalhos — fixa pra alinhar a
+/// coluna "ação" em todas as seções (contrato de tabela de 2 colunas, T14).
+const HELP_KEY_COL: usize = 12;
+
+/// Uma seção de atalhos: título centrado + linhas tecla/ação alinhadas em 2
+/// colunas. Reutilizado por `help_text` pra cada tela (Navegação global,
+/// Overview, Waybar Config, Login) — data-driven em vez de repetir a mesma
+/// construção de `Line` 4x.
+fn help_section(title: &str, rows: &[(&str, &str)]) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        format!(" {title} "),
+        Style::default()
+            .fg(to_ratatui(ColorToken::TextBright))
+            .add_modifier(Modifier::BOLD),
+    ))
+    .centered()];
+    for (key, action) in rows {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("  {key:<HELP_KEY_COL$}"),
+                Style::default()
+                    .fg(to_ratatui(ColorToken::Cyan))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                action.to_string(),
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]));
+    }
+    lines
+}
+
+/// Constroi o conteudo do overlay de ajuda: tabela de 2 colunas
+/// (tecla/ação) por tela + dica de mouse no rodapé (T14).
 fn help_text() -> Text<'static> {
-    Text::from(vec![
-        Line::from(" Navegacao global ").centered(),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "  [?] / Esc  ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "abre/fecha esta ajuda",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  up/down    ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "mover selecao na sidebar",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Enter      ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "ativar item selecionado",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  h / g / w  ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "ir para Historico / Login / Waybar",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  [q]        ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("sair", Style::default().fg(to_ratatui(ColorToken::Text))),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  [r]        ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "atualizar quotas",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(" Overview ").centered(),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "  up/down    ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "selecionar provider",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Enter      ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "abrir detalhe",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Esc        ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "voltar para lista",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(" Waybar Config ").centered(),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "  up/down    ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "selecionar campo",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Enter      ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "editar campo",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  [s]        ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "salvar configuracao",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(" Login ").centered(),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "  up/down    ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "selecionar provider",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Enter      ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "iniciar login do provider",
-                Style::default().fg(to_ratatui(ColorToken::Text)),
-            ),
-        ]),
-        Line::from(""),
-    ])
+    let mut lines: Vec<Line<'static>> = Vec::new();
+
+    lines.extend(help_section(
+        "Navegação global",
+        &[
+            ("[?] / Esc", "abre/fecha esta ajuda"),
+            ("up/down", "mover seleção na sidebar"),
+            ("Enter", "ativar item selecionado"),
+            ("h / g / w", "Histórico / Login / Waybar"),
+            ("q", "sair"),
+            ("r", "atualizar quotas"),
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.extend(help_section(
+        "Overview",
+        &[
+            ("up/down", "selecionar provider"),
+            ("Enter", "abrir detalhe"),
+            ("Esc", "voltar para lista"),
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.extend(help_section(
+        "Waybar Config",
+        &[
+            ("up/down", "selecionar campo"),
+            ("Enter", "editar campo"),
+            ("s", "salvar configuração"),
+            ("Esc", "voltar"),
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.extend(help_section(
+        "Login",
+        &[
+            ("up/down", "selecionar provider"),
+            ("Enter", "iniciar login do provider"),
+            ("Esc", "voltar"),
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(
+        Line::from(Span::styled(
+            "click seleciona \u{b7} wheel rola \u{b7} shift+drag seleciona texto",
+            Style::default().fg(to_ratatui(ColorToken::Muted)),
+        ))
+        .centered(),
+    );
+
+    Text::from(lines)
+}
+
+/// Retorna um `Rect` centralizado em `r`, ocupando `percent_x`% de largura e
+/// `percent_y`% de altura. Usado pelo overlay de ajuda pra fixar o tamanho
+/// do popup INDEPENDENTE do conteúdo — antes o popup (`tui_popup::Popup`) se
+/// auto-dimensionava pelo texto, e um cálculo de altura menor que a área
+/// disponível deixava linhas da tela por baixo (ex. a tabela do dashboard)
+/// sobreviverem nas bordas do popup (bug "pr"/"sto": fragmentos truncados
+/// de texto que não pertenciam ao overlay). Com área fixa + `Clear`
+/// explícito ANTES de qualquer conteúdo, nenhuma célula da tela anterior
+/// sobrevive dentro do popup.
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1])[1]
+}
+
+/// Renderiza o overlay de ajuda por cima de tudo: `Clear` ANTES do conteúdo
+/// numa área FIXA (60%x70% do frame, `centered_rect`) — mata o clipping que
+/// deixava texto da tela por baixo vazar nas bordas do popup quando o
+/// tamanho era auto-calculado a partir do conteúdo (T14).
+fn render_help_overlay(frame: &mut Frame) {
+    let area = frame.area();
+    let popup_area = centered_rect(60, 70, area);
+
+    frame.render_widget(Clear, popup_area);
+
+    let bg = ratatui::style::Color::Rgb(0x28, 0x2c, 0x34); // One Dark
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .style(Style::default().bg(bg))
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
+        .title(Span::styled(
+            " agent-bar — atalhos ",
+            Style::default()
+                .fg(to_ratatui(ColorToken::Blue))
+                .add_modifier(Modifier::BOLD),
+        ));
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    let content = Paragraph::new(help_text())
+        .style(Style::default().fg(to_ratatui(ColorToken::Text)))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(content, inner);
 }
 
 /// Título direito da moldura externa: spinner (quando ha fetch em voo) +
@@ -299,19 +268,7 @@ pub fn render(state: &AppState, frame: &mut Frame, hits: &mut HitMap) {
 
     // Overlay de ajuda: renderizado por cima de tudo quando show_help=true.
     if state.show_help {
-        // Fundo One Dark (#282c34) para contraste com o conteudo da tela.
-        let bg = ratatui::style::Color::Rgb(0x28, 0x2c, 0x34);
-        let content = help_text();
-        let popup = Popup::new(content)
-            .title(Line::from(Span::styled(
-                " agent-bar — atalhos ",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::Blue))
-                    .add_modifier(Modifier::BOLD),
-            )))
-            .style(Style::default().bg(bg).fg(to_ratatui(ColorToken::Text)))
-            .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)));
-        frame.render_widget(popup, area);
+        render_help_overlay(frame);
     }
 }
 
@@ -323,6 +280,34 @@ mod tests {
     use crate::tui::state::{FetchStatus, ProviderView};
     use crate::usage::amp::AmpDollars;
     use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageSummary};
+
+    /// Settings mínimas pra inicializar `ConfigState` (usada só pelos
+    /// testes de help overlay sobre a tela Waybar — não exercita edição).
+    fn fake_settings() -> crate::settings::Settings {
+        use crate::settings::*;
+        use std::collections::BTreeMap;
+        Settings {
+            version: 2,
+            waybar: Waybar {
+                providers: vec!["claude".to_string(), "codex".to_string()],
+                show_percentage: true,
+                separators: SeparatorStyle::Gap,
+                provider_order: vec!["claude".to_string(), "codex".to_string()],
+                display_mode: DisplayMode::Remaining,
+                signal: Some(8),
+                interval: 60,
+            },
+            tooltip: Tooltip {},
+            models: BTreeMap::new(),
+            window_policy: BTreeMap::new(),
+            notify: Notify { enabled: true },
+            cache: CacheSettings {
+                ttl: BTreeMap::new(),
+            },
+            glyph_mode: GlyphMode::Box,
+            fx_rate: 5.50,
+        }
+    }
 
     fn make_quota(
         id: &str,
@@ -487,10 +472,97 @@ mod tests {
 
     #[test]
     fn help_overlay_renders_snapshot() {
-        // Terminal largo para acomodar o popup centralizado sem truncamento.
-        let backend = ratatui::backend::TestBackend::new(80, 35);
+        // Terminal generoso (60%x70% do popup comporta as 4 seções + dica
+        // de mouse sem wrap/corte).
+        let backend = ratatui::backend::TestBackend::new(100, 44);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
+        state.show_help = true;
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn help_overlay_clear_prevents_underlying_table_from_leaking() {
+        // Regressão do bug "pr"/"sto" (T14): o popup ERA auto-dimensionado
+        // pelo conteúdo (`tui_popup::Popup`); se o cálculo automático desse
+        // uma área menor que o necessário, fragmentos da tabela por baixo
+        // sobreviviam dentro das bordas do popup. Fix: `centered_rect`
+        // fixa a área (60%x70% do frame) e `Clear` roda ANTES de qualquer
+        // conteúdo nessa área exata — célula a célula, nada da tabela do
+        // dashboard por baixo (aqui, os textos "sessão"/"26%"/"$2.10" dos
+        // cards) pode sobreviver dentro do popup.
+        let backend = ratatui::backend::TestBackend::new(100, 44);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![
+            ProviderView::new(make_quota(
+                "claude",
+                "Claude",
+                26.0,
+                Some("2026-06-19T23:00:00Z"),
+            )),
+            ProviderView::new(make_quota(
+                "codex",
+                "Codex",
+                1.0,
+                Some("2026-06-20T01:28:00Z"),
+            )),
+            ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
+        ];
+        state.status = FetchStatus::Loaded;
+        state.usage = Some(fake_usage());
+        state.show_help = true;
+
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+
+        let popup_area = centered_rect(60, 70, Rect::new(0, 0, 100, 44));
+        let buffer = terminal.backend().buffer();
+        let mut popup_text = String::new();
+        for y in popup_area.y..popup_area.y + popup_area.height {
+            for x in popup_area.x..popup_area.x + popup_area.width {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    popup_text.push_str(cell.symbol());
+                }
+            }
+            popup_text.push('\n');
+        }
+
+        for leaked in ["sessão", "26%", "$2.10", "hoje", "23:00"] {
+            assert!(
+                !popup_text.contains(leaked),
+                "conteúdo do dashboard por baixo vazou dentro do popup ({leaked:?} encontrado):\n{popup_text}"
+            );
+        }
+    }
+
+    #[test]
+    fn help_overlay_clears_over_login_screen() {
+        // Mesma regressão, sobre a tela Login (reskin da T14) — confirma
+        // que o Clear cobre a área do popup em QUALQUER tela, não só
+        // Overview.
+        let backend = ratatui::backend::TestBackend::new(100, 44);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::Login;
+        state.show_help = true;
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn help_overlay_clears_over_waybar_screen() {
+        let backend = ratatui::backend::TestBackend::new(100, 44);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::Waybar;
+        state.config_state = Some(crate::tui::state::ConfigState::new(&fake_settings()));
         state.show_help = true;
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
@@ -552,9 +624,9 @@ mod tests {
         assert_eq!(hits.at(1, 9), Some(MouseTarget::Sidebar(3))); // History
         assert_eq!(hits.at(1, 10), Some(MouseTarget::Sidebar(4))); // Login
         assert_eq!(hits.at(1, 11), Some(MouseTarget::Sidebar(5))); // Waybar
-        // (50, 5) cai dentro do 1º card da Overview (Task 11: cards
-        // registram MouseTarget::Card) — deixou de ser "fora de qualquer
-        // zona" desde que o dashboard passou a ser cards clicáveis.
+                                                                   // (50, 5) cai dentro do 1º card da Overview (Task 11: cards
+                                                                   // registram MouseTarget::Card) — deixou de ser "fora de qualquer
+                                                                   // zona" desde que o dashboard passou a ser cards clicáveis.
         assert_eq!(hits.at(50, 5), Some(MouseTarget::Card(0)));
         // Fora do frame inteiramente continua sem zona.
         assert_eq!(hits.at(200, 5), None);

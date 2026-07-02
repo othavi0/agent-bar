@@ -10,37 +10,52 @@ use ratatui::Frame;
 
 use crate::theme::ColorToken;
 use crate::tui::login_state::{login_state_for, LoginState};
-use crate::tui::mouse::HitMap;
+use crate::tui::mouse::{ChipKind, HitMap, MouseTarget};
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
+use crate::tui::widgets::chips::{chips_line, register_chip_hits};
 
 /// Constantes dos providers da aba Login (id, nome de exibicao).
 const PROVIDERS: [(&str, &str); 3] = [("claude", "Claude"), ("codex", "Codex"), ("amp", "Amp")];
 
 /// Renderiza a aba Login completa. O status de cada provider nao depende de
-/// paths de credencial — vem do `LoginState` (ultimo fetch real). `_hits`
-/// e repassado pelo dispatcher (`render/mod.rs`); usos reais nas Tasks 11-14.
-pub fn render_login(state: &AppState, frame: &mut Frame, area: Rect, _hits: &mut HitMap) {
+/// paths de credencial — vem do `LoginState` (ultimo fetch real).
+pub fn render_login(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     // Layout: [lista de providers | painel de detalhe/instrucao]
-    // 28 cols cobre o pior caso sem truncar: prefixo " > " (3) + "Claude" (6)
-    // + " [verificando…]" (15, o label mais longo) + 2 de borda = 26; +2 de
-    // folga. Labels antigos ("[ok]"/"[--]") cabiam em 22, mas os novos labels
-    // em PT-BR ("deslogado", "sem token", "verificando…") sao mais longos.
+    // 30 cols cobre o pior caso sem truncar: cursor " > " (3) + marca (1) +
+    // " Claude " (8, nome com folga de 6 + 2 espaços) + marca de status (1)
+    // + " verificando…" (13, o label mais longo) = 26; + 2 de borda + 2 de
+    // folga = 30.
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(28), Constraint::Min(0)])
+        .constraints([Constraint::Length(30), Constraint::Min(0)])
         .split(area);
 
     let list_area = horiz[0];
     let detail_area = horiz[1];
 
-    render_provider_list(state, frame, list_area);
-    render_detail_panel(state, frame, detail_area);
+    render_provider_list(state, frame, list_area, hits);
+    render_detail_panel(state, frame, detail_area, hits);
 }
 
 /// Coluna esquerda: lista os providers com status derivado do ultimo fetch.
-fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect) {
+/// Cada linha registra `MouseTarget::Card(i)` — clique SELECIONA (mesmo
+/// efeito de LoginUp/LoginDown); a ativação do login continua exclusiva do
+/// Enter/chip (braço dedicado em `update.rs`, T14).
+fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let selected_bg = ratatui::style::Color::Rgb(45, 53, 65);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
+        .title(Span::styled(
+            " Login ",
+            Style::default()
+                .fg(to_ratatui(ColorToken::TextBright))
+                .add_modifier(Modifier::BOLD),
+        ));
+    let inner = block.inner(area);
 
     let items: Vec<ListItem<'_>> = PROVIDERS
         .iter()
@@ -55,76 +70,89 @@ fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect) {
             let login_state = login_state_for(quota, fetch_pending);
             let selected = i == state.login_selected;
 
-            let prefix = if selected { " > " } else { "   " };
-
-            let name_style = if selected {
-                Style::default()
-                    .fg(provider_color(id))
-                    .add_modifier(Modifier::BOLD)
-                    .bg(selected_bg)
+            let cursor = if selected { " > " } else { "   " };
+            // Marca colorida — mesma linguagem visual da sidebar
+            // (`render/sidebar.rs::item_label`): ◆ pra Claude, ● pros
+            // demais, sempre na cor de marca do provider.
+            let mark = if id == "claude" {
+                "\u{25c6}"
             } else {
-                Style::default().fg(provider_color(id))
+                "\u{25cf}"
             };
 
-            let prefix_style = if selected {
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .bg(selected_bg)
-            } else {
-                Style::default().fg(to_ratatui(ColorToken::Comment))
-            };
-
-            let (status_text, status_fg, bold) = match login_state {
-                LoginState::Ok => (" [ok]", to_ratatui(ColorToken::Green), true),
-                LoginState::NoToken => (" [sem token]", to_ratatui(ColorToken::Yellow), false),
-                LoginState::LoggedOut => (" [deslogado]", to_ratatui(ColorToken::Muted), false),
+            // Marca de status: ● preenchida quando há sessão/token de
+            // alguma forma (mesmo que rejeitado ou com erro não-auth), ○
+            // vazia quando não há sessão nenhuma, ◐ enquanto o fetch está
+            // em voo.
+            let (dot, label, status_fg, bold) = match login_state {
+                LoginState::Ok => ("\u{25cf}", "ok", to_ratatui(ColorToken::Green), true),
+                LoginState::NoToken => (
+                    "\u{25cf}",
+                    "sem token",
+                    to_ratatui(ColorToken::Yellow),
+                    false,
+                ),
+                LoginState::LoggedOut => (
+                    "\u{25cb}",
+                    "deslogado",
+                    to_ratatui(ColorToken::Muted),
+                    false,
+                ),
                 // Falha nao-auth (parse/rede/API): erro real, mas nao pede
                 // re-login — cor de atencao distinta de "deslogado".
-                LoginState::Error => (" [erro]", to_ratatui(ColorToken::Red), false),
-                LoginState::Checking => (" [verificando…]", to_ratatui(ColorToken::Cyan), false),
-            };
-            let status_style = if selected {
-                Style::default()
-                    .fg(status_fg)
-                    .add_modifier(if bold {
-                        Modifier::BOLD
-                    } else {
-                        Modifier::empty()
-                    })
-                    .bg(selected_bg)
-            } else {
-                Style::default().fg(status_fg).add_modifier(if bold {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                })
+                LoginState::Error => ("\u{25cf}", "erro", to_ratatui(ColorToken::Red), false),
+                LoginState::Checking => (
+                    "\u{25d0}",
+                    "verificando\u{2026}",
+                    to_ratatui(ColorToken::Cyan),
+                    false,
+                ),
             };
 
-            ListItem::new(Line::from(vec![
-                Span::styled(prefix, prefix_style),
-                Span::styled(name, name_style),
-                Span::styled(status_text, status_style),
-            ]))
+            let mark_style = Style::default().fg(provider_color(id));
+            let mut name_style = Style::default().fg(to_ratatui(ColorToken::Text));
+            if selected {
+                name_style = name_style.add_modifier(Modifier::BOLD);
+            }
+            let mut status_style = Style::default().fg(status_fg);
+            if bold {
+                status_style = status_style.add_modifier(Modifier::BOLD);
+            }
+
+            let mut line = Line::from(vec![
+                Span::raw(cursor),
+                Span::styled(mark, mark_style),
+                Span::styled(format!(" {name:<6} "), name_style),
+                Span::styled(dot, status_style),
+                Span::styled(format!(" {label}"), status_style),
+            ]);
+            // Preenche a linha INTEIRA (largura da coluna, não só o texto)
+            // com o bg de seleção — estilo de linha entra "por baixo" dos
+            // estilos de cada span (que só definem fg), então as cores de
+            // marca/status sobrevivem por cima do highlight.
+            if selected {
+                line = line.style(Style::default().bg(selected_bg));
+            }
+            ListItem::new(line)
         })
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
-        .title(Span::styled(
-            " Login ",
-            Style::default()
-                .fg(to_ratatui(ColorToken::TextBright))
-                .add_modifier(Modifier::BOLD),
-        ));
+    for i in 0..PROVIDERS.len() {
+        let row_y = inner.y + i as u16;
+        if row_y < inner.y + inner.height {
+            hits.push(
+                Rect::new(inner.x, row_y, inner.width, 1),
+                MouseTarget::Card(i),
+            );
+        }
+    }
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
 }
 
-/// Painel direito: instrucoes e status de feedback.
-fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect) {
+/// Painel direito: instrucoes, chips de ação e status de feedback.
+fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let (id, name) = PROVIDERS[state.login_selected];
 
     let hint = match id {
@@ -146,11 +174,6 @@ fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect) {
             format!(" {hint}"),
             Style::default().fg(to_ratatui(ColorToken::Text)),
         )),
-        Line::from(""),
-        Line::from(Span::styled(
-            " [Enter] iniciar login    [j/k] navegar    [q] sair",
-            Style::default().fg(to_ratatui(ColorToken::Comment)),
-        )),
     ];
 
     // Exibe status de feedback se houver (erro ou confirmacao de sucesso).
@@ -168,9 +191,20 @@ fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    let p = Paragraph::new(lines).block(block);
-    frame.render_widget(p, area);
+    let vert = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
+    frame.render_widget(Paragraph::new(lines), vert[0]);
+
+    let chips: [(ChipKind, &str, &str); 2] = [
+        (ChipKind::StartLogin, "\u{21b5}", "iniciar login"),
+        (ChipKind::Back, "esc", "voltar"),
+    ];
+    let chips_area = vert[1];
+    let line = chips_line(&chips, chips_area.width);
+    frame.render_widget(Paragraph::new(line), chips_area);
+    register_chip_hits(&chips, chips_area, hits);
 }
 
 #[cfg(test)]

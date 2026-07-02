@@ -84,14 +84,9 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(Action::LoginDown),
             KeyCode::Char('k') | KeyCode::Up => Some(Action::LoginUp),
-            KeyCode::Enter => {
-                let id = match state.login_selected {
-                    0 => "claude",
-                    1 => "codex",
-                    _ => "amp",
-                };
-                Some(Action::LoginRequested(id.to_string()))
-            }
+            KeyCode::Enter => Some(Action::LoginRequested(
+                login_selected_id(state.login_selected).to_string(),
+            )),
             KeyCode::Esc => Some(Action::Back),
             KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
             KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
@@ -120,6 +115,18 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         KeyCode::Char('r') => Some(Action::Refresh),
         KeyCode::Char('q') => Some(Action::Quit),
         _ => None,
+    }
+}
+
+/// Mapeia o índice selecionado da aba Login pro id do provider — mesma
+/// ordem de `render/login.rs::PROVIDERS`. Compartilhado entre o Enter
+/// (`key_to_action_with_state`) e o clique no chip `StartLogin` (T14):
+/// os dois precisam disparar a MESMA action pro provider selecionado.
+fn login_selected_id(idx: usize) -> &'static str {
+    match idx {
+        0 => "claude",
+        1 => "codex",
+        _ => "amp",
     }
 }
 
@@ -645,6 +652,20 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
                     None => vec![],
                 }
             }
+            // Na tela Login, os itens da lista de providers TAMBÉM registram
+            // MouseTarget::Card(i) (mesma linguagem visual dos cards do
+            // Overview) — mas aqui o clique so SELECIONA (mesmo efeito de
+            // LoginUp/LoginDown), nunca ativa Detail. Reusar o braço
+            // genérico abaixo (Activate(Provider(i))) navegaria pra fora da
+            // tela Login no primeiro clique, contrariando "click seleciona;
+            // ativação continua pelo Enter/chip" (T14).
+            MouseTarget::Card(i) if state.screen == Screen::Login => {
+                if i < 3 {
+                    state.login_selected = i;
+                    state.login_status = None;
+                }
+                vec![]
+            }
             MouseTarget::Card(i) => update(state, Action::Activate(SidebarItem::Provider(i))),
             MouseTarget::Chip(ChipKind::Open) => update(state, Action::OpenDetail),
             MouseTarget::Chip(ChipKind::Refresh) => update(state, Action::Refresh),
@@ -657,9 +678,17 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             MouseTarget::Chip(ChipKind::History) => {
                 update(state, Action::Activate(SidebarItem::History))
             }
-            MouseTarget::Chip(ChipKind::ToggleRange) => {
-                update(state, Action::ToggleHistoryRange)
-            }
+            MouseTarget::Chip(ChipKind::ToggleRange) => update(state, Action::ToggleHistoryRange),
+            // Chip "iniciar login" da tela Login: dispara a MESMA action que
+            // o Enter dispara lá (Action::LoginRequested pro provider
+            // selecionado) — nunca Activate(Login), que seria no-op (a
+            // tela já está ativa) e ignoraria o clique (T14).
+            MouseTarget::Chip(ChipKind::StartLogin) => update(
+                state,
+                Action::LoginRequested(login_selected_id(state.login_selected).to_string()),
+            ),
+            MouseTarget::Chip(ChipKind::EnterEdit) => update(state, Action::ConfigEnterEdit),
+            MouseTarget::Chip(ChipKind::SaveConfig) => update(state, Action::SaveConfig),
         },
 
         Action::Hover(t) => {
@@ -877,7 +906,10 @@ mod tests {
             &mut state,
             Action::FetchStarted(vec!["claude".into(), "amp".into()]),
         );
-        update(&mut state, Action::ProviderFetched(Box::new(test_quota("claude", 50.0))));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 50.0))),
+        );
         // "claude" ja saiu do pending; "amp" ainda esta em voo quando a onda 2 comeca.
         assert_eq!(state.fetch_pending, vec!["amp".to_string()]);
 
@@ -940,8 +972,14 @@ mod tests {
             &mut state,
             Action::FetchStarted(vec!["claude".into(), "amp".into()]),
         );
-        update(&mut state, Action::ProviderFetched(Box::new(test_quota("claude", 80.0))));
-        update(&mut state, Action::ProviderFetched(Box::new(test_quota("amp", 60.0))));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("amp", 60.0))),
+        );
         // Onda 2 comeca antes da onda 1 completar.
         update(&mut state, Action::FetchStarted(vec!["codex".into()]));
 
@@ -1012,7 +1050,10 @@ mod tests {
         );
         assert!(!state.fetch_pending.is_empty());
 
-        update(&mut state, Action::FetchFailed("fetch runtime: boom".into()));
+        update(
+            &mut state,
+            Action::FetchFailed("fetch runtime: boom".into()),
+        );
 
         assert!(
             state.fetch_pending.is_empty(),
@@ -1323,7 +1364,11 @@ mod tests {
         let fu = update(&mut state, Action::LoginRequested("codex".into()));
         assert!(fu.is_empty()); // nao re-enfileira mais: o event_loop le pending_login
         assert_eq!(state.pending_login.as_deref(), Some("codex"));
-        assert!(state.login_status.as_deref().unwrap_or("").contains("codex"));
+        assert!(state
+            .login_status
+            .as_deref()
+            .unwrap_or("")
+            .contains("codex"));
     }
 
     #[test]
@@ -1387,6 +1432,116 @@ mod tests {
             "indice fora de sidebar_items() nao deve gerar Activate"
         );
         assert_eq!(state.screen, Screen::Overview, "tela nao muda sem Activate");
+    }
+
+    // ---- Aba Login: reskin (Task 14) ----
+
+    #[test]
+    fn click_card_on_login_screen_only_selects_never_activates_detail() {
+        // Regressão do bug que esta task evita: MouseTarget::Card(i) já
+        // significa "Activate(Provider(i))" no Overview (ativa Detail). A
+        // lista de providers da tela Login reusa Card(i) pro mesmo visual,
+        // mas o clique deve APENAS selecionar (mesmo efeito de
+        // LoginUp/LoginDown) — nunca navegar pra fora da tela Login.
+        let mut state = AppState::new();
+        state.screen = Screen::Login;
+        state.login_selected = 0;
+        state.login_status = Some("Abrindo login para claude...".to_string());
+
+        let fu = update(&mut state, Action::Click(MouseTarget::Card(1)));
+
+        assert_eq!(state.login_selected, 1, "clique deve selecionar o item 1");
+        assert_eq!(
+            state.screen,
+            Screen::Login,
+            "clique num item da lista NUNCA deve navegar pra Detail"
+        );
+        assert_eq!(
+            state.login_status, None,
+            "seleção limpa o status (mesmo comportamento de LoginUp/LoginDown)"
+        );
+        assert!(fu.is_empty());
+    }
+
+    #[test]
+    fn click_card_on_login_screen_ignores_out_of_range_index() {
+        let mut state = AppState::new();
+        state.screen = Screen::Login;
+        state.login_selected = 0;
+
+        update(&mut state, Action::Click(MouseTarget::Card(99)));
+
+        assert_eq!(
+            state.login_selected, 0,
+            "índice fora de faixa (só 3 providers) é ignorado"
+        );
+    }
+
+    #[test]
+    fn click_card_outside_login_screen_still_activates_detail() {
+        // Garante que o guard acima NÃO regrediu o comportamento existente
+        // do Overview (Card(i) → Activate(Provider(i))).
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
+        update(&mut state, Action::Click(MouseTarget::Card(0)));
+        assert_eq!(state.screen, Screen::Detail);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn click_start_login_chip_fires_same_action_as_enter_for_selected_provider() {
+        // O chip "iniciar login" tem que disparar a MESMA action que o
+        // Enter dispara na tela Login (Action::LoginRequested pro provider
+        // selecionado) — nunca Action::Activate(Login) (ChipKind::Login
+        // seria no-op ali, a tela já está ativa; T14 introduz
+        // ChipKind::StartLogin exatamente pra evitar essa armadilha).
+        let mut state = AppState::new();
+        state.screen = Screen::Login;
+        state.login_selected = 1; // codex
+
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::StartLogin)),
+        );
+
+        assert_eq!(state.pending_login.as_deref(), Some("codex"));
+        assert!(state
+            .login_status
+            .as_deref()
+            .unwrap_or("")
+            .contains("codex"));
+    }
+
+    // ---- Tela Waybar: reskin (Task 14) ----
+
+    #[test]
+    fn click_enter_edit_chip_starts_editing_selected_field() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::EnterEdit)),
+        );
+
+        let cs = state.config_state.as_ref().unwrap();
+        assert!(cs.editing, "chip 'editar' deve entrar em modo de edição");
+    }
+
+    #[test]
+    fn click_save_config_chip_sets_pending_save() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::SaveConfig)),
+        );
+
+        assert!(
+            state.pending_save,
+            "chip 'salvar' deve sinalizar pending_save (mesmo efeito da tecla [s])"
+        );
     }
 
     // ---- Aba History (Task 13) ----

@@ -14,6 +14,18 @@ pub enum ChipKind {
     History,
     /// Alterna o range do chart da aba History (24h/7d) — tecla `t` (T13).
     ToggleRange,
+    /// Inicia o login do provider SELECIONADO na tela Login — tecla Enter
+    /// (T14). Distinto de `ChipKind::Login` (que navega PARA a tela Login
+    /// a partir de outra tela, ex. chip do Detail): reusar `Login` aqui
+    /// seria no-op na própria tela Login (o braço de `Login` só ativa a
+    /// tela, já ativa).
+    StartLogin,
+    /// Entra em modo de edição do campo selecionado na tela Waybar — mesma
+    /// semântica do Enter fora de edição (T14).
+    EnterEdit,
+    /// Salva a configuração da tela Waybar — mesma semântica da tecla `s`
+    /// (T14).
+    SaveConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
