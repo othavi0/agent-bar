@@ -1,6 +1,6 @@
 [package]
 name = "agent-bar"
-version = "7.0.1"
+version = "7.1.0"
 edition = "2021"
 # 1.88: piso real, não 1.80 — tui-scrollview exige 1.88; tachyonfx (via anpa) exige 1.82.
 rust-version = "1.88"

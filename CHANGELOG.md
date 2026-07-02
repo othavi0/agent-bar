@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-07-02
+
+Leva de ajustes visuais da TUI pós-teste real do redesign.
+
+### Added
+- **Painel "Hoje (24h)" no Overview**: quando sobra altura abaixo dos cards,
+  o espaço vira o chart braille das últimas 24h (mesma visualização do
+  Histórico) com totais de hoje/7d no rodapé. Em terminal baixo o layout
+  antigo permanece intacto.
+
+### Changed
+- **Animação de transição de tela (coalesce) removida** — reprovada em uso
+  real; a navegação agora troca de tela instantaneamente. Sweep no fetch,
+  pulse crítico e count-up de custo permanecem.
+- Popup de ajuda (`?`) se dimensiona pelo conteúdo (antes era 60%x70% do
+  frame e cortava as seções finais em terminais menores) e escurece a tela
+  por baixo enquanto aberto.
+- Copy da TUI revisada: acentos corrigidos ("instruções", "vírgula",
+  "inválido", "configuração"…) e "Waybar Config" → "Config do Waybar".
+
+### Fixed
+- **"hoje 0 tok" / "sem uso de tokens" durante o carregamento**: enquanto o
+  parse dos session logs não terminou, Histórico, Detail e cards agora dizem
+  "coletando…" em vez de afirmar zero sobre dado que só não chegou.
+- Parse dos session logs roda **uma vez** por refresh (rodava duas — uma pra
+  janela de hoje, outra pra de 7 dias), cortando o tempo de carregamento do
+  histórico pela metade.
+- Rodapé do painel novo usa o mesmo vocabulário de tokens da tabela do
+  Histórico (input+output), evitando totais contraditórios entre telas.
+
 ## [7.0.1] - 2026-07-02
 
 Hotfix de distribuição: `agent-bar update` e `install.sh`.
