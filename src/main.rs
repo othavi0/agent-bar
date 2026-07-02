@@ -21,7 +21,8 @@ use agent_bar::settings::{self, Settings};
 use agent_bar::tui;
 use agent_bar::watch;
 use agent_bar::{
-    doctor, runtime, setup, term_prompt, uninstall, update, waybar_contract, waybar_integration,
+    doctor, install, runtime, setup, term_prompt, uninstall, update, waybar_contract,
+    waybar_integration,
 };
 
 // ---------------------------------------------------------------------------
@@ -296,9 +297,18 @@ async fn main() {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)
                 .unwrap_or_default();
-            // Pós-cutover: o crate É a raiz do repo; CARGO_MANIFEST_DIR já aponta pra raiz.
-            let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             let install_root = home.join(format!(".{APP_NAME}"));
+
+            // Detecção pelo binário real, não por CARGO_MANIFEST_DIR (compile-time —
+            // aponta pro runner do CI, não pra máquina do usuário; hotfix 7.0.1).
+            let current_exe = match std::env::current_exe().and_then(|p| p.canonicalize()) {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("Failed to resolve current executable: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let repo_root = update::find_repo_root(&current_exe);
 
             fn run_real_command(cmd: &str, args: &[String], cwd: &Path) -> update::CommandResult {
                 match std::process::Command::new(cmd)
@@ -327,7 +337,7 @@ async fn main() {
                 }
             }
 
-            match update::detect_install_kind(&repo_root, &install_root) {
+            match update::detect_install_kind(repo_root.as_deref(), &install_root) {
                 update::InstallKind::System => {
                     term_prompt::status(
                         "Info",
@@ -336,68 +346,29 @@ async fn main() {
                     std::process::exit(0);
                 }
                 update::InstallKind::DevGit => {
+                    if let Some(root) = &repo_root {
+                        if let Ok(v) = update::read_cargo_version(root) {
+                            log::debug!(
+                                "Dev checkout detectado: {} (Cargo.toml v{v})",
+                                root.display()
+                            );
+                        }
+                    }
                     log::error!(
                         "Dev checkout detectado. Use `git pull` na raiz do repositório para atualizar."
                     );
                     std::process::exit(1);
                 }
-                update::InstallKind::Npm => {
-                    let settings_for_setup = settings.clone();
-                    let repo_root_for_setup = repo_root.clone();
-                    let home_for_setup = home.clone();
-                    let run_setup = || {
-                        let asset_paths = waybar_contract::get_default_waybar_asset_paths();
-                        let ipaths = waybar_integration::get_default_waybar_integration_paths();
-                        let cfg = setup::SetupConfig {
-                            asset_paths: Some(asset_paths),
-                            integration_paths: Some(ipaths),
-                            repo_root: Some(repo_root_for_setup.clone()),
-                            home: home_for_setup.clone(),
-                            skip_reload: false,
-                            system_install: runtime::is_system_install(),
-                        };
-                        if let Err(e) = setup::run_setup(&settings_for_setup, cfg, false, false) {
-                            log::error!("Setup falhou após update: {e}");
-                        }
-                    };
-                    let confirm_npm = |summary: &update::NpmUpdateSummary| {
-                        term_prompt::confirm(
-                            &format!(
-                                "Atualizar {} (versão atual: {})?",
-                                summary.package_name, summary.current_version
-                            ),
-                            true,
-                        )
-                    };
-                    match update::run_npm_update(update::NpmUpdateOptions {
-                        repo_root: &repo_root,
-                        run_command: &run_real_command,
-                        run_setup: &run_setup,
-                        confirm_npm: &confirm_npm,
-                    }) {
-                        Ok(r) => {
-                            match r.status {
-                                update::NpmUpdateStatus::Updated => {
-                                    term_prompt::status(
-                                        "OK",
-                                        &format!("{} atualizado", r.summary.package_name),
-                                    );
-                                }
-                                update::NpmUpdateStatus::Cancelled => {
-                                    term_prompt::status("Cancelado", "Update não aplicado");
-                                }
-                            }
-                            std::process::exit(0);
-                        }
-                        Err(e) => {
-                            log::error!("{e}");
-                            std::process::exit(1);
-                        }
-                    }
-                }
                 update::InstallKind::ManagedGit => {
+                    let Some(root) = repo_root.clone() else {
+                        log::error!("Internal error: ManagedGit sem repo_root resolvido.");
+                        std::process::exit(1);
+                    };
+                    if let Ok(v) = update::read_cargo_version(&root) {
+                        log::debug!("Managed checkout: {} (Cargo.toml v{v})", root.display());
+                    }
                     let settings_for_setup = settings.clone();
-                    let repo_root_for_setup = repo_root.clone();
+                    let repo_root_for_setup = root.clone();
                     let home_for_setup = home.clone();
                     let run_setup = || {
                         let asset_paths = waybar_contract::get_default_waybar_asset_paths();
@@ -424,7 +395,7 @@ async fn main() {
                         term_prompt::confirm("Aplicar update?", true)
                     };
                     match update::run_managed_update(update::ManagedUpdateOptions {
-                        repo_root: &repo_root,
+                        repo_root: &root,
                         install_root: &install_root,
                         run_command: &run_real_command,
                         run_setup: &run_setup,
@@ -446,6 +417,63 @@ async fn main() {
                                     std::process::exit(1);
                                 }
                             }
+                            std::process::exit(0);
+                        }
+                        Err(e) => {
+                            log::error!("{e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                update::InstallKind::Standalone => {
+                    let http = match reqwest::Client::builder()
+                        .use_rustls_tls()
+                        .user_agent(update::SELFUPDATE_USER_AGENT)
+                        .timeout(Duration::from_secs(60))
+                        .build()
+                    {
+                        Ok(c) => c,
+                        Err(e) => {
+                            log::error!("Failed to build HTTP client: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+                    let data_dir = update::default_data_dir(&home);
+                    let opts = update::StandaloneUpdateOptions {
+                        current_version: app_identity::VERSION,
+                        exe_path: &current_exe,
+                        data_dir: &data_dir,
+                        run_command: &run_real_command,
+                        http: &http,
+                        releases_api_url: format!(
+                            "https://api.github.com/repos/{}/releases/latest",
+                            update::GITHUB_REPO
+                        ),
+                        download_base_url: format!(
+                            "https://github.com/{}/releases/download",
+                            update::GITHUB_REPO
+                        ),
+                        has_sha256sum: &|| install::has_cmd("sha256sum"),
+                        has_tar: &|| install::has_cmd("tar"),
+                    };
+                    match update::run_standalone_update(opts).await {
+                        Ok(update::StandaloneUpdateStatus::UpToDate { version }) => {
+                            term_prompt::status(
+                                "OK",
+                                &format!("Já está na última versão (v{version})"),
+                            );
+                            std::process::exit(0);
+                        }
+                        Ok(update::StandaloneUpdateStatus::Updated {
+                            old_version,
+                            new_version,
+                        }) => {
+                            term_prompt::status(
+                                "OK",
+                                &format!(
+                                    "agent-bar atualizado: v{old_version} -> v{new_version}. Rode `agent-bar setup` se a integração com o Waybar precisar de refresh."
+                                ),
+                            );
                             std::process::exit(0);
                         }
                         Err(e) => {
