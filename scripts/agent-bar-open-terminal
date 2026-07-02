@@ -31,7 +31,10 @@ if command -v agent-bar >/dev/null 2>&1; then
 fi
 
 # 1) Alacritty direto (Omarchy incluso): fonte configurável + classe p/ float.
-if command -v alacritty >/dev/null 2>&1; then
+# Guard: fonte só se aplica em terminais com flag própria — se $TERMINAL está
+# setado e não é alacritty, respeitamos a escolha e pulamos pro resto da cascata.
+if { [ -z "${TERMINAL:-}" ] || [ "$(basename -- "$TERMINAL")" = "alacritty" ]; } \
+  && command -v alacritty >/dev/null 2>&1; then
   font_opts=()
   if [ -n "$font_family" ]; then
     font_opts+=(--option "font.normal.family=\"$font_family\"")
