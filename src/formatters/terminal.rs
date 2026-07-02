@@ -170,6 +170,7 @@ mod tests {
                 resets_at: Some("2026-03-28T14:00:00Z".into()),
                 window_minutes: Some(300),
                 used: None,
+                severity: None,
             }),
             secondary: None,
             models: None,

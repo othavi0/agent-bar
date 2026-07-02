@@ -633,6 +633,7 @@ mod tests {
             resets_at: None,
             window_minutes: None,
             used: Some(20.0),
+            severity: None,
         });
         let mut state = AppState::new();
         // Inicializa com 0 (forçamos display_ratio inicial diferente do target)
@@ -684,6 +685,7 @@ mod tests {
             resets_at: None,
             window_minutes: None,
             used: Some(58.0),
+            severity: None,
         });
         let pv = crate::tui::state::ProviderView::new(q);
         // Na inicialização, display_ratio deve ser igual ao target (sem animação no 1º frame).

@@ -74,6 +74,7 @@ fn to_quota_window(raw: &CodexWindowRaw) -> QuotaWindow {
         resets_at: unix_to_iso(raw.resets_at),
         window_minutes: Some(raw.window_minutes),
         used: None,
+        severity: None,
     }
 }
 

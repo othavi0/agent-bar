@@ -409,6 +409,7 @@ mod tests {
                 resets_at: resets_at.map(|s| s.to_string()),
                 window_minutes: Some(300),
                 used: Some(100.0 - remaining),
+                severity: None,
             }),
             secondary: None,
             models: None,

@@ -17,6 +17,11 @@ pub struct QuotaWindow {
     pub window_minutes: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub used: Option<f64>,
+    /// Severidade vinda da API (`limits[].severity` do Claude). `None` =
+    /// calcular localmente por threshold. Omitida do JSON quando ausente
+    /// (mantém golden/waybar_contract intactos).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Default)]
@@ -116,6 +121,7 @@ mod tests {
             resets_at: Some("2026-06-19T14:00:00Z".into()),
             window_minutes: None,
             used: None,
+            severity: None,
         }
     }
 
@@ -138,6 +144,7 @@ mod tests {
             resets_at: None,
             window_minutes: Some(300),
             used: None,
+            severity: None,
         };
         let j = serde_json::to_value(w).unwrap();
         assert!(
