@@ -46,12 +46,25 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
                 .as_ref()
                 .map(|w| format!("{:>3.0}%", w.remaining))
                 .unwrap_or_else(|| "  – ".to_string());
-            Line::from(format!(" {mark} {:<7}{pct}", pv.quota.display_name))
+            // Coluna de nome tem largura fixa 7 — nunca corte seco: nomes
+            // maiores truncam com "…" em vez de estourar a coluna.
+            let name_trunc = truncate_name(&pv.quota.display_name, 7);
+            Line::from(format!(" {mark} {:<7}{pct}", name_trunc))
         }
         SidebarItem::History => Line::from("   Histórico".to_string()),
         SidebarItem::Login => Line::from("   Login".to_string()),
         SidebarItem::Waybar => Line::from("   Waybar".to_string()),
     }
+}
+
+/// Trunca `name` para no máximo `width` células, terminando em "…" quando
+/// corta — contrato de alinhamento: nunca corte seco.
+fn truncate_name(name: &str, width: usize) -> String {
+    if name.chars().count() <= width {
+        return name.to_string();
+    }
+    let head: String = name.chars().take(width.saturating_sub(1)).collect();
+    format!("{head}…")
 }
 
 pub fn render_sidebar(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
@@ -94,7 +107,15 @@ pub fn render_sidebar(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         lines.push(line);
     }
 
+    // Guard de altura: itens além de `area.height` são clipados pelo
+    // Paragraph e não ficam visíveis — não registrar zona de clique pra
+    // linha que não está na tela (regressão vs a sidebar antiga, que já
+    // parava em `inner.height`).
+    let max_row = area.y + area.height;
     for (i, row) in row_of_item.iter().enumerate() {
+        if *row >= max_row {
+            continue;
+        }
         hits.push(Rect::new(area.x, *row, area.width, 1), MouseTarget::Sidebar(i));
     }
     frame.render_widget(Paragraph::new(lines), area);
@@ -119,7 +140,20 @@ fn item_color(state: &AppState, item: SidebarItem) -> ratatui::style::Color {
             if pv.quota.error.is_some() {
                 to_ratatui(ColorToken::Muted) // deslogado/erro: dim
             } else {
-                crate::tui::theme_bridge::hex_to_color(provider_hex(&pv.quota.provider))
+                let remaining = pv.quota.primary.as_ref().map(|w| w.remaining).unwrap_or(0.0);
+                if remaining < 10.0 {
+                    // Animação D: blink crítico — substituída pelo pulse na Task 16.
+                    // Migrado de widgets/provider_list.rs (órfão desta task, apagado):
+                    // mesma cadência de ~450ms (ticks de 30ms → 15 ticks por fase).
+                    let blink_visible = (state.anim_frame / 15) % 2 == 0;
+                    if blink_visible {
+                        to_ratatui(ColorToken::Red)
+                    } else {
+                        to_ratatui(ColorToken::Muted)
+                    }
+                } else {
+                    crate::tui::theme_bridge::hex_to_color(provider_hex(&pv.quota.provider))
+                }
             }
         }
         _ => to_ratatui(ColorToken::Text),
@@ -197,5 +231,96 @@ mod tests {
             let found = (0..20u16).any(|y| hits.at(0, y) == Some(MouseTarget::Sidebar(i)));
             assert!(found, "faltou hit-zone (narrow) para indice {i}");
         }
+    }
+
+    #[test]
+    fn critical_quota_blinks_red_then_muted() {
+        // Animação D: remaining < 10% pisca — migrado de provider_list.rs
+        // (órfão, apagado). anim_frame=0 -> fase visível (Red); anim_frame=15
+        // -> fase apagada (Muted). Cadência: 15 ticks de 30ms por fase.
+        let mut state = AppState::new();
+        state.providers = vec![make_provider("claude", "Claude", 5.0)];
+
+        state.anim_frame = 0;
+        let visible = item_color(&state, SidebarItem::Provider(0));
+        assert_eq!(visible, to_ratatui(ColorToken::Red));
+
+        state.anim_frame = 15;
+        let dim = item_color(&state, SidebarItem::Provider(0));
+        assert_eq!(dim, to_ratatui(ColorToken::Muted));
+
+        assert_ne!(visible, dim);
+    }
+
+    #[test]
+    fn non_critical_quota_uses_provider_color_regardless_of_anim_frame() {
+        let mut state = AppState::new();
+        state.providers = vec![make_provider("claude", "Claude", 50.0)];
+        state.anim_frame = 0;
+        let color = item_color(&state, SidebarItem::Provider(0));
+        assert_eq!(
+            color,
+            crate::tui::theme_bridge::hex_to_color(provider_hex("claude"))
+        );
+    }
+
+    #[test]
+    fn hit_zones_respect_height_guard() {
+        // area.height=3 só cabe a linha de VISAO(0) + Overview(1); todo o
+        // resto (providers/History/Login/Waybar) fica fora da tela — não
+        // deve registrar zona de clique pra linha invisível.
+        let backend = ratatui::backend::TestBackend::new(17, 3);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![make_provider("claude", "Claude", 26.0)];
+        let mut hits = HitMap::default();
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_sidebar(&state, f, area, &mut hits);
+            })
+            .unwrap();
+
+        // Overview (indice 0) cai na linha 1, dentro da area de altura 3.
+        assert_eq!(hits.at(0, 1), Some(MouseTarget::Sidebar(0)));
+        // Provider(0) (indice 1) cairia na linha 4 — fora da area (0..3).
+        for y in 0..3u16 {
+            assert_ne!(hits.at(0, y), Some(MouseTarget::Sidebar(1)));
+        }
+        // Nenhuma zona registrada em y >= height.
+        for y in 3..20u16 {
+            assert_eq!(hits.at(0, y), None);
+        }
+    }
+
+    #[test]
+    fn long_display_name_truncates_with_ellipsis() {
+        let mut state = AppState::new();
+        state.providers = vec![make_provider("claude", "VeryLongProviderName", 50.0)];
+        let line = item_label(&state, SidebarItem::Provider(0), false);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains('…'), "esperava elipse na truncagem: {text}");
+        assert!(
+            !text.contains("VeryLongProviderName"),
+            "nome nao deveria aparecer inteiro: {text}"
+        );
+    }
+
+    #[test]
+    fn render_sidebar_snapshot_critical_blink_visible() {
+        // Snapshot deterministico: anim_frame=0 -> fase visivel do blink.
+        let backend = ratatui::backend::TestBackend::new(17, 12);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![make_provider("claude", "Claude", 5.0)];
+        state.anim_frame = 0;
+        let mut hits = HitMap::default();
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_sidebar(&state, f, area, &mut hits);
+            })
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
     }
 }

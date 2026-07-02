@@ -1,0 +1,16 @@
+---
+source: src/tui/render/sidebar.rs
+expression: terminal.backend()
+---
+" VISÃO           "
+" ▸ Geral         "
+"                 "
+" PROVIDERS       "
+" ◆ Claude   5%   "
+"                 "
+" MAIS            "
+"   Histórico     "
+"   Login         "
+"   Waybar        "
+"                 "
+"                 "

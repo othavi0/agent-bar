@@ -7,7 +7,6 @@
 
 pub mod chips;
 pub mod key_hint;
-pub mod provider_list;
 pub mod quota_gauge;
 pub mod severity;
 pub mod sparkline;
