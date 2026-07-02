@@ -5,7 +5,7 @@ expression: terminal.backend()
 "┏ Login ━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
 "┃ > Claude [ok]            ┃┃ Claude                           ┃"
 "┃   Codex [sem token]      ┃┃                                  ┃"
-"┃   Amp [deslogado]        ┃┃ Abre a REPL do Claude. Digite /lo┃"
+"┃   Amp [erro]             ┃┃ Abre a REPL do Claude. Digite /lo┃"
 "┃                          ┃┃                                  ┃"
 "┃                          ┃┃ [Enter] iniciar login    [j/k] na┃"
 "┃                          ┃┃                                  ┃"

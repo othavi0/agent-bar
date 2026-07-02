@@ -79,6 +79,9 @@ fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect) {
                 LoginState::Ok => (" [ok]", to_ratatui(ColorToken::Green), true),
                 LoginState::NoToken => (" [sem token]", to_ratatui(ColorToken::Yellow), false),
                 LoginState::LoggedOut => (" [deslogado]", to_ratatui(ColorToken::Muted), false),
+                // Falha nao-auth (parse/rede/API): erro real, mas nao pede
+                // re-login — cor de atencao distinta de "deslogado".
+                LoginState::Error => (" [erro]", to_ratatui(ColorToken::Red), false),
                 LoginState::Checking => (" [verificando…]", to_ratatui(ColorToken::Cyan), false),
             };
             let status_style = if selected {
@@ -197,17 +200,15 @@ mod tests {
     fn render_login_snapshot_mixed_login_states() {
         // Regressão do bug que esta task mata: aba Login refletia path.exists()
         // /binário no PATH, contradizendo o dashboard (fetch real). Aqui claude
-        // = Ok, codex = NoToken (erro com fonte presente), amp = LoggedOut
-        // (mensagem "Not logged in" contrato) — tudo derivado de state.providers.
+        // = Ok, codex = NoToken (erro com fonte presente), amp = Error (falha
+        // não-auth — parse/rede/API — nunca rotulada "deslogado", spec §10) —
+        // tudo derivado de state.providers. LoggedOut fica coberto pelo
+        // snapshot com providers vazios (`render_login_snapshot`).
         let mut state = AppState::new();
         state.providers = vec![
             ProviderView::new(quota("claude", true, None)),
             ProviderView::new(quota("codex", true, Some("Codex API error 401"))),
-            ProviderView::new(quota(
-                "amp",
-                false,
-                Some("Not logged in. Open `agent-bar menu` and choose Provider login."),
-            )),
+            ProviderView::new(quota("amp", false, Some("Failed to parse usage"))),
         ];
         use crate::tui::state::Tab;
         state.tab = Tab::Login;

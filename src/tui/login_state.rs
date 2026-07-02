@@ -8,10 +8,14 @@ use crate::providers::types::ProviderQuota;
 pub enum LoginState {
     /// Último fetch retornou quota sem erro.
     Ok,
-    /// Fonte presente mas auth inválida (erro de API/token no fetch).
+    /// `available: true` com erro de auth/token no fetch (fonte presente,
+    /// mas a API rejeitou a credencial).
     NoToken,
     /// Sem sessão (erro tipado de não-logado, ou provider nunca visto).
     LoggedOut,
+    /// Fetch falhou por motivo NÃO relacionado a auth (parse, rede, API) —
+    /// não induzir re-login.
+    Error,
     /// Fetch em voo para este provider.
     Checking,
 }
@@ -26,7 +30,7 @@ pub fn login_state_for(quota: Option<&ProviderQuota>, fetch_pending: bool) -> Lo
             (None, _) => LoginState::Ok,
             (Some(e), _) if e.starts_with("Not logged in") => LoginState::LoggedOut,
             (Some(_), true) => LoginState::NoToken,
-            (Some(_), false) => LoginState::LoggedOut,
+            (Some(_), false) => LoginState::Error,
         },
     }
 }
@@ -74,6 +78,14 @@ mod tests {
     fn other_error_with_source_present_is_no_token() {
         let q = quota(true, Some("Claude API error 401"));
         assert_eq!(login_state_for(Some(&q), false), LoginState::NoToken);
+    }
+
+    #[test]
+    fn non_auth_error_with_source_absent_is_error_not_logged_out() {
+        // Falha transitória (parse/rede/API) com available:false não deve
+        // induzir re-login — é um estado distinto de LoggedOut (spec §10).
+        let q = quota(false, Some("Failed to parse usage"));
+        assert_eq!(login_state_for(Some(&q), false), LoginState::Error);
     }
 
     #[test]
