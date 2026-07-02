@@ -144,36 +144,17 @@ pub enum FetchStatus {
     Failed(String),
 }
 
+// A "Animação A" (gauge lerp via `display_ratio`/`target_ratio`) foi
+// removida na varredura de legado 7.1.x: nenhum render lia o valor — os
+// gauges renderizam `w.remaining` direto; só os testes exercitavam o lerp.
 #[derive(Debug, Clone)]
 pub struct ProviderView {
     pub quota: ProviderQuota,
-    /// Animação A (gauge lerp): valor exibido do gauge, persegue o target via lerp.
-    /// Inicializado = target no 1º load para não animar a partir de zero.
-    pub display_ratio: f64,
 }
 
 impl ProviderView {
     pub fn new(quota: ProviderQuota) -> Self {
-        let target = quota
-            .primary
-            .as_ref()
-            .map(|w| w.remaining / 100.0)
-            .unwrap_or(0.0)
-            .clamp(0.0, 1.0);
-        Self {
-            quota,
-            display_ratio: target,
-        }
-    }
-
-    /// Percentual restante alvo (0.0-1.0) vindo do dado bruto do provider.
-    pub fn target_ratio(&self) -> f64 {
-        self.quota
-            .primary
-            .as_ref()
-            .map(|w| w.remaining / 100.0)
-            .unwrap_or(0.0)
-            .clamp(0.0, 1.0)
+        Self { quota }
     }
 }
 
@@ -240,9 +221,8 @@ pub struct AppState {
     /// lerp (fator 0.12/tick de ~30ms, snap quando a diferença < 0.01) —
     /// count-up visual. Com `animations=false`, `AnimTick` snapa direto pro
     /// alvo (sem lerp). No 1º load (`Action::UsageComputed` com
-    /// `usage` ainda `None`) já nasce igual ao alvo — mesmo racional do
-    /// `display_ratio` de `ProviderView::new()` — para não animar a partir
-    /// de zero no primeiro paint.
+    /// `usage` ainda `None`) já nasce igual ao alvo — para não animar a
+    /// partir de zero no primeiro paint.
     pub display_cost: f64,
     /// Gate de animações (`settings.menu.animations`, Task 15/16): controla
     /// o count-up de `display_cost` e o pulse crítico dos gauges

@@ -330,11 +330,9 @@ fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
             ),
         ]);
     }
-    let pct_used = if eu.limit > 0.0 {
-        (eu.used / eu.limit * 100.0).clamp(0.0, 100.0)
-    } else {
-        0.0
-    };
+    // `eu.limit > 0.0` é garantido pelo early-return acima (limit <= 0.0
+    // já saiu com o texto "sem limite") — divisão segura.
+    let pct_used = (eu.used / eu.limit * 100.0).clamp(0.0, 100.0);
     let remaining_pct = 100.0 - pct_used;
     let color = sev_color(Some(remaining_pct));
     let mut spans = vec![label];

@@ -63,6 +63,21 @@ launch_ghostty() {
   exec setsid ghostty --title="Agent Bar" "${font_opts[@]}" -e bash -lc "$cmd"
 }
 
+# uwsm/xdg genérico (sem suporte a fonte — fallback documentado). Só retorna
+# se nenhum dos dois dispatchers existir (cada exec substitui o processo);
+# quem chama decide o erro/fallback seguinte.
+try_xdg_generic() {
+  if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
+    exec setsid uwsm-app -- xdg-terminal-exec \
+      --app-id=org.omarchy.terminal \
+      --title="Agent Bar" \
+      -e bash -lc "$cmd"
+  fi
+  if command -v xdg-terminal-exec >/dev/null 2>&1; then
+    exec setsid xdg-terminal-exec --title="Agent Bar" -e bash -lc "$cmd"
+  fi
+}
+
 # ---- Política de $TERMINAL ----
 # `xdg-terminal-exec` é o dispatcher (Omarchy exporta por padrão), não uma
 # preferência concreta — tratado como UNSET. Preferência concreta conhecida
@@ -107,15 +122,7 @@ wezterm)
   # xdg-terminal-exec é quem lê $TERMINAL e respeita a escolha; sem fonte,
   # fallback documentado). Sem uwsm/xdg disponível, falha aqui mesmo (não
   # cascateia pros terminais diretos — a preferência foi explícita).
-  if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
-    exec setsid uwsm-app -- xdg-terminal-exec \
-      --app-id=org.omarchy.terminal \
-      --title="Agent Bar" \
-      -e bash -lc "$cmd"
-  fi
-  if command -v xdg-terminal-exec >/dev/null 2>&1; then
-    exec setsid xdg-terminal-exec --title="Agent Bar" -e bash -lc "$cmd"
-  fi
+  try_xdg_generic
   echo "No terminal launcher found for \$TERMINAL=$TERMINAL (xdg-terminal-exec/uwsm-app not available)." >&2
   exit 1
   ;;
@@ -139,17 +146,7 @@ if command -v ghostty >/dev/null 2>&1; then
   launch_ghostty
 fi
 
-# uwsm/xdg genérico (sem suporte a fonte — fallback documentado):
-if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
-  exec setsid uwsm-app -- xdg-terminal-exec \
-    --app-id=org.omarchy.terminal \
-    --title="Agent Bar" \
-    -e bash -lc "$cmd"
-fi
-
-if command -v xdg-terminal-exec >/dev/null 2>&1; then
-  exec setsid xdg-terminal-exec --title="Agent Bar" -e bash -lc "$cmd"
-fi
+try_xdg_generic
 
 # wezterm: launch atual, sem fonte. `--config font=...` tem sintaxe Lua
 # frágil; não-suportado aqui (documentado, não implementado).

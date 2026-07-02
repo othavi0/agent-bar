@@ -558,7 +558,7 @@ pub fn build_help(no_color: bool) -> String {
         "{}\n",
         cmd_line(
             "update",
-            "Update the install (npm or managed checkout)",
+            "Update the install (self-update or managed checkout)",
             no_color
         )
     ));
@@ -1170,8 +1170,8 @@ mod tests {
     fn build_help_contains_update_description() {
         let help = build_help(false);
         assert!(
-            help.contains("Update the install (npm or managed checkout)"),
-            "Texto 'Update the install (npm or managed checkout)' não encontrado no help"
+            help.contains("Update the install (self-update or managed checkout)"),
+            "Texto 'Update the install (self-update or managed checkout)' não encontrado no help"
         );
     }
 
@@ -1190,8 +1190,8 @@ mod tests {
     fn build_help_no_color_preserves_text_needles() {
         let help = build_help(true);
         assert!(
-            help.contains("Update the install (npm or managed checkout)"),
-            "no_color=true: texto 'Update the install (npm or managed checkout)' ausente"
+            help.contains("Update the install (self-update or managed checkout)"),
+            "no_color=true: texto 'Update the install (self-update or managed checkout)' ausente"
         );
         assert!(
             help.contains("agent-bar  or  cargo run"),

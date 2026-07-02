@@ -472,9 +472,8 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
 
         Action::UsageComputed(summary) => {
             // 1º load (usage ainda None): pinta display_cost = alvo direto,
-            // sem animar a partir de zero — mesmo racional do
-            // display_ratio em ProviderView::new(). Loads seguintes deixam
-            // o AnimTick fazer o count-up até o novo alvo.
+            // sem animar a partir de zero. Loads seguintes deixam o
+            // AnimTick fazer o count-up até o novo alvo.
             if state.usage.is_none() {
                 state.display_cost = summary.total_cost.usd;
             }
@@ -645,11 +644,8 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         Action::Tick => vec![],
 
         Action::AnimTick => {
-            // Animação A (gauge lerp): cada provider avança display_ratio → target.
-            for pv in &mut state.providers {
-                let target = pv.target_ratio();
-                pv.display_ratio += (target - pv.display_ratio) * 0.20;
-            }
+            // (A antiga "Animação A" — gauge lerp via display_ratio — foi
+            // removida: nenhum render lia o valor.)
             // Animação C (throbber): avança o frame do spinner braille.
             state.throbber.advance();
             // Animação D (pulse): contador de frames para blink do ● crítico
@@ -775,7 +771,7 @@ mod tests {
     }
 
     /// Quota com `primary.remaining` preenchido — usado pelos testes do fluxo
-    /// de fetch assincrono (Task 5) que validam ProviderView/target_ratio.
+    /// de fetch assincrono (Task 5).
     fn test_quota(id: &str, remaining: f64) -> ProviderQuota {
         use crate::providers::types::QuotaWindow;
         let mut q = fake_quota(id);
@@ -1206,39 +1202,6 @@ mod tests {
     }
 
     #[test]
-    fn anim_tick_lerps_display_ratio_toward_target() {
-        use crate::providers::types::QuotaWindow;
-
-        // Cria provider com remaining=80% → target_ratio=0.80
-        let mut q = fake_quota("claude");
-        q.primary = Some(QuotaWindow {
-            remaining: 80.0,
-            resets_at: None,
-            window_minutes: None,
-            used: Some(20.0),
-            severity: None,
-        });
-        let mut state = AppState::new();
-        // Inicializa com 0 (forçamos display_ratio inicial diferente do target)
-        let mut pv = crate::tui::state::ProviderView::new(q);
-        pv.display_ratio = 0.0; // ponto de partida artificial para testar a convergência
-        state.providers = vec![pv];
-
-        // Após 20 AnimTicks, display_ratio deve convergir próximo a 0.80
-        for _ in 0..20 {
-            update(&mut state, Action::AnimTick);
-        }
-
-        let display = state.providers[0].display_ratio;
-        let target = 0.80_f64;
-        let diff = (display - target).abs();
-        assert!(
-            diff < 0.01,
-            "display_ratio {display:.4} deve estar próximo de {target:.2} após 20 ticks (diff={diff:.4})"
-        );
-    }
-
-    #[test]
     fn anim_tick_increments_anim_frame_and_throbber() {
         let mut state = AppState::new();
         assert_eq!(state.anim_frame, 0);
@@ -1357,8 +1320,7 @@ mod tests {
 
     #[test]
     fn usage_computed_first_load_snaps_display_cost_without_animating() {
-        // Mesmo racional do display_ratio em ProviderView::new(): o 1º load
-        // não deve animar a partir de zero.
+        // O 1º load não deve animar a partir de zero.
         let mut state = AppState::new();
         assert!(state.usage.is_none());
         assert_eq!(state.display_cost, 0.0);
@@ -1390,28 +1352,6 @@ mod tests {
         assert_eq!(
             state.display_cost, 10.0,
             "2º load não deve resetar display_cost — AnimTick faz o count-up"
-        );
-    }
-
-    #[test]
-    fn display_ratio_initializes_to_target() {
-        use crate::providers::types::QuotaWindow;
-        let mut q = fake_quota("codex");
-        q.primary = Some(QuotaWindow {
-            remaining: 42.0,
-            resets_at: None,
-            window_minutes: None,
-            used: Some(58.0),
-            severity: None,
-        });
-        let pv = crate::tui::state::ProviderView::new(q);
-        // Na inicialização, display_ratio deve ser igual ao target (sem animação no 1º frame).
-        let expected = 42.0 / 100.0;
-        let diff = (pv.display_ratio - expected).abs();
-        assert!(
-            diff < 1e-10,
-            "display_ratio={} mas esperado={expected}",
-            pv.display_ratio
         );
     }
 
