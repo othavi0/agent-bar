@@ -3,13 +3,13 @@ source: src/tui/render/login.rs
 expression: terminal.backend()
 ---
 "┏ Login ━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃ > Claude [deslogado]     ┃┃ Claude                           ┃"
-"┃   Codex [deslogado]      ┃┃                                  ┃"
+"┃ > Claude [ok]            ┃┃ Claude                           ┃"
+"┃   Codex [sem token]      ┃┃                                  ┃"
 "┃   Amp [deslogado]        ┃┃ Abre a REPL do Claude. Digite /lo┃"
 "┃                          ┃┃                                  ┃"
 "┃                          ┃┃ [Enter] iniciar login    [j/k] na┃"
 "┃                          ┃┃                                  ┃"
-"┃                          ┃┃ Erro no login: claude nao encontr┃"
+"┃                          ┃┃                                  ┃"
 "┃                          ┃┃                                  ┃"
 "┃                          ┃┃                                  ┃"
 "┃                          ┃┃                                  ┃"

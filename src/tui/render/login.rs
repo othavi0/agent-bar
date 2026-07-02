@@ -1,5 +1,6 @@
 //! Aba Login: lista os 3 providers com status de autenticacao e acao de login.
-//! Sem emoji. Status determinado pelos credential paths e disponibilidade do binario.
+//! Sem emoji. Status vem do `LoginState` derivado do ULTIMO FETCH REAL (ver
+//! `crate::tui::login_state`) — nunca de path.exists() ou binario no PATH.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -9,80 +10,50 @@ use ratatui::Frame;
 
 use crate::config::Paths;
 use crate::theme::ColorToken;
+use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
-
-/// Determina se o provider esta autenticado (verificacao local, sem rede).
-/// - claude: credentials file existe
-/// - codex: auth file existe
-/// - amp: binario `amp` acessivel no PATH ou em candidatos conhecidos
-pub fn is_logged_in(provider_id: &str, paths: &Paths) -> bool {
-    match provider_id {
-        "claude" => paths.claude_credentials.exists(),
-        "codex" => paths.codex_auth.exists(),
-        "amp" => {
-            let home = std::env::var("HOME").unwrap_or_default();
-            crate::providers::amp_cli::find_amp_bin(&home).is_some()
-        }
-        _ => false,
-    }
-}
 
 /// Constantes dos providers da aba Login (id, nome de exibicao).
 const PROVIDERS: [(&str, &str); 3] = [("claude", "Claude"), ("codex", "Codex"), ("amp", "Amp")];
 
-/// Renderiza a aba Login completa. Aceita paths opcional; se `None`, resolve
-/// via `Paths::from_env()` (aceitavel: stat de arquivo, nao chamada de rede).
-pub fn render_login(state: &AppState, paths_opt: Option<&Paths>, frame: &mut Frame, area: Rect) {
-    let resolved;
-    let paths: &Paths = match paths_opt {
-        Some(p) => p,
-        None => {
-            match Paths::from_env() {
-                Ok(p) => {
-                    resolved = p;
-                    &resolved
-                }
-                Err(_) => {
-                    // Sem HOME: exibe mensagem de erro minima.
-                    let block = ratatui::widgets::Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Thick)
-                        .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)));
-                    let p = ratatui::widgets::Paragraph::new(Span::styled(
-                        " HOME nao definido; nao foi possivel resolver paths.",
-                        Style::default().fg(to_ratatui(ColorToken::Red)),
-                    ))
-                    .block(block);
-                    frame.render_widget(p, area);
-                    return;
-                }
-            }
-        }
-    };
-
+/// Renderiza a aba Login completa. `_paths_opt` fica no signature so por
+/// compat com o dispatcher (`render/mod.rs`); o status de cada provider nao
+/// depende mais de paths de credencial — vem do `LoginState` (ultimo fetch).
+pub fn render_login(state: &AppState, _paths_opt: Option<&Paths>, frame: &mut Frame, area: Rect) {
     // Layout: [lista de providers | painel de detalhe/instrucao]
+    // 28 cols cobre o pior caso sem truncar: prefixo " > " (3) + "Claude" (6)
+    // + " [verificando…]" (15, o label mais longo) + 2 de borda = 26; +2 de
+    // folga. Labels antigos ("[ok]"/"[--]") cabiam em 22, mas os novos labels
+    // em PT-BR ("deslogado", "sem token", "verificando…") sao mais longos.
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(22), Constraint::Min(0)])
+        .constraints([Constraint::Length(28), Constraint::Min(0)])
         .split(area);
 
     let list_area = horiz[0];
     let detail_area = horiz[1];
 
-    render_provider_list(state, paths, frame, list_area);
+    render_provider_list(state, frame, list_area);
     render_detail_panel(state, frame, detail_area);
 }
 
-/// Coluna esquerda: lista os providers com status (logado / nao logado).
-fn render_provider_list(state: &AppState, paths: &Paths, frame: &mut Frame, area: Rect) {
+/// Coluna esquerda: lista os providers com status derivado do ultimo fetch.
+fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect) {
     let selected_bg = ratatui::style::Color::Rgb(45, 53, 65);
 
     let items: Vec<ListItem<'_>> = PROVIDERS
         .iter()
         .enumerate()
         .map(|(i, &(id, name))| {
-            let logged_in = is_logged_in(id, paths);
+            let quota = state
+                .providers
+                .iter()
+                .find(|pv| pv.quota.provider == id)
+                .map(|pv| &pv.quota);
+            // Task 5 liga o pending real; ate la, nunca "Checking" por aqui.
+            let fetch_pending = false;
+            let login_state = login_state_for(quota, fetch_pending);
             let selected = i == state.login_selected;
 
             let prefix = if selected { " > " } else { "   " };
@@ -104,22 +75,23 @@ fn render_provider_list(state: &AppState, paths: &Paths, frame: &mut Frame, area
                 Style::default().fg(to_ratatui(ColorToken::Comment))
             };
 
-            let (status_text, status_fg) = if logged_in {
-                (" [ok]", to_ratatui(ColorToken::Green))
-            } else {
-                (" [--]", to_ratatui(ColorToken::Muted))
+            let (status_text, status_fg, bold) = match login_state {
+                LoginState::Ok => (" [ok]", to_ratatui(ColorToken::Green), true),
+                LoginState::NoToken => (" [sem token]", to_ratatui(ColorToken::Yellow), false),
+                LoginState::LoggedOut => (" [deslogado]", to_ratatui(ColorToken::Muted), false),
+                LoginState::Checking => (" [verificando…]", to_ratatui(ColorToken::Cyan), false),
             };
             let status_style = if selected {
                 Style::default()
                     .fg(status_fg)
-                    .add_modifier(if logged_in {
+                    .add_modifier(if bold {
                         Modifier::BOLD
                     } else {
                         Modifier::empty()
                     })
                     .bg(selected_bg)
             } else {
-                Style::default().fg(status_fg).add_modifier(if logged_in {
+                Style::default().fg(status_fg).add_modifier(if bold {
                     Modifier::BOLD
                 } else {
                     Modifier::empty()
@@ -202,61 +174,58 @@ fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tui::state::AppState;
+    use crate::providers::types::ProviderQuota;
+    use crate::tui::state::{AppState, ProviderView};
 
-    fn make_paths_tmp() -> (tempfile::TempDir, Paths) {
-        let dir = tempfile::tempdir().unwrap();
-        let h = dir.path();
-        let paths = Paths {
-            cache_dir: h.join("cache/agent-bar"),
-            config_dir: h.join("config/agent-bar"),
-            claude_credentials: h.join(".claude/.credentials.json"),
-            codex_auth: h.join(".codex/auth.json"),
-            codex_sessions: h.join(".codex/sessions"),
-            amp_settings: h.join("config/amp/settings.json"),
-            amp_threads: h.join(".local/share/amp/threads"),
-        };
-        (dir, paths)
+    fn quota(provider: &str, available: bool, error: Option<&str>) -> ProviderQuota {
+        ProviderQuota {
+            provider: provider.to_string(),
+            display_name: provider.to_string(),
+            available,
+            account: None,
+            plan: None,
+            plan_type: None,
+            primary: None,
+            secondary: None,
+            models: None,
+            extra: None,
+            error: error.map(|s| s.to_string()),
+        }
     }
 
     #[test]
-    fn is_logged_in_claude_absent() {
-        let (_tmp, paths) = make_paths_tmp();
-        assert!(!is_logged_in("claude", &paths));
-    }
+    fn render_login_snapshot_mixed_login_states() {
+        // Regressão do bug que esta task mata: aba Login refletia path.exists()
+        // /binário no PATH, contradizendo o dashboard (fetch real). Aqui claude
+        // = Ok, codex = NoToken (erro com fonte presente), amp = LoggedOut
+        // (mensagem "Not logged in" contrato) — tudo derivado de state.providers.
+        let mut state = AppState::new();
+        state.providers = vec![
+            ProviderView::new(quota("claude", true, None)),
+            ProviderView::new(quota("codex", true, Some("Codex API error 401"))),
+            ProviderView::new(quota(
+                "amp",
+                false,
+                Some("Not logged in. Open `agent-bar menu` and choose Provider login."),
+            )),
+        ];
+        use crate::tui::state::Tab;
+        state.tab = Tab::Login;
 
-    #[test]
-    fn is_logged_in_claude_present() {
-        let (_tmp, paths) = make_paths_tmp();
-        std::fs::create_dir_all(paths.claude_credentials.parent().unwrap()).unwrap();
-        std::fs::write(&paths.claude_credentials, b"{}").unwrap();
-        assert!(is_logged_in("claude", &paths));
-    }
-
-    #[test]
-    fn is_logged_in_codex_absent() {
-        let (_tmp, paths) = make_paths_tmp();
-        assert!(!is_logged_in("codex", &paths));
-    }
-
-    #[test]
-    fn is_logged_in_codex_present() {
-        let (_tmp, paths) = make_paths_tmp();
-        std::fs::create_dir_all(paths.codex_auth.parent().unwrap()).unwrap();
-        std::fs::write(&paths.codex_auth, b"{}").unwrap();
-        assert!(is_logged_in("codex", &paths));
-    }
-
-    #[test]
-    fn is_logged_in_unknown_always_false() {
-        let (_tmp, paths) = make_paths_tmp();
-        assert!(!is_logged_in("unknown_xyz", &paths));
+        let backend = ratatui::backend::TestBackend::new(64, 16);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_login(&state, None, f, area);
+            })
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
     }
 
     #[test]
     fn render_login_snapshot() {
-        let (_tmp, paths) = make_paths_tmp();
-        // Sem credenciais: todos [--]
+        // Sem providers no state (fetch nunca rodou): todos deslogados.
         let mut state = AppState::new();
         state.login_selected = 1; // Codex selecionado
         use crate::tui::state::Tab;
@@ -267,7 +236,7 @@ mod tests {
         terminal
             .draw(|f| {
                 let area = f.area();
-                render_login(&state, Some(&paths), f, area);
+                render_login(&state, None, f, area);
             })
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
@@ -275,7 +244,6 @@ mod tests {
 
     #[test]
     fn render_login_snapshot_with_status() {
-        let (_tmp, paths) = make_paths_tmp();
         let mut state = AppState::new();
         state.login_selected = 0;
         state.login_status = Some("Erro no login: claude nao encontrado".to_string());
@@ -287,7 +255,7 @@ mod tests {
         terminal
             .draw(|f| {
                 let area = f.area();
-                render_login(&state, Some(&paths), f, area);
+                render_login(&state, None, f, area);
             })
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
