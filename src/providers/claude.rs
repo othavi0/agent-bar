@@ -230,6 +230,9 @@ fn money_of(m: &Option<ClaudeSpendMoneyRaw>) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// `limit == 0.0` com `enabled == true` é sentinel de "sem teto configurado"
+/// (um limite real de $0 com enabled:true seria absurdo semântico) — o render
+/// trata esse caso à parte (sem gauge, só o valor gasto).
 fn extra_usage_from_spend(s: &ClaudeSpendRaw) -> ExtraUsage {
     let used = money_of(&s.used);
     let limit = money_of(&s.limit);
@@ -778,6 +781,24 @@ mod tests {
         let eu = extra.extra_usage.as_ref().unwrap();
         assert!(!eu.enabled);
         assert_eq!(eu.used, 0.0);
+        assert_eq!(eu.limit, 0.0);
+        assert_eq!(eu.remaining, 0.0);
+    }
+
+    /// Sentinel: `spend.enabled:true` com `limit:null` (extra usage ativado
+    /// sem teto configurado) mapeia p/ `ExtraUsage{limit:0.0}`, NÃO um erro —
+    /// o render (`detail.rs`) que decide o texto/gauge a partir disso.
+    #[test]
+    fn extra_usage_from_spend_null_limit_is_unlimited_sentinel() {
+        let spend: ClaudeSpendRaw = serde_json::from_value(json!({
+            "used": {"amount_minor": 1234, "currency": "USD", "exponent": 2},
+            "limit": null,
+            "enabled": true
+        }))
+        .unwrap();
+        let eu = extra_usage_from_spend(&spend);
+        assert!(eu.enabled);
+        assert!((eu.used - 12.34).abs() < 1e-9);
         assert_eq!(eu.limit, 0.0);
         assert_eq!(eu.remaining, 0.0);
     }

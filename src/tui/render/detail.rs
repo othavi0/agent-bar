@@ -286,10 +286,14 @@ fn spark_line(state: &AppState, provider: &str, content_width: u16) -> Line<'sta
 // ---------------------------------------------------------------------------
 
 /// Linha "extra usage": `enabled=false` → texto fixo "desativado";
-/// `enabled=true` → gauge(20) + "$used de $limit". Mesma coluna de label
-/// das demais seções. Só Claude tem esta seção (Amp/Codex têm extras
-/// próprios, sem overlap com `ClaudeQuotaExtra.extra_usage`); providers
-/// sem extra omitem a linha inteira (chamador não invoca esta função).
+/// `enabled=true && limit<=0.0` → sentinel de "sem limite configurado"
+/// (`extra_usage_from_spend` em `claude.rs`) → só o valor gasto, SEM gauge
+/// (não há teto p/ dar proporção — gauge 100%+"de $0.00" era
+/// autocontraditório); `enabled=true && limit>0.0` → gauge(20) + "$used de
+/// $limit". Mesma coluna de label das demais seções. Só Claude tem esta
+/// seção (Amp/Codex têm extras próprios, sem overlap com
+/// `ClaudeQuotaExtra.extra_usage`); providers sem extra omitem a linha
+/// inteira (chamador não invoca esta função).
 fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
     let label = Span::styled(
         format!(" {:<LABEL_W$} ", "extra usage"),
@@ -301,6 +305,19 @@ fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
             Span::styled(
                 "desativado",
                 Style::default().fg(to_ratatui(ColorToken::Muted)),
+            ),
+        ]);
+    }
+    if eu.limit <= 0.0 {
+        return Line::from(vec![
+            label,
+            Span::styled(
+                format!("${:.2} usado", eu.used),
+                Style::default().fg(to_ratatui(ColorToken::Yellow)),
+            ),
+            Span::styled(
+                " \u{b7} sem limite",
+                Style::default().fg(to_ratatui(ColorToken::Comment)),
             ),
         ]);
     }
@@ -988,6 +1005,34 @@ mod tests {
                 remaining: 0.0,
                 limit: 0.0,
                 used: 0.0,
+            }),
+        }));
+
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![pv];
+        state.selected = 0;
+        state.screen = Screen::Detail;
+        state.status = FetchStatus::Loaded;
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn detail_extra_usage_no_limit() {
+        // Sentinel: enabled:true + limit<=0.0 ("sem teto configurado" — ver
+        // extra_usage_from_spend em claude.rs). Sem gauge, só o valor gasto.
+        let mut pv = make_claude_full();
+        pv.quota.extra = Some(ProviderExtra::Claude(ClaudeQuotaExtra {
+            weekly_models: None,
+            extra_usage: Some(ExtraUsage {
+                enabled: true,
+                remaining: 0.0,
+                limit: 0.0,
+                used: 12.34,
             }),
         }));
 
