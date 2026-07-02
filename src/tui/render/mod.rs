@@ -6,7 +6,7 @@ pub mod login;
 mod shared;
 pub mod sidebar;
 
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
@@ -127,43 +127,38 @@ fn help_text() -> Text<'static> {
     Text::from(lines)
 }
 
-/// Retorna um `Rect` centralizado em `r`, ocupando `percent_x`% de largura e
-/// `percent_y`% de altura. Usado pelo overlay de ajuda pra fixar o tamanho
-/// do popup INDEPENDENTE do conteúdo — antes o popup (`tui_popup::Popup`) se
-/// auto-dimensionava pelo texto, e um cálculo de altura menor que a área
-/// disponível deixava linhas da tela por baixo (ex. a tabela do dashboard)
-/// sobreviverem nas bordas do popup (bug "pr"/"sto": fragmentos truncados
-/// de texto que não pertenciam ao overlay). Com área fixa + `Clear`
-/// explícito ANTES de qualquer conteúdo, nenhuma célula da tela anterior
-/// sobrevive dentro do popup.
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let vertical = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(vertical[1])[1]
+/// Área do popup de ajuda: dimensionada pelo CONTEÚDO de `help_text()`
+/// (altura = linhas + 2 bordas; largura = linha mais longa + bordas e
+/// respiro), clampada ao frame e centralizada. A área era um percentual
+/// fixo do frame (60%x70%) — em terminais reais menores que o dos
+/// snapshots (ex. 110x32), 70% dava menos linhas que o conteúdo e as
+/// seções finais (Login/Histórico) morriam cortadas na borda de baixo.
+/// O `Clear` explícito ANTES do conteúdo (em `render_help_overlay`)
+/// continua obrigatório: sem ele, células da tela por baixo sobrevivem
+/// dentro do popup (bug "pr"/"sto" da T14).
+fn help_popup_area(frame_area: Rect) -> Rect {
+    let text = help_text();
+    let width = (text.width() as u16).saturating_add(6).min(frame_area.width);
+    let height = (text.height() as u16)
+        .saturating_add(2)
+        .min(frame_area.height);
+    let x = frame_area.x + (frame_area.width - width) / 2;
+    let y = frame_area.y + (frame_area.height - height) / 2;
+    Rect::new(x, y, width, height)
 }
 
-/// Renderiza o overlay de ajuda por cima de tudo: `Clear` ANTES do conteúdo
-/// numa área FIXA (60%x70% do frame, `centered_rect`) — mata o clipping que
-/// deixava texto da tela por baixo vazar nas bordas do popup quando o
-/// tamanho era auto-calculado a partir do conteúdo (T14).
+/// Renderiza o overlay de ajuda por cima de tudo. A tela inteira por baixo
+/// é escurecida (DIM) antes do popup — sem isso, texto vivo encostado na
+/// borda (ex. a cauda de uma linha longa da tela de baixo) lê como
+/// vazamento/sujeira do popup.
 fn render_help_overlay(frame: &mut Frame) {
     let area = frame.area();
-    let popup_area = centered_rect(60, 70, area);
+    let popup_area = help_popup_area(area);
 
+    frame.render_widget(
+        Block::default().style(Style::default().add_modifier(Modifier::DIM)),
+        area,
+    );
     frame.render_widget(Clear, popup_area);
 
     let bg = ratatui::style::Color::Rgb(0x28, 0x2c, 0x34); // One Dark
@@ -491,8 +486,8 @@ mod tests {
 
     #[test]
     fn help_overlay_renders_snapshot() {
-        // Terminal generoso (60%x70% do popup comporta as 4 seções + dica
-        // de mouse sem wrap/corte).
+        // Terminal generoso (o popup dimensionado pelo conteúdo cabe com
+        // folga, sem wrap/corte).
         let backend = ratatui::backend::TestBackend::new(100, 44);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
@@ -505,14 +500,12 @@ mod tests {
 
     #[test]
     fn help_overlay_clear_prevents_underlying_table_from_leaking() {
-        // Regressão do bug "pr"/"sto" (T14): o popup ERA auto-dimensionado
-        // pelo conteúdo (`tui_popup::Popup`); se o cálculo automático desse
-        // uma área menor que o necessário, fragmentos da tabela por baixo
-        // sobreviviam dentro das bordas do popup. Fix: `centered_rect`
-        // fixa a área (60%x70% do frame) e `Clear` roda ANTES de qualquer
-        // conteúdo nessa área exata — célula a célula, nada da tabela do
-        // dashboard por baixo (aqui, os textos "sessão"/"26%"/"$2.10" dos
-        // cards) pode sobreviver dentro do popup.
+        // Regressão do bug "pr"/"sto" (T14): fragmentos da tabela por
+        // baixo sobreviviam dentro das bordas do popup quando o Clear não
+        // cobria a área inteira. `Clear` roda ANTES de qualquer conteúdo
+        // na área exata de `help_popup_area` — célula a célula, nada da
+        // tabela do dashboard por baixo (aqui, os textos "sessão"/"26%"/
+        // "$2.10" dos cards) pode sobreviver dentro do popup.
         let backend = ratatui::backend::TestBackend::new(100, 44);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
@@ -544,7 +537,7 @@ mod tests {
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
 
-        let popup_area = centered_rect(60, 70, Rect::new(0, 0, 100, 44));
+        let popup_area = help_popup_area(Rect::new(0, 0, 100, 44));
         let buffer = terminal.backend().buffer();
         let mut popup_text = String::new();
         for y in popup_area.y..popup_area.y + popup_area.height {
@@ -560,6 +553,44 @@ mod tests {
             assert!(
                 !popup_text.contains(leaked),
                 "conteúdo do dashboard por baixo vazou dentro do popup ({leaked:?} encontrado):\n{popup_text}"
+            );
+        }
+    }
+
+    #[test]
+    fn help_overlay_shows_all_sections_at_110x32() {
+        // Regressão do corte visto na máquina real (110x32): com a área do
+        // popup fixada em 60%x70% do frame, o inner ficava com 20 linhas
+        // para 28 linhas de conteúdo — as seções finais (Login/Histórico)
+        // e a dica de mouse morriam na borda de baixo. O popup deve se
+        // dimensionar pelo CONTEÚDO (clampado ao frame), então tudo
+        // precisa estar visível.
+        let backend = ratatui::backend::TestBackend::new(110, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.show_help = true;
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let mut screen = String::new();
+        for y in 0..32u16 {
+            for x in 0..110u16 {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    screen.push_str(cell.symbol());
+                }
+            }
+            screen.push('\n');
+        }
+        for expected in [
+            "alterna 24h/7d",              // linha da seção Histórico
+            "iniciar login do provider",   // linha da seção Login
+            "shift+drag seleciona texto",  // dica de mouse (última linha)
+        ] {
+            assert!(
+                screen.contains(expected),
+                "conteúdo do help cortado ({expected:?} ausente):\n{screen}"
             );
         }
     }
