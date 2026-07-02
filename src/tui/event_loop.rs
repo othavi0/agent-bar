@@ -12,6 +12,7 @@ use crate::usage;
 use crate::waybar_integration::{self, get_default_waybar_integration_paths, ApplyOptions};
 
 use super::action::Action;
+use super::effects::Effects;
 use super::login_spawn::RealLogin;
 use super::render::render;
 use super::state::{AppState, Screen};
@@ -173,9 +174,26 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     // Glyph mode real (Task 15): sem isto, `glyph_mode` fica no default Box
     // do AppState::new() mesmo com "glyphMode":"nerd" configurado.
     state.glyph_mode = octx.settings.glyph_mode;
+    // Gate de animações real (Task 16): sem isto, `animations` fica no
+    // default `true` do AppState::new() mesmo com "animations":false
+    // configurado — o count-up e o pulse crítico nunca desligariam.
+    state.animations = octx.settings.menu.animations;
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).
     let mut hits = super::mouse::HitMap::default();
+    // Efeitos tachyonfx (Task 16): coalesce na troca de tela, sweep no
+    // fetch. Gate próprio (`Effects::new(enabled)`), independente do de
+    // `state.animations` acima (mesma fonte — settings.menu.animations —
+    // mas o efeito roda fora do render puro, DEPOIS do draw).
+    let mut effects = Effects::new(octx.settings.menu.animations);
+    // Instant do frame anterior: base do `elapsed` passado a
+    // `effects.process` (o manager precisa saber quanto tempo passou desde
+    // o último draw pra avançar a animação corretamente).
+    let mut last_frame = std::time::Instant::now();
+    // Área do último frame desenhado (capturada dentro do draw, usada
+    // depois pra `effects.on_event` — `Frame::area()` só existe dentro do
+    // fechamento de `terminal.draw`).
+    let mut frame_area = ratatui::layout::Rect::default();
 
     // Canal p/ os resultados do fetch e do parse de usage em background. Mantém o loop livre.
     let (bg_tx, mut bg_rx) = tokio::sync::mpsc::unbounded_channel::<Action>();
@@ -196,8 +214,21 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     loop {
         terminal.draw(|f| {
             hits.clear();
-            render(&state, f, &mut hits)
+            render(&state, f, &mut hits);
+            // Efeitos tachyonfx (T16): rodam DEPOIS do render, direto no
+            // buffer já pintado — nunca fazem parte do contrato puro de
+            // `render()` (snapshots de teste nunca passam por aqui).
+            frame_area = f.area();
+            let elapsed = last_frame.elapsed();
+            effects.process(elapsed, f.buffer_mut(), frame_area);
         })?;
+        last_frame = std::time::Instant::now();
+        // Drena fx_queue (T16): update() só empurra puro; o disparo real do
+        // efeito acontece aqui, fora do render. Drenar TODA iteração evita
+        // a fila crescer sem limite entre frames.
+        for ev in state.fx_queue.drain(..) {
+            effects.on_event(ev, frame_area);
+        }
 
         // IO pendente que exige frame previo: o draw acima ja pintou o
         // status ("Abrindo login para X..." / "Salvando...") antes de

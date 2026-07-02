@@ -22,7 +22,7 @@ use crate::tui::state::{AppState, ProviderView};
 use crate::tui::theme_bridge::{hex_to_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
 use crate::tui::widgets::icons::{glyph, Icon};
-use crate::tui::widgets::quota_gauge::gauge_spans;
+use crate::tui::widgets::quota_gauge::{gauge_spans, pulse_color};
 use crate::tui::widgets::severity::severity_color_api;
 use crate::tui::widgets::sparkline::sparkline_str;
 use crate::usage::buckets::provider_series_24h;
@@ -185,8 +185,13 @@ fn fmt_provider_cost(pu: &ProviderUsage) -> String {
 }
 
 /// Uma linha de gauge (sessão/semana): label fixo 8, gauge, % right-aligned, reset.
-fn gauge_line(label: &str, w: &QuotaWindow, gauge_w: usize) -> Line<'static> {
-    let color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
+/// `anim_frame`/`animations` (Task 16): pulso crítico quando `remaining < 10.0`
+/// — coexiste com o blink da sidebar (Task 10), não o substitui.
+fn gauge_line(label: &str, w: &QuotaWindow, gauge_w: usize, anim_frame: u64, animations: bool) -> Line<'static> {
+    let mut color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
+    if animations && w.remaining < 10.0 {
+        color = pulse_color(color, anim_frame);
+    }
     let reset_str = fmt_reset(w.resets_at.as_deref());
     let mut spans = vec![Span::styled(
         format!("{:<8}", label),
@@ -249,10 +254,10 @@ fn render_provider_card(
         let gauge_w = derive_gauge_width(card_rect.width);
         let mut lines = Vec::with_capacity(3);
         if let Some(w) = &q.primary {
-            lines.push(gauge_line("sess\u{e3}o", w, gauge_w));
+            lines.push(gauge_line("sess\u{e3}o", w, gauge_w, state.anim_frame, state.animations));
         }
         if let Some(w) = &q.secondary {
-            lines.push(gauge_line("semana", w, gauge_w));
+            lines.push(gauge_line("semana", w, gauge_w, state.anim_frame, state.animations));
         }
 
         let series = match now {
@@ -494,7 +499,12 @@ mod tests {
             ProviderView::new(make_quota("amp", "Amp", 80.0, None, None)),
         ];
         state.status = FetchStatus::Loaded;
-        state.usage = Some(fake_usage());
+        // display_cost (T16): header agora mostra o count-up, não
+        // usage.total_cost.usd direto — sem isto, o header ficaria em
+        // "$0.00" (default de AppState::new()) em vez do custo real.
+        let usage = fake_usage();
+        state.display_cost = usage.total_cost.usd;
+        state.usage = Some(usage);
         // Séries distintas por provider — sparklines não devem ficar iguais.
         state.history = Some(vec![
             rec("claude", now - time::Duration::hours(1), 900_000),
@@ -680,4 +690,84 @@ mod tests {
 
     // quota_bar_logic (assertion de gauge 100%/0% via quota_bar_pub) já
     // existe em `render/mod.rs` — não duplicar aqui.
+
+    // ---- Motion: pulse crítico no card (Task 16) ----
+
+    /// Provider crítico: `remaining` < 10.0 dispara `pulse_color` no gauge
+    /// de sessão do card (via `gauge_line`). Confirma o CALL SITE real
+    /// (não só `pulse_color` isolado, já coberto em
+    /// `widgets::quota_gauge::tests`) — o buffer inteiro do card deve
+    /// diferir entre dois `anim_frame` distintos quando `animations=true`.
+    #[test]
+    fn critical_card_gauge_pulses_across_anim_frames_when_animations_on() {
+        let backend = ratatui::backend::TestBackend::new(100, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(make_quota(
+            "claude", "Claude", 5.0, None, None,
+        ))];
+        state.status = FetchStatus::Loaded;
+        state.animations = true;
+
+        state.anim_frame = 0;
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_dashboard(&state, f, area, &mut HitMap::default());
+            })
+            .unwrap();
+        let buf_frame0 = terminal.backend().buffer().clone();
+
+        state.anim_frame = 18; // ~metade do ciclo de 37 ticks do pulso
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_dashboard(&state, f, area, &mut HitMap::default());
+            })
+            .unwrap();
+        let buf_frame18 = terminal.backend().buffer().clone();
+
+        assert_ne!(
+            buf_frame0, buf_frame18,
+            "gauge crítico deveria pulsar (cor diferente) entre anim_frame 0 e 18"
+        );
+    }
+
+    /// Self-review do brief: animations=false → zero lerp visual — o pulso
+    /// não deve alterar UM ÚNICO byte do buffer entre `anim_frame`s
+    /// distintos (mesmo provider crítico do teste acima).
+    #[test]
+    fn critical_card_gauge_stays_static_when_animations_off() {
+        let backend = ratatui::backend::TestBackend::new(100, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(make_quota(
+            "claude", "Claude", 5.0, None, None,
+        ))];
+        state.status = FetchStatus::Loaded;
+        state.animations = false;
+
+        state.anim_frame = 0;
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_dashboard(&state, f, area, &mut HitMap::default());
+            })
+            .unwrap();
+        let buf_frame0 = terminal.backend().buffer().clone();
+
+        state.anim_frame = 18;
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_dashboard(&state, f, area, &mut HitMap::default());
+            })
+            .unwrap();
+        let buf_frame18 = terminal.backend().buffer().clone();
+
+        assert_eq!(
+            buf_frame0, buf_frame18,
+            "com animations=false, o pulso não deve alterar nada entre anim_frames"
+        );
+    }
 }

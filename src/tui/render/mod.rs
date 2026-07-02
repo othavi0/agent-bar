@@ -203,11 +203,14 @@ fn header_status(state: &AppState) -> Line<'static> {
         spans.push(Span::raw(" \u{b7} "));
     }
 
-    let cost = state
-        .usage
-        .as_ref()
-        .map(|u| format!("${:.2}", u.total_cost.usd))
-        .unwrap_or_else(|| "-".to_string());
+    // Count-up (T16): mostra `display_cost` (persegue `usage.total_cost.usd`
+    // via lerp em AnimTick), não o valor bruto — "-" enquanto usage ainda
+    // não carregou nenhuma vez (display_cost fica em 0.0 até o 1º load).
+    let cost = if state.usage.is_some() {
+        format!("${:.2}", state.display_cost)
+    } else {
+        "-".to_string()
+    };
     spans.push(Span::styled(
         cost,
         Style::default().fg(to_ratatui(ColorToken::TextBright)),
@@ -452,7 +455,12 @@ mod tests {
             ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
         ];
         state.status = FetchStatus::Loaded;
-        state.usage = Some(fake_usage());
+        // display_cost (T16): header agora mostra o count-up, não
+        // usage.total_cost.usd direto — sem isto, o header ficaria em
+        // "$0.00" (default de AppState::new()) em vez do custo real.
+        let usage = fake_usage();
+        state.display_cost = usage.total_cost.usd;
+        state.usage = Some(usage);
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
@@ -518,7 +526,12 @@ mod tests {
             ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
         ];
         state.status = FetchStatus::Loaded;
-        state.usage = Some(fake_usage());
+        // display_cost (T16): header agora mostra o count-up, não
+        // usage.total_cost.usd direto — sem isto, o header ficaria em
+        // "$0.00" (default de AppState::new()) em vez do custo real.
+        let usage = fake_usage();
+        state.display_cost = usage.total_cost.usd;
+        state.usage = Some(usage);
         state.show_help = true;
 
         terminal
@@ -596,7 +609,12 @@ mod tests {
             ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
         ];
         state.status = FetchStatus::Loaded;
-        state.usage = Some(fake_usage());
+        // display_cost (T16): header agora mostra o count-up, não
+        // usage.total_cost.usd direto — sem isto, o header ficaria em
+        // "$0.00" (default de AppState::new()) em vez do custo real.
+        let usage = fake_usage();
+        state.display_cost = usage.total_cost.usd;
+        state.usage = Some(usage);
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();

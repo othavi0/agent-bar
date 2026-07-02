@@ -41,6 +41,17 @@ pub enum Screen {
     Waybar,
 }
 
+/// Evento de efeito visual (T16): `update` empurra puro (`fx_queue`); o
+/// event_loop drena a fila a cada frame e traduz em efeitos tachyonfx
+/// (`crate::tui::effects::Effects::on_event`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FxEvent {
+    /// `Activate` mudou `state.screen` — dispara coalesce (T16).
+    ScreenChanged,
+    /// `FetchCompleted` chegou — dispara sweep (T16).
+    FetchLanded,
+}
+
 /// Item da sidebar unica. `Provider(i)` indexa `AppState.providers`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarItem {
@@ -223,6 +234,27 @@ pub struct AppState {
     /// com glyphs universais); `event_loop::run` sobrescreve com
     /// `octx.settings.glyph_mode` no boot real.
     pub glyph_mode: GlyphMode,
+    /// Fila de eventos de efeito visual (T16). `update` empurra puro; o
+    /// event_loop drena (`.drain(..)`) a cada iteração do loop e nunca deve
+    /// deixá-la crescer sem limite entre frames.
+    pub fx_queue: Vec<FxEvent>,
+    /// Custo exibido no header (T16): persegue `usage.total_cost.usd` via
+    /// lerp (fator 0.12/tick de ~30ms, snap quando a diferença < 0.01) —
+    /// count-up visual. Com `animations=false`, `AnimTick` snapa direto pro
+    /// alvo (sem lerp). No 1º load (`Action::UsageComputed` com
+    /// `usage` ainda `None`) já nasce igual ao alvo — mesmo racional do
+    /// `display_ratio` de `ProviderView::new()` — para não animar a partir
+    /// de zero no primeiro paint.
+    pub display_cost: f64,
+    /// Gate de animações (`settings.menu.animations`, Task 15/16): controla
+    /// o count-up de `display_cost` e o pulse crítico dos gauges
+    /// (`widgets::quota_gauge::pulse_color`). Default `true` (paridade com
+    /// `MenuSettings::animations`); `event_loop::run` sobrescreve com
+    /// `octx.settings.menu.animations` no boot real — mesmo padrão de
+    /// `glyph_mode`/`local_offset`. NÃO gate os efeitos tachyonfx (esses
+    /// são gate por `Effects::new(enabled)`, construído direto do
+    /// settings no event_loop).
+    pub animations: bool,
 }
 
 impl AppState {
@@ -251,6 +283,9 @@ impl AppState {
             hover: None,
             local_offset: time::UtcOffset::UTC,
             glyph_mode: GlyphMode::Box,
+            fx_queue: Vec::new(),
+            display_cost: 0.0,
+            animations: true,
         }
     }
 }

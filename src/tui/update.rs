@@ -3,8 +3,8 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use super::action::Action;
 use super::mouse::{ChipKind, MouseTarget};
 use super::state::{
-    sidebar_items, AppState, ConfigField, ConfigState, FetchStatus, HistoryRange, ProviderView,
-    Screen, SidebarItem,
+    sidebar_items, AppState, ConfigField, ConfigState, FetchStatus, FxEvent, HistoryRange,
+    ProviderView, Screen, SidebarItem,
 };
 
 /// Translates a raw KeyEvent into a semantic Action, if applicable.
@@ -279,6 +279,7 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::Activate(item) => {
+            let old_screen = state.screen;
             let follow_ups = match item {
                 SidebarItem::Overview => {
                     state.screen = Screen::Overview;
@@ -346,6 +347,12 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             {
                 state.sidebar_selected = idx;
             }
+            // Efeito coalesce (T16): só quando a tela de fato muda — ativar
+            // o item já ativo (ex. Enter em cima de si mesmo) não deve
+            // re-disparar o efeito.
+            if state.screen != old_screen {
+                state.fx_queue.push(FxEvent::ScreenChanged);
+            }
             follow_ups
         }
 
@@ -410,6 +417,10 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::FetchCompleted { fetched_at } => {
+            // Efeito sweep (T16): dispara sempre que uma onda de fetch
+            // termina, mesmo se outra onda sobreposta ainda estiver em voo
+            // (gatilho é a action chegando, não o status final agregado).
+            state.fx_queue.push(FxEvent::FetchLanded);
             // NAO limpa fetch_pending incondicionalmente: cada ProviderFetched
             // ja remove o proprio id. Se sobrar algo aqui, e porque outra onda
             // (Refresh/tick de 60s) ainda esta em voo — mantem Loading em vez
@@ -456,6 +467,13 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::UsageComputed(summary) => {
+            // 1º load (usage ainda None): pinta display_cost = alvo direto,
+            // sem animar a partir de zero — mesmo racional do
+            // display_ratio em ProviderView::new(). Loads seguintes deixam
+            // o AnimTick fazer o count-up até o novo alvo.
+            if state.usage.is_none() {
+                state.display_cost = summary.total_cost.usd;
+            }
             state.usage = Some(summary);
             vec![]
         }
@@ -630,8 +648,23 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             }
             // Animação C (throbber): avança o frame do spinner braille.
             state.throbber.advance();
-            // Animação D (pulse): contador de frames para blink do ● crítico.
+            // Animação D (pulse): contador de frames para blink do ● crítico
+            // da sidebar (Task 10) E para o pulse dos gauges críticos do
+            // card/detalhe (Task 16, `widgets::quota_gauge::pulse_color`) —
+            // os dois efeitos coexistem, um não substitui o outro.
             state.anim_frame = state.anim_frame.wrapping_add(1);
+            // Count-up do custo do header (T16): ease exponencial (~800ms
+            // em ticks de 30ms, fator 0.12). animations=false → snapa
+            // direto pro alvo, sem lerp visual.
+            let target_cost = state.usage.as_ref().map(|u| u.total_cost.usd).unwrap_or(0.0);
+            if state.animations {
+                state.display_cost += (target_cost - state.display_cost) * 0.12;
+                if (target_cost - state.display_cost).abs() < 0.01 {
+                    state.display_cost = target_cost;
+                }
+            } else {
+                state.display_cost = target_cost;
+            }
             vec![]
         }
 
@@ -1176,6 +1209,127 @@ mod tests {
             "throbber deve voltar a 0 após 6 ticks"
         );
         assert_eq!(state.anim_frame, 6);
+    }
+
+    // ---- Motion: tachyonfx + lerps (Task 16) ----
+
+    /// UsageSummary com `total_cost.usd` fixo — helper pro teste de count-up
+    /// de `display_cost` (não interessa o resto do summary).
+    fn test_usage_summary_with_cost(usd: f64) -> crate::usage::UsageSummary {
+        crate::usage::UsageSummary {
+            providers: vec![],
+            total_cost: crate::usage::Cost {
+                usd,
+                brl: usd * 5.50,
+            },
+            fx_rate: 5.50,
+        }
+    }
+
+    #[test]
+    fn screen_change_pushes_fx_event() {
+        let mut state = AppState::new();
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert!(state.fx_queue.contains(&crate::tui::state::FxEvent::ScreenChanged));
+    }
+
+    #[test]
+    fn activate_same_screen_does_not_repush_fx_event() {
+        // Reativar o item já ativo (ex. Enter em cima de si mesmo) não deve
+        // disparar um 2º coalesce — só a mudança real de tela dispara.
+        let mut state = AppState::new();
+        update(&mut state, Action::Activate(SidebarItem::History));
+        state.fx_queue.clear();
+
+        update(&mut state, Action::Activate(SidebarItem::History));
+
+        assert!(
+            state.fx_queue.is_empty(),
+            "reativar a MESMA tela não deve empurrar ScreenChanged de novo"
+        );
+    }
+
+    #[test]
+    fn fetch_completed_pushes_fetch_landed() {
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+            },
+        );
+        assert!(state.fx_queue.contains(&crate::tui::state::FxEvent::FetchLanded));
+    }
+
+    #[test]
+    fn anim_tick_lerps_display_cost_toward_target() {
+        let mut state = AppState::new();
+        // usage já presente (não é o 1º load) para exercitar o lerp, não o
+        // snap de UsageComputed — display_cost começa em 0.0 (default).
+        state.usage = Some(test_usage_summary_with_cost(100.0));
+        state.display_cost = 0.0;
+
+        update(&mut state, Action::AnimTick);
+        assert!(state.display_cost > 0.0 && state.display_cost < 100.0);
+
+        for _ in 0..400 {
+            update(&mut state, Action::AnimTick);
+        }
+        assert!((state.display_cost - 100.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn anim_tick_snaps_display_cost_when_animations_off() {
+        // Self-review: animations=false → zero lerp visual (snap direto).
+        let mut state = AppState::new();
+        state.animations = false;
+        state.usage = Some(test_usage_summary_with_cost(42.0));
+        state.display_cost = 0.0;
+
+        update(&mut state, Action::AnimTick);
+
+        assert_eq!(
+            state.display_cost, 42.0,
+            "com animations=false, 1 único AnimTick já deve snapar pro alvo"
+        );
+    }
+
+    #[test]
+    fn usage_computed_first_load_snaps_display_cost_without_animating() {
+        // Mesmo racional do display_ratio em ProviderView::new(): o 1º load
+        // não deve animar a partir de zero.
+        let mut state = AppState::new();
+        assert!(state.usage.is_none());
+        assert_eq!(state.display_cost, 0.0);
+
+        update(
+            &mut state,
+            Action::UsageComputed(test_usage_summary_with_cost(7.5)),
+        );
+
+        assert_eq!(state.display_cost, 7.5);
+    }
+
+    #[test]
+    fn usage_computed_second_load_does_not_reset_display_cost() {
+        // Loads seguintes (usage já Some) preservam display_cost — o
+        // AnimTick é quem faz o count-up até o novo alvo, não o snap.
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::UsageComputed(test_usage_summary_with_cost(10.0)),
+        );
+        assert_eq!(state.display_cost, 10.0);
+
+        update(
+            &mut state,
+            Action::UsageComputed(test_usage_summary_with_cost(50.0)),
+        );
+
+        assert_eq!(
+            state.display_cost, 10.0,
+            "2º load não deve resetar display_cost — AnimTick faz o count-up"
+        );
     }
 
     #[test]
