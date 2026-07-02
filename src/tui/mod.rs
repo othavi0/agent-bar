@@ -40,11 +40,16 @@ pub async fn run_tui(ctx: &Ctx<'_>) -> anyhow::Result<()> {
     let mut terminal = ratatui::try_init().context("falha ao inicializar o terminal")?;
     // Captura de eventos de mouse (Task 9): entra APÓS o alternate screen —
     // ratatui::try_init já fez enable_raw_mode + EnterAlternateScreen acima.
-    ratatui::crossterm::execute!(
+    // Best-effort (mesmo padrão do Disable abaixo): se falhar, a TUI segue
+    // funcionando só com teclado em vez de abortar com o terminal preso em
+    // alternate screen/raw mode sem `try_restore` (o `?` propagaria o erro
+    // ANTES do restore no fim desta função).
+    if let Err(e) = ratatui::crossterm::execute!(
         std::io::stdout(),
         ratatui::crossterm::event::EnableMouseCapture
-    )
-    .context("falha ao habilitar captura de mouse")?;
+    ) {
+        log::warn!("mouse capture indisponível: {e}");
+    }
 
     let octx = OwnedCtx::from_ctx(ctx);
     let result = event_loop::run(octx, &mut terminal).await;

@@ -358,8 +358,9 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut Hi
 
     // Zonas clicaveis: uma por linha de provider visivel (a lista nao tem
     // scroll — itens alem de `inner.height` sao clipados pelo widget e nao
-    // ficam clicaveis). A linha da throbber/err (acima) nao registra zona:
-    // nao tem MouseTarget correspondente ainda.
+    // ficam clicaveis). A linha da throbber/err (abaixo, apendada ao final
+    // de `items`) nao registra zona: nao tem MouseTarget correspondente
+    // ainda.
     for (i, _) in state.providers.iter().enumerate() {
         if (i as u16) >= inner.height {
             break;
