@@ -145,6 +145,12 @@ fn amp_dollars_of(state: &AppState) -> Option<&AmpDollars> {
 /// dia/provider + chips. `hits` recebe as zonas clicáveis dos chips.
 pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let records: &[UsageRecord] = state.history.as_deref().unwrap_or(&[]);
+    // Calculado ANTES de qualquer early-return (fix pós-review): o early
+    // return antigo checava só `records.is_empty()`, sem olhar pro Amp —
+    // Amp nunca gera `UsageRecord` (sem log local de token), então um
+    // usuário só-Amp ficava preso em "coletando histórico…" pra sempre,
+    // mesmo com `amp_dollars` já carregado em `state.usage`.
+    let amp_dollars = amp_dollars_of(state);
 
     let title = match state.history_range {
         HistoryRange::Day => " Hist\u{f3}rico (24h) ",
@@ -161,28 +167,42 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
                 .add_modifier(Modifier::BOLD),
         ));
 
-    if !records.is_empty() {
+    // Rodapé "Total 7d" some só quando NÃO HÁ NADA pra mostrar (nem token
+    // nem Amp). Com Amp-only (records vazio, amp_dollars presente), ainda
+    // mostra "Total 7d: 0 tokens" — honesto, não esconde o rodapé por causa
+    // de um campo vazio.
+    if !records.is_empty() || amp_dollars.is_some() {
         block = block.title_bottom(footer_line(records));
     }
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Sem records (history None/vazio) → skeleton com spinner, NUNCA branco.
-    if records.is_empty() {
+    // Skeleton com spinner SÓ quando não há absolutamente nada — nem
+    // tokens locais (`records`) nem $ do Amp. NUNCA branco.
+    if records.is_empty() && amp_dollars.is_none() {
         render_skeleton_screen(state, frame, inner, hits);
         return;
     }
 
-    // `now` é a âncora determinística do chart. `records` não-vazio implica
-    // `series_now` Some (fallback = max ts de `state.history`) — o `None`
-    // aqui é só defensivo (nunca deveria disparar), mantém o mesmo skeleton
-    // em vez de propagar um `unwrap`.
-    let now = match series_now(state) {
-        Some(n) => n,
-        None => {
-            render_skeleton_screen(state, frame, inner, hits);
-            return;
+    // `now`: âncora do chart. Sem records não há nada pra bucketizar — usa
+    // uma constante determinística (`UNIX_EPOCH`, NUNCA `now_utc()`); os
+    // buckets ficam 100% zero de qualquer forma (bucket_by_hour(&[], ..)),
+    // então `render_chart` cai sozinho no texto "sem uso de tokens..." —
+    // mesmo caminho de quando um provider não tem dado no range
+    // selecionado, sem precisar de uma mensagem/branch nova.
+    let now = if records.is_empty() {
+        time::OffsetDateTime::UNIX_EPOCH
+    } else {
+        // `records` não-vazio implica `series_now` Some (fallback = max ts
+        // de `state.history`) — o `None` aqui é só defensivo (nunca deveria
+        // disparar), mantém o mesmo skeleton em vez de propagar um `unwrap`.
+        match series_now(state) {
+            Some(n) => n,
+            None => {
+                render_skeleton_screen(state, frame, inner, hits);
+                return;
+            }
         }
     };
 
@@ -192,7 +212,6 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
     };
 
     let provider_buckets = bucket_by_provider_day(records);
-    let amp_dollars = amp_dollars_of(state);
 
     let mut n_rows: u16 = provider_buckets.values().map(|v| v.len() as u16).sum();
     if amp_dollars.is_some() {
@@ -383,7 +402,7 @@ fn render_table(
             .map(|v| format!("${v:.2}"))
             .unwrap_or_else(|| "-".to_string());
         let custo_line = Line::from(vec![
-            Span::raw(format!("{spent} de {total} (cr {remaining})  ")),
+            Span::raw(format!("{spent} de {total} (saldo cr {remaining})  ")),
             Span::styled(
                 "sem logs locais de token",
                 Style::default().fg(to_ratatui(ColorToken::Comment)),
@@ -672,6 +691,25 @@ mod tests {
         let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
         state.last_update = Some(now);
         state.history = Some(synth_wave("claude", "claude-opus-4-8", now, 24 * 3));
+        state.usage = Some(amp_usage(0.81, 5.0, 4.19));
+        terminal
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// Regressão pós-review: usuário só-Amp (`state.history` carregado mas
+    /// vazio — sem log local de claude/codex — `amp_dollars` presente).
+    /// Antes do fix, o early-return do skeleton rodava só olhando pra
+    /// `records.is_empty()` e prendia esse usuário em "coletando
+    /// histórico…" pra sempre, mesmo com o Amp já carregado.
+    #[test]
+    fn history_amp_only() {
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.history = Some(vec![]); // carregado, mas sem records (só-Amp)
         state.usage = Some(amp_usage(0.81, 5.0, 4.19));
         terminal
             .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
