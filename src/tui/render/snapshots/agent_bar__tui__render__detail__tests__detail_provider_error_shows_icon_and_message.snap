@@ -5,7 +5,7 @@ expression: terminal.backend()
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
 "│ VISÃO           ┏ Codex ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
 "│ ▸ Geral         ┃                                                                               ┃│"
-"│                 ┃ ✕ Erro ao carregar dados                                                      ┃│"
+"│                 ┃ ! Erro ao carregar dados                                                      ┃│"
 "│ PROVIDERS       ┃                                                                               ┃│"
 "│ ● Codex    –    ┃ Failed to fetch Codex usage                                                   ┃│"
 "│                 ┃                                                                               ┃│"

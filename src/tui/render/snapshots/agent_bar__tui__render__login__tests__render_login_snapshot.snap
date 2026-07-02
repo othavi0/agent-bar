@@ -3,9 +3,9 @@ source: src/tui/render/login.rs
 expression: terminal.backend()
 ---
 "┏ Login ━━━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃   ◆ Claude ○ deslogado     ┃┃ Codex                          ┃"
-"┃ > ● Codex  ○ deslogado     ┃┃                                ┃"
-"┃   ● Amp    ○ deslogado     ┃┃ Executa `codex auth login` (flu┃"
+"┃   ◆ Claude ✗ deslogado     ┃┃ Codex                          ┃"
+"┃ > ● Codex  ✗ deslogado     ┃┃                                ┃"
+"┃   ● Amp    ✗ deslogado     ┃┃ Executa `codex auth login` (flu┃"
 "┃                            ┃┃                                ┃"
 "┃                            ┃┃                                ┃"
 "┃                            ┃┃                                ┃"

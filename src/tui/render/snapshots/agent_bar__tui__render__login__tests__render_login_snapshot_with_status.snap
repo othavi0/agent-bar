@@ -3,9 +3,9 @@ source: src/tui/render/login.rs
 expression: terminal.backend()
 ---
 "┏ Login ━━━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃ > ◆ Claude ○ deslogado     ┃┃ Claude                         ┃"
-"┃   ● Codex  ○ deslogado     ┃┃                                ┃"
-"┃   ● Amp    ○ deslogado     ┃┃ Abre a REPL do Claude. Digite /┃"
+"┃ > ◆ Claude ✗ deslogado     ┃┃ Claude                         ┃"
+"┃   ● Codex  ✗ deslogado     ┃┃                                ┃"
+"┃   ● Amp    ✗ deslogado     ┃┃ Abre a REPL do Claude. Digite /┃"
 "┃                            ┃┃                                ┃"
 "┃                            ┃┃ Erro no login: claude nao encon┃"
 "┃                            ┃┃                                ┃"

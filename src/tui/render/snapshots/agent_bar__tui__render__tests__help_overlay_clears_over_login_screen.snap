@@ -4,9 +4,9 @@ expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
 "│ VISÃO           ┏ Login ━━━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
-"│ ▸ Geral         ┃ > ◆ Claude ○ deslogado     ┃┃ Claude                                          ┃│"
-"│                 ┃   ● Codex  ○ deslogado     ┃┃                                                 ┃│"
-"│ MAIS            ┃   ● Amp    ○ deslogado     ┃┃ Abre a REPL do Claude. Digite /login e siga as i┃│"
+"│ ▸ Geral         ┃ > ◆ Claude ✗ deslogado     ┃┃ Claude                                          ┃│"
+"│                 ┃   ● Codex  ✗ deslogado     ┃┃                                                 ┃│"
+"│ MAIS            ┃   ● Amp    ✗ deslogado     ┃┃ Abre a REPL do Claude. Digite /login e siga as i┃│"
 "│   Histórico     ┃                            ┃┃                                                 ┃│"
 "│   Login         ┃                            ┃┃                                                 ┃│"
 "│   Waybar        ┃ ╭ agent-bar — atalhos ─────────────────────────────────────╮                  ┃│"
