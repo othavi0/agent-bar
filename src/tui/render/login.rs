@@ -167,7 +167,7 @@ fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect, hits: &m
 
     let hint = match id {
         "claude" => "Abre a REPL do Claude. Digite /login e siga as instrucoes.",
-        "codex" => "Executa `codex auth login` (fluxo OAuth no browser).",
+        "codex" => "Executa `codex login` (fluxo OAuth no browser).",
         "amp" => "Executa `amp login` (autenticacao no browser).",
         _ => "",
     };

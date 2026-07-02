@@ -149,7 +149,7 @@ fn item_color(state: &AppState, item: SidebarItem) -> ratatui::style::Color {
                     // (`widgets::quota_gauge::pulse_color`) nos GAUGES do
                     // card/detalhe — os dois coexistem (alvo/cadência
                     // diferentes), este blink NÃO foi substituído.
-                    let blink_visible = (state.anim_frame / 15) % 2 == 0;
+                    let blink_visible = (state.anim_frame / 15).is_multiple_of(2);
                     if blink_visible {
                         to_ratatui(ColorToken::Red)
                     } else {

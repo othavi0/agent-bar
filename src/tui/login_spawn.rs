@@ -7,9 +7,9 @@
 //!   3. Aguarda o processo terminar.
 //!   4. Re-inicializa o terminal (`ratatui::try_init`) + limpa o display.
 //!
-//! Comandos de login (confirmados em `src/tui/login.ts`/`login-single.ts`):
+//! Comandos de login (ver spec `docs/superpowers/specs/2026-07-01-tui-redesign-design.md` §4.3):
 //!   - claude: `claude` (sem args; o usuario digita `/login` dentro da REPL)
-//!   - codex:  `codex auth login`
+//!   - codex:  `codex login`
 //!   - amp:    `amp login`
 
 use std::process::Command;
@@ -87,14 +87,14 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
                 bail!("codex CLI nao encontrado no PATH");
             }
             let status = Command::new("codex")
-                .args(["auth", "login"])
+                .arg("login")
                 .stdin(std::process::Stdio::inherit())
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit())
                 .status()
-                .context("falha ao executar codex auth login")?;
+                .context("falha ao executar codex login")?;
             if !status.success() {
-                log::warn!("codex auth login encerrou com codigo {:?}", status.code());
+                log::warn!("codex login encerrou com codigo {:?}", status.code());
             }
             Ok(())
         }

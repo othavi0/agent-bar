@@ -7,23 +7,6 @@ use super::state::{
     ProviderView, Screen, SidebarItem,
 };
 
-/// Translates a raw KeyEvent into a semantic Action, if applicable.
-pub fn key_to_action(key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
-        KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
-        KeyCode::Enter => Some(Action::OpenDetail),
-        KeyCode::Esc => Some(Action::Back),
-        KeyCode::Left => {
-            // Will be resolved in update using current tab; return sentinel via Char('<')
-            // Actually we return a SwitchTab action resolved here is not possible without state.
-            // So we return a raw Left action wrapped — update will handle it.
-            None // handled below
-        }
-        _ => None,
-    }
-}
-
 /// Translates a KeyEvent into a semantic Action using current screen state:
 /// up/down move the sidebar cursor, Enter/h/g/w activate a sidebar item
 /// (jumping directly to Detail/History/Login/Waybar), Esc goes back to
