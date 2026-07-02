@@ -166,6 +166,10 @@ fn drain(
 /// — o `select!` NUNCA espera rede; teclas e animacao respondem durante o fetch.
 pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
     let mut state = AppState::new();
+    // Offset local real (T12 fix): sem isto, `local_offset` fica no default
+    // UTC do AppState::new() e o pico do sparkline de 24h mostra hora UTC
+    // rotulada como "local".
+    state.local_offset = octx.local_offset;
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).
     let mut hits = super::mouse::HitMap::default();

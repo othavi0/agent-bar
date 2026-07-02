@@ -198,6 +198,12 @@ pub struct AppState {
     pub pending_save: bool,
     /// Alvo do HitMap sob o cursor do mouse (Task 9). None fora de qualquer zona.
     pub hover: Option<MouseTarget>,
+    /// Offset local do relógio (T12 fix): usado pra converter timestamps
+    /// (ex. pico do sparkline de 24h) antes de extrair a hora exibida —
+    /// NUNCA assuma que um `OffsetDateTime` já carrega o offset certo.
+    /// Default `UtcOffset::UTC` (mantém testes/snapshots determinísticos);
+    /// `event_loop::run` sobrescreve com `octx.local_offset` no boot real.
+    pub local_offset: time::UtcOffset,
 }
 
 impl AppState {
@@ -223,6 +229,7 @@ impl AppState {
             pending_login: None,
             pending_save: false,
             hover: None,
+            local_offset: time::UtcOffset::UTC,
         }
     }
 }

@@ -60,15 +60,28 @@ fn truncate_name(name: &str, max: usize) -> String {
     }
 }
 
-/// Formata tokens em unidade legível ("14.2M" / "1.2K" / "500").
+/// Formata tokens em unidade legível ("14.2M" / "1.2K" / "500"). Escolhe a
+/// MENOR unidade cujo valor arredondado a 1 casa decimal fique < 1000 (senão
+/// a última, "B") — nunca a unidade "óbvia" pelo tamanho bruto de `n`, que
+/// deixava a fronteira estourar (`999_950` virava "1000.0K" em vez de
+/// "1.0M"; regressão pega em review, T12).
 fn abbrev_tokens(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
+    const UNITS: [&str; 4] = ["", "K", "M", "B"];
+    let last = UNITS.len() - 1;
+    let mut idx = 0;
+    while idx < last {
+        let scale = 1000f64.powi(idx as i32);
+        let rounded = ((n as f64 / scale) * 10.0).round() / 10.0;
+        if rounded < 1000.0 {
+            break;
+        }
+        idx += 1;
     }
+    if idx == 0 {
+        return n.to_string();
+    }
+    let scale = 1000f64.powi(idx as i32);
+    format!("{:.1}{}", n as f64 / scale, UNITS[idx])
 }
 
 /// Tokens totais de um `ModelUsage` (todas as 4 categorias — mesma
@@ -223,7 +236,12 @@ fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'sta
 // ---------------------------------------------------------------------------
 
 /// Linha "tokens/h 24h": sparkline real (`provider_series_24h`) + hora de
-/// pico (índice do máximo → hora local, via `now.hour()`). `now` NUNCA é
+/// pico (índice do máximo → hora LOCAL). `now` (de `series_now`) carrega
+/// qualquer offset que sua fonte tiver (ex. `state.history[].ts`, tipicamente
+/// UTC) — `now.hour()` sozinho mentiria "local" enquanto devolve UTC. Fix:
+/// converte pro offset do relógio local (`state.local_offset`, T12) ANTES de
+/// extrair a hora; a subtração de `hours_back` é invariante a essa conversão
+/// (mesmo instante, offset fixo, sem DST neste app). `now` NUNCA é
 /// `OffsetDateTime::now_utc()` — vem de `series_now` (mesma âncora do
 /// Overview, Task 11), garantindo render puro/determinístico p/ snapshot.
 /// Sem âncora OU sem uso na janela → placeholder textual (nunca inventa
@@ -244,7 +262,8 @@ fn spark_line(state: &AppState, provider: &str, content_width: u16) -> Line<'sta
         if has_data {
             if let Some((idx, &peak)) = series.iter().enumerate().max_by_key(|&(_, &v)| v) {
                 let hours_back = (series.len() - 1 - idx) as i64;
-                let peak_hour = (now.hour() as i64 - hours_back).rem_euclid(24);
+                let local_now = now.to_offset(state.local_offset);
+                let peak_hour = (local_now.hour() as i64 - hours_back).rem_euclid(24);
                 let prefix = " tokens/h  ";
                 let suffix = format!("  pico {peak_hour:02}h: {}", abbrev_tokens(peak));
                 // Largura derivada do prefixo/sufixo REAIS (não uma constante
@@ -605,6 +624,19 @@ mod tests {
         assert_eq!(abbrev_tokens(999_000), "999.0K");
     }
 
+    /// Regressão (review T12): a unidade "óbvia" pelo tamanho bruto de `n`
+    /// podia estourar a fronteira de 1000 depois do arredondamento a 1 casa
+    /// decimal (999_950 virava "1000.0K"). `abbrev_tokens` tem que escolher
+    /// a MENOR unidade cujo valor arredondado fique < 1000.
+    #[test]
+    fn abbrev_tokens_never_rounds_across_unit_boundary() {
+        assert_eq!(abbrev_tokens(999), "999");
+        assert_eq!(abbrev_tokens(1_000), "1.0K");
+        assert_eq!(abbrev_tokens(999_950), "1.0M");
+        assert_eq!(abbrev_tokens(999_999_999), "1.0B");
+        assert_eq!(abbrev_tokens(5_686_100_000), "5.7B");
+    }
+
     #[test]
     fn truncate_name_keeps_short_names_intact() {
         // Regressão do bug "Free Tie": "Free Tier" (9 chars) cabe em 12 —
@@ -618,6 +650,60 @@ mod tests {
         let out = truncate_name("claude-opus-4-8-extended", 12);
         assert_eq!(out.chars().count(), 12);
         assert!(out.ends_with('\u{2026}'));
+    }
+
+    // -----------------------------------------------------------------
+    // Unit tests: spark_line usa state.local_offset (review T12) — antes
+    // `now.hour()` devolvia o offset que `now` já carregasse (tipicamente
+    // UTC), rotulado como "hora local" sem nunca converter de fato.
+    // -----------------------------------------------------------------
+
+    fn spark_line_text(state: &AppState) -> String {
+        let line = super::spark_line(state, "claude", 100);
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn spark_line_peak_hour_uses_local_offset_not_utc() {
+        let mut state = AppState::new();
+        let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
+        state.last_update = Some(now);
+        state.local_offset = time::UtcOffset::from_hms(-3, 0, 0).unwrap();
+        state.history = Some(vec![rec(
+            "claude",
+            "claude-opus-4-8",
+            now - time::Duration::hours(1),
+            900_000,
+        )]);
+        let text = spark_line_text(&state);
+        // now (02:00 UTC) em -03:00 é 23h do dia anterior; o pico está 1h
+        // atrás → 22h local (NÃO "01h", que seria o resultado se o offset
+        // local fosse ignorado e a hora UTC crua vazasse pro label).
+        assert!(
+            text.contains("pico 22h:"),
+            "esperava hora local (UTC-3 → 22h) na linha, obtido: {text:?}"
+        );
+    }
+
+    #[test]
+    fn spark_line_peak_hour_default_utc_offset_matches_snapshots() {
+        let mut state = AppState::new();
+        let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
+        state.last_update = Some(now);
+        // local_offset default (UTC, de AppState::new()) — confirma que os
+        // snapshots existentes (todos com offset default) continuam
+        // corretos depois do fix de conversão.
+        state.history = Some(vec![rec(
+            "claude",
+            "claude-opus-4-8",
+            now - time::Duration::hours(1),
+            900_000,
+        )]);
+        let text = spark_line_text(&state);
+        assert!(
+            text.contains("pico 01h:"),
+            "esperava hora UTC (offset default) 01h na linha, obtido: {text:?}"
+        );
     }
 
     // -----------------------------------------------------------------
