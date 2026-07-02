@@ -1,96 +1,77 @@
-//! QuotaGauge: block-bar helpers for rendering remaining-quota percentages.
-//!
-//! These are pure functions, not Widget impls, to keep ownership simple and
-//! allow callers to compose them into Spans inside larger Lines/Paragraphs.
+//! Gauge por célula: gradiente sutil no trecho preenchido + trilho.
 
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::style::{Color, Style};
+use ratatui::text::Span;
 
 use crate::theme::ColorToken;
 use crate::tui::theme_bridge::to_ratatui;
-use crate::tui::widgets::severity::severity_color;
 
-/// Builds a block-bar string of `width` characters.
-/// Filled chars (█) represent remaining quota; empty (░) represent consumed.
-/// 100% remaining → all filled; 0% remaining → all empty.
-pub fn block_bar(remaining_pct: f64, width: usize) -> String {
-    let remaining = remaining_pct.clamp(0.0, 100.0);
-    let filled = ((remaining / 100.0) * width as f64).round() as usize;
-    let filled = filled.min(width);
-    let empty = width - filled;
-    format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
+/// Interpola linearmente entre duas cores RGB (t em 0.0..=1.0).
+fn lerp_rgb(a: Color, b: Color, t: f64) -> Color {
+    let ((ar, ag, ab), (br, bg, bb)) = match (a, b) {
+        (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => ((r1, g1, b1), (r2, g2, b2)),
+        _ => return b,
+    };
+    let mix = |x: u8, y: u8| -> u8 {
+        (f64::from(x) + (f64::from(y) - f64::from(x)) * t).round() as u8
+    };
+    Color::Rgb(mix(ar, br), mix(ag, bg), mix(ab, bb))
 }
 
-/// Builds a `Line` containing `bar + " PCT%"` styled by severity.
-/// `width` controls the bar width in characters; `label_style` is the style
-/// applied to the percentage label.
-pub fn quota_gauge_line(remaining_pct: f64, width: usize) -> Line<'static> {
-    let bar = block_bar(remaining_pct, width);
-    let color = severity_color(Some(remaining_pct));
-    let pct_str = format!("{:3.0}%", remaining_pct);
-    let text_style = Style::default().fg(to_ratatui(ColorToken::Text));
-
-    Line::from(vec![
-        Span::styled(bar, Style::default().fg(color)),
-        Span::styled(format!(" {pct_str}"), text_style),
-    ])
+/// Escurece a cor para o início do gradiente (60% da intensidade).
+fn dimmed(c: Color) -> Color {
+    lerp_rgb(Color::Rgb(0, 0, 0), c, 0.6)
 }
 
-/// Builds a `Line` for a window gauge row (label + bar + pct + reset arrow).
-/// Used in detail view for primary/secondary windows.
-pub fn window_gauge_line<'a>(
-    label: &'a str,
-    remaining_pct: f64,
-    width: usize,
-    reset_str: &'a str,
-) -> Line<'a> {
-    let bar = block_bar(remaining_pct, width);
-    let color = severity_color(Some(remaining_pct));
-    let pct_str = format!("{:3.0}%", remaining_pct);
-
-    Line::from(vec![
-        Span::styled(
-            format!(" {:<4} ", label),
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        ),
-        Span::styled(bar, Style::default().fg(color)),
-        Span::styled(
-            format!("  {}  ", pct_str),
-            Style::default()
-                .fg(to_ratatui(ColorToken::TextBright))
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            format!("\u{2192} {}", reset_str),
-            Style::default().fg(to_ratatui(ColorToken::Comment)),
-        ),
-    ])
+/// Barra de quota: `remaining_pct` em 0..=100, `width` células.
+/// Preenchido = `█` com gradiente dimmed→cor ao longo do trecho;
+/// trilho = `▒` em EmptyTrack. Total de células == width, sempre.
+pub fn gauge_spans(remaining_pct: f64, width: usize, color: Color) -> Vec<Span<'static>> {
+    let pct = remaining_pct.clamp(0.0, 100.0);
+    let filled = ((width as f64) * pct / 100.0).round() as usize;
+    let mut spans = Vec::with_capacity(width.min(filled + 1));
+    for i in 0..filled {
+        let t = if filled <= 1 {
+            1.0
+        } else {
+            i as f64 / (filled - 1) as f64
+        };
+        spans.push(Span::styled(
+            "█".to_string(),
+            Style::default().fg(lerp_rgb(dimmed(color), color, t)),
+        ));
+    }
+    if width > filled {
+        spans.push(Span::styled(
+            "▒".repeat(width - filled),
+            Style::default().fg(to_ratatui(ColorToken::EmptyTrack)),
+        ));
+    }
+    spans
 }
 
-/// Builds a `Line` for a model mini-gauge row (name + bar + pct + cost).
-pub fn model_gauge_line<'a>(
-    name_trunc: &'a str,
-    remaining_pct: f64,
-    width: usize,
-    cost_str: &'a str,
-) -> Line<'a> {
-    let bar = block_bar(remaining_pct, width);
-    let color = severity_color(Some(remaining_pct));
-    let pct_str = format!("{:3.0}%", remaining_pct);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    Line::from(vec![
-        Span::styled(
-            format!("   {:<8}  ", name_trunc),
-            Style::default().fg(to_ratatui(ColorToken::Text)),
-        ),
-        Span::styled(bar, Style::default().fg(color)),
-        Span::styled(
-            format!("  {}", pct_str),
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        ),
-        Span::styled(
-            cost_str.to_string(),
-            Style::default().fg(to_ratatui(ColorToken::Comment)),
-        ),
-    ])
+    #[test]
+    fn gauge_spans_fill_and_track_add_up_to_width() {
+        let spans = gauge_spans(50.0, 10, ratatui::style::Color::Green);
+        let total: usize = spans.iter().map(|s| s.content.chars().count()).sum();
+        assert_eq!(total, 10);
+        let filled: usize = spans
+            .iter()
+            .filter(|s| s.content.contains('█'))
+            .map(|s| s.content.chars().count())
+            .sum();
+        assert_eq!(filled, 5);
+    }
+
+    #[test]
+    fn gauge_spans_zero_and_full() {
+        let z = gauge_spans(0.0, 8, ratatui::style::Color::Red);
+        assert!(z.iter().all(|s| !s.content.contains('█')));
+        let f = gauge_spans(100.0, 8, ratatui::style::Color::Green);
+        assert!(f.iter().all(|s| !s.content.contains('▒')));
+    }
 }

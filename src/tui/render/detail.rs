@@ -7,7 +7,7 @@ use ratatui::Frame;
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
-use crate::tui::widgets::quota_gauge::block_bar;
+use crate::tui::widgets::quota_gauge::gauge_spans;
 use crate::tui::widgets::severity::severity_color as sev_color;
 use crate::usage::{ModelUsage, ProviderUsage};
 
@@ -85,45 +85,47 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
     // Primary (5h)
     if let Some(primary) = &q.primary {
         let rem = primary.remaining;
-        let bar = block_bar(rem, bar_width);
         let color = sev_color(Some(rem));
         let pct_str = format!("{:3.0}%", rem);
         let reset_str = fmt_reset(primary.resets_at.as_deref());
 
-        lines.push(Line::from(vec![
-            Span::styled(" 5h  ", Style::default().fg(to_ratatui(ColorToken::Muted))),
-            Span::styled(bar, Style::default().fg(color)),
-            Span::styled(
-                format!("  {}  ", pct_str),
-                Style::default().fg(to_ratatui(ColorToken::TextBright)),
-            ),
-            Span::styled(
-                format!("\u{2192} {}", reset_str),
-                Style::default().fg(to_ratatui(ColorToken::Comment)),
-            ),
-        ]));
+        let mut spans = vec![Span::styled(
+            " 5h  ",
+            Style::default().fg(to_ratatui(ColorToken::Muted)),
+        )];
+        spans.extend(gauge_spans(rem, bar_width, color));
+        spans.push(Span::styled(
+            format!("  {}  ", pct_str),
+            Style::default().fg(to_ratatui(ColorToken::TextBright)),
+        ));
+        spans.push(Span::styled(
+            format!("\u{2192} {}", reset_str),
+            Style::default().fg(to_ratatui(ColorToken::Comment)),
+        ));
+        lines.push(Line::from(spans));
     }
 
     // Secondary (wk)
     if let Some(secondary) = &q.secondary {
         let rem = secondary.remaining;
-        let bar = block_bar(rem, bar_width);
         let color = sev_color(Some(rem));
         let pct_str = format!("{:3.0}%", rem);
         let reset_str = fmt_reset(secondary.resets_at.as_deref());
 
-        lines.push(Line::from(vec![
-            Span::styled(" wk  ", Style::default().fg(to_ratatui(ColorToken::Muted))),
-            Span::styled(bar, Style::default().fg(color)),
-            Span::styled(
-                format!("  {}  ", pct_str),
-                Style::default().fg(to_ratatui(ColorToken::TextBright)),
-            ),
-            Span::styled(
-                format!("\u{2192} {}", reset_str),
-                Style::default().fg(to_ratatui(ColorToken::Comment)),
-            ),
-        ]));
+        let mut spans = vec![Span::styled(
+            " wk  ",
+            Style::default().fg(to_ratatui(ColorToken::Muted)),
+        )];
+        spans.extend(gauge_spans(rem, bar_width, color));
+        spans.push(Span::styled(
+            format!("  {}  ", pct_str),
+            Style::default().fg(to_ratatui(ColorToken::TextBright)),
+        ));
+        spans.push(Span::styled(
+            format!("\u{2192} {}", reset_str),
+            Style::default().fg(to_ratatui(ColorToken::Comment)),
+        ));
+        lines.push(Line::from(spans));
     }
 
     // Lookup usage data for this provider
@@ -145,7 +147,6 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
 
             for (model_name, window) in models {
                 let rem = window.remaining;
-                let bar = block_bar(rem, mini_bar_width);
                 let color = sev_color(Some(rem));
                 let pct_str = format!("{:3.0}%", rem);
                 // Truncate model name to 8 chars for alignment
@@ -169,21 +170,20 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
                     })
                     .unwrap_or_default();
 
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("   {:<8}  ", name_trunc),
-                        Style::default().fg(to_ratatui(ColorToken::Text)),
-                    ),
-                    Span::styled(bar, Style::default().fg(color)),
-                    Span::styled(
-                        format!("  {}", pct_str),
-                        Style::default().fg(to_ratatui(ColorToken::Muted)),
-                    ),
-                    Span::styled(
-                        model_cost_str,
-                        Style::default().fg(to_ratatui(ColorToken::Comment)),
-                    ),
-                ]));
+                let mut spans = vec![Span::styled(
+                    format!("   {:<8}  ", name_trunc),
+                    Style::default().fg(to_ratatui(ColorToken::Text)),
+                )];
+                spans.extend(gauge_spans(rem, mini_bar_width, color));
+                spans.push(Span::styled(
+                    format!("  {}", pct_str),
+                    Style::default().fg(to_ratatui(ColorToken::Muted)),
+                ));
+                spans.push(Span::styled(
+                    model_cost_str,
+                    Style::default().fg(to_ratatui(ColorToken::Comment)),
+                ));
+                lines.push(Line::from(spans));
             }
         }
     }

@@ -7,15 +7,18 @@ use ratatui::Frame;
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
-use crate::tui::widgets::quota_gauge::block_bar;
+use crate::tui::widgets::quota_gauge::gauge_spans;
 use crate::tui::widgets::severity::severity_color as sev_color;
 use crate::usage::ProviderUsage;
 
-/// Builds a 7-char block bar string for remaining quota.
-/// Delegates to `quota_gauge::block_bar` with width=7.
+/// Builds a 7-char gauge string (chars only, no color) for remaining quota.
+/// Delegates to `quota_gauge::gauge_spans` with width=7.
 /// Public for tests in render/mod.rs.
 pub fn quota_bar_pub(remaining_pct: f64) -> String {
-    block_bar(remaining_pct, 7)
+    gauge_spans(remaining_pct, 7, to_ratatui(ColorToken::Green))
+        .iter()
+        .map(|s| s.content.as_ref())
+        .collect()
 }
 
 /// Derives bar width from available area width.
@@ -73,7 +76,6 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
             // Animacao A (gauge lerp): usa display_ratio (animado) para a barra,
             // mas mostra o percentual bruto (remaining) no texto - so a barra desliza.
             let bar_pct = pv.display_ratio * 100.0;
-            let bar = block_bar(bar_pct, bar_width);
             let pct_str = format!("{:3.0}%", remaining);
             let bar_color = sev_color(Some(remaining));
             let p_color = provider_color(&q.provider);
@@ -92,10 +94,9 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect) {
                 })
                 .unwrap_or_else(|| "-".to_string());
 
-            let bar_cell = Cell::from(Line::from(vec![
-                Span::styled(bar, Style::default().fg(bar_color)),
-                Span::styled(format!(" {pct_str}"), text_style),
-            ]));
+            let mut bar_spans = gauge_spans(bar_pct, bar_width, bar_color);
+            bar_spans.push(Span::styled(format!(" {pct_str}"), text_style));
+            let bar_cell = Cell::from(Line::from(bar_spans));
 
             // Custo: busca no UsageSummary pelo provider id
             let cost_str = state
