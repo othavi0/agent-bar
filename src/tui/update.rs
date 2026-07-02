@@ -1,7 +1,10 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use super::action::Action;
-use super::state::{AppState, ConfigField, ConfigState, FetchStatus, Mode, ProviderView, Tab};
+use super::state::{
+    sidebar_items, AppState, ConfigField, ConfigState, FetchStatus, ProviderView, Screen,
+    SidebarItem,
+};
 
 /// Translates a raw KeyEvent into a semantic Action, if applicable.
 pub fn key_to_action(key: KeyEvent) -> Option<Action> {
@@ -32,7 +35,7 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
     }
 
     // '?' global: abre o overlay de ajuda de qualquer contexto (exceto edicao).
-    let in_config_edit = state.tab == Tab::Waybar
+    let in_config_edit = state.screen == Screen::Waybar
         && state
             .config_state
             .as_ref()
@@ -43,8 +46,8 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         return Some(Action::ToggleHelp);
     }
 
-    // Na aba Waybar com campo em edicao, delega ao input buffer (so Esc/Enter escapam).
-    if state.tab == Tab::Waybar {
+    // Na tela Waybar com campo em edicao, delega ao input buffer (so Esc/Enter escapam).
+    if state.screen == Screen::Waybar {
         if let Some(cs) = &state.config_state {
             if cs.editing {
                 return match key.code {
@@ -54,30 +57,26 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
                 };
             }
         }
-        // Aba Waybar, fora do modo edicao.
+        // Tela Waybar, fora do modo edicao. h/g/w saltam direto para outra
+        // tela (substituem o antigo ←→ de troca de aba — sem conflito com
+        // j/k/Enter/s/Esc/q, ja usados aqui).
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(Action::ConfigDown),
             KeyCode::Char('k') | KeyCode::Up => Some(Action::ConfigUp),
             KeyCode::Enter => Some(Action::ConfigEnterEdit),
             KeyCode::Char('s') => Some(Action::SaveConfig),
             KeyCode::Esc => Some(Action::Back),
-            KeyCode::Left | KeyCode::BackTab => {
-                let idx = state.tab.index();
-                let next = if idx == 0 { 3 } else { idx - 1 };
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
-            KeyCode::Right | KeyCode::Tab => {
-                let idx = state.tab.index();
-                let next = (idx + 1) % 4;
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
+            KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
+            KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
+            KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
             KeyCode::Char('q') => Some(Action::Quit),
             _ => None,
         };
     }
 
-    // Aba Login: navegacao e acao de login.
-    if state.tab == Tab::Login {
+    // Tela Login: navegacao e acao de login. h/w saltam direto para outra
+    // tela (mesmo racional da tela Waybar acima).
+    if state.screen == Screen::Login {
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(Action::LoginDown),
             KeyCode::Char('k') | KeyCode::Up => Some(Action::LoginUp),
@@ -89,16 +88,10 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
                 };
                 Some(Action::LoginRequested(id.to_string()))
             }
-            KeyCode::Left | KeyCode::BackTab => {
-                let idx = state.tab.index();
-                let next = if idx == 0 { 3 } else { idx - 1 };
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
-            KeyCode::Right | KeyCode::Tab => {
-                let idx = state.tab.index();
-                let next = (idx + 1) % 4;
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
+            KeyCode::Esc => Some(Action::Back),
+            KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
+            KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
+            KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
             KeyCode::Char('q') => Some(Action::Quit),
             _ => None,
         };
@@ -109,16 +102,9 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
         KeyCode::Enter => Some(Action::OpenDetail),
         KeyCode::Esc => Some(Action::Back),
-        KeyCode::Left | KeyCode::BackTab => {
-            let idx = state.tab.index();
-            let next = if idx == 0 { 3 } else { idx - 1 };
-            Some(Action::SwitchTab(Tab::from_index(next)))
-        }
-        KeyCode::Right | KeyCode::Tab => {
-            let idx = state.tab.index();
-            let next = (idx + 1) % 4;
-            Some(Action::SwitchTab(Tab::from_index(next)))
-        }
+        KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
+        KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
+        KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
         KeyCode::Char('r') => Some(Action::Refresh),
         KeyCode::Char('q') => Some(Action::Quit),
         _ => None,
@@ -251,42 +237,55 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
-        Action::Down => {
-            let max = state.providers.len().saturating_sub(1);
-            if state.selected < max {
-                state.selected += 1;
-            }
+        Action::Up => {
+            state.sidebar_selected = state.sidebar_selected.saturating_sub(1);
             vec![]
         }
 
-        Action::Up => {
-            if state.selected > 0 {
-                state.selected -= 1;
-            }
+        Action::Down => {
+            let max = sidebar_items(state.providers.len()).len() - 1;
+            state.sidebar_selected = (state.sidebar_selected + 1).min(max);
             vec![]
         }
 
         Action::OpenDetail => {
-            state.mode = Mode::Detail;
-            vec![]
+            // Recursa (mesmo padrao do braço Action::Key): aplica a ativacao
+            // na hora e propaga os follow-ups dela (ex. InitConfig ao ativar
+            // Waybar), em vez de so devolver Activate sem aplicar.
+            let items = sidebar_items(state.providers.len());
+            match items.get(state.sidebar_selected).copied() {
+                Some(item) => update(state, Action::Activate(item)),
+                None => vec![],
+            }
         }
 
-        Action::Back => {
-            state.mode = Mode::List;
-            vec![]
-        }
-
-        Action::SwitchTab(tab) => {
-            let is_waybar = tab == Tab::Waybar;
-            state.tab = tab;
-            state.mode = Mode::List;
-            // Inicializa config_state ao entrar na aba Waybar pela 1a vez.
-            // Nao podemos acessar settings aqui (update e puro), entao sinalizamos.
-            if is_waybar && state.config_state.is_none() {
-                return vec![Action::InitConfig(
-                    // Usa as edit_settings se ja existirem (re-entrada), senao placeholder.
-                    // O event_loop vai enviar InitConfig com as settings reais.
-                    crate::settings::Settings {
+        Action::Activate(item) => match item {
+            SidebarItem::Overview => {
+                state.screen = Screen::Overview;
+                vec![]
+            }
+            SidebarItem::Provider(i) => {
+                state.selected = i;
+                state.screen = Screen::Detail;
+                vec![]
+            }
+            SidebarItem::History => {
+                state.screen = Screen::History;
+                vec![]
+            }
+            SidebarItem::Login => {
+                state.screen = Screen::Login;
+                vec![]
+            }
+            SidebarItem::Waybar => {
+                state.screen = Screen::Waybar;
+                // Inicializa config_state ao entrar na tela Waybar pela 1a vez.
+                // Nao podemos acessar settings aqui (update e puro), entao sinalizamos
+                // com um placeholder — o event_loop (drain) sobrescreve com as
+                // settings reais ao interceptar InitConfig (mesmo mecanismo do
+                // antigo SwitchTab para a aba Waybar).
+                if state.config_state.is_none() {
+                    vec![Action::InitConfig(crate::settings::Settings {
                         version: 0, // sentinela; event_loop sobrescreve com real
                         waybar: crate::settings::Waybar {
                             providers: vec![],
@@ -306,9 +305,20 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
                         },
                         glyph_mode: crate::settings::GlyphMode::Box,
                         fx_rate: 5.50,
-                    },
-                )];
+                    })]
+                } else {
+                    vec![]
+                }
             }
+        },
+
+        Action::SelectSidebar(i) => {
+            state.sidebar_selected = i;
+            vec![]
+        }
+
+        Action::Back => {
+            state.screen = Screen::Overview;
             vec![]
         }
 
@@ -621,44 +631,66 @@ mod tests {
     }
 
     #[test]
-    fn down_moves_selection_and_clamps() {
+    fn down_moves_sidebar_selected_and_clamps() {
         let mut state = state_with_providers(3);
+        assert_eq!(state.sidebar_selected, 0);
+
+        update(&mut state, Action::Down);
+        assert_eq!(state.sidebar_selected, 1);
+
+        update(&mut state, Action::Down);
+        assert_eq!(state.sidebar_selected, 2);
+
+        // sidebar_items(3) = [Overview, Provider(0..3), History, Login, Waybar] = 7 itens (indices 0..=6).
+        for _ in 0..10 {
+            update(&mut state, Action::Down);
+        }
+        assert_eq!(
+            state.sidebar_selected, 6,
+            "should clamp at sidebar_items.len()-1"
+        );
+    }
+
+    #[test]
+    fn sidebar_items_order() {
+        let items = sidebar_items(2);
+        assert_eq!(
+            items,
+            vec![
+                SidebarItem::Overview,
+                SidebarItem::Provider(0),
+                SidebarItem::Provider(1),
+                SidebarItem::History,
+                SidebarItem::Login,
+                SidebarItem::Waybar,
+            ]
+        );
+    }
+
+    #[test]
+    fn up_down_move_sidebar_and_enter_activates() {
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
+        update(&mut state, Action::Down); // Overview → Provider(0)
+        assert_eq!(state.sidebar_selected, 1);
+        update(&mut state, Action::OpenDetail); // Enter
+        assert_eq!(state.screen, Screen::Detail);
         assert_eq!(state.selected, 0);
-
-        update(&mut state, Action::Down);
-        assert_eq!(state.selected, 1);
-
-        update(&mut state, Action::Down);
-        assert_eq!(state.selected, 2);
-
-        // Clamp: already at max
-        update(&mut state, Action::Down);
-        assert_eq!(state.selected, 2, "should clamp at providers.len()-1");
+        update(&mut state, Action::Back); // Esc
+        assert_eq!(state.screen, Screen::Overview);
     }
 
     #[test]
-    fn open_detail_then_back() {
+    fn activate_history_login_waybar() {
         let mut state = AppState::new();
-        assert_eq!(state.mode, Mode::List);
-
-        update(&mut state, Action::OpenDetail);
-        assert_eq!(state.mode, Mode::Detail);
-
-        update(&mut state, Action::Back);
-        assert_eq!(state.mode, Mode::List);
-    }
-
-    #[test]
-    fn switch_tab_changes_tab_resets_mode() {
-        let mut state = AppState::new();
-        // Set detail mode to verify reset
-        state.mode = Mode::Detail;
-        state.tab = Tab::Dashboard;
-
-        update(&mut state, Action::SwitchTab(Tab::Waybar));
-
-        assert_eq!(state.tab, Tab::Waybar, "tab should switch to Waybar");
-        assert_eq!(state.mode, Mode::List, "mode should reset to List");
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        update(&mut state, Action::Activate(SidebarItem::Login));
+        assert_eq!(state.screen, Screen::Login);
+        let fu = update(&mut state, Action::Activate(SidebarItem::Waybar));
+        assert_eq!(state.screen, Screen::Waybar);
+        // Entrar na Waybar inicializa o config (comportamento atual do SwitchTab):
+        assert!(matches!(fu.as_slice(), [Action::InitConfig(_)]));
     }
 
     #[test]

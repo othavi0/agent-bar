@@ -222,7 +222,7 @@ mod tests {
     use crate::settings::{
         CacheSettings, DisplayMode, GlyphMode, Notify, SeparatorStyle, Settings, Tooltip, Waybar,
     };
-    use crate::tui::state::{AppState, ConfigState, Tab};
+    use crate::tui::state::{AppState, ConfigState, Screen};
     use std::collections::BTreeMap;
 
     fn fake_settings() -> Settings {
@@ -252,7 +252,7 @@ mod tests {
     fn state_on_waybar() -> AppState {
         let settings = fake_settings();
         let mut state = AppState::new();
-        state.tab = Tab::Waybar;
+        state.screen = Screen::Waybar;
         state.config_state = Some(ConfigState::new(&settings));
         state
     }

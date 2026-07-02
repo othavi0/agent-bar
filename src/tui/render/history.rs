@@ -296,7 +296,7 @@ pub mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
 
         let mut state = AppState::new();
-        state.tab = crate::tui::state::Tab::History;
+        state.screen = crate::tui::state::Screen::History;
         state.history = Some(vec![
             rec(
                 "claude",
@@ -348,7 +348,7 @@ pub mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
 
         let mut state = AppState::new();
-        state.tab = crate::tui::state::Tab::History;
+        state.screen = crate::tui::state::Screen::History;
         state.history = Some(vec![]);
 
         terminal
@@ -364,7 +364,7 @@ pub mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
 
         let mut state = AppState::new();
-        state.tab = crate::tui::state::Tab::History;
+        state.screen = crate::tui::state::Screen::History;
         // history = None simula ainda-nao-carregado
 
         terminal
@@ -380,7 +380,7 @@ pub mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
 
         let mut state = AppState::new();
-        state.tab = crate::tui::state::Tab::History;
+        state.screen = crate::tui::state::Screen::History;
         state.history = Some(vec![
             rec(
                 "claude",

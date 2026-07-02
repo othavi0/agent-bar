@@ -2,9 +2,6 @@
 source: src/tui/render/mod.rs
 expression: terminal.backend()
 ---
-"┏ agent-bar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃ Dashboard ┃ Waybar ┃ History ┃ Login                         ┃"
-"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
 "┏PROVIDERS━━━━━━┓┏ Todos os providers ━━━━━━━━━━━━━━━━━━━━━━━━━┓"
 "┃◆ Claude  26%  ┃┃provider  uso            reset  custo        ┃"
 "┃● Codex    1%  ┃┃Claude    ████▒▒▒▒▒▒▒▒▒▒ 23:00  -            ┃"
@@ -20,5 +17,8 @@ expression: terminal.backend()
 "┃               ┃┃                                             ┃"
 "┃               ┃┃                                             ┃"
 "┃               ┃┃                                             ┃"
+"┃               ┃┃                                             ┃"
+"┃               ┃┃                                             ┃"
+"┃               ┃┃                                             ┃"
 "┗━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
-" ↑↓ provider · ←→ aba · Enter detalhe · [q]uit · [?] ajuda      "
+" ↑↓ navegar · Enter abrir · [q]uit · [?] ajuda                  "

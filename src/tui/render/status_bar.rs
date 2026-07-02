@@ -3,7 +3,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-use crate::tui::state::{AppState, Mode, Tab};
+use crate::tui::state::{AppState, Screen};
 use crate::tui::widgets::key_hint::{hint_span, key_span, sep_span};
 
 /// Renders the bottom status bar with contextual key hints.
@@ -24,9 +24,9 @@ pub fn render_status_bar(state: &AppState, frame: &mut Frame, area: Rect) {
 
     let help_hint: Vec<Span<'_>> = vec![sep_span(), key_span("[?]"), hint_span(" ajuda")];
 
-    let spans: Vec<Span<'_>> = match (&state.tab, &state.mode) {
-        // Aba Waybar (config): hints de edicao.
-        (Tab::Waybar, _) => {
+    let spans: Vec<Span<'_>> = match state.screen {
+        // Tela Waybar (config): hints de edicao.
+        Screen::Waybar => {
             let editing = state
                 .config_state
                 .as_ref()
@@ -53,8 +53,8 @@ pub fn render_status_bar(state: &AppState, frame: &mut Frame, area: Rect) {
                     key_span("[s]"),
                     hint_span("alvar"),
                     sep_span(),
-                    key_span("\u{2190}\u{2192}"),
-                    hint_span(" aba"),
+                    key_span("Esc"),
+                    hint_span(" volta"),
                     sep_span(),
                     key_span("[q]"),
                     hint_span("uit"),
@@ -63,8 +63,8 @@ pub fn render_status_bar(state: &AppState, frame: &mut Frame, area: Rect) {
                 s
             }
         }
-        // Aba Login.
-        (Tab::Login, _) => {
+        // Tela Login.
+        Screen::Login => {
             let mut s = vec![
                 hint_span(" "),
                 key_span("\u{2191}\u{2193}"),
@@ -73,8 +73,8 @@ pub fn render_status_bar(state: &AppState, frame: &mut Frame, area: Rect) {
                 key_span("Enter"),
                 hint_span(" login"),
                 sep_span(),
-                key_span("\u{2190}\u{2192}"),
-                hint_span(" aba"),
+                key_span("Esc"),
+                hint_span(" volta"),
                 sep_span(),
                 key_span("[q]"),
                 hint_span("uit"),
@@ -82,12 +82,12 @@ pub fn render_status_bar(state: &AppState, frame: &mut Frame, area: Rect) {
             s.extend(help_hint);
             s
         }
-        // Aba History.
-        (Tab::History, _) => {
+        // Tela History.
+        Screen::History => {
             let mut s = vec![
                 hint_span(" "),
-                key_span("\u{2190}\u{2192}"),
-                hint_span(" aba"),
+                key_span("Esc"),
+                hint_span(" volta"),
                 sep_span(),
                 key_span("[r]"),
                 hint_span("efresh"),
@@ -98,18 +98,15 @@ pub fn render_status_bar(state: &AppState, frame: &mut Frame, area: Rect) {
             s.extend(help_hint);
             s
         }
-        // Dashboard lista.
-        (_, Mode::List) => {
+        // Overview (lista de providers).
+        Screen::Overview => {
             let mut s = vec![
                 hint_span(" "),
                 key_span("\u{2191}\u{2193}"),
-                hint_span(" provider"),
-                sep_span(),
-                key_span("\u{2190}\u{2192}"),
-                hint_span(" aba"),
+                hint_span(" navegar"),
                 sep_span(),
                 key_span("Enter"),
-                hint_span(" detalhe"),
+                hint_span(" abrir"),
                 sep_span(),
                 key_span("[q]"),
                 hint_span("uit"),
@@ -117,18 +114,15 @@ pub fn render_status_bar(state: &AppState, frame: &mut Frame, area: Rect) {
             s.extend(help_hint);
             s
         }
-        // Dashboard detalhe.
-        (_, Mode::Detail) => {
+        // Detalhe do provider.
+        Screen::Detail => {
             let mut s = vec![
                 hint_span(" "),
                 key_span("\u{2191}\u{2193}"),
-                hint_span(" provider"),
+                hint_span(" navegar"),
                 sep_span(),
                 key_span("Esc"),
                 hint_span(" volta"),
-                sep_span(),
-                key_span("\u{2190}\u{2192}"),
-                hint_span(" aba"),
                 sep_span(),
                 key_span("[r]"),
                 hint_span("efresh"),

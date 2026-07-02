@@ -17,35 +17,38 @@ impl ThrobberAnim {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Tab {
-    Dashboard,
-    Waybar,
+/// Tela atual da TUI. Substitui `Tab` + `Mode`: cada tela e um estado
+/// distinto navegado via sidebar (sem abas).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    Overview,
+    Detail,
     History,
     Login,
+    Waybar,
 }
 
-impl Tab {
-    /// Tabs in display order.
-    pub const ALL: [Tab; 4] = [Tab::Dashboard, Tab::Waybar, Tab::History, Tab::Login];
+/// Item da sidebar unica. `Provider(i)` indexa `AppState.providers`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidebarItem {
+    Overview,
+    Provider(usize),
+    History,
+    Login,
+    Waybar,
+}
 
-    pub fn index(&self) -> usize {
-        match self {
-            Tab::Dashboard => 0,
-            Tab::Waybar => 1,
-            Tab::History => 2,
-            Tab::Login => 3,
-        }
-    }
-
-    pub fn from_index(i: usize) -> Self {
-        match i % 4 {
-            0 => Tab::Dashboard,
-            1 => Tab::Waybar,
-            2 => Tab::History,
-            _ => Tab::Login,
-        }
-    }
+/// Constroi a lista de itens da sidebar na ordem de exibicao:
+/// Overview, 1 entrada por provider, History, Login, Waybar.
+pub fn sidebar_items(n_providers: usize) -> Vec<SidebarItem> {
+    let mut v = vec![SidebarItem::Overview];
+    v.extend((0..n_providers).map(SidebarItem::Provider));
+    v.extend([
+        SidebarItem::History,
+        SidebarItem::Login,
+        SidebarItem::Waybar,
+    ]);
+    v
 }
 
 /// Campo da aba Waybar config (ordem de exibicao = ordem dos enum variants).
@@ -112,18 +115,6 @@ impl ConfigState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Panel {
-    Sidebar,
-    Content,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Mode {
-    List,
-    Detail,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FetchStatus {
     Idle,
     Loading,
@@ -166,11 +157,15 @@ impl ProviderView {
 
 #[derive(Debug)]
 pub struct AppState {
-    pub tab: Tab,
+    /// Tela atual (navegacao via sidebar, sem abas).
+    pub screen: Screen,
     pub providers: Vec<ProviderView>,
+    /// Indice do provider em foco na tela Detail.
     pub selected: usize,
-    pub mode: Mode,
-    pub focus: Panel,
+    /// Indice selecionado na sidebar (indexa `sidebar_items(providers.len())`).
+    pub sidebar_selected: usize,
+    /// Posicao de scroll do painel de conteudo (usado por telas com overflow).
+    pub scroll: u16,
     pub status: FetchStatus,
     pub last_update: Option<time::OffsetDateTime>,
     pub should_quit: bool,
@@ -204,11 +199,11 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         Self {
-            tab: Tab::Dashboard,
+            screen: Screen::Overview,
             providers: Vec::new(),
             selected: 0,
-            mode: Mode::List,
-            focus: Panel::Sidebar,
+            sidebar_selected: 0,
+            scroll: 0,
             status: FetchStatus::Idle,
             last_update: None,
             should_quit: false,

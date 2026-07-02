@@ -14,7 +14,7 @@ use crate::waybar_integration::{self, get_default_waybar_integration_paths, Appl
 use super::action::Action;
 use super::login_spawn::RealLogin;
 use super::render::render;
-use super::state::{AppState, Tab};
+use super::state::{AppState, Screen};
 use super::update::update;
 
 /// Dispara o parse pesado dos session logs FORA do thread do event loop
@@ -211,9 +211,9 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
             maybe_ev = events.next() => {
                 if let Some(Ok(ev)) = maybe_ev {
                     if let Event::Key(key) = &ev {
-                        // Na aba Waybar em modo edicao, passa o evento cru ao Input antes
+                        // Na tela Waybar em modo edicao, passa o evento cru ao Input antes
                         // de traduzir em Action (permite edicao caracter a caracter).
-                        if state.tab == Tab::Waybar {
+                        if state.screen == Screen::Waybar {
                             if let Some(cs) = state.config_state.as_mut() {
                                 if cs.editing {
                                     cs.input.handle_event(&ev);

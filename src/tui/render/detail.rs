@@ -47,7 +47,7 @@ fn fmt_reset(resets_at: Option<&str>) -> String {
     }
 }
 
-/// Renders the Detail view for the selected provider (Mode::Detail).
+/// Renders the Detail view for the selected provider (Screen::Detail).
 pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect) {
     let provider = match state.providers.get(state.selected) {
         Some(pv) => pv,
@@ -249,7 +249,7 @@ mod tests {
 
     use crate::providers::types::{ProviderQuota, QuotaWindow};
     use crate::tui::render::render;
-    use crate::tui::state::{AppState, FetchStatus, Mode, ProviderView};
+    use crate::tui::state::{AppState, FetchStatus, ProviderView, Screen};
     use crate::usage::amp::AmpDollars;
     use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageSummary};
 
@@ -370,7 +370,7 @@ mod tests {
         let mut state = AppState::new();
         state.providers = vec![make_claude_provider()];
         state.selected = 0;
-        state.mode = Mode::Detail;
+        state.screen = Screen::Detail;
         state.status = FetchStatus::Loaded;
         terminal.draw(|f| render(&state, f)).unwrap();
         insta::assert_snapshot!(terminal.backend());
@@ -383,7 +383,7 @@ mod tests {
         let mut state = AppState::new();
         state.providers = vec![make_claude_provider()];
         state.selected = 0;
-        state.mode = Mode::Detail;
+        state.screen = Screen::Detail;
         state.status = FetchStatus::Loaded;
         state.usage = Some(fake_usage());
         terminal.draw(|f| render(&state, f)).unwrap();
@@ -397,7 +397,7 @@ mod tests {
         let mut state = AppState::new();
         state.providers = vec![make_claude_provider()];
         state.selected = 0;
-        state.mode = Mode::Detail;
+        state.screen = Screen::Detail;
         state.status = FetchStatus::Loaded;
         state.usage = Some(fake_usage());
         terminal.draw(|f| render(&state, f)).unwrap();

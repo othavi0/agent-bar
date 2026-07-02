@@ -209,8 +209,8 @@ mod tests {
             ProviderView::new(quota("codex", true, Some("Codex API error 401"))),
             ProviderView::new(quota("amp", false, Some("Failed to parse usage"))),
         ];
-        use crate::tui::state::Tab;
-        state.tab = Tab::Login;
+        use crate::tui::state::Screen;
+        state.screen = Screen::Login;
 
         let backend = ratatui::backend::TestBackend::new(64, 16);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
@@ -228,8 +228,8 @@ mod tests {
         // Sem providers no state (fetch nunca rodou): todos deslogados.
         let mut state = AppState::new();
         state.login_selected = 1; // Codex selecionado
-        use crate::tui::state::Tab;
-        state.tab = Tab::Login;
+        use crate::tui::state::Screen;
+        state.screen = Screen::Login;
 
         let backend = ratatui::backend::TestBackend::new(64, 16);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
@@ -247,8 +247,8 @@ mod tests {
         let mut state = AppState::new();
         state.login_selected = 0;
         state.login_status = Some("Erro no login: claude nao encontrado".to_string());
-        use crate::tui::state::Tab;
-        state.tab = Tab::Login;
+        use crate::tui::state::Screen;
+        state.screen = Screen::Login;
 
         let backend = ratatui::backend::TestBackend::new(64, 16);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();

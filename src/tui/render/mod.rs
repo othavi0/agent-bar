@@ -8,13 +8,13 @@ pub mod status_bar;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Tabs};
+use ratatui::widgets::{Block, BorderType, Borders, List, ListItem};
 use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 use tui_popup::Popup;
 
 use crate::theme::ColorToken;
-use crate::tui::state::{AppState, FetchStatus, Panel};
+use crate::tui::state::{AppState, FetchStatus, Screen};
 use crate::tui::theme_bridge::to_ratatui;
 use crate::tui::widgets::provider_list::provider_list_item;
 
@@ -44,25 +44,37 @@ fn help_text() -> Text<'static> {
         ]),
         Line::from(vec![
             Span::styled(
-                "  Tab / ->   ",
+                "  up/down    ",
                 Style::default()
                     .fg(to_ratatui(ColorToken::TextBright))
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                "proxima aba",
+                "mover selecao na sidebar",
                 Style::default().fg(to_ratatui(ColorToken::Text)),
             ),
         ]),
         Line::from(vec![
             Span::styled(
-                "  Shift+Tab  ",
+                "  Enter      ",
                 Style::default()
                     .fg(to_ratatui(ColorToken::TextBright))
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                "aba anterior",
+                "ativar item selecionado",
+                Style::default().fg(to_ratatui(ColorToken::Text)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  h / g / w  ",
+                Style::default()
+                    .fg(to_ratatui(ColorToken::TextBright))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "ir para Historico / Login / Waybar",
                 Style::default().fg(to_ratatui(ColorToken::Text)),
             ),
         ]),
@@ -88,7 +100,7 @@ fn help_text() -> Text<'static> {
             ),
         ]),
         Line::from(""),
-        Line::from(" Dashboard ").centered(),
+        Line::from(" Overview ").centered(),
         Line::from(""),
         Line::from(vec![
             Span::styled(
@@ -200,21 +212,16 @@ fn help_text() -> Text<'static> {
 pub fn render(state: &AppState, frame: &mut Frame) {
     let area = frame.area();
 
-    // Vertical split: [tab_bar (3), body (fill), status_bar (1)]
+    // Vertical split: [body (fill), status_bar (1)]. Sem tab bar — navegacao
+    // e via sidebar unica (Task 8); o layout visual completo e a Task 10.
     let vert = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(area);
 
-    let tab_area = vert[0];
-    let body_area = vert[1];
-    let status_area = vert[2];
+    let body_area = vert[0];
+    let status_area = vert[1];
 
-    render_tab_bar(state, frame, tab_area);
     render_body(state, frame, body_area);
     render_status_bar(state, frame, status_area);
 
@@ -236,47 +243,6 @@ pub fn render(state: &AppState, frame: &mut Frame) {
     }
 }
 
-/// Renders the tab bar at the top.
-fn render_tab_bar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
-    let active_style = Style::default()
-        .fg(to_ratatui(ColorToken::TextBright))
-        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
-    let inactive_style = Style::default().fg(to_ratatui(ColorToken::Muted));
-
-    let tab_titles: Vec<Line<'_>> = ["Dashboard", "Waybar", "History", "Login"]
-        .iter()
-        .enumerate()
-        .map(|(i, &name)| {
-            if i == state.tab.index() {
-                Line::from(Span::styled(name, active_style))
-            } else {
-                Line::from(Span::styled(name, inactive_style))
-            }
-        })
-        .collect();
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)))
-        .title(Span::styled(
-            " agent-bar ",
-            Style::default()
-                .fg(to_ratatui(ColorToken::Blue))
-                .add_modifier(Modifier::BOLD),
-        ));
-
-    let tabs = Tabs::new(tab_titles)
-        .select(state.tab.index())
-        .block(block)
-        .highlight_style(active_style)
-        .style(inactive_style)
-        // Use heavy vertical bar as divider (no VS16 selector)
-        .divider(Span::raw("\u{2503}"));
-
-    frame.render_widget(tabs, area);
-}
-
 /// Renders the body: sidebar (providers) + content panel.
 fn render_body(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
     // Horizontal split: [sidebar (17), content (fill)]
@@ -294,12 +260,9 @@ fn render_body(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect)
 
 /// Renders the provider sidebar.
 fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
-    let sidebar_focused = matches!(state.focus, Panel::Sidebar);
-    let border_color = if sidebar_focused {
-        to_ratatui(ColorToken::Blue)
-    } else {
-        to_ratatui(ColorToken::Comment)
-    };
+    // Sidebar sempre em foco (nao ha mais painel de conteudo com foco
+    // proprio nesta versao minima — Task 10 redesenha o layout completo).
+    let border_color = to_ratatui(ColorToken::Blue);
 
     let title_style = Style::default()
         .fg(to_ratatui(ColorToken::TextBright))
@@ -379,16 +342,14 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
     frame.render_widget(list, area);
 }
 
-/// Dispatches content rendering based on current tab and mode.
+/// Dispatches content rendering based on the current screen.
 fn render_content(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
-    use crate::tui::state::{Mode, Tab};
-
-    match (&state.tab, &state.mode) {
-        (Tab::Dashboard, Mode::Detail) => render_detail(state, frame, area),
-        (Tab::Dashboard, _) => render_dashboard(state, frame, area),
-        (Tab::Waybar, _) => render_config(state, frame, area),
-        (Tab::History, _) => render_history(state, frame, area),
-        (Tab::Login, _) => render_login(state, None, frame, area),
+    match state.screen {
+        Screen::Overview => render_dashboard(state, frame, area),
+        Screen::Detail => render_detail(state, frame, area),
+        Screen::History => render_history(state, frame, area),
+        Screen::Login => render_login(state, None, frame, area),
+        Screen::Waybar => render_config(state, frame, area),
     }
 }
 

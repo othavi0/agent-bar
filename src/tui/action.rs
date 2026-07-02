@@ -4,7 +4,7 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::Settings;
 use crate::usage::{UsageRecord, UsageSummary};
 
-use super::state::Tab;
+use super::state::SidebarItem;
 
 #[derive(Debug)]
 pub enum Action {
@@ -28,7 +28,10 @@ pub enum Action {
     Down,
     OpenDetail,
     Back,
-    SwitchTab(Tab),
+    /// Move a selecao da sidebar diretamente para o indice dado.
+    SelectSidebar(usize),
+    /// Ativa o item selecionado da sidebar (navega para a tela correspondente).
+    Activate(SidebarItem),
     Refresh,
     Quit,
     // --- Aba Waybar Config ---
