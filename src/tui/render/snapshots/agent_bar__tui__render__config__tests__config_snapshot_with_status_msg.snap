@@ -1,14 +1,15 @@
 ---
 source: src/tui/render/config.rs
+assertion_line: 332
 expression: terminal.backend()
 ---
-"╭ Waybar Config ───╮╭ providers  ──────────────────────────────╮"
+"╭ Config do Waybar ╮╭ providers  ──────────────────────────────╮"
 "│ > providers      ││ claude, codex                            │"
 "│   providerOrder  │╰──────────────────────────────────────────╯"
 "│   separators     │╭──────────────────────────────────────────╮"
-"│   displayMode    ││ IDs separados por virgula. Ex: claude, co│"
+"│   displayMode    ││ IDs separados por vírgula. Ex: claude, co│"
 "│   fxRate         ││                                          │"
-"│   signal         ││ Configuracao salva e Waybar recarregado. │"
+"│   signal         ││ Configuração salva e Waybar recarregado. │"
 "│   interval       ││                                          │"
 "│                  ││                                          │"
 "│                  ││                                          │"

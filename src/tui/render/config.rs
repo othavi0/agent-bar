@@ -75,7 +75,7 @@ fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
         .title(Span::styled(
-            " Waybar Config ",
+            " Config do Waybar ",
             Style::default()
                 .fg(to_ratatui(ColorToken::TextBright))
                 .add_modifier(Modifier::BOLD),
@@ -221,8 +221,8 @@ fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect, hits:
 /// Dica por campo (None = sem dica especifica).
 fn field_hint(field: ConfigField) -> Option<&'static str> {
     match field {
-        ConfigField::Providers => Some("IDs separados por virgula. Ex: claude, codex, amp"),
-        ConfigField::ProviderOrder => Some("Ordem de exibicao no Waybar. Ex: claude, codex"),
+        ConfigField::Providers => Some("IDs separados por vírgula. Ex: claude, codex, amp"),
+        ConfigField::ProviderOrder => Some("Ordem de exibição no Waybar. Ex: claude, codex"),
         ConfigField::Separators => Some("Estilo: pill / gap / bare / glass / shadow / none"),
         ConfigField::DisplayMode => Some("Modo: remaining (restante) / used (usado)"),
         ConfigField::FxRate => Some("Taxa US$/BRL para custo em R$. Ex: 5.75"),
@@ -324,7 +324,7 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = state_on_waybar();
         if let Some(cs) = state.config_state.as_mut() {
-            cs.status_msg = Some("Configuracao salva e Waybar recarregado.".to_string());
+            cs.status_msg = Some("Configuração salva e Waybar recarregado.".to_string());
         }
         terminal
             .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))

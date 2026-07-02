@@ -4,11 +4,11 @@ assertion_line: 625
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
-"│ VISÃO           ╭ Waybar Config ───╮╭ providers  ───────────────────────────────────────────────╮│"
+"│ VISÃO           ╭ Config do Waybar ╮╭ providers  ───────────────────────────────────────────────╮│"
 "│ ▸ Geral         │ > providers      ││ claude, codex                                             ││"
 "│                 │   providerOrder  │╰───────────────────────────────────────────────────────────╯│"
 "│ MAIS            │   separators     │╭───────────────────────────────────────────────────────────╮│"
-"│   Histórico     │   displayMode    ││ IDs separados por virgula. Ex: claude, codex, amp         ││"
+"│   Histórico     │   displayMode    ││ IDs separados por vírgula. Ex: claude, codex, amp         ││"
 "│   Login         │   fxRate         ││                                                           ││"
 "│   Waybar        ╭ agent-bar — atalhos ────────────────────────────────────────╮                 ││"
 "│                 │                      Navegação global                       │                 ││"
@@ -24,7 +24,7 @@ expression: terminal.backend()
 "│                 │  Enter       abrir detalhe                                  │                 ││"
 "│                 │  Esc         voltar para lista                              │                 ││"
 "│                 │                                                             │                 ││"
-"│                 │                        Waybar Config                        │                 ││"
+"│                 │                      Config do Waybar                       │                 ││"
 "│                 │  up/down     selecionar campo                               │                 ││"
 "│                 │  Enter       editar campo                                   │                 ││"
 "│                 │  s           salvar configuração                            │                 ││"

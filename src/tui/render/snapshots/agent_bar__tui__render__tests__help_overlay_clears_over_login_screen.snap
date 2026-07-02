@@ -24,7 +24,7 @@ expression: terminal.backend()
 "│                 │  Enter       abrir detalhe                                  │                 ┃│"
 "│                 │  Esc         voltar para lista                              │                 ┃│"
 "│                 │                                                             │                 ┃│"
-"│                 │                        Waybar Config                        │                 ┃│"
+"│                 │                      Config do Waybar                       │                 ┃│"
 "│                 │  up/down     selecionar campo                               │                 ┃│"
 "│                 │  Enter       editar campo                                   │                 ┃│"
 "│                 │  s           salvar configuração                            │                 ┃│"

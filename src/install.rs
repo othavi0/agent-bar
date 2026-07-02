@@ -21,7 +21,7 @@ pub fn ensure_command(cmd: &str, install_hint: &str) -> bool {
     if has_cmd(cmd) {
         return true;
     }
-    log::warn!("{cmd} nao encontrado. {install_hint}");
+    log::warn!("{cmd} não encontrado. {install_hint}");
     false
 }
 
@@ -35,7 +35,7 @@ pub fn ensure_amp_cli() -> bool {
         return true;
     }
     log::warn!(
-        "Amp CLI nao encontrado. Para instalar, rode: {}",
+        "Amp CLI não encontrado. Para instalar, rode: {}",
         AMP_INSTALL_COMMAND
     );
     false

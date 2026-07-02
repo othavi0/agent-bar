@@ -1,8 +1,9 @@
 ---
 source: src/tui/render/config.rs
+assertion_line: 318
 expression: terminal.backend()
 ---
-"╭ Waybar Config ───╮╭ fxRate  [editando]  ─────────────────────╮"
+"╭ Config do Waybar ╮╭ fxRate  [editando]  ─────────────────────╮"
 "│   providers      ││ 6.25                                     │"
 "│   providerOrder  │╰──────────────────────────────────────────╯"
 "│   separators     │╭──────────────────────────────────────────╮"

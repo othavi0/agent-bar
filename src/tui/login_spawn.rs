@@ -52,7 +52,7 @@ impl ProviderLogin for RealLogin {
                 );
             }
             Err(e) => {
-                log::warn!("falha ao re-inicializar terminal apos login: {e}");
+                log::warn!("falha ao re-inicializar terminal após login: {e}");
             }
         }
 
@@ -65,9 +65,9 @@ impl ProviderLogin for RealLogin {
 fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
     match provider_id {
         "claude" => {
-            let ok = ensure_command("claude", "Instale o Claude Code CLI (binario: claude).");
+            let ok = ensure_command("claude", "Instale o Claude Code CLI (binário: claude).");
             if !ok {
-                bail!("claude CLI nao encontrado no PATH");
+                bail!("claude CLI não encontrado no PATH");
             }
             let status = Command::new("claude")
                 .stdin(std::process::Stdio::inherit())
@@ -76,15 +76,15 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
                 .status()
                 .context("falha ao executar claude")?;
             if !status.success() {
-                log::warn!("claude encerrou com codigo {:?}", status.code());
+                log::warn!("claude encerrou com código {:?}", status.code());
             }
             Ok(())
         }
 
         "codex" => {
-            let ok = ensure_command("codex", "Instale o OpenAI Codex CLI (binario: codex).");
+            let ok = ensure_command("codex", "Instale o OpenAI Codex CLI (binário: codex).");
             if !ok {
-                bail!("codex CLI nao encontrado no PATH");
+                bail!("codex CLI não encontrado no PATH");
             }
             let status = Command::new("codex")
                 .arg("login")
@@ -94,7 +94,7 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
                 .status()
                 .context("falha ao executar codex login")?;
             if !status.success() {
-                log::warn!("codex login encerrou com codigo {:?}", status.code());
+                log::warn!("codex login encerrou com código {:?}", status.code());
             }
             Ok(())
         }
@@ -103,7 +103,7 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
             let home = std::env::var("HOME").unwrap_or_default();
             let amp_bin = find_amp_bin(&home).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Amp CLI nao encontrado. Instale com: {}",
+                    "Amp CLI não encontrado. Instale com: {}",
                     crate::app_identity::AMP_INSTALL_COMMAND
                 )
             })?;
@@ -115,7 +115,7 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
                 .status()
                 .context("falha ao executar amp login")?;
             if !status.success() {
-                log::warn!("amp login encerrou com codigo {:?}", status.code());
+                log::warn!("amp login encerrou com código {:?}", status.code());
             }
             Ok(())
         }

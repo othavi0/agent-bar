@@ -171,7 +171,7 @@ fn apply_field_edit(field: ConfigField, value: &str, cs: &mut ConfigState) -> Re
                 "none" => SeparatorStyle::None,
                 other => {
                     return Err(format!(
-                        "separador invalido: '{other}' (pill/gap/bare/glass/shadow/none)"
+                        "separador inválido: '{other}' (pill/gap/bare/glass/shadow/none)"
                     ))
                 }
             };
@@ -183,7 +183,7 @@ fn apply_field_edit(field: ConfigField, value: &str, cs: &mut ConfigState) -> Re
             let mode = match value.trim() {
                 "remaining" => DisplayMode::Remaining,
                 "used" => DisplayMode::Used,
-                other => return Err(format!("modo invalido: '{other}' (remaining/used)")),
+                other => return Err(format!("modo inválido: '{other}' (remaining/used)")),
             };
             s.waybar.display_mode = mode;
             Ok(())
@@ -192,7 +192,7 @@ fn apply_field_edit(field: ConfigField, value: &str, cs: &mut ConfigState) -> Re
             let rate: f64 = value
                 .trim()
                 .parse()
-                .map_err(|_| format!("fxRate invalido: '{value}' (numero esperado)"))?;
+                .map_err(|_| format!("fxRate inválido: '{value}' (número esperado)"))?;
             if !rate.is_finite() || rate <= 0.0 {
                 return Err(format!("fxRate deve ser positivo: '{value}'"));
             }
@@ -207,7 +207,7 @@ fn apply_field_edit(field: ConfigField, value: &str, cs: &mut ConfigState) -> Re
             }
             let n: i64 = trimmed
                 .parse()
-                .map_err(|_| format!("signal invalido: '{value}' (1-30 ou none)"))?;
+                .map_err(|_| format!("signal inválido: '{value}' (1-30 ou none)"))?;
             if !(1..=30).contains(&n) {
                 return Err(format!("signal deve ser 1-30 ou none: '{value}'"));
             }
@@ -218,7 +218,7 @@ fn apply_field_edit(field: ConfigField, value: &str, cs: &mut ConfigState) -> Re
             let n: u32 = value
                 .trim()
                 .parse()
-                .map_err(|_| format!("interval invalido: '{value}' (inteiro positivo)"))?;
+                .map_err(|_| format!("interval inválido: '{value}' (inteiro positivo)"))?;
             if n == 0 {
                 return Err(format!("interval deve ser > 0: '{value}'"));
             }

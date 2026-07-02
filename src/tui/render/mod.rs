@@ -90,7 +90,7 @@ fn help_text() -> Text<'static> {
     lines.push(Line::from(""));
 
     lines.extend(help_section(
-        "Waybar Config",
+        "Config do Waybar",
         &[
             ("up/down", "selecionar campo"),
             ("Enter", "editar campo"),

@@ -166,9 +166,9 @@ fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect, hits: &m
     let (id, name) = PROVIDERS[state.login_selected];
 
     let hint = match id {
-        "claude" => "Abre a REPL do Claude. Digite /login e siga as instrucoes.",
+        "claude" => "Abre a REPL do Claude. Digite /login e siga as instruções.",
         "codex" => "Executa `codex login` (fluxo OAuth no browser).",
-        "amp" => "Executa `amp login` (autenticacao no browser).",
+        "amp" => "Executa `amp login` (autenticação no browser).",
         _ => "",
     };
 
