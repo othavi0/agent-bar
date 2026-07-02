@@ -47,7 +47,9 @@ fn derive_bar_width(content_width: u16) -> usize {
     let label_w = 1 + LABEL_W + 1;
     let pct_w = 1 + 4 + 1;
     let reset_w = 2 + 1 + 1 + 5;
-    (content_width as usize).saturating_sub(label_w + pct_w + reset_w).max(10)
+    (content_width as usize)
+        .saturating_sub(label_w + pct_w + reset_w)
+        .max(10)
 }
 
 /// Trunca um nome pra no máximo `max` colunas, usando `…` no lugar do
@@ -296,7 +298,10 @@ fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
     if !eu.enabled {
         return Line::from(vec![
             label,
-            Span::styled("desativado", Style::default().fg(to_ratatui(ColorToken::Muted))),
+            Span::styled(
+                "desativado",
+                Style::default().fg(to_ratatui(ColorToken::Muted)),
+            ),
         ]);
     }
     let pct_used = if eu.limit > 0.0 {
@@ -322,7 +327,11 @@ fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
 /// Linha de totais: "hoje" vem de `state.usage` (já agregado pelo engine);
 /// "7 dias" soma `state.history` filtrado por provider (records brutos —
 /// `state.usage` não cobre a janela de 7d).
-fn totals_line(state: &AppState, provider_usage: Option<&ProviderUsage>, provider: &str) -> Line<'static> {
+fn totals_line(
+    state: &AppState,
+    provider_usage: Option<&ProviderUsage>,
+    provider: &str,
+) -> Line<'static> {
     let (today_tokens, today_cost) = match provider_usage {
         Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
         None => (0, "-".to_string()),
@@ -339,11 +348,15 @@ fn totals_line(state: &AppState, provider_usage: Option<&ProviderUsage>, provide
         .iter()
         .map(|r| r.input + r.output + r.cache_read + r.cache_write)
         .sum();
-    let week_cost: Option<f64> = week_records.iter().fold(None, |acc, r| match cost_usd_of(r) {
-        Some(c) => Some(acc.unwrap_or(0.0) + c),
-        None => acc,
-    });
-    let week_cost_str = week_cost.map(|c| format!("${c:.2}")).unwrap_or_else(|| "-".to_string());
+    let week_cost: Option<f64> = week_records
+        .iter()
+        .fold(None, |acc, r| match cost_usd_of(r) {
+            Some(c) => Some(acc.unwrap_or(0.0) + c),
+            None => acc,
+        });
+    let week_cost_str = week_cost
+        .map(|c| format!("${c:.2}"))
+        .unwrap_or_else(|| "-".to_string());
 
     Line::from(Span::styled(
         format!(
@@ -471,7 +484,13 @@ fn render_full(
                     .fg(to_ratatui(ColorToken::TextBright))
                     .add_modifier(Modifier::BOLD),
             )));
-            let max_tokens = pu.by_model.iter().map(model_tokens).max().unwrap_or(0).max(1);
+            let max_tokens = pu
+                .by_model
+                .iter()
+                .map(model_tokens)
+                .max()
+                .unwrap_or(0)
+                .max(1);
             for mu in &pu.by_model {
                 lines.push(model_usage_line(mu, max_tokens, brand));
             }
@@ -761,7 +780,9 @@ mod tests {
             secondary: None,
             models: None,
             extra: None,
-            error: Some("Not logged in. Open `agent-bar menu` and choose Provider login.".to_string()),
+            error: Some(
+                "Not logged in. Open `agent-bar menu` and choose Provider login.".to_string(),
+            ),
         })
     }
 
@@ -848,9 +869,24 @@ mod tests {
         state.usage = Some(usage);
         state.last_update = Some(now);
         state.history = Some(vec![
-            rec("claude", "claude-opus-4-8", now - time::Duration::hours(1), 900_000),
-            rec("claude", "claude-opus-4-8", now - time::Duration::hours(5), 100_000),
-            rec("claude", "claude-sonnet-4-6", now - time::Duration::hours(9), 50_000),
+            rec(
+                "claude",
+                "claude-opus-4-8",
+                now - time::Duration::hours(1),
+                900_000,
+            ),
+            rec(
+                "claude",
+                "claude-opus-4-8",
+                now - time::Duration::hours(5),
+                100_000,
+            ),
+            rec(
+                "claude",
+                "claude-sonnet-4-6",
+                now - time::Duration::hours(9),
+                50_000,
+            ),
             rec("codex", "gpt-5.5", now - time::Duration::hours(2), 700_000),
         ]);
         terminal

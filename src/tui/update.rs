@@ -649,7 +649,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             // Count-up do custo do header (T16): ease exponencial (~800ms
             // em ticks de 30ms, fator 0.12). animations=false → snapa
             // direto pro alvo, sem lerp visual.
-            let target_cost = state.usage.as_ref().map(|u| u.total_cost.usd).unwrap_or(0.0);
+            let target_cost = state
+                .usage
+                .as_ref()
+                .map(|u| u.total_cost.usd)
+                .unwrap_or(0.0);
             if state.animations {
                 state.display_cost += (target_cost - state.display_cost) * 0.12;
                 if (target_cost - state.display_cost).abs() < 0.01 {
@@ -1228,7 +1232,9 @@ mod tests {
     fn screen_change_pushes_fx_event() {
         let mut state = AppState::new();
         update(&mut state, Action::Activate(SidebarItem::History));
-        assert!(state.fx_queue.contains(&crate::tui::state::FxEvent::ScreenChanged));
+        assert!(state
+            .fx_queue
+            .contains(&crate::tui::state::FxEvent::ScreenChanged));
     }
 
     #[test]
@@ -1257,7 +1263,9 @@ mod tests {
                 silent: false,
             },
         );
-        assert!(state.fx_queue.contains(&crate::tui::state::FxEvent::FetchLanded));
+        assert!(state
+            .fx_queue
+            .contains(&crate::tui::state::FxEvent::FetchLanded));
     }
 
     /// Fix pós-review (T16): `silent=true` (poll de 60s do `data_tick`) NÃO
@@ -1274,7 +1282,9 @@ mod tests {
             },
         );
         assert!(
-            !state.fx_queue.contains(&crate::tui::state::FxEvent::FetchLanded),
+            !state
+                .fx_queue
+                .contains(&crate::tui::state::FxEvent::FetchLanded),
             "onda silenciosa (poll de 60s) não deve empurrar FetchLanded"
         );
     }

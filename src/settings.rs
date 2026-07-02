@@ -276,7 +276,9 @@ fn normalize(raw: RawSettings) -> Settings {
     let rm = raw.menu.unwrap_or_default();
     let menu = MenuSettings {
         animations: rm.animations.unwrap_or(true),
-        font_family: rm.font_family.unwrap_or_else(|| "IBM Plex Mono".to_string()),
+        font_family: rm
+            .font_family
+            .unwrap_or_else(|| "IBM Plex Mono".to_string()),
         font_size: rm.font_size.unwrap_or(12),
     };
 

@@ -15,8 +15,11 @@ pub fn hex_to_color(hex: &str) -> Color {
     if h.len() != 6 {
         return Color::Rgb(0, 0, 0);
     }
-    let seg =
-        |i: usize| h.get(i..i + 2).and_then(|s| u8::from_str_radix(s, 16).ok()).unwrap_or(0);
+    let seg = |i: usize| {
+        h.get(i..i + 2)
+            .and_then(|s| u8::from_str_radix(s, 16).ok())
+            .unwrap_or(0)
+    };
     Color::Rgb(seg(0), seg(2), seg(4))
 }
 

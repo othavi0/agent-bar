@@ -529,8 +529,13 @@ mod tests {
         let now = time::macros::datetime!(2026-07-02 05:00:00 UTC);
         let labels = x_axis_labels(now, 24, HistoryRange::Day, time::UtcOffset::UTC);
         assert_eq!(labels.len(), 3);
-        let text = |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
-        assert_eq!(text(&labels[0]), "06h", "24h atras de 05h (offset UTC) = 06h do dia anterior");
+        let text =
+            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
+        assert_eq!(
+            text(&labels[0]),
+            "06h",
+            "24h atras de 05h (offset UTC) = 06h do dia anterior"
+        );
         assert_eq!(text(&labels[1]), "18h");
         assert_eq!(text(&labels[2]), "agora");
     }
@@ -543,7 +548,8 @@ mod tests {
         let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
         let offset = time::UtcOffset::from_hms(-3, 0, 0).unwrap();
         let labels = x_axis_labels(now, 24, HistoryRange::Day, offset);
-        let text = |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
+        let text =
+            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
         // now em -03:00 = 23h do dia anterior; 23h atras disso = 00h local
         // (NAO "03h", que seria o resultado se a hora UTC vazasse crua).
         assert_eq!(text(&labels[0]), "00h");
@@ -554,9 +560,11 @@ mod tests {
         let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
         let hours = 24 * 7;
         let labels = x_axis_labels(now, hours, HistoryRange::Week, time::UtcOffset::UTC);
-        let text = |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
+        let text =
+            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
         assert_eq!(text(&labels[2]), "hoje");
-        let expected_oldest = weekday_abbrev((now - time::Duration::hours((hours - 1) as i64)).weekday());
+        let expected_oldest =
+            weekday_abbrev((now - time::Duration::hours((hours - 1) as i64)).weekday());
         assert_eq!(text(&labels[0]), expected_oldest);
     }
 
@@ -623,7 +631,12 @@ mod tests {
     /// Gera uma onda de records (nao uma reta) pra provar que o chart tem
     /// FORMA de verdade — mata o antigo esticamento de 7 pontos que virava
     /// blocos repetidos.
-    fn synth_wave(provider: &str, model: &str, now: time::OffsetDateTime, hours_back_max: i64) -> Vec<UsageRecord> {
+    fn synth_wave(
+        provider: &str,
+        model: &str,
+        now: time::OffsetDateTime,
+        hours_back_max: i64,
+    ) -> Vec<UsageRecord> {
         (0..hours_back_max)
             .step_by(3)
             .map(|h| {

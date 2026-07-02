@@ -10,7 +10,12 @@ use super::action::Action;
 /// runtime tokio current_thread. Resultados chegam via `tx` como Actions.
 /// `silent` viaja até o `FetchCompleted` final (T16: gate do sweep — só
 /// ondas pedidas pelo usuário disparam o efeito, não o poll de 60s).
-pub fn spawn_fetch(tx: &UnboundedSender<Action>, octx: OwnedCtx, only: Option<String>, silent: bool) {
+pub fn spawn_fetch(
+    tx: &UnboundedSender<Action>,
+    octx: OwnedCtx,
+    only: Option<String>,
+    silent: bool,
+) {
     let tx = tx.clone();
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Builder::new_current_thread()

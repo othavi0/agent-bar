@@ -108,7 +108,10 @@ fn render_cards(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitM
         let visible_bottom = bottom.min(scroll + viewport_h);
         let screen_y = area.y + (visible_top - scroll);
         let h = visible_bottom - visible_top;
-        hits.push(Rect::new(area.x, screen_y, area.width, h), MouseTarget::Card(i));
+        hits.push(
+            Rect::new(area.x, screen_y, area.width, h),
+            MouseTarget::Card(i),
+        );
     }
 }
 
@@ -187,7 +190,13 @@ fn fmt_provider_cost(pu: &ProviderUsage) -> String {
 /// Uma linha de gauge (sessão/semana): label fixo 8, gauge, % right-aligned, reset.
 /// `anim_frame`/`animations` (Task 16): pulso crítico quando `remaining < 10.0`
 /// — coexiste com o blink da sidebar (Task 10), não o substitui.
-fn gauge_line(label: &str, w: &QuotaWindow, gauge_w: usize, anim_frame: u64, animations: bool) -> Line<'static> {
+fn gauge_line(
+    label: &str,
+    w: &QuotaWindow,
+    gauge_w: usize,
+    anim_frame: u64,
+    animations: bool,
+) -> Line<'static> {
     let mut color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
     if animations && w.remaining < 10.0 {
         color = pulse_color(color, anim_frame);
@@ -254,10 +263,22 @@ fn render_provider_card(
         let gauge_w = derive_gauge_width(card_rect.width);
         let mut lines = Vec::with_capacity(3);
         if let Some(w) = &q.primary {
-            lines.push(gauge_line("sess\u{e3}o", w, gauge_w, state.anim_frame, state.animations));
+            lines.push(gauge_line(
+                "sess\u{e3}o",
+                w,
+                gauge_w,
+                state.anim_frame,
+                state.animations,
+            ));
         }
         if let Some(w) = &q.secondary {
-            lines.push(gauge_line("semana", w, gauge_w, state.anim_frame, state.animations));
+            lines.push(gauge_line(
+                "semana",
+                w,
+                gauge_w,
+                state.anim_frame,
+                state.animations,
+            ));
         }
 
         let series = match now {
@@ -330,7 +351,9 @@ fn render_skeleton_card(state: &AppState, frame: &mut Frame, rect: Rect, show_sp
         for _ in 0..state.throbber.index {
             throbber_state.calc_next();
         }
-        block = block.title(Line::from(throbber_widget.to_symbol_span(&throbber_state)).alignment(Alignment::Right));
+        block = block.title(
+            Line::from(throbber_widget.to_symbol_span(&throbber_state)).alignment(Alignment::Right),
+        );
     }
 
     let inner = block.inner(rect);
@@ -494,8 +517,20 @@ mod tests {
         let now = datetime!(2026-06-19 20:00:00 UTC);
         state.last_update = Some(now);
         state.providers = vec![
-            ProviderView::new(make_quota("claude", "Claude", 26.0, Some("2026-06-19T23:00:00Z"), None)),
-            ProviderView::new(make_quota("codex", "Codex", 55.0, Some("2026-06-20T01:28:00Z"), None)),
+            ProviderView::new(make_quota(
+                "claude",
+                "Claude",
+                26.0,
+                Some("2026-06-19T23:00:00Z"),
+                None,
+            )),
+            ProviderView::new(make_quota(
+                "codex",
+                "Codex",
+                55.0,
+                Some("2026-06-20T01:28:00Z"),
+                None,
+            )),
             ProviderView::new(make_quota("amp", "Amp", 80.0, None, None)),
         ];
         state.status = FetchStatus::Loaded;
@@ -527,7 +562,13 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.providers = vec![
-            ProviderView::new(make_quota("claude", "Claude", 26.0, Some("2026-06-19T23:00:00Z"), None)),
+            ProviderView::new(make_quota(
+                "claude",
+                "Claude",
+                26.0,
+                Some("2026-06-19T23:00:00Z"),
+                None,
+            )),
             ProviderView::new(make_quota(
                 "codex",
                 "Codex",
@@ -646,7 +687,15 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.providers = (0..5)
-            .map(|i| ProviderView::new(make_quota(&format!("p{i}"), &format!("P{i}"), 50.0, None, None)))
+            .map(|i| {
+                ProviderView::new(make_quota(
+                    &format!("p{i}"),
+                    &format!("P{i}"),
+                    50.0,
+                    None,
+                    None,
+                ))
+            })
             .collect();
         state.scroll = 8;
         let mut hits = HitMap::default();

@@ -11,9 +11,12 @@ use crate::tui::state::AppState;
 /// `state.last_update`; fallback = timestamp mais recente de `state.history`;
 /// ambos ausentes → sem âncora, série fica vazia (sparkline vazio, ok).
 pub fn series_now(state: &AppState) -> Option<time::OffsetDateTime> {
-    state
-        .last_update
-        .or_else(|| state.history.as_deref().and_then(|r| r.iter().map(|u| u.ts).max()))
+    state.last_update.or_else(|| {
+        state
+            .history
+            .as_deref()
+            .and_then(|r| r.iter().map(|u| u.ts).max())
+    })
 }
 
 /// Formata tokens em unidade legível ("14.2M" / "1.2K" / "500"). Escolhe a

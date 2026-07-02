@@ -12,9 +12,8 @@ fn lerp_rgb(a: Color, b: Color, t: f64) -> Color {
         (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => ((r1, g1, b1), (r2, g2, b2)),
         _ => return b,
     };
-    let mix = |x: u8, y: u8| -> u8 {
-        (f64::from(x) + (f64::from(y) - f64::from(x)) * t).round() as u8
-    };
+    let mix =
+        |x: u8, y: u8| -> u8 { (f64::from(x) + (f64::from(y) - f64::from(x)) * t).round() as u8 };
     Color::Rgb(mix(ar, br), mix(ag, bg), mix(ab, bb))
 }
 

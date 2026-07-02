@@ -21,7 +21,11 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
             SidebarItem::Overview => Line::from(" ▸".to_string()),
             SidebarItem::Provider(i) => {
                 let pv = &state.providers[i];
-                let mark = if pv.quota.provider == "claude" { "◆" } else { "●" };
+                let mark = if pv.quota.provider == "claude" {
+                    "◆"
+                } else {
+                    "●"
+                };
                 Line::from(format!(" {mark}"))
             }
             // ratatui pula `buf.set_style` inteiro quando a Line tem
@@ -39,7 +43,11 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
         SidebarItem::Overview => Line::from(" ▸ Geral".to_string()),
         SidebarItem::Provider(i) => {
             let pv = &state.providers[i];
-            let mark = if pv.quota.provider == "claude" { "◆" } else { "●" };
+            let mark = if pv.quota.provider == "claude" {
+                "◆"
+            } else {
+                "●"
+            };
             let pct = pv
                 .quota
                 .primary
@@ -116,7 +124,10 @@ pub fn render_sidebar(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         if *row >= max_row {
             continue;
         }
-        hits.push(Rect::new(area.x, *row, area.width, 1), MouseTarget::Sidebar(i));
+        hits.push(
+            Rect::new(area.x, *row, area.width, 1),
+            MouseTarget::Sidebar(i),
+        );
     }
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -140,7 +151,12 @@ fn item_color(state: &AppState, item: SidebarItem) -> ratatui::style::Color {
             if pv.quota.error.is_some() {
                 to_ratatui(ColorToken::Muted) // deslogado/erro: dim
             } else {
-                let remaining = pv.quota.primary.as_ref().map(|w| w.remaining).unwrap_or(0.0);
+                let remaining = pv
+                    .quota
+                    .primary
+                    .as_ref()
+                    .map(|w| w.remaining)
+                    .unwrap_or(0.0);
                 if remaining < 10.0 {
                     // Animação D: blink crítico da MARCA da sidebar. Migrado
                     // de widgets/provider_list.rs (órfão desta task,
