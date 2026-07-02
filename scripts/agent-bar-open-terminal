@@ -30,43 +30,116 @@ if command -v agent-bar >/dev/null 2>&1; then
   fi
 fi
 
-# 1) Alacritty direto (Omarchy incluso): fonte configurável + classe p/ float.
-# Guard: fonte só se aplica em terminais com flag própria — se $TERMINAL está
-# setado e não é alacritty, respeitamos a escolha e pulamos pro resto da cascata.
-if { [ -z "${TERMINAL:-}" ] || [ "$(basename -- "$TERMINAL")" = "alacritty" ]; } \
-  && command -v alacritty >/dev/null 2>&1; then
-  font_opts=()
+# ---- Launchers (fonte via array bash, nunca eval) ----
+
+launch_alacritty() {
+  local font_opts=()
   if [ -n "$font_family" ]; then
     font_opts+=(--option "font.normal.family=\"$font_family\"")
     [ -n "$font_size" ] && font_opts+=(--option "font.size=$font_size")
   fi
   exec setsid alacritty --class org.omarchy.terminal --title "Agent Bar" \
     "${font_opts[@]}" -e bash -lc "$cmd"
-fi
+}
 
-# 2) kitty / foot / ghostty com flag de fonte:
-if command -v kitty >/dev/null 2>&1; then
-  font_opts=()
+launch_kitty() {
+  local font_opts=()
   [ -n "$font_family" ] && font_opts+=(-o "font_family=$font_family")
   [ -n "$font_size" ] && font_opts+=(-o "font_size=$font_size")
   exec setsid kitty --title "Agent Bar" "${font_opts[@]}" bash -lc "$cmd"
-fi
+}
 
-if command -v foot >/dev/null 2>&1; then
+launch_foot() {
   if [ -n "$font_family" ]; then
     exec setsid foot -T "Agent Bar" -o "main.font=$font_family:size=${font_size:-12}" bash -lc "$cmd"
   fi
   exec setsid foot -T "Agent Bar" bash -lc "$cmd"
-fi
+}
 
-if command -v ghostty >/dev/null 2>&1; then
-  font_opts=()
+launch_ghostty() {
+  local font_opts=()
   [ -n "$font_family" ] && font_opts+=("--font-family=$font_family")
   [ -n "$font_size" ] && font_opts+=("--font-size=${font_size:-12}")
   exec setsid ghostty --title="Agent Bar" "${font_opts[@]}" -e bash -lc "$cmd"
+}
+
+# ---- Política de $TERMINAL ----
+# `xdg-terminal-exec` é o dispatcher (Omarchy exporta por padrão), não uma
+# preferência concreta — tratado como UNSET. Preferência concreta conhecida
+# (alacritty/kitty/foot/ghostty/wezterm) com binário presente lança DIRETO;
+# ausente = inválida, cai na cascata normal (não trava). Qualquer outro valor
+# (st, urxvt...) pula os branches diretos e vai só pro xdg genérico.
+term_pref=""
+if [ -n "${TERMINAL:-}" ]; then
+  term_pref="$(basename -- "$TERMINAL")"
+fi
+[ "$term_pref" = "xdg-terminal-exec" ] && term_pref=""
+
+case "$term_pref" in
+"")
+  # sem preferência (ou xdg-terminal-exec) → cascata normal abaixo.
+  ;;
+alacritty)
+  command -v alacritty >/dev/null 2>&1 && launch_alacritty
+  term_pref=""
+  ;;
+kitty)
+  command -v kitty >/dev/null 2>&1 && launch_kitty
+  term_pref=""
+  ;;
+foot)
+  command -v foot >/dev/null 2>&1 && launch_foot
+  term_pref=""
+  ;;
+ghostty)
+  command -v ghostty >/dev/null 2>&1 && launch_ghostty
+  term_pref=""
+  ;;
+wezterm)
+  if command -v wezterm >/dev/null 2>&1; then
+    exec setsid wezterm start --always-new-process --class "AgentBar" bash -lc "$cmd"
+  fi
+  term_pref=""
+  ;;
+*)
+  # st, urxvt etc.: preferência concreta mas sem flag de fonte suportada —
+  # pula os terminais diretos e vai só pro caminho uwsm/xdg genérico (o
+  # xdg-terminal-exec é quem lê $TERMINAL e respeita a escolha; sem fonte,
+  # fallback documentado). Sem uwsm/xdg disponível, falha aqui mesmo (não
+  # cascateia pros terminais diretos — a preferência foi explícita).
+  if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
+    exec setsid uwsm-app -- xdg-terminal-exec \
+      --app-id=org.omarchy.terminal \
+      --title="Agent Bar" \
+      -e bash -lc "$cmd"
+  fi
+  if command -v xdg-terminal-exec >/dev/null 2>&1; then
+    exec setsid xdg-terminal-exec --title="Agent Bar" -e bash -lc "$cmd"
+  fi
+  echo "No terminal launcher found for \$TERMINAL=$TERMINAL (xdg-terminal-exec/uwsm-app not available)." >&2
+  exit 1
+  ;;
+esac
+
+# ---- Cascata normal (sem preferência válida): por disponibilidade ----
+
+if command -v alacritty >/dev/null 2>&1; then
+  launch_alacritty
 fi
 
-# 3) uwsm/xdg genérico (sem suporte a fonte — fallback documentado):
+if command -v kitty >/dev/null 2>&1; then
+  launch_kitty
+fi
+
+if command -v foot >/dev/null 2>&1; then
+  launch_foot
+fi
+
+if command -v ghostty >/dev/null 2>&1; then
+  launch_ghostty
+fi
+
+# uwsm/xdg genérico (sem suporte a fonte — fallback documentado):
 if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
   exec setsid uwsm-app -- xdg-terminal-exec \
     --app-id=org.omarchy.terminal \
