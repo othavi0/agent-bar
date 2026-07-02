@@ -120,7 +120,7 @@ fn handle_login(state: &mut AppState, provider_id: String) {
 }
 
 /// Despacha todas as follow-up actions retornadas por update (1 nivel de profundidade).
-/// SaveConfig, LoginRequested e ReloadUsage sao interceptados aqui para IO.
+/// SaveConfig, LoginRequested, ReloadUsage e Refresh sao interceptados aqui para IO.
 fn drain(
     state: &mut AppState,
     octx: &OwnedCtx,
@@ -146,6 +146,12 @@ fn drain(
             // ReloadUsage e interceptado: redispara o parse de usage em background.
             Action::ReloadUsage => {
                 spawn_usage_load(bg_tx, octx, state);
+            }
+            // Refresh (tecla [r]) e interceptado: dispara refetch real fora do
+            // event loop. update() ja garantiu que so re-enfileira quando nao
+            // ha fetch em voo (evita spawn_fetch duplicado).
+            Action::Refresh => {
+                super::fetch::spawn_fetch(bg_tx, octx.clone(), None);
             }
             other => {
                 update(state, other);

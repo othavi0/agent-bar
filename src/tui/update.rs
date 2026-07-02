@@ -313,9 +313,14 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::Refresh => {
-            state.status = FetchStatus::Loading;
-            // The event loop observes Loading and fires the actual fetch.
-            vec![]
+            // Evita fetch duplicado se ja tem um em voo; senao, re-enfileira
+            // Refresh UMA vez para o event_loop interceptar (mesmo padrao de
+            // ReloadUsage/SaveConfig — o drain NAO re-entra no update com ele).
+            if state.fetch_pending.is_empty() {
+                vec![Action::Refresh]
+            } else {
+                vec![]
+            }
         }
 
         Action::FetchStarted(ids) => {
@@ -957,5 +962,31 @@ mod tests {
         // Status msg deve ser "Salvando..."
         let msg = state.config_state.as_ref().unwrap().status_msg.as_deref();
         assert_eq!(msg, Some("Salvando..."));
+    }
+
+    // ---- Refresh (tecla [r]) ----
+
+    #[test]
+    fn refresh_with_no_pending_fetch_reenqueues_once() {
+        let mut state = AppState::new();
+        assert!(state.fetch_pending.is_empty());
+
+        let fu = update(&mut state, Action::Refresh);
+
+        assert!(matches!(fu.as_slice(), [Action::Refresh]));
+    }
+
+    #[test]
+    fn refresh_with_pending_fetch_is_noop() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        assert!(!state.fetch_pending.is_empty());
+
+        let fu = update(&mut state, Action::Refresh);
+
+        assert!(
+            fu.is_empty(),
+            "Refresh deve ser no-op quando ja ha fetch em voo (evita duplicar spawn_fetch)"
+        );
     }
 }
