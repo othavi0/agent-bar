@@ -421,13 +421,34 @@ pub fn get_default_waybar_asset_paths() -> WaybarAssetPaths {
 // resolve_asset_source_root
 // ---------------------------------------------------------------------------
 
+/// Resolve o diretório de dados de uma instalação standalone (curl|bash).
+/// A decisão `XDG_DATA_HOME` vs `<home>/.local/share` (a parte que causava
+/// split-brain com `update::default_data_dir` — hotfix 7.0.1) é delegada pra
+/// `config::agent_bar_data_dir`, canônica pros dois. O short-circuit de
+/// `AGENT_BAR_DATA` fica duplicado aqui de propósito: não precisa de `HOME`
+/// pra resolver, então checamos antes de exigi-lo (`None` só quando nem
+/// `AGENT_BAR_DATA` nem `HOME` estão disponíveis).
+fn standalone_data_asset_dir() -> Option<PathBuf> {
+    if let Some(v) = std::env::var_os("AGENT_BAR_DATA").filter(|v| !v.is_empty()) {
+        return Some(PathBuf::from(v));
+    }
+    let home = std::env::var_os("HOME").filter(|v| !v.is_empty())?;
+    Some(crate::config::agent_bar_data_dir(&PathBuf::from(home)))
+}
+
 /// Resolve o diretório raiz que contém `icons/` e `scripts/` de origem.
 /// Espelha `resolveAssetSourceRoot` do TS (linhas 74-94).
 ///
 /// Prioridade:
 /// 1. `AGENT_BAR_ASSET_DIR` env — deve ser absoluto e conter `icons/`.
 /// 2. Instalação de sistema: `/usr/share/agent-bar`.
-/// 3. Dev/checkout: o `CARGO_MANIFEST_DIR` (raiz do repo).
+/// 3. Instalação standalone: `AGENT_BAR_DATA` env, senão
+///    `${XDG_DATA_HOME:-~/.local/share}/agent-bar` (mesma resolução do
+///    `install.sh` — hotfix 7.0.1: sem isso, `agent-bar setup` avulso após
+///    um install standalone caía direto no fallback dev/`CARGO_MANIFEST_DIR`
+///    fantasma e falhava).
+/// 4. Dev/checkout: o `CARGO_MANIFEST_DIR` (raiz do repo) — só aceito se
+///    `has_icons` também passar aqui.
 pub fn resolve_asset_source_root() -> anyhow::Result<PathBuf> {
     let has_icons = |d: &Path| d.join("icons").exists();
 
@@ -453,6 +474,12 @@ pub fn resolve_asset_source_root() -> anyhow::Result<PathBuf> {
         );
     }
 
+    if let Some(data_dir) = standalone_data_asset_dir() {
+        if has_icons(&data_dir) {
+            return Ok(data_dir);
+        }
+    }
+
     // Pós-cutover: o crate É a raiz do repo; CARGO_MANIFEST_DIR já aponta pra raiz.
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
@@ -461,7 +488,7 @@ pub fn resolve_asset_source_root() -> anyhow::Result<PathBuf> {
     }
 
     anyhow::bail!(
-        "Asset directory not found. Run `agent-bar setup` from a checkout, or set AGENT_BAR_ASSET_DIR."
+        "Asset directory not found. Reinstall via install.sh, run `agent-bar setup` from a checkout, or set AGENT_BAR_ASSET_DIR."
     );
 }
 
@@ -613,6 +640,155 @@ mod tests {
                 .to_string()
                 .contains("AGENT_BAR_ASSET_DIR must be"));
         });
+    }
+
+    // -----------------------------------------------------------------------
+    // Fix 3 (hotfix 7.0.1): candidato standalone em resolve_asset_source_root
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[serial_test::serial]
+    fn asset_root_honors_standalone_data_dir_without_asset_dir_env() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("icons")).unwrap();
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_ASSET_DIR", None),
+                ("AGENT_BAR_FORCE_COMPILED", None),
+                ("AGENT_BAR_DATA", Some(dir.path().as_os_str())),
+            ],
+            || {
+                let resolved = resolve_asset_source_root().unwrap();
+                assert_eq!(resolved, dir.path());
+                // Prioridade respeitada: não caiu no fallback dev (a raiz do
+                // repo, que também tem icons/ — ver install.sh/assets).
+                assert_ne!(resolved, PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn asset_root_honors_xdg_data_home_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(APP_NAME).join("icons")).unwrap();
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_ASSET_DIR", None),
+                ("AGENT_BAR_FORCE_COMPILED", None),
+                ("AGENT_BAR_DATA", None),
+                ("XDG_DATA_HOME", Some(dir.path().as_os_str())),
+            ],
+            || {
+                let resolved = resolve_asset_source_root().unwrap();
+                assert_eq!(resolved, dir.path().join(APP_NAME));
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn asset_root_falls_through_to_dev_when_standalone_has_no_icons() {
+        // Diretório existe (candidato construível) mas sem icons/ — inválido;
+        // o fallback dev (CARGO_MANIFEST_DIR, raiz do repo — tem icons/) só é
+        // aceito porque o standalone falhou o guard `has_icons`.
+        let dir = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_ASSET_DIR", None),
+                ("AGENT_BAR_FORCE_COMPILED", None),
+                ("AGENT_BAR_DATA", Some(dir.path().as_os_str())),
+            ],
+            || {
+                let resolved = resolve_asset_source_root().unwrap();
+                assert_eq!(resolved, PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn asset_root_system_forced_errors_even_with_standalone_data_present() {
+        // Sem nenhum candidato viável: System é forçado (sem `/usr/share/agent-bar`
+        // real nesta máquina de teste) e o candidato standalone, mesmo com
+        // icons/ presente, não deve ser consultado — System tem precedência e
+        // falha antes de chegar lá. Mensagem final cita AGENT_BAR_ASSET_DIR.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("icons")).unwrap();
+        let dir_str = dir.path().to_str().expect("tempdir path is valid UTF-8");
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_FORCE_COMPILED", Some("1")),
+                ("AGENT_BAR_ASSET_DIR", None),
+                ("AGENT_BAR_DATA", Some(dir_str)),
+            ],
+            || {
+                let err = resolve_asset_source_root().unwrap_err().to_string();
+                assert!(err.contains("Asset directory not found"), "got: {err}");
+                assert!(err.contains("AGENT_BAR_ASSET_DIR"), "got: {err}");
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn standalone_data_asset_dir_prefers_agent_bar_data_over_xdg() {
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", Some("/custom/data")),
+                ("XDG_DATA_HOME", Some("/xdg/data")),
+            ],
+            || {
+                assert_eq!(
+                    standalone_data_asset_dir(),
+                    Some(PathBuf::from("/custom/data"))
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn standalone_data_asset_dir_falls_back_to_home_local_share() {
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", None::<&str>),
+            ],
+            || {
+                let home = std::env::var_os("HOME").expect("HOME must be set in test env");
+                let expected = PathBuf::from(home)
+                    .join(".local")
+                    .join("share")
+                    .join(APP_NAME);
+                assert_eq!(standalone_data_asset_dir(), Some(expected));
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn standalone_data_dir_matches_update_default_data_dir_with_xdg_set() {
+        // Hotfix 7.0.1 (fix(paths)): standalone_data_asset_dir (setup) e
+        // update::default_data_dir (self-update) tinham que resolver pro
+        // MESMO diretório — antes divergiam porque só um respeitava
+        // XDG_DATA_HOME. Não mexe em $HOME real (evita flake em testes
+        // não-serial de outros módulos que leem HOME concorrentemente);
+        // como XDG_DATA_HOME é setado aqui, ele domina de qualquer forma.
+        let real_home = std::env::var_os("HOME").expect("HOME must be set in test env");
+        let home_path = PathBuf::from(&real_home);
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", Some("/xdg/data")),
+            ],
+            || {
+                let from_setup = standalone_data_asset_dir().unwrap();
+                let from_update = crate::update::default_data_dir(&home_path);
+                assert_eq!(from_setup, from_update);
+                assert_eq!(from_setup, PathBuf::from("/xdg/data/agent-bar"));
+            },
+        );
     }
 
     #[test]

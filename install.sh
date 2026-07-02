@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/othavioquiliao/agent-bar/master/install.sh | bash
 #
 # Flags:
-#   --force      Overwrite existing binary / data dir without prompting.
+#   --force      Reinstall even if already up to date (no prompting).
 #   --no-setup   Skip the `agent-bar setup` step at the end.
 #   --yes, -y    Assume yes for prompts (non-interactive).
 #
@@ -101,6 +101,50 @@ resolve_version() {
     die "Could not resolve latest release tag. Set AGENT_BAR_VERSION to install a specific version."
   fi
   echo "$tag"
+}
+
+# --- existing-install detection ---------------------------------------------
+
+# Captura `--version` do binário instalado, mantém só a primeira linha, e
+# valida contra um padrão semver simples. Qualquer outra coisa (JSON de
+# binário da era TS pré-5.0.0, saída vazia, erro) vira "legacy".
+detect_existing_version() {
+  local bin_path="$1"
+  local raw
+  raw=$("$bin_path" --version 2>/dev/null | head -n1) || true
+  if [[ "$raw" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    echo "$raw"
+  else
+    echo "legacy"
+  fi
+}
+
+# --- legacy npm/bun cleanup --------------------------------------------------
+
+# Best-effort: uma instalação global via npm/bun (era pré-5.0.0) pode deixar
+# o pacote registrado e/ou um symlink em $BIN_DIR apontando pra node_modules.
+# Nunca fatal — cada passo segue mesmo se falhar.
+cleanup_legacy_npm() {
+  if command -v npm >/dev/null 2>&1; then
+    if npm ls -g "@noctuacore/agent-bar" >/dev/null 2>&1; then
+      log "Removing legacy npm package..."
+      npm rm -g "@noctuacore/agent-bar" >/dev/null 2>&1 \
+        || warn "Failed to remove legacy npm package (continuing)."
+    fi
+  fi
+
+  if command -v bun >/dev/null 2>&1; then
+    if bun pm ls -g 2>/dev/null | grep -q "@noctuacore/agent-bar"; then
+      log "Removing legacy bun package..."
+      bun remove -g "@noctuacore/agent-bar" >/dev/null 2>&1 \
+        || warn "Failed to remove legacy bun package (continuing)."
+    fi
+  fi
+
+  if [[ -L "${BIN_DIR}/agent-bar" ]]; then
+    log "Removing stale symlink at ${BIN_DIR}/agent-bar..."
+    rm -f "${BIN_DIR}/agent-bar" || warn "Failed to remove stale symlink (continuing)."
+  fi
 }
 
 # --- download + verify + extract -------------------------------------------
@@ -203,15 +247,28 @@ main() {
 
   local version
   version=$(resolve_version)
-  log "Installing agent-bar ${version}..."
+  [[ "$version" == v* ]] || version="v${version}"
+  local ver_bare="${version#v}"
 
-  if [[ "$FORCE" -eq 0 && -x "${BIN_DIR}/agent-bar" ]]; then
-    local existing_ver
-    existing_ver=$("${BIN_DIR}/agent-bar" --version 2>/dev/null || echo "unknown")
-    warn "agent-bar is already installed (${existing_ver}). Use --force to overwrite."
-    exit 0
+  if [[ -x "${BIN_DIR}/agent-bar" ]]; then
+    local existing_ver existing_bare
+    existing_ver=$(detect_existing_version "${BIN_DIR}/agent-bar")
+    existing_bare="${existing_ver#v}"
+
+    if [[ "$existing_ver" != "legacy" && "$existing_bare" == "$ver_bare" ]]; then
+      if [[ "$FORCE" -eq 0 ]]; then
+        ok "agent-bar is already up to date (v${ver_bare})."
+        exit 0
+      fi
+      log "Reinstalling agent-bar ${version} (--force)..."
+    else
+      log "Updating agent-bar (${existing_ver} -> ${version})..."
+    fi
+  else
+    log "Installing agent-bar ${version}..."
   fi
 
+  cleanup_legacy_npm
   install_binary "$version"
   check_path
 

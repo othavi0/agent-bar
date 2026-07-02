@@ -1,8 +1,10 @@
 //! Configuração estática + resolução de paths (injetada, sem estado global).
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::app_identity::APP_NAME;
 
 // API Claude (contrato §3.10 do design — UA hardcoded, não a versão do agent-bar).
 pub const CLAUDE_USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
@@ -60,6 +62,33 @@ pub fn status_for_percent(pct: Option<f64>) -> HealthStatus {
         Some(p) if p < THRESHOLD_GREEN => HealthStatus::Low,
         Some(_) => HealthStatus::Ok,
     }
+}
+
+/// Diretório de dados (`icons/`, `scripts/`) compartilhado entre o
+/// self-update (`agent-bar update`, via `update::default_data_dir`) e a
+/// resolução de assets standalone (`agent-bar setup`, via
+/// `waybar_contract::standalone_data_asset_dir`) — hotfix 7.0.1: antes cada
+/// um resolvia essa pasta de um jeito diferente (`update` ignorava
+/// `XDG_DATA_HOME`), causando split-brain pra quem só setasse
+/// `XDG_DATA_HOME` (self-update escrevia num lugar, setup lia de outro).
+///
+/// Mesma convenção do `install.sh`, com um fallback extra via
+/// `XDG_DATA_HOME` que o script não tem (só `AGENT_BAR_DATA`/`$HOME` fixo).
+///
+/// Prioridade: `AGENT_BAR_DATA` env (usado como está — já é o diretório
+/// final, sem sufixo), senão `${XDG_DATA_HOME:-<home>/.local/share}/agent-bar`.
+pub fn agent_bar_data_dir(home: &Path) -> PathBuf {
+    if let Some(v) = env::var_os("AGENT_BAR_DATA").filter(|v| !v.is_empty()) {
+        return PathBuf::from(v);
+    }
+
+    let data_home = env::var_os("XDG_DATA_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute()) // XDG spec: ignore relative paths
+        .unwrap_or_else(|| home.join(".local").join("share"));
+
+    data_home.join(APP_NAME)
 }
 
 /// Epoch em milissegundos. Os módulos puros recebem `now_ms` por parâmetro
@@ -161,6 +190,57 @@ mod tests {
                 let p = Paths::from_env().unwrap();
                 assert_eq!(p.cache_dir, PathBuf::from("/home/u/.cache/agent-bar"));
                 assert_eq!(p.config_dir, PathBuf::from("/home/u/.config/agent-bar"));
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn agent_bar_data_dir_prefers_env_override() {
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", Some("/custom/data")),
+                ("XDG_DATA_HOME", Some("/xdg/data")),
+            ],
+            || {
+                assert_eq!(
+                    agent_bar_data_dir(Path::new("/home/u")),
+                    PathBuf::from("/custom/data")
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn agent_bar_data_dir_honors_xdg_data_home() {
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", Some("/xdg/data")),
+            ],
+            || {
+                assert_eq!(
+                    agent_bar_data_dir(Path::new("/home/u")),
+                    PathBuf::from("/xdg/data/agent-bar")
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn agent_bar_data_dir_falls_back_to_home() {
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", None::<&str>),
+            ],
+            || {
+                assert_eq!(
+                    agent_bar_data_dir(Path::new("/home/u")),
+                    PathBuf::from("/home/u/.local/share/agent-bar")
+                );
             },
         );
     }

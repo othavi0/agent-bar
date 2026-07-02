@@ -1,17 +1,39 @@
-//! Detecção de tipo de instalação e lógica de update. Port de `src/update.ts:113-286`.
+//! Detecção de tipo de instalação e lógica de update.
+//!
+//! `ManagedGit`/`DevGit`: fluxo git, port original de `src/update.ts:113-252`
+//! (mantido — o `run_managed_update` continua fazendo `fetch`/`reset --hard`/
+//! `clean -fd`/`run_setup`).
+//!
+//! `Standalone`: self-update via GitHub Releases. Substitui o antigo caminho
+//! `Npm` (hotfix 7.0.1) — `detect_install_kind` usava `CARGO_MANIFEST_DIR`
+//! (path de COMPILE TIME, aponta pro runner do CI) pra achar o repo_root; em
+//! qualquer instalação standalone (curl|bash) isso caía sempre no ramo `Npm`
+//! tentando ler um `package.json` inexistente. A detecção agora parte do
+//! binário real (`std::env::current_exe()`), subindo diretórios em runtime.
 
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::bail;
 use serde_json::Value;
 
+use crate::app_identity::TERMINAL_HELPER_NAME;
 use crate::runtime::is_system_install;
 
 // ---------------------------------------------------------------------------
 // Constantes
 // ---------------------------------------------------------------------------
 
-const DEPENDENCY_FILES: &[&str] = &["package.json", "bun.lock", "bun.lockb"];
+/// `owner/repo` do GitHub — mesmo valor usado por `install.sh` (`GITHUB_REPO`).
+pub const GITHUB_REPO: &str = "othavioquiliao/agent-bar";
+
+/// User-Agent dedicado pro self-update (GitHub exige um; o cliente HTTP
+/// compartilhado em `http::client()` é específico do Claude — timeout curto
+/// de 5s e UA `claude-code/...` não servem pra baixar um tarball de release).
+pub const SELFUPDATE_USER_AGENT: &str = concat!("agent-bar-selfupdate/", env!("CARGO_PKG_VERSION"));
+
+const RELEASE_ASSET_ARCH: &str = "x86_64";
 
 // ---------------------------------------------------------------------------
 // InstallKind
@@ -21,7 +43,7 @@ const DEPENDENCY_FILES: &[&str] = &["package.json", "bun.lock", "bun.lockb"];
 pub enum InstallKind {
     ManagedGit,
     DevGit,
-    Npm,
+    Standalone,
     System,
 }
 
@@ -36,7 +58,7 @@ pub struct CommandResult {
 }
 
 // ---------------------------------------------------------------------------
-// is_managed_install_root / detect_install_kind
+// is_managed_install_root
 // ---------------------------------------------------------------------------
 
 /// Retorna `true` se `repo_root` e `install_root` apontam para o mesmo diretório.
@@ -64,28 +86,88 @@ fn normalize(p: &Path) -> PathBuf {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Detecção via binário real (substitui CARGO_MANIFEST_DIR — hotfix 7.0.1)
+// ---------------------------------------------------------------------------
+
+/// Extrai um campo simples de `[package]` em um `Cargo.toml` (ex: `name`,
+/// `version`). Parse de linha só — não lida com tabelas inline/arrays;
+/// suficiente pro nosso próprio manifest (evita puxar a dep `toml` só pra
+/// isso). Para de considerar campos assim que sai da seção `[package]`.
+fn cargo_toml_package_field(content: &str, field: &str) -> Option<String> {
+    let mut in_package = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if !in_package || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        if key.trim() != field {
+            continue;
+        }
+        let value = value.split('#').next().unwrap_or(value).trim();
+        let value = value.trim_matches('"');
+        if !value.is_empty() {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+/// Sobe a árvore de diretórios a partir do binário (`exe`) procurando um
+/// checkout git (diretório com `.git/`) cujo `Cargo.toml` declare
+/// `[package] name = "agent-bar"`. Substitui `CARGO_MANIFEST_DIR`.
+pub fn find_repo_root(exe: &Path) -> Option<PathBuf> {
+    let mut dir = exe.parent();
+    while let Some(d) = dir {
+        if d.join(".git").exists() {
+            if let Ok(content) = fs::read_to_string(d.join("Cargo.toml")) {
+                if cargo_toml_package_field(&content, "name").as_deref() == Some("agent-bar") {
+                    return Some(d.to_path_buf());
+                }
+            }
+        }
+        dir = d.parent();
+    }
+    None
+}
+
+/// Lê `version` do `Cargo.toml` em `repo_root`. Substitui a leitura de versão
+/// via `package.json` (que o caminho `Npm`, removido neste hotfix, usava).
+pub fn read_cargo_version(repo_root: &Path) -> anyhow::Result<String> {
+    let manifest = repo_root.join("Cargo.toml");
+    let content = fs::read_to_string(&manifest)
+        .map_err(|e| anyhow::anyhow!("Failed to read Cargo.toml: {e}"))?;
+    cargo_toml_package_field(&content, "version")
+        .ok_or_else(|| anyhow::anyhow!("Cargo.toml is missing package.version"))
+}
+
 /// Detecta o tipo de instalação em uso.
 ///
-/// Ordem de precedência (port de `detectInstallKind` no TS):
+/// Ordem de precedência:
 /// 1. `is_system_install()` → `System`
-/// 2. `.git` ausente em `repo_root` → `Npm`
-/// 3. `is_managed_install_root` → `ManagedGit`, senão `DevGit`
-pub fn detect_install_kind(repo_root: &Path, install_root: &Path) -> InstallKind {
+/// 2. `repo_root` resolvido (via `find_repo_root`) → `ManagedGit` se
+///    `is_managed_install_root`, senão `DevGit`
+/// 3. Nenhum checkout git encontrado a partir do binário → `Standalone`
+pub fn detect_install_kind(repo_root: Option<&Path>, install_root: &Path) -> InstallKind {
     if is_system_install() {
         return InstallKind::System;
     }
-    if !repo_root.join(".git").exists() {
-        return InstallKind::Npm;
-    }
-    if is_managed_install_root(repo_root, install_root) {
-        InstallKind::ManagedGit
-    } else {
-        InstallKind::DevGit
+    match repo_root {
+        Some(root) if is_managed_install_root(root, install_root) => InstallKind::ManagedGit,
+        Some(_) => InstallKind::DevGit,
+        None => InstallKind::Standalone,
     }
 }
 
 // ---------------------------------------------------------------------------
-// Helpers internos
+// Helpers internos (fluxo git)
 // ---------------------------------------------------------------------------
 
 fn split_lines(output: &str) -> Vec<String> {
@@ -163,8 +245,6 @@ pub struct UpdateSummary {
     pub local_changes: Vec<String>,
     pub has_updates: bool,
     pub has_local_changes: bool,
-    pub dependency_files_changed: bool,
-    pub needs_dependency_install: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -181,7 +261,6 @@ pub struct ManagedUpdateResult {
     pub repo_root: PathBuf,
     pub install_root: PathBuf,
     pub summary: Option<UpdateSummary>,
-    pub installed_dependencies: bool,
 }
 
 pub struct ManagedUpdateOptions<'a> {
@@ -193,7 +272,10 @@ pub struct ManagedUpdateOptions<'a> {
     pub confirm: &'a dyn Fn(&UpdateSummary) -> bool,
 }
 
-/// Port de `runManagedUpdate` (`src/update.ts:161-252`).
+/// Port de `runManagedUpdate` (`src/update.ts:161-252`), sem o passo de
+/// instalação de dependências via `bun` — pós-cutover pra Rust não há mais
+/// `package.json`/`node_modules` num checkout do agent-bar (hard rule: sem
+/// Node/npm/bun em runtime).
 pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<ManagedUpdateResult> {
     let repo_root = opts.repo_root;
     let install_root = opts.install_root;
@@ -205,7 +287,6 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
             repo_root: repo_root.to_path_buf(),
             install_root: install_root.to_path_buf(),
             summary: None,
-            installed_dependencies: false,
         });
     }
 
@@ -273,28 +354,6 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
         &["status".to_string(), "--short".to_string()],
     )?);
 
-    let diff_output = require_command(
-        opts.run_command,
-        repo_root,
-        "Check dependency changes",
-        "git",
-        &{
-            let mut args = vec![
-                "diff".to_string(),
-                "--name-only".to_string(),
-                "HEAD".to_string(),
-                upstream.clone(),
-                "--".to_string(),
-            ];
-            args.extend(DEPENDENCY_FILES.iter().map(|s| s.to_string()));
-            args
-        },
-    )?;
-    let dependency_files_changed = !diff_output.trim().is_empty();
-
-    let needs_dependency_install =
-        dependency_files_changed || !repo_root.join("node_modules").exists();
-
     let summary = UpdateSummary {
         repo_root: repo_root.to_path_buf(),
         install_root: install_root.to_path_buf(),
@@ -305,8 +364,6 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
         has_local_changes: !local_changes.is_empty(),
         commits,
         local_changes,
-        dependency_files_changed,
-        needs_dependency_install,
     };
 
     // Sem mudanças → up-to-date; NÃO chamar confirm.
@@ -316,7 +373,6 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
             repo_root: repo_root.to_path_buf(),
             install_root: install_root.to_path_buf(),
             summary: Some(summary),
-            installed_dependencies: false,
         });
     }
 
@@ -328,7 +384,6 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
             repo_root: repo_root.to_path_buf(),
             install_root: install_root.to_path_buf(),
             summary: Some(summary),
-            installed_dependencies: false,
         });
     }
 
@@ -349,18 +404,6 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
         &["clean".to_string(), "-fd".to_string()],
     )?;
 
-    let mut installed_dependencies = false;
-    if needs_dependency_install {
-        require_command(
-            opts.run_command,
-            repo_root,
-            "Install dependencies",
-            "bun",
-            &["install".to_string()],
-        )?;
-        installed_dependencies = true;
-    }
-
     (opts.run_setup)();
 
     Ok(ManagedUpdateResult {
@@ -368,94 +411,277 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
         repo_root: repo_root.to_path_buf(),
         install_root: install_root.to_path_buf(),
         summary: Some(summary),
-        installed_dependencies,
     })
 }
 
 // ---------------------------------------------------------------------------
-// NpmUpdate*
+// Standalone self-update (GitHub Releases) — substitui o caminho `Npm`
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
-pub struct NpmUpdateSummary {
-    pub package_name: String,
-    pub current_version: String,
+/// Extrai `tag_name` de um payload JSON de release do GitHub. Port do
+/// `grep '"tag_name"' | sed ...` do `install.sh`.
+fn parse_release_tag(body: &str) -> anyhow::Result<String> {
+    let v: Value = serde_json::from_str(body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse GitHub release response: {e}"))?;
+    v.get("tag_name")
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow::anyhow!("GitHub release response missing tag_name"))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NpmUpdateStatus {
-    Cancelled,
-    Updated,
+/// Remove o prefixo `v` de uma versão/tag (`v7.0.1` → `7.0.1`).
+fn version_bare(v: &str) -> &str {
+    v.strip_prefix('v').unwrap_or(v)
 }
 
-#[derive(Debug, Clone)]
-pub struct NpmUpdateResult {
-    pub status: NpmUpdateStatus,
-    pub summary: NpmUpdateSummary,
+/// `true` se a tag da última release corresponde à versão compilada no
+/// binário atual (comparação sem prefixo `v`).
+fn is_up_to_date(current_version: &str, latest_tag: &str) -> bool {
+    version_bare(current_version) == version_bare(latest_tag)
 }
 
-pub struct NpmUpdateOptions<'a> {
-    pub repo_root: &'a Path,
-    pub run_command: &'a dyn Fn(&str, &[String], &Path) -> CommandResult,
-    pub run_setup: &'a dyn Fn(),
-    pub confirm_npm: &'a dyn Fn(&NpmUpdateSummary) -> bool,
+/// Nome do asset tarball, seguindo o padrão do `publish.yml`/`install.sh`.
+fn asset_filename(ver_bare: &str) -> String {
+    format!("agent-bar-{ver_bare}-{RELEASE_ASSET_ARCH}.tar.gz")
 }
 
-/// Lê `name` e `version` de `package.json` em `repo_root`.
-fn read_package_info(repo_root: &Path) -> anyhow::Result<NpmUpdateSummary> {
-    let pkg_path = repo_root.join("package.json");
-    let content = std::fs::read_to_string(&pkg_path)
-        .map_err(|e| anyhow::anyhow!("Failed to read package.json: {e}"))?;
-    let v: Value = serde_json::from_str(&content)
-        .map_err(|e| anyhow::anyhow!("Failed to parse package.json: {e}"))?;
+/// Diretório de dados (`icons/`, `scripts/`) usado pelo `install.sh`.
+/// Resolução canônica em `config::agent_bar_data_dir` — compartilhada com
+/// `waybar_contract::standalone_data_asset_dir` (hotfix 7.0.1: as duas
+/// resolviam essa pasta de jeitos diferentes, split-brain pra quem setasse
+/// só `XDG_DATA_HOME`).
+pub fn default_data_dir(home: &Path) -> PathBuf {
+    crate::config::agent_bar_data_dir(home)
+}
 
-    let name = v
-        .get("name")
-        .and_then(|n| n.as_str())
-        .filter(|s| !s.is_empty());
-    let version = v
-        .get("version")
-        .and_then(|n| n.as_str())
-        .filter(|s| !s.is_empty());
-
-    match (name, version) {
-        (Some(n), Some(ver)) => Ok(NpmUpdateSummary {
-            package_name: n.to_string(),
-            current_version: ver.to_string(),
-        }),
-        _ => bail!("package.json is missing name or version"),
+async fn download_file(client: &reqwest::Client, url: &str, dest: &Path) -> anyhow::Result<()> {
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to download {url}: {e}"))?;
+    if !resp.status().is_success() {
+        bail!("Failed to download {url}: HTTP {}", resp.status());
     }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read response body from {url}: {e}"))?;
+    fs::write(dest, &bytes)
+        .map_err(|e| anyhow::anyhow!("Failed to write {}: {e}", dest.display()))?;
+    Ok(())
 }
 
-/// Port de `runNpmUpdate` (`src/update.ts:265-286`).
-pub fn run_npm_update(opts: NpmUpdateOptions<'_>) -> anyhow::Result<NpmUpdateResult> {
-    let summary = read_package_info(opts.repo_root)?;
+/// Verifica o checksum via `sha256sum -c` (shell-out; sem dep nova de
+/// criptografia). Caller garante que `sha256sum` existe no PATH antes de
+/// chamar — nunca pula a verificação silenciosamente.
+fn verify_checksum(
+    run_command: &dyn Fn(&str, &[String], &Path) -> CommandResult,
+    tmp_dir: &Path,
+    asset: &str,
+) -> anyhow::Result<()> {
+    require_command(
+        run_command,
+        tmp_dir,
+        "Verify checksum",
+        "sha256sum",
+        &["-c".to_string(), format!("{asset}.sha256")],
+    )?;
+    Ok(())
+}
 
-    let approved = (opts.confirm_npm)(&summary);
-    if !approved {
-        return Ok(NpmUpdateResult {
-            status: NpmUpdateStatus::Cancelled,
-            summary,
+fn extract_tarball(
+    run_command: &dyn Fn(&str, &[String], &Path) -> CommandResult,
+    tmp_dir: &Path,
+    asset: &str,
+) -> anyhow::Result<()> {
+    require_command(
+        run_command,
+        tmp_dir,
+        "Extract release archive",
+        "tar",
+        &["xzf".to_string(), asset.to_string()],
+    )?;
+    Ok(())
+}
+
+/// Substitui o binário atual atomicamente: copia pra `<exe>.new` no mesmo
+/// diretório, ajusta permissões 755, e `rename()` sobre o exe atual
+/// (seguro no Linux mesmo com o exe em execução).
+fn replace_binary_atomic(new_binary: &Path, target_exe: &Path) -> anyhow::Result<()> {
+    let staging = target_exe.with_extension("new");
+    fs::copy(new_binary, &staging)
+        .map_err(|e| anyhow::anyhow!("Failed to stage new binary at {}: {e}", staging.display()))?;
+    if let Err(e) = fs::set_permissions(&staging, fs::Permissions::from_mode(0o755)) {
+        // Best-effort: não deixa o `<exe>.new` órfão pra trás no diretório do
+        // binário atual antes de propagar o erro.
+        let _ = fs::remove_file(&staging);
+        return Err(anyhow::anyhow!(
+            "Failed to set permissions on {}: {e}",
+            staging.display()
+        ));
+    }
+    fs::rename(&staging, target_exe).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to install new binary at {}: {e}",
+            target_exe.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn copy_dir_contents(src: &Path, dest: &Path) -> anyhow::Result<()> {
+    for entry in
+        fs::read_dir(src).map_err(|e| anyhow::anyhow!("Failed to read {}: {e}", src.display()))?
+    {
+        let entry =
+            entry.map_err(|e| anyhow::anyhow!("Failed to read entry in {}: {e}", src.display()))?;
+        let path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if path.is_dir() {
+            fs::create_dir_all(&dest_path)
+                .map_err(|e| anyhow::anyhow!("Failed to create {}: {e}", dest_path.display()))?;
+            copy_dir_contents(&path, &dest_path)?;
+        } else {
+            fs::copy(&path, &dest_path)
+                .map_err(|e| anyhow::anyhow!("Failed to copy {}: {e}", path.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Espelha o layout de assets do `install.sh` (linhas 139-148): `icons/.` →
+/// `<data_dir>/icons/`, `scripts/agent-bar-open-terminal` → `<data_dir>/scripts/`
+/// (755).
+fn install_standalone_assets(extracted_dir: &Path, data_dir: &Path) -> anyhow::Result<()> {
+    let icons_src = extracted_dir.join("icons");
+    let icons_dest = data_dir.join("icons");
+    let scripts_dest = data_dir.join("scripts");
+    fs::create_dir_all(&icons_dest)
+        .map_err(|e| anyhow::anyhow!("Failed to create {}: {e}", icons_dest.display()))?;
+    fs::create_dir_all(&scripts_dest)
+        .map_err(|e| anyhow::anyhow!("Failed to create {}: {e}", scripts_dest.display()))?;
+
+    if icons_src.is_dir() {
+        copy_dir_contents(&icons_src, &icons_dest)?;
+    }
+
+    let script_src = extracted_dir.join("scripts").join(TERMINAL_HELPER_NAME);
+    if script_src.is_file() {
+        let script_dest = scripts_dest.join(TERMINAL_HELPER_NAME);
+        fs::copy(&script_src, &script_dest)
+            .map_err(|e| anyhow::anyhow!("Failed to install {}: {e}", script_dest.display()))?;
+        fs::set_permissions(&script_dest, fs::Permissions::from_mode(0o755)).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to set permissions on {}: {e}",
+                script_dest.display()
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub enum StandaloneUpdateStatus {
+    UpToDate {
+        version: String,
+    },
+    Updated {
+        old_version: String,
+        new_version: String,
+    },
+}
+
+pub struct StandaloneUpdateOptions<'a> {
+    pub current_version: &'a str,
+    pub exe_path: &'a Path,
+    pub data_dir: &'a Path,
+    pub run_command: &'a dyn Fn(&str, &[String], &Path) -> CommandResult,
+    pub http: &'a reqwest::Client,
+    pub releases_api_url: String,
+    pub download_base_url: String,
+    /// Seams de teste: substituem os checks reais de `sha256sum`/`tar` no PATH
+    /// (produção usa `crate::install::has_cmd`).
+    pub has_sha256sum: &'a dyn Fn() -> bool,
+    pub has_tar: &'a dyn Fn() -> bool,
+}
+
+/// Self-update via GitHub Releases. Substitui `run_npm_update` (hotfix 7.0.1):
+/// resolve a última release, compara com a versão compilada no binário atual,
+/// baixa + verifica checksum + extrai, e substitui o binário atomicamente.
+pub async fn run_standalone_update(
+    opts: StandaloneUpdateOptions<'_>,
+) -> anyhow::Result<StandaloneUpdateStatus> {
+    let resp = opts
+        .http
+        .get(&opts.releases_api_url)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach GitHub releases API: {e}"))?;
+    if !resp.status().is_success() {
+        bail!("GitHub releases API returned HTTP {}", resp.status());
+    }
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read GitHub releases API response: {e}"))?;
+    let tag = parse_release_tag(&body)?;
+
+    if is_up_to_date(opts.current_version, &tag) {
+        return Ok(StandaloneUpdateStatus::UpToDate {
+            version: opts.current_version.to_string(),
         });
     }
 
-    require_command(
-        opts.run_command,
-        opts.repo_root,
-        "Update package",
-        "bun",
-        &[
-            "add".to_string(),
-            "-g".to_string(),
-            summary.package_name.clone(),
-        ],
-    )?;
+    if !(opts.has_sha256sum)() {
+        bail!(
+            "sha256sum not found. Install coreutils via your distro's package manager to verify the download."
+        );
+    }
+    if !(opts.has_tar)() {
+        bail!("tar not found. Install via your distro's package manager.");
+    }
 
-    (opts.run_setup)();
+    let ver_bare = version_bare(&tag).to_string();
+    let asset = asset_filename(&ver_bare);
 
-    Ok(NpmUpdateResult {
-        status: NpmUpdateStatus::Updated,
-        summary,
+    // `tempfile::tempdir()` (já em `[dependencies]`, usado em produção por
+    // `cache.rs`/`notify.rs`): criação atômica com perms 0700 e sem aceitar
+    // um path pré-existente/symlink plantado — este diretório segura o
+    // tarball que vira o executável do usuário, então o hand-rolled
+    // (pid+nanos em `/tmp`) era exatamente o padrão TOCTOU que `tempfile`
+    // existe pra evitar.
+    let tmp = tempfile::tempdir().map_err(|e| anyhow::anyhow!("Failed to create tempdir: {e}"))?;
+    let tmp_path = tmp.path();
+
+    download_file(
+        opts.http,
+        &format!("{}/{tag}/{asset}", opts.download_base_url),
+        &tmp_path.join(&asset),
+    )
+    .await?;
+    download_file(
+        opts.http,
+        &format!("{}/{tag}/{asset}.sha256", opts.download_base_url),
+        &tmp_path.join(format!("{asset}.sha256")),
+    )
+    .await?;
+
+    verify_checksum(opts.run_command, tmp_path, &asset)?;
+    extract_tarball(opts.run_command, tmp_path, &asset)?;
+
+    let new_binary = tmp_path.join("agent-bar");
+    if !new_binary.exists() {
+        bail!("Extracted release archive is missing the agent-bar binary");
+    }
+    replace_binary_atomic(&new_binary, opts.exe_path)?;
+    install_standalone_assets(tmp_path, opts.data_dir)?;
+
+    Ok(StandaloneUpdateStatus::Updated {
+        old_version: opts.current_version.to_string(),
+        new_version: ver_bare,
     })
 }
 
@@ -470,6 +696,8 @@ mod tests {
     use std::fs;
 
     use tempfile::tempdir;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 
@@ -525,7 +753,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_discards_and_resets_installs_deps_runs_setup() {
+    fn managed_resets_cleans_and_runs_setup() {
         let tmp = tempdir().unwrap();
         let install_root = tmp.path();
         let setup_count = Cell::new(0u32);
@@ -543,10 +771,6 @@ mod tests {
                 "def456 update cli\n",
             ),
             ("git status --short", " M README.md\n?? scratch.txt\n"),
-            (
-                "git diff --name-only HEAD origin/master -- package.json bun.lock bun.lockb",
-                "package.json\n",
-            ),
         ]);
 
         let r = run_managed_update(ManagedUpdateOptions {
@@ -557,14 +781,12 @@ mod tests {
             confirm: &|summary| {
                 assert!(summary.has_local_changes);
                 assert!(summary.has_updates);
-                assert!(summary.dependency_files_changed);
                 true
             },
         })
         .unwrap();
 
         assert!(matches!(r.status, ManagedUpdateStatus::Updated));
-        assert!(r.installed_dependencies);
         assert_eq!(setup_count.get(), 1);
 
         let cmds: Vec<(String, Vec<String>)> = fake.commands.borrow().clone();
@@ -618,19 +840,6 @@ mod tests {
             (
                 "git".to_string(),
                 vec![
-                    "diff".to_string(),
-                    "--name-only".to_string(),
-                    "HEAD".to_string(),
-                    "origin/master".to_string(),
-                    "--".to_string(),
-                    "package.json".to_string(),
-                    "bun.lock".to_string(),
-                    "bun.lockb".to_string(),
-                ],
-            ),
-            (
-                "git".to_string(),
-                vec![
                     "reset".to_string(),
                     "--hard".to_string(),
                     "origin/master".to_string(),
@@ -640,57 +849,8 @@ mod tests {
                 "git".to_string(),
                 vec!["clean".to_string(), "-fd".to_string()],
             ),
-            ("bun".to_string(), vec!["install".to_string()]),
         ];
         assert_eq!(cmds, expected);
-    }
-
-    #[test]
-    fn managed_skips_bun_install_when_deps_unchanged_and_node_modules_exists() {
-        let tmp = tempdir().unwrap();
-        let install_root = tmp.path();
-        fs::create_dir_all(install_root.join("node_modules")).unwrap();
-        let setup_count = Cell::new(0u32);
-
-        let fake = Fake::new(&[
-            ("git rev-parse --git-dir", ".git\n"),
-            ("git rev-parse --short HEAD", "abc123\n"),
-            ("git branch --show-current", "master\n"),
-            (
-                "git rev-parse --abbrev-ref --symbolic-full-name @{u}",
-                "origin/master\n",
-            ),
-            (
-                "git log --oneline HEAD..origin/master -10",
-                "def456 update docs\n",
-            ),
-            ("git status --short", ""),
-            (
-                "git diff --name-only HEAD origin/master -- package.json bun.lock bun.lockb",
-                "",
-            ),
-        ]);
-
-        let r = run_managed_update(ManagedUpdateOptions {
-            repo_root: install_root,
-            install_root,
-            run_command: &|c, a, p| fake.run(c, a, p),
-            run_setup: &|| setup_count.set(setup_count.get() + 1),
-            confirm: &|_| true,
-        })
-        .unwrap();
-
-        assert!(matches!(r.status, ManagedUpdateStatus::Updated));
-        assert!(!r.installed_dependencies);
-        assert_eq!(setup_count.get(), 1);
-
-        let cmds = fake.commands.borrow();
-        assert!(
-            !cmds
-                .iter()
-                .any(|(cmd, args)| cmd == "bun"
-                    && args.first().map(|s| s.as_str()) == Some("install"))
-        );
     }
 
     #[test]
@@ -712,10 +872,6 @@ mod tests {
                 "def456 update cli\n",
             ),
             ("git status --short", " M README.md\n"),
-            (
-                "git diff --name-only HEAD origin/master -- package.json bun.lock bun.lockb",
-                "",
-            ),
         ]);
 
         let r = run_managed_update(ManagedUpdateOptions {
@@ -743,7 +899,6 @@ mod tests {
     fn managed_up_to_date_does_not_call_confirm() {
         let tmp = tempdir().unwrap();
         let install_root = tmp.path();
-        fs::create_dir_all(install_root.join("node_modules")).unwrap();
         let setup_count = Cell::new(0u32);
 
         let fake = Fake::new(&[
@@ -756,10 +911,6 @@ mod tests {
             ),
             ("git log --oneline HEAD..origin/master -10", ""),
             ("git status --short", ""),
-            (
-                "git diff --name-only HEAD origin/master -- package.json bun.lock bun.lockb",
-                "",
-            ),
         ]);
 
         let r = run_managed_update(ManagedUpdateOptions {
@@ -779,12 +930,86 @@ mod tests {
         assert!(!cmds
             .iter()
             .any(|(cmd, args)| cmd == "git" && args.first().map(|s| s.as_str()) == Some("reset")));
-        assert!(
-            !cmds
-                .iter()
-                .any(|(cmd, args)| cmd == "bun"
-                    && args.first().map(|s| s.as_str()) == Some("install"))
-        );
+    }
+
+    // -----------------------------------------------------------------------
+    // find_repo_root / read_cargo_version tests
+    // -----------------------------------------------------------------------
+
+    fn write_agent_bar_manifest(dir: &Path, version: &str) {
+        fs::create_dir_all(dir.join(".git")).unwrap();
+        fs::write(
+            dir.join("Cargo.toml"),
+            format!(
+                "[package]\nname = \"agent-bar\"\nversion = \"{version}\"\nedition = \"2021\"\n\n[[bin]]\nname = \"agent-bar\"\npath = \"src/main.rs\"\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn find_repo_root_walks_up_from_nested_exe() {
+        let tmp = tempdir().unwrap();
+        let repo_root = tmp.path();
+        write_agent_bar_manifest(repo_root, "7.0.0");
+
+        let exe = repo_root.join("target").join("release").join("agent-bar");
+        fs::create_dir_all(exe.parent().unwrap()).unwrap();
+
+        assert_eq!(find_repo_root(&exe), Some(repo_root.to_path_buf()));
+    }
+
+    #[test]
+    fn find_repo_root_none_without_git() {
+        let tmp = tempdir().unwrap();
+        let repo_root = tmp.path();
+        fs::write(
+            repo_root.join("Cargo.toml"),
+            "[package]\nname = \"agent-bar\"\nversion = \"7.0.0\"\n",
+        )
+        .unwrap();
+        // Sem .git
+
+        let exe = repo_root.join("agent-bar");
+        assert_eq!(find_repo_root(&exe), None);
+    }
+
+    #[test]
+    fn find_repo_root_none_when_name_differs() {
+        let tmp = tempdir().unwrap();
+        let repo_root = tmp.path();
+        fs::create_dir_all(repo_root.join(".git")).unwrap();
+        fs::write(
+            repo_root.join("Cargo.toml"),
+            "[package]\nname = \"some-other-crate\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+
+        let exe = repo_root.join("target").join("release").join("agent-bar");
+        assert_eq!(find_repo_root(&exe), None);
+    }
+
+    #[test]
+    fn find_repo_root_none_when_binary_outside_any_checkout() {
+        let tmp = tempdir().unwrap();
+        let bin_dir = tmp.path().join("home").join(".local").join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        let exe = bin_dir.join("agent-bar");
+
+        assert_eq!(find_repo_root(&exe), None);
+    }
+
+    #[test]
+    fn read_cargo_version_parses_line() {
+        let tmp = tempdir().unwrap();
+        write_agent_bar_manifest(tmp.path(), "7.0.1");
+        assert_eq!(read_cargo_version(tmp.path()).unwrap(), "7.0.1");
+    }
+
+    #[test]
+    fn read_cargo_version_errors_when_missing() {
+        let tmp = tempdir().unwrap();
+        assert!(read_cargo_version(tmp.path()).is_err());
     }
 
     // -----------------------------------------------------------------------
@@ -798,7 +1023,7 @@ mod tests {
         fs::create_dir_all(install_root.join(".git")).unwrap();
 
         assert_eq!(
-            detect_install_kind(install_root, install_root),
+            detect_install_kind(Some(install_root), install_root),
             InstallKind::ManagedGit
         );
     }
@@ -810,20 +1035,16 @@ mod tests {
         fs::create_dir_all(repo_root.join(".git")).unwrap();
 
         assert_eq!(
-            detect_install_kind(repo_root, Path::new("/home/test/.agent-bar")),
+            detect_install_kind(Some(repo_root), Path::new("/home/test/.agent-bar")),
             InstallKind::DevGit
         );
     }
 
     #[test]
-    fn detect_kind_npm() {
-        let tmp = tempdir().unwrap();
-        let repo_root = tmp.path();
-        // Sem .git
-
+    fn detect_kind_standalone_when_no_repo_root() {
         assert_eq!(
-            detect_install_kind(repo_root, Path::new("/home/test/.agent-bar")),
-            InstallKind::Npm
+            detect_install_kind(None, Path::new("/home/test/.agent-bar")),
+            InstallKind::Standalone
         );
     }
 
@@ -832,103 +1053,286 @@ mod tests {
     fn detect_kind_system_via_env() {
         temp_env::with_var("AGENT_BAR_FORCE_COMPILED", Some("1"), || {
             assert_eq!(
-                detect_install_kind(Path::new("/whatever"), Path::new("/home/test/.agent-bar")),
+                detect_install_kind(None, Path::new("/home/test/.agent-bar")),
                 InstallKind::System
             );
         });
     }
 
     // -----------------------------------------------------------------------
-    // runNpmUpdate tests
+    // Standalone self-update: lógica pura
     // -----------------------------------------------------------------------
 
     #[test]
-    fn npm_update_runs_bun_add_and_setup() {
-        let tmp = tempdir().unwrap();
-        let repo_root = tmp.path();
-        fs::write(
-            repo_root.join("package.json"),
-            r#"{"name":"@noctuacore/agent-bar","version":"4.0.1"}"#,
-        )
-        .unwrap();
-        let setup_count = Cell::new(0u32);
-        let fake = Fake::new(&[]);
-        let captured_name: RefCell<String> = RefCell::new(String::new());
-        let captured_version: RefCell<String> = RefCell::new(String::new());
+    fn parse_release_tag_reads_field() {
+        let body = r#"{"tag_name":"v7.0.1","name":"v7.0.1"}"#;
+        assert_eq!(parse_release_tag(body).unwrap(), "v7.0.1");
+    }
 
-        let r = run_npm_update(NpmUpdateOptions {
-            repo_root,
-            run_command: &|c, a, p| fake.run(c, a, p),
-            run_setup: &|| setup_count.set(setup_count.get() + 1),
-            confirm_npm: &|summary| {
-                *captured_name.borrow_mut() = summary.package_name.clone();
-                *captured_version.borrow_mut() = summary.current_version.clone();
-                true
+    #[test]
+    fn parse_release_tag_errors_when_missing() {
+        assert!(parse_release_tag(r#"{"name":"whatever"}"#).is_err());
+    }
+
+    #[test]
+    fn parse_release_tag_errors_on_invalid_json() {
+        assert!(parse_release_tag("not json").is_err());
+    }
+
+    #[test]
+    fn version_bare_strips_v_prefix() {
+        assert_eq!(version_bare("v7.0.1"), "7.0.1");
+        assert_eq!(version_bare("7.0.1"), "7.0.1");
+    }
+
+    #[test]
+    fn is_up_to_date_ignores_v_prefix() {
+        assert!(is_up_to_date("7.0.1", "v7.0.1"));
+        assert!(is_up_to_date("7.0.1", "7.0.1"));
+        assert!(!is_up_to_date("7.0.0", "v7.0.1"));
+    }
+
+    #[test]
+    fn asset_filename_matches_publish_pattern() {
+        assert_eq!(asset_filename("7.0.1"), "agent-bar-7.0.1-x86_64.tar.gz");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn default_data_dir_uses_env_override() {
+        temp_env::with_var("AGENT_BAR_DATA", Some("/custom/data"), || {
+            assert_eq!(
+                default_data_dir(Path::new("/home/test")),
+                PathBuf::from("/custom/data")
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn default_data_dir_falls_back_to_home() {
+        // XDG_DATA_HOME explicitamente unset — a máquina de dev real quase
+        // sempre tem esse env setado (gotcha do repo: XDG_* precisa ser
+        // controlado explicitamente em teste, nunca assumido ausente).
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", None::<&str>),
+            ],
+            || {
+                assert_eq!(
+                    default_data_dir(Path::new("/home/test")),
+                    PathBuf::from("/home/test/.local/share/agent-bar")
+                );
             },
-        })
-        .unwrap();
-
-        assert!(matches!(r.status, NpmUpdateStatus::Updated));
-        assert_eq!(setup_count.get(), 1);
-        assert_eq!(*captured_name.borrow(), "@noctuacore/agent-bar");
-        assert_eq!(*captured_version.borrow(), "4.0.1");
-
-        let cmds: Vec<(String, Vec<String>)> = fake.commands.borrow().clone();
-        assert_eq!(
-            cmds,
-            vec![(
-                "bun".to_string(),
-                vec![
-                    "add".to_string(),
-                    "-g".to_string(),
-                    "@noctuacore/agent-bar".to_string()
-                ]
-            )]
         );
     }
 
     #[test]
-    fn npm_update_cancelled_no_bun_add_no_setup() {
+    #[serial_test::serial]
+    fn default_data_dir_honors_xdg_data_home() {
+        // Hotfix 7.0.1 (fix(paths)): antes `default_data_dir` ignorava
+        // XDG_DATA_HOME por completo — split-brain com
+        // `waybar_contract::standalone_data_asset_dir`, que já o respeitava.
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", Some("/xdg/data")),
+            ],
+            || {
+                assert_eq!(
+                    default_data_dir(Path::new("/home/test")),
+                    PathBuf::from("/xdg/data/agent-bar")
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn verify_checksum_runs_sha256sum_c() {
+        let fake = Fake::new(&[("sha256sum -c agent-bar-7.0.1-x86_64.tar.gz.sha256", "OK\n")]);
         let tmp = tempdir().unwrap();
-        let repo_root = tmp.path();
-        fs::write(
-            repo_root.join("package.json"),
-            r#"{"name":"@noctuacore/agent-bar","version":"4.0.1"}"#,
+        verify_checksum(
+            &|c, a, p| fake.run(c, a, p),
+            tmp.path(),
+            "agent-bar-7.0.1-x86_64.tar.gz",
         )
         .unwrap();
-        let setup_count = Cell::new(0u32);
-        let fake = Fake::new(&[]);
+        assert_eq!(
+            fake.commands.borrow()[0],
+            (
+                "sha256sum".to_string(),
+                vec![
+                    "-c".to_string(),
+                    "agent-bar-7.0.1-x86_64.tar.gz.sha256".to_string()
+                ]
+            )
+        );
+    }
 
-        let r = run_npm_update(NpmUpdateOptions {
-            repo_root,
-            run_command: &|c, a, p| fake.run(c, a, p),
-            run_setup: &|| setup_count.set(setup_count.get() + 1),
-            confirm_npm: &|_| false,
-        })
+    #[test]
+    fn verify_checksum_fails_on_mismatch() {
+        struct FailFake;
+        impl FailFake {
+            fn run(&self, _c: &str, _a: &[String], _p: &Path) -> CommandResult {
+                CommandResult {
+                    ok: false,
+                    output: "checksum mismatch".to_string(),
+                }
+            }
+        }
+        let fake = FailFake;
+        let tmp = tempdir().unwrap();
+        let err =
+            verify_checksum(&|c, a, p| fake.run(c, a, p), tmp.path(), "asset.tar.gz").unwrap_err();
+        assert!(err.to_string().contains("Verify checksum failed"));
+    }
+
+    #[test]
+    fn extract_tarball_runs_tar_xzf() {
+        let fake = Fake::new(&[("tar xzf agent-bar-7.0.1-x86_64.tar.gz", "")]);
+        let tmp = tempdir().unwrap();
+        extract_tarball(
+            &|c, a, p| fake.run(c, a, p),
+            tmp.path(),
+            "agent-bar-7.0.1-x86_64.tar.gz",
+        )
+        .unwrap();
+        assert_eq!(
+            fake.commands.borrow()[0],
+            (
+                "tar".to_string(),
+                vec![
+                    "xzf".to_string(),
+                    "agent-bar-7.0.1-x86_64.tar.gz".to_string()
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn replace_binary_atomic_swaps_and_sets_perms() {
+        let tmp = tempdir().unwrap();
+        let new_binary = tmp.path().join("agent-bar-new");
+        fs::write(&new_binary, b"new-binary-contents").unwrap();
+
+        let target_dir = tmp.path().join("bin");
+        fs::create_dir_all(&target_dir).unwrap();
+        let target_exe = target_dir.join("agent-bar");
+        fs::write(&target_exe, b"old-binary-contents").unwrap();
+
+        replace_binary_atomic(&new_binary, &target_exe).unwrap();
+
+        assert_eq!(fs::read(&target_exe).unwrap(), b"new-binary-contents");
+        let mode = fs::metadata(&target_exe).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755);
+        assert!(!target_dir.join("agent-bar.new").exists());
+    }
+
+    #[test]
+    fn install_standalone_assets_copies_icons_and_script() {
+        let tmp = tempdir().unwrap();
+        let extracted = tmp.path().join("extracted");
+        fs::create_dir_all(extracted.join("icons")).unwrap();
+        fs::write(extracted.join("icons").join("a.png"), b"icon").unwrap();
+        fs::create_dir_all(extracted.join("scripts")).unwrap();
+        fs::write(
+            extracted.join("scripts").join(TERMINAL_HELPER_NAME),
+            b"#!/usr/bin/env bash\n",
+        )
         .unwrap();
 
-        assert!(matches!(r.status, NpmUpdateStatus::Cancelled));
-        assert_eq!(setup_count.get(), 0);
+        let data_dir = tmp.path().join("data");
+        install_standalone_assets(&extracted, &data_dir).unwrap();
+
+        assert!(data_dir.join("icons").join("a.png").exists());
+        let script_dest = data_dir.join("scripts").join(TERMINAL_HELPER_NAME);
+        assert!(script_dest.exists());
+        let mode = fs::metadata(&script_dest).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755);
+    }
+
+    #[test]
+    fn install_standalone_assets_ok_when_source_missing() {
+        let tmp = tempdir().unwrap();
+        let extracted = tmp.path().join("extracted-empty");
+        fs::create_dir_all(&extracted).unwrap();
+        let data_dir = tmp.path().join("data");
+
+        // Sem icons/ nem scripts/ no extraído — não deve falhar, só cria os dirs.
+        install_standalone_assets(&extracted, &data_dir).unwrap();
+        assert!(data_dir.join("icons").is_dir());
+        assert!(data_dir.join("scripts").is_dir());
+    }
+
+    // -----------------------------------------------------------------------
+    // run_standalone_update: orquestração, rede mockada via wiremock (NUNCA
+    // bate na API real do GitHub)
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn run_standalone_update_reports_up_to_date() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/releases/latest"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"tag_name":"v7.0.0"}"#))
+            .mount(&server)
+            .await;
+
+        let client = reqwest::Client::new();
+        let fake = Fake::new(&[]);
+        let tmp = tempdir().unwrap();
+
+        let status = run_standalone_update(StandaloneUpdateOptions {
+            current_version: "7.0.0",
+            exe_path: &tmp.path().join("agent-bar"),
+            data_dir: &tmp.path().join("data"),
+            run_command: &|c, a, p| fake.run(c, a, p),
+            http: &client,
+            releases_api_url: format!("{}/releases/latest", server.uri()),
+            download_base_url: format!("{}/download", server.uri()),
+            has_sha256sum: &|| true,
+            has_tar: &|| true,
+        })
+        .await
+        .unwrap();
+
+        assert!(
+            matches!(status, StandaloneUpdateStatus::UpToDate { ref version } if version == "7.0.0")
+        );
+        // Não chegou perto de baixar/verificar nada.
         assert!(fake.commands.borrow().is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // Testes adicionais de cobertura
-    // -----------------------------------------------------------------------
+    #[tokio::test]
+    async fn run_standalone_update_fails_clearly_without_sha256sum() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/releases/latest"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"tag_name":"v7.0.1"}"#))
+            .mount(&server)
+            .await;
 
-    #[test]
-    fn is_managed_install_root_same_path() {
-        assert!(is_managed_install_root(
-            Path::new("/home/user/.agent-bar"),
-            Path::new("/home/user/.agent-bar")
-        ));
-    }
+        let client = reqwest::Client::new();
+        let fake = Fake::new(&[]);
+        let tmp = tempdir().unwrap();
 
-    #[test]
-    fn is_managed_install_root_different_paths() {
-        assert!(!is_managed_install_root(
-            Path::new("/tmp/dev/agent-bar"),
-            Path::new("/home/user/.agent-bar")
-        ));
+        let err = run_standalone_update(StandaloneUpdateOptions {
+            current_version: "7.0.0",
+            exe_path: &tmp.path().join("agent-bar"),
+            data_dir: &tmp.path().join("data"),
+            run_command: &|c, a, p| fake.run(c, a, p),
+            http: &client,
+            releases_api_url: format!("{}/releases/latest", server.uri()),
+            download_base_url: format!("{}/download", server.uri()),
+            has_sha256sum: &|| false,
+            has_tar: &|| true,
+        })
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("sha256sum not found"));
+        // Nunca chegou a rodar nenhum comando (nem tentou baixar).
+        assert!(fake.commands.borrow().is_empty());
     }
 }
