@@ -1,5 +1,6 @@
 pub mod action;
 pub mod event_loop;
+pub mod fetch;
 pub mod login_spawn;
 pub mod login_state;
 pub mod render;
@@ -10,7 +11,7 @@ pub mod widgets;
 
 use anyhow::Context as _;
 
-use crate::providers::Ctx;
+use crate::providers::{Ctx, OwnedCtx};
 
 /// Abre o terminal alternado, inicializa o AppState, e executa o event loop.
 pub async fn run_tui(ctx: &Ctx<'_>) -> anyhow::Result<()> {
@@ -30,7 +31,8 @@ pub async fn run_tui(ctx: &Ctx<'_>) -> anyhow::Result<()> {
 
     let mut terminal = ratatui::try_init().context("falha ao inicializar o terminal")?;
 
-    let result = event_loop::run(ctx, &mut terminal).await;
+    let octx = OwnedCtx::from_ctx(ctx);
+    let result = event_loop::run(octx, &mut terminal).await;
 
     ratatui::try_restore().context("falha ao restaurar o terminal")?;
 

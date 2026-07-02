@@ -1,6 +1,6 @@
 use ratatui::crossterm::event::KeyEvent;
 
-use crate::providers::types::AllQuotas;
+use crate::providers::types::ProviderQuota;
 use crate::settings::Settings;
 use crate::usage::{UsageRecord, UsageSummary};
 
@@ -11,7 +11,16 @@ pub enum Action {
     Key(KeyEvent),
     Tick,
     AnimTick,
-    DataFetched(AllQuotas),
+    /// Fetch iniciou para estes provider ids (spinner/progresso).
+    FetchStarted(Vec<String>),
+    /// Um provider terminou (merge incremental — a tela atualiza aos poucos).
+    /// Boxed: `ProviderQuota` é ~500 bytes inline, muito maior que as demais
+    /// variantes do enum (clippy::large_enum_variant).
+    ProviderFetched(Box<ProviderQuota>),
+    /// Todos terminaram. `fetched_at` ISO (mesmo formato do AllQuotas).
+    FetchCompleted { fetched_at: String },
+    /// Pede ao event_loop para redisparar o parse de usage (interceptada).
+    ReloadUsage,
     FetchFailed(String),
     /// Engine de custo calculou UsageSummary; armazenar em AppState.usage.
     UsageComputed(UsageSummary),

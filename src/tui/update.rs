@@ -1,5 +1,4 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use time::OffsetDateTime;
 
 use super::action::Action;
 use super::state::{AppState, ConfigField, ConfigState, FetchStatus, Mode, ProviderView, Tab};
@@ -319,20 +318,42 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
-        Action::DataFetched(quotas) => {
-            state.providers = quotas
+        Action::FetchStarted(ids) => {
+            state.status = FetchStatus::Loading;
+            state.fetch_pending = ids;
+            vec![]
+        }
+
+        Action::ProviderFetched(q) => {
+            state.fetch_pending.retain(|id| id != &q.provider);
+            match state
                 .providers
-                .into_iter()
-                .map(ProviderView::new)
-                .collect();
+                .iter_mut()
+                .find(|pv| pv.quota.provider == q.provider)
+            {
+                Some(pv) => pv.quota = *q,
+                None => state.providers.push(ProviderView::new(*q)),
+            }
+            vec![]
+        }
+
+        Action::FetchCompleted { fetched_at } => {
+            state.fetch_pending.clear();
             state.status = FetchStatus::Loaded;
-            state.last_update = Some(OffsetDateTime::now_utc());
+            // Mesmo parse de timestamp usado pelo antigo DataFetched.
+            state.last_update = time::OffsetDateTime::parse(
+                &fetched_at,
+                &time::format_description::well_known::Rfc3339,
+            )
+            .ok();
             // Clamp selection if providers list shrank.
             if !state.providers.is_empty() && state.selected >= state.providers.len() {
                 state.selected = state.providers.len() - 1;
             }
-            vec![]
+            vec![Action::ReloadUsage]
         }
+
+        Action::ReloadUsage => vec![], // interceptada no event_loop; no update e no-op
 
         Action::FetchFailed(msg) => {
             state.status = FetchStatus::Failed(msg);
@@ -513,7 +534,7 @@ mod tests {
     use ratatui::crossterm::event::KeyModifiers;
 
     use super::*;
-    use crate::providers::types::{AllQuotas, ProviderQuota};
+    use crate::providers::types::ProviderQuota;
 
     fn fake_quota(id: &str) -> ProviderQuota {
         ProviderQuota {
@@ -529,6 +550,21 @@ mod tests {
             extra: None,
             error: None,
         }
+    }
+
+    /// Quota com `primary.remaining` preenchido — usado pelos testes do fluxo
+    /// de fetch assincrono (Task 5) que validam ProviderView/target_ratio.
+    fn test_quota(id: &str, remaining: f64) -> ProviderQuota {
+        use crate::providers::types::QuotaWindow;
+        let mut q = fake_quota(id);
+        q.primary = Some(QuotaWindow {
+            remaining,
+            resets_at: None,
+            window_minutes: None,
+            used: Some(100.0 - remaining),
+            severity: None,
+        });
+        q
     }
 
     fn state_with_providers(n: usize) -> AppState {
@@ -585,18 +621,82 @@ mod tests {
     }
 
     #[test]
-    fn data_fetched_populates_providers_and_status() {
+    fn fetch_started_sets_loading_and_pending() {
+        let mut state = AppState::new();
+        let fu = update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        assert!(fu.is_empty());
+        assert_eq!(state.status, FetchStatus::Loading);
+        assert_eq!(
+            state.fetch_pending,
+            vec!["claude".to_string(), "amp".to_string()]
+        );
+    }
+
+    #[test]
+    fn provider_fetched_merges_by_id_and_clears_pending() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        let q = test_quota("claude", 80.0);
+        update(&mut state, Action::ProviderFetched(Box::new(q.clone())));
+        assert!(state.fetch_pending.is_empty());
+        assert_eq!(state.providers.len(), 1);
+        assert_eq!(state.providers[0].quota.provider, "claude");
+        // Segundo fetch do mesmo provider substitui (nao duplica):
+        update(&mut state, Action::ProviderFetched(Box::new(q)));
+        assert_eq!(state.providers.len(), 1);
+    }
+
+    #[test]
+    fn fetch_completed_sets_loaded_and_requests_usage_reload() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
+        let fu = update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+            },
+        );
+        assert_eq!(state.status, FetchStatus::Loaded);
+        assert!(state.last_update.is_some());
+        assert!(matches!(fu.as_slice(), [Action::ReloadUsage]));
+    }
+
+    #[test]
+    fn fetch_flow_populates_providers_and_status() {
+        // Migrado de `data_fetched_populates_providers_and_status` (Task 5):
+        // o fluxo FetchStarted->ProviderFetched->FetchCompleted substitui o
+        // antigo Action::DataFetched(AllQuotas), preservando as mesmas
+        // validacoes (providers populados, status Loaded, last_update parseado).
         let mut state = AppState::new();
         assert_eq!(state.status, FetchStatus::Idle);
         assert!(state.providers.is_empty());
         assert!(state.last_update.is_none());
 
-        let quotas = AllQuotas {
-            providers: vec![fake_quota("claude"), fake_quota("codex")],
-            fetched_at: "2026-06-19T12:00:00.000Z".to_string(),
-        };
-
-        update(&mut state, Action::DataFetched(quotas));
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "codex".into()]),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(fake_quota("claude"))),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(fake_quota("codex"))),
+        );
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-06-19T12:00:00.000Z".to_string(),
+            },
+        );
 
         assert_eq!(state.status, FetchStatus::Loaded);
         assert_eq!(state.providers.len(), 2);
@@ -604,7 +704,7 @@ mod tests {
         assert_eq!(state.providers[1].quota.provider, "codex");
         assert!(
             state.last_update.is_some(),
-            "last_update should be Some after DataFetched"
+            "last_update should be Some after FetchCompleted"
         );
     }
 

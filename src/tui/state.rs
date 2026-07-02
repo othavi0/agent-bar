@@ -191,6 +191,9 @@ pub struct AppState {
     pub history: Option<Vec<UsageRecord>>,
     /// Overlay de ajuda visivel (toggle via `?`, fecha com Esc ou `?`).
     pub show_help: bool,
+    /// Ids de provider com fetch em voo (Task 5). Populado por `FetchStarted`,
+    /// esvaziado incrementalmente por `ProviderFetched`/`FetchCompleted`.
+    pub fetch_pending: Vec<String>,
 }
 
 impl AppState {
@@ -212,6 +215,7 @@ impl AppState {
             login_status: None,
             history: None,
             show_help: false,
+            fetch_pending: Vec::new(),
         }
     }
 }

@@ -51,8 +51,7 @@ fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect) {
                 .iter()
                 .find(|pv| pv.quota.provider == id)
                 .map(|pv| &pv.quota);
-            // Task 5 liga o pending real; ate la, nunca "Checking" por aqui.
-            let fetch_pending = false;
+            let fetch_pending = state.fetch_pending.iter().any(|p| p == id);
             let login_state = login_state_for(quota, fetch_pending);
             let selected = i == state.login_selected;
 

@@ -351,7 +351,16 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
                 }
                 let symbol_span = throbber_widget.to_symbol_span(&throbber_state);
                 // Prefixo " " para alinhamento com os itens da lista.
-                let line = Line::from(vec![Span::raw(" "), symbol_span]);
+                let mut spans = vec![Span::raw(" "), symbol_span];
+                // Progresso por provider (Task 5): lista os ids ainda em voo
+                // enquanto o fetch assíncrono roda em thread própria.
+                if !state.fetch_pending.is_empty() {
+                    spans.push(Span::styled(
+                        format!(" atualizando: {}", state.fetch_pending.join(" ")),
+                        Style::default().fg(to_ratatui(ColorToken::Comment)),
+                    ));
+                }
+                let line = Line::from(spans);
                 v.push(ListItem::new(line));
             }
             FetchStatus::Failed(_) => {

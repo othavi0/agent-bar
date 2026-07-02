@@ -5,7 +5,7 @@ use tokio::time::{interval, Duration};
 use tui_input::backend::crossterm::EventHandler as _;
 
 use crate::providers::extras::get_amp_extra;
-use crate::providers::{fetch_all, registry, Ctx};
+use crate::providers::OwnedCtx;
 use crate::settings;
 use crate::setup;
 use crate::usage;
@@ -14,7 +14,7 @@ use crate::waybar_integration::{self, get_default_waybar_integration_paths, Appl
 use super::action::Action;
 use super::login_spawn::RealLogin;
 use super::render::render;
-use super::state::{AppState, FetchStatus, Tab};
+use super::state::{AppState, Tab};
 use super::update::update;
 
 /// Dispara o parse pesado dos session logs FORA do thread do event loop
@@ -23,12 +23,12 @@ use super::update::update;
 /// inline no loop — deixa o `select!` livre p/ servir teclas/animação enquanto isso.
 fn spawn_usage_load(
     bg_tx: &tokio::sync::mpsc::UnboundedSender<Action>,
-    ctx: &Ctx<'_>,
+    octx: &OwnedCtx,
     state: &AppState,
 ) {
-    let claude_dir = ctx.home.join(".claude").join("projects");
-    let codex_dir = ctx.home.join(".codex").join("sessions");
-    let fx_rate = ctx.settings.fx_rate;
+    let claude_dir = octx.home.join(".claude").join("projects");
+    let codex_dir = octx.home.join(".codex").join("sessions");
+    let fx_rate = octx.settings.fx_rate;
 
     // amp_meta do ProviderView do Amp (clone OWNED p/ cruzar o spawn_blocking).
     let amp_meta: Option<std::collections::BTreeMap<String, String>> = state
@@ -38,12 +38,13 @@ fn spawn_usage_load(
         .and_then(|pv| get_amp_extra(&pv.quota))
         .and_then(|e| e.meta.clone());
 
-    // Cutoffs no contexto async: clock injetado (ctx) p/ hoje; now_utc p/ a janela de 7d.
-    let today_start =
-        time::OffsetDateTime::from_unix_timestamp_nanos((ctx.now_ms as i128) * 1_000_000)
-            .map(|t| t.to_offset(ctx.local_offset))
-            .map(|t| t.replace_time(time::Time::MIDNIGHT))
-            .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+    // Cutoffs no contexto async: clock via OwnedCtx::now_ms() (a thread de fetch
+    // nao tem o now_ms do Ctx original) p/ hoje; now_utc p/ a janela de 7d.
+    let now_ms = OwnedCtx::now_ms();
+    let today_start = time::OffsetDateTime::from_unix_timestamp_nanos((now_ms as i128) * 1_000_000)
+        .map(|t| t.to_offset(octx.local_offset))
+        .map(|t| t.replace_time(time::Time::MIDNIGHT))
+        .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
     let history_cutoff = time::OffsetDateTime::now_utc() - time::Duration::days(7);
 
     // std::thread (NÃO tokio::spawn_blocking): thread detached, não-rastreada pelo
@@ -81,14 +82,14 @@ fn spawn_usage_load(
 
 /// Persiste as edit_settings, aplica a integracao Waybar e recarrega o Waybar.
 /// Chamado do event_loop quando SaveConfig e interceptado (nao e puro — faz IO).
-fn handle_save_config(state: &mut AppState, ctx: &Ctx<'_>) {
+fn handle_save_config(state: &mut AppState, octx: &OwnedCtx) {
     let edited = match state.config_state.as_ref() {
         Some(cs) => cs.edit_settings.clone(),
         None => return,
     };
 
     let result: Result<(), String> = (|| {
-        settings::save(ctx.paths, &edited).map_err(|e| format!("save falhou: {e}"))?;
+        settings::save(&octx.paths, &edited).map_err(|e| format!("save falhou: {e}"))?;
 
         let paths = get_default_waybar_integration_paths();
         let opts = ApplyOptions {
@@ -119,23 +120,32 @@ fn handle_login(state: &mut AppState, provider_id: String) {
 }
 
 /// Despacha todas as follow-up actions retornadas por update (1 nivel de profundidade).
-/// SaveConfig e LoginRequested sao interceptados aqui para IO.
-fn drain(state: &mut AppState, ctx: &Ctx<'_>, actions: Vec<Action>) {
+/// SaveConfig, LoginRequested e ReloadUsage sao interceptados aqui para IO.
+fn drain(
+    state: &mut AppState,
+    octx: &OwnedCtx,
+    bg_tx: &tokio::sync::mpsc::UnboundedSender<Action>,
+    actions: Vec<Action>,
+) {
     for a in actions {
         match a {
-            // InitConfig com settings reais do ctx (sobrescreve o placeholder do update).
+            // InitConfig com settings reais do octx (sobrescreve o placeholder do update).
             Action::InitConfig(_placeholder) => {
-                for sub in update(state, Action::InitConfig(ctx.settings.clone())) {
+                for sub in update(state, Action::InitConfig(octx.settings.clone())) {
                     update(state, sub);
                 }
             }
             // SaveConfig e interceptado: nao re-entra no update, faz IO aqui.
             Action::SaveConfig => {
-                handle_save_config(state, ctx);
+                handle_save_config(state, octx);
             }
             // LoginRequested e interceptado: nao re-entra no update, faz IO aqui.
             Action::LoginRequested(id) => {
                 handle_login(state, id);
+            }
+            // ReloadUsage e interceptado: redispara o parse de usage em background.
+            Action::ReloadUsage => {
+                spawn_usage_load(bg_tx, octx, state);
             }
             other => {
                 update(state, other);
@@ -144,51 +154,33 @@ fn drain(state: &mut AppState, ctx: &Ctx<'_>, actions: Vec<Action>) {
     }
 }
 
-/// Event loop principal. Corre ate `state.should_quit`.
-pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
+/// Event loop principal. Corre ate `state.should_quit`. O fetch de quotas
+/// (inicial e a cada 60s) roda numa thread propria (`tui::fetch::spawn_fetch`)
+/// — o `select!` NUNCA espera rede; teclas e animacao respondem durante o fetch.
+pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
     let mut state = AppState::new();
 
-    // Canal p/ os resultados do parse em background (spawn_blocking). Mantém o loop livre.
+    // Canal p/ os resultados do fetch e do parse de usage em background. Mantém o loop livre.
     let (bg_tx, mut bg_rx) = tokio::sync::mpsc::unbounded_channel::<Action>();
 
     let mut events = EventStream::new();
-    // interval_at: 1º tick em +60s (NÃO imediato). O `initial_fetch` já faz a 1ª carga;
-    // o tick imediato do `interval` re-disparava fetch+parse redundante logo após o boot.
+    // interval_at: 1º tick em +60s (NÃO imediato). O fetch inicial abaixo já faz a
+    // 1ª carga; o tick imediato do `interval` re-disparava fetch redundante no boot.
     let mut data_tick = tokio::time::interval_at(
         tokio::time::Instant::now() + Duration::from_secs(60),
         Duration::from_secs(60),
     );
     let mut anim_tick = interval(Duration::from_millis(30));
 
-    // Tick imediato: dispara o fetch inicial sem esperar 60s.
-    let mut initial_fetch = true;
+    // Fetch inicial: dispara em thread propria e segue — o select! serve
+    // teclado/animação já, sem esperar a rede (bug que esta task mata).
+    super::fetch::spawn_fetch(&bg_tx, octx.clone(), None);
 
     loop {
         terminal.draw(|f| render(&state, f))?;
 
         if state.should_quit {
             break;
-        }
-
-        if initial_fetch {
-            initial_fetch = false;
-            state.status = FetchStatus::Loading;
-            let providers = registry();
-            // Fetch inline (async, ~sub-segundo). O parse pesado dos logs vai p/ background
-            // via spawn_usage_load, entao o loop chega no select! quase imediatamente.
-            match tokio::time::timeout(Duration::from_secs(30), fetch_all(&providers, ctx)).await {
-                Ok(quotas) => {
-                    let follow_ups = update(&mut state, Action::DataFetched(quotas));
-                    drain(&mut state, ctx, follow_ups);
-                    spawn_usage_load(&bg_tx, ctx, &state);
-                }
-                Err(_) => {
-                    let follow_ups =
-                        update(&mut state, Action::FetchFailed("fetch timeout".to_string()));
-                    drain(&mut state, ctx, follow_ups);
-                }
-            }
-            continue;
         }
 
         tokio::select! {
@@ -206,38 +198,19 @@ pub async fn run(ctx: &Ctx<'_>, terminal: &mut DefaultTerminal) -> anyhow::Resul
                             }
                         }
                         let follow_ups = update(&mut state, Action::Key(*key));
-                        drain(&mut state, ctx, follow_ups);
+                        drain(&mut state, &octx, &bg_tx, follow_ups);
                     }
                 }
             }
 
             _ = data_tick.tick() => {
-                state.status = FetchStatus::Loading;
-                let providers = registry();
-                match tokio::time::timeout(
-                    Duration::from_secs(30),
-                    fetch_all(&providers, ctx),
-                )
-                .await
-                {
-                    Ok(quotas) => {
-                        let follow_ups = update(&mut state, Action::DataFetched(quotas));
-                        drain(&mut state, ctx, follow_ups);
-                        spawn_usage_load(&bg_tx, ctx, &state);
-                    }
-                    Err(_) => {
-                        let follow_ups = update(
-                            &mut state,
-                            Action::FetchFailed("fetch timeout".to_string()),
-                        );
-                        drain(&mut state, ctx, follow_ups);
-                    }
-                }
+                super::fetch::spawn_fetch(&bg_tx, octx.clone(), None);
             }
 
             bg = bg_rx.recv() => {
                 if let Some(action) = bg {
-                    update(&mut state, action);
+                    let follow_ups = update(&mut state, action);
+                    drain(&mut state, &octx, &bg_tx, follow_ups);
                 }
             }
 
