@@ -138,6 +138,18 @@ fn login_status_span(logged: LoginState) -> Span<'static> {
     }
 }
 
+/// Cor da borda do card: feedback de hover. Extraída como função pura (em
+/// vez de inline no render) pra ser testável direto — um snapshot de
+/// `TestBackend` serializa só caracteres, nunca cor (`buffer_view` não
+/// exporta estilo), então a decisão de cor teria zero cobertura sem isto.
+fn card_border_color(hovered: bool) -> ratatui::style::Color {
+    if hovered {
+        to_ratatui(ColorToken::Text)
+    } else {
+        to_ratatui(ColorToken::Comment)
+    }
+}
+
 /// Largura do gauge derivada da área real do card — nunca constante mágica
 /// (bug do código antigo). 8 label + 6 pct + 14 reset = 28 colunas fixas.
 fn derive_gauge_width(card_width: u16) -> usize {
@@ -212,11 +224,7 @@ fn render_provider_card(
     };
 
     let hovered = state.hover == Some(MouseTarget::Card(idx));
-    let border_color = if hovered {
-        to_ratatui(ColorToken::Text)
-    } else {
-        to_ratatui(ColorToken::Comment)
-    };
+    let border_color = card_border_color(hovered);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -558,9 +566,20 @@ mod tests {
     }
 
     #[test]
-    fn card_hover_uses_lighter_border() {
-        // Hover feedback: state.hover == Some(Card(i)) usa borda Text (mais
-        // clara que Comment) em vez da borda default.
+    fn card_border_color_reflects_hover() {
+        // A cor de hover é decidida por uma função pura (`card_border_color`)
+        // justamente pra ser testável direto: um snapshot de TestBackend
+        // serializa só caracteres (`buffer_view` não exporta estilo/cor) —
+        // o snapshot abaixo (`card_hover_state_renders_without_panic`) é
+        // idêntico com ou sem hover, então NÃO cobre a cor.
+        assert_eq!(card_border_color(true), to_ratatui(ColorToken::Text));
+        assert_eq!(card_border_color(false), to_ratatui(ColorToken::Comment));
+    }
+
+    #[test]
+    fn card_hover_state_renders_without_panic() {
+        // Cobertura estrutural apenas (layout/panic) — a cor de hover é
+        // verificada em `card_border_color_reflects_hover`, não aqui.
         let backend = ratatui::backend::TestBackend::new(100, 32);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
@@ -658,13 +677,6 @@ mod tests {
         assert!(found, "esperava chip [q] registrado na última linha");
     }
 
-    #[test]
-    fn quota_bar_logic() {
-        // 100% remaining = all filled (nothing consumed)
-        let bar_100 = quota_bar_pub(100.0);
-        // 0% remaining = all empty (fully consumed)
-        let bar_0 = quota_bar_pub(0.0);
-        assert_eq!(bar_100, "\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}");
-        assert_eq!(bar_0, "\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}");
-    }
+    // quota_bar_logic (assertion de gauge 100%/0% via quota_bar_pub) já
+    // existe em `render/mod.rs` — não duplicar aqui.
 }
