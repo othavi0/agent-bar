@@ -275,6 +275,34 @@ fn render_chart(
     now: time::OffsetDateTime,
     hours: usize,
 ) {
+    render_trend_chart(
+        frame,
+        area,
+        records,
+        now,
+        hours,
+        state.history_range,
+        state.local_offset,
+        " sem uso de tokens no per\u{ed}odo selecionado",
+    );
+}
+
+/// Corpo reusável do chart (History E painel "Hoje (24h)" do Overview):
+/// mesma visualização, parametrizada em vez de ler `AppState` direto —
+/// `range` decide o estilo dos labels do eixo X, `empty_msg` é o
+/// placeholder quando nenhum provider tem dado no range (o texto muda
+/// conforme a tela: o History tem seletor de período, o Overview não).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn render_trend_chart(
+    frame: &mut Frame,
+    area: Rect,
+    records: &[UsageRecord],
+    now: time::OffsetDateTime,
+    hours: usize,
+    range: HistoryRange,
+    local_offset: time::UtcOffset,
+    empty_msg: &str,
+) {
     if area.width == 0 || area.height == 0 {
         return;
     }
@@ -294,7 +322,7 @@ fn render_chart(
 
     if series_by_provider.is_empty() {
         let p = Paragraph::new(Span::styled(
-            " sem uso de tokens no per\u{ed}odo selecionado",
+            empty_msg.to_string(),
             Style::default().fg(to_ratatui(ColorToken::Muted)),
         ));
         frame.render_widget(p, area);
@@ -319,7 +347,7 @@ fn render_chart(
         })
         .collect();
 
-    let x_labels = x_axis_labels(now, hours, state.history_range, state.local_offset);
+    let x_labels = x_axis_labels(now, hours, range, local_offset);
     let y_labels = vec![Line::from("0"), Line::from(abbrev_tokens(y_max as u64))];
 
     let chart = Chart::new(datasets)

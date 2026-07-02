@@ -60,10 +60,121 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect, hits: &
             render_skeleton(state, frame, content_area);
         }
     } else {
-        render_cards(state, frame, content_area, hits);
+        // Densidade (PRODUCT.md: "cada célula da janela trabalha"): quando
+        // sobra altura abaixo dos cards, o resto vira o painel de tendência
+        // "Hoje (24h)" — chart braille do History + totais hoje/7d. Sem
+        // sobra (terminal baixo), o layout antigo fica intacto (cards com
+        // scroll na área inteira).
+        let cards_h = CARD_H * state.providers.len() as u16;
+        if content_area.height >= cards_h + TREND_MIN_H {
+            let vert =
+                Layout::vertical([Constraint::Length(cards_h), Constraint::Min(0)])
+                    .split(content_area);
+            render_cards(state, frame, vert[0], hits);
+            render_trend_panel(state, frame, vert[1]);
+        } else {
+            render_cards(state, frame, content_area, hits);
+        }
     }
 
     render_footer_chips(frame, footer_area, hits);
+}
+
+/// Altura mínima pro painel de tendência valer a pena: borda (2) + 1 linha
+/// de eixo Y útil + labels do eixo X — abaixo disso o chart braille vira
+/// ruído e é melhor devolver a área pros cards.
+const TREND_MIN_H: u16 = 8;
+
+/// Painel "Hoje (24h)": chart braille das últimas 24h (mesma visualização
+/// do History, via `render_trend_chart`) + rodapé com totais hoje/7d.
+/// Estados: `history=None` → "coletando histórico…" (parse em voo, mesma
+/// regra do History: nunca afirmar zero); carregado sem uso → placeholder
+/// "sem uso nas últimas 24h" do próprio chart.
+fn render_trend_panel(state: &AppState, frame: &mut Frame, area: Rect) {
+    let loading = state.history.is_none();
+    let records: &[crate::usage::UsageRecord] = state.history.as_deref().unwrap_or(&[]);
+
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)))
+        .title(Span::styled(
+            " Hoje (24h) ",
+            Style::default()
+                .fg(to_ratatui(ColorToken::TextBright))
+                .add_modifier(Modifier::BOLD),
+        ));
+    if !loading {
+        if let Some(totals) = trend_totals_line(state, records) {
+            block = block.title_bottom(totals);
+        }
+    }
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+
+    if loading {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                " coletando hist\u{f3}rico\u{2026}",
+                Style::default().fg(to_ratatui(ColorToken::Muted)),
+            )),
+            inner,
+        );
+        return;
+    }
+
+    // Âncora do chart: mesma regra do History — max ts dos records via
+    // `series_now`; sem records, constante determinística (os buckets são
+    // todo zero de qualquer forma e o chart cai no placeholder).
+    let now = series_now(state).unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+    super::history::render_trend_chart(
+        frame,
+        inner,
+        records,
+        now,
+        24,
+        crate::tui::state::HistoryRange::Day,
+        state.local_offset,
+        " sem uso de tokens nas \u{fa}ltimas 24h",
+    );
+}
+
+/// Rodapé do painel de tendência: "hoje X tok · $Y  ·  7d Z tok". "hoje"
+/// vem de `state.usage` (janela de hoje do UsageComputed); "7d" soma os
+/// records crus (mesma janela do HistoryLoaded). `usage=None` → sem rodapé
+/// (não inventa zero).
+fn trend_totals_line(
+    state: &AppState,
+    records: &[crate::usage::UsageRecord],
+) -> Option<Line<'static>> {
+    // Vocabulário de tokens dos TOTAIS = input+output (o mesmo do
+    // `DayBucket` que alimenta a tabela e o "Total 7d" do History) —
+    // somar cache aqui faria este rodapé contradizer o History na tela
+    // ao lado (6.2B vs 37M na máquina real).
+    let usage = state.usage.as_ref()?;
+    let today_tokens: u64 = usage
+        .providers
+        .iter()
+        .map(|pu| pu.total_input + pu.total_output)
+        .sum();
+    let week_tokens: u64 = records.iter().map(|r| r.input + r.output).sum();
+    Some(
+        Line::from(Span::styled(
+            format!(
+                " hoje {} tok \u{b7} ${:.2}  \u{b7}  7d {} tok ",
+                crate::tui::render::shared::abbrev_tokens(today_tokens),
+                usage.total_cost.usd,
+                crate::tui::render::shared::abbrev_tokens(week_tokens),
+            ),
+            Style::default()
+                .fg(to_ratatui(ColorToken::TextBright))
+                .add_modifier(Modifier::BOLD),
+        ))
+        .alignment(Alignment::Right),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -290,12 +401,20 @@ fn render_provider_card(
             None => Vec::new(),
         };
         let spark = sparkline_str(&series);
-        let cost_str = state
-            .usage
-            .as_ref()
-            .and_then(|s| s.providers.iter().find(|pu| pu.provider == q.provider))
-            .map(fmt_provider_cost)
-            .unwrap_or_else(|| "-".to_string());
+        // `usage=None` = UsageComputed em voo — a linha diz "coletando…"
+        // em vez do falso "- hoje" (mesma regra de loading do restante).
+        let cost_label = match state.usage.as_ref() {
+            None => "coletando\u{2026}".to_string(),
+            Some(s) => {
+                let cost_str = s
+                    .providers
+                    .iter()
+                    .find(|pu| pu.provider == q.provider)
+                    .map(fmt_provider_cost)
+                    .unwrap_or_else(|| "-".to_string());
+                format!("{cost_str} hoje")
+            }
+        };
 
         lines.push(Line::from(vec![
             Span::styled(
@@ -303,7 +422,7 @@ fn render_provider_card(
                 Style::default().fg(to_ratatui(ColorToken::Comment)),
             ),
             Span::styled(
-                format!("  {cost_str} hoje"),
+                format!("  {cost_label}"),
                 Style::default().fg(to_ratatui(ColorToken::Muted)),
             ),
         ]));
@@ -506,6 +625,99 @@ mod tests {
             cache_write: 0,
             ts,
         }
+    }
+
+    /// Renderiza a tela num TestBackend e devolve o texto plano do buffer.
+    fn screen_text(state: &AppState, w: u16, h: u16) -> String {
+        let backend = ratatui::backend::TestBackend::new(w, h);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_dashboard(state, f, area, &mut HitMap::default());
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut out = String::new();
+        for y in 0..h {
+            for x in 0..w {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    out.push_str(cell.symbol());
+                }
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    fn state_with_two_providers_and_data() -> AppState {
+        use time::macros::datetime;
+        let mut state = AppState::new();
+        let now = datetime!(2026-06-19 20:00:00 UTC);
+        state.last_update = Some(now);
+        state.providers = vec![
+            ProviderView::new(make_quota(
+                "claude",
+                "Claude",
+                26.0,
+                Some("2026-06-19T23:00:00Z"),
+                None,
+            )),
+            ProviderView::new(make_quota("amp", "Amp", 80.0, None, None)),
+        ];
+        state.status = FetchStatus::Loaded;
+        state.usage = Some(fake_usage());
+        state.history = Some(vec![
+            rec("claude", now - time::Duration::hours(1), 900_000),
+            rec("claude", now - time::Duration::hours(5), 100_000),
+        ]);
+        state
+    }
+
+    // -----------------------------------------------------------------
+    // Painel de tendência "Hoje (24h)" (densidade — decisão B): preenche
+    // o espaço vertical que sobra abaixo dos cards com o chart braille de
+    // 24h + totais; some quando não há altura; mostra loading enquanto o
+    // parse está em voo (nunca afirma zero — mesma regra do History).
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn trend_panel_fills_leftover_height() {
+        let state = state_with_two_providers_and_data();
+        let text = screen_text(&state, 110, 30); // 2 cards = 12 linhas; sobra >> 8
+        assert!(
+            text.contains("Hoje (24h)"),
+            "com altura sobrando, o painel de tendência deve aparecer:\n{text}"
+        );
+        assert!(
+            text.contains("hoje") && text.contains("7d"),
+            "rodapé de totais (hoje/7d) ausente:\n{text}"
+        );
+    }
+
+    #[test]
+    fn trend_panel_absent_when_height_is_tight() {
+        let state = state_with_two_providers_and_data();
+        let text = screen_text(&state, 110, 14); // 12 de cards + 1 footer: sem sobra
+        assert!(
+            !text.contains("Hoje (24h)"),
+            "sem altura sobrando, o painel não deve aparecer (cards mantêm scroll):\n{text}"
+        );
+    }
+
+    #[test]
+    fn trend_panel_loading_shows_coletando() {
+        let mut state = state_with_two_providers_and_data();
+        state.history = None; // HistoryLoaded ainda não chegou
+        let text = screen_text(&state, 110, 30);
+        assert!(
+            text.contains("coletando hist\u{f3}rico"),
+            "history=None deve mostrar loading no painel:\n{text}"
+        );
+        assert!(
+            !text.contains("sem uso"),
+            "history=None não pode afirmar 'sem uso':\n{text}"
+        );
     }
 
     #[test]
