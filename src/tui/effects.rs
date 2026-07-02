@@ -1,4 +1,5 @@
-//! Efeitos tachyonfx: coalesce na troca de tela, sweep no fetch.
+//! Efeitos tachyonfx: sweep no fetch. (O coalesce na troca de tela foi
+//! removido em 7.0.x — reprovado em uso real; não reintroduzir.)
 //!
 //! `enabled=false` (`settings.menu.animations`) vira tudo no-op — nem
 //! `on_event` empurra pro manager, nem `process` toca o buffer. O gate vive
@@ -15,8 +16,8 @@ use tachyonfx::{fx, EffectManager, Interpolation, Motion};
 use super::state::FxEvent;
 
 /// Gerencia os efeitos tachyonfx em voo. `content_area` (parâmetro de
-/// `on_event`) não é usada pelos efeitos atuais (coalesce/sweep operam
-/// sobre a `area` recebida por `process`, no frame seguinte) — mantida na
+/// `on_event`) não é usada pelo efeito atual (o sweep opera sobre a
+/// `area` recebida por `process`, no frame seguinte) — mantida na
 /// assinatura pra efeitos futuros escopados a uma região específica.
 pub struct Effects {
     manager: EffectManager<()>,
@@ -38,11 +39,6 @@ impl Effects {
             return;
         }
         match ev {
-            // Coalesce (~280ms, SineOut): a tela nova "se forma" em vez de
-            // trocar seca — feedback de navegação (Geral↔Histórico etc.).
-            FxEvent::ScreenChanged => self
-                .manager
-                .add_effect(fx::coalesce((280, Interpolation::SineOut))),
             // Sweep esquerda→direita (~900ms, QuadOut): dado novo "varre" a
             // tela quando um fetch termina.
             FxEvent::FetchLanded => self.manager.add_effect(fx::sweep_in(
@@ -140,7 +136,6 @@ mod tests {
     fn disabled_on_event_does_not_panic_and_process_is_noop() {
         let mut fx = Effects::new(false);
         let area = Rect::new(0, 0, 10, 4);
-        fx.on_event(FxEvent::ScreenChanged, area);
         fx.on_event(FxEvent::FetchLanded, area);
 
         let mut buf = Buffer::empty(area);
@@ -153,7 +148,6 @@ mod tests {
     fn enabled_process_runs_without_panic() {
         let mut fx = Effects::new(true);
         let area = Rect::new(0, 0, 10, 4);
-        fx.on_event(FxEvent::ScreenChanged, area);
         fx.on_event(FxEvent::FetchLanded, area);
 
         let mut buf = Buffer::empty(area);

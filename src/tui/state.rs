@@ -46,8 +46,6 @@ pub enum Screen {
 /// (`crate::tui::effects::Effects::on_event`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FxEvent {
-    /// `Activate` mudou `state.screen` — dispara coalesce (T16).
-    ScreenChanged,
     /// `FetchCompleted` chegou — dispara sweep (T16).
     FetchLanded,
 }

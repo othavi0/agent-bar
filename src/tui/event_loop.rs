@@ -183,8 +183,8 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).
     let mut hits = super::mouse::HitMap::default();
-    // Efeitos tachyonfx (Task 16): coalesce na troca de tela, sweep no
-    // fetch. Gate próprio (`Effects::new(enabled)`), independente do de
+    // Efeitos tachyonfx (Task 16): sweep no fetch.
+    // Gate próprio (`Effects::new(enabled)`), independente do de
     // `state.animations` acima (mesma fonte — settings.menu.animations —
     // mas o efeito roda fora do render puro, DEPOIS do draw).
     let mut effects = Effects::new(octx.settings.menu.animations);

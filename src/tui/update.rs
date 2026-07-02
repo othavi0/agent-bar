@@ -330,18 +330,14 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             {
                 state.sidebar_selected = idx;
             }
-            // Efeito coalesce (T16): só quando a tela de fato muda — ativar
-            // o item já ativo (ex. Enter em cima de si mesmo) não deve
-            // re-disparar o efeito.
+            // `state.scroll` é compartilhado entre telas (ScrollView do
+            // Overview e, agora, a tabela do History) — sem reset, uma
+            // posição de scroll deixada numa tela (ex. Overview rolado)
+            // vaza pra outra tela sem relação nenhuma com aquele offset
+            // (History abriria com linhas de dado já puladas). Reseta
+            // só quando a tela de fato muda, não quando reativa a que
+            // já está ativa (ex. Enter em cima de si mesmo).
             if state.screen != old_screen {
-                state.fx_queue.push(FxEvent::ScreenChanged);
-                // `state.scroll` é compartilhado entre telas (ScrollView do
-                // Overview e, agora, a tabela do History) — sem reset, uma
-                // posição de scroll deixada numa tela (ex. Overview rolado)
-                // vaza pra outra tela sem relação nenhuma com aquele offset
-                // (History abriria com linhas de dado já puladas). Reseta
-                // só quando a tela de fato muda, não quando reativa a que
-                // já está ativa (mesmo critério do ScreenChanged acima).
                 state.scroll = 0;
             }
             follow_ups
@@ -1279,27 +1275,14 @@ mod tests {
     }
 
     #[test]
-    fn screen_change_pushes_fx_event() {
+    fn screen_change_pushes_no_fx_event() {
+        // O coalesce de troca de tela foi removido (reprovado em uso real) —
+        // navegar entre telas não deve enfileirar efeito nenhum.
         let mut state = AppState::new();
         update(&mut state, Action::Activate(SidebarItem::History));
-        assert!(state
-            .fx_queue
-            .contains(&crate::tui::state::FxEvent::ScreenChanged));
-    }
-
-    #[test]
-    fn activate_same_screen_does_not_repush_fx_event() {
-        // Reativar o item já ativo (ex. Enter em cima de si mesmo) não deve
-        // disparar um 2º coalesce — só a mudança real de tela dispara.
-        let mut state = AppState::new();
-        update(&mut state, Action::Activate(SidebarItem::History));
-        state.fx_queue.clear();
-
-        update(&mut state, Action::Activate(SidebarItem::History));
-
         assert!(
             state.fx_queue.is_empty(),
-            "reativar a MESMA tela não deve empurrar ScreenChanged de novo"
+            "troca de tela não deve empurrar FxEvent (coalesce removido)"
         );
     }
 
