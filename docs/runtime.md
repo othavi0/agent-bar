@@ -52,6 +52,9 @@ Defaults:
 - display mode: `remaining`
 - show percentage: `true`
 - Codex window policy: `both`
+- menu animations: `true`
+- menu font family: `IBM Plex Mono`
+- menu font size: `12`
 
 Normalization:
 
@@ -64,6 +67,19 @@ Normalization:
 Older settings files are normalized to schema version 2 on load: the version is
 stamped and unknown providers are dropped (e.g. a `copilot` entry from a previous
 version is removed).
+
+### Menu Font (`menu.animations`/`menu.fontFamily`/`menu.fontSize`)
+
+`agent-bar menu` launches inside a terminal spawned by
+`scripts/agent-bar-open-terminal`, which passes `menu.fontFamily`/
+`menu.fontSize` to the terminal emulator's own font flag so the TUI opens
+with the configured font. This only works for emulators the script knows a
+font flag for (Alacritty, kitty, foot, Ghostty); the generic `xdg-terminal-exec`
+fallback path (used when none of those are found, or via `uwsm-app`) has no
+such flag, so the configured font silently does not apply there — the
+terminal's own default font is used instead. Also: if `$TERMINAL` is set to
+something other than `alacritty`, the script skips the Alacritty-specific
+font injection and respects the user's terminal choice as-is.
 
 ## Cache
 

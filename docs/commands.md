@@ -6,8 +6,26 @@
 | --- | --- | --- |
 | `agent-bar` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
 | `agent-bar status` | Print the quota view in a terminal. | Cache only |
-| `agent-bar menu` | Open provider login, model, and layout settings. | Settings and provider auth as requested |
+| `agent-bar menu` | Interactive TUI: overview, per-provider detail, hourly/daily history, provider login, and the Waybar config editor. | Settings and provider auth as requested |
 | `agent-bar update` | Update the install: managed `~/.agent-bar` checkout, or defers to system package manager. | `~/.agent-bar`, managed Waybar files |
+
+## `menu` Navigation
+
+The TUI has a left sidebar (Overview, one entry per provider, History, Login,
+Waybar) and a right-hand content pane.
+
+- **Keyboard:** `up`/`down` (or `j`/`k`) move the sidebar cursor, `Enter`
+  activates the selected item, `h`/`g`/`w` jump directly to History/Login/
+  Waybar from anywhere, `r` refreshes quotas, `Esc` backs out of a detail
+  view, `?` toggles a help overlay listing every binding per screen, `q`
+  quits.
+- **Mouse:** click selects (sidebar rows, provider cards, chips), the wheel
+  scrolls, and `shift`+drag selects terminal text as usual (mouse capture is
+  disabled for that gesture).
+- **`menu-font`:** hidden internal command (`agent-bar menu-font`, not shown
+  in `--help`) that prints `{fontFamily}\t{fontSize}` from
+  `settings.menu` for `scripts/agent-bar-open-terminal` to pass through to
+  terminals that support a font flag when launching the menu.
 
 ## Internal Commands (Waybar-Triggered)
 
