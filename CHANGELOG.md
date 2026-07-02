@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [7.0.1] - 2026-07-02
+
+Hotfix de distribuição: `agent-bar update` e `install.sh`.
+
+### Fixed
+- **`agent-bar update` estava quebrado em todo install standalone** desde a
+  6.0.0: a detecção usava um path de compile-time (`CARGO_MANIFEST_DIR`, o
+  diretório do runner do CI) e caía num modo npm legado tentando ler
+  `package.json` inexistente. A detecção agora parte do binário real
+  (`current_exe`): checkout de dev → fluxo git; instalação de sistema/AUR →
+  orienta o gerenciador de pacotes; standalone → **self-update real** (baixa
+  a última release, verifica sha256 obrigatoriamente, substitui o binário de
+  forma atômica e espelha os assets).
+- **`agent-bar setup` avulso falhava em install standalone** — a resolução
+  de assets ganhou o candidato `~/.local/share/agent-bar` (respeitando
+  `AGENT_BAR_DATA`/`XDG_DATA_HOME`), unificada entre update e setup.
+- **`install.sh` agora migra instalações antigas sozinho**: upgrade
+  automático quando a versão difere (sem exigir `--force`), detecção sã de
+  binários da era TypeScript (que respondiam `--version` com o JSON do
+  módulo), remoção best-effort do pacote npm legado
+  (`@noctuacore/agent-bar`) e de symlinks antigos. `--force` fica só para
+  reinstalar a mesma versão.
+
+### Changed
+- Caminho de update npm/bun removido por completo (legado morto).
+- Diretório temporário do self-update via `tempfile` (0700, criação
+  atômica) em vez de path manual em `/tmp`.
+
 ## [7.0.0] - 2026-07-02
 
 Redesign completo da TUI do `agent-bar menu` (spec e plano em
