@@ -141,6 +141,10 @@ struct ClaudeLimitScopeRaw {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClaudeLimitRaw {
+    // Elemento malformado (sem `kind`) não pode derrubar o decode do corpo
+    // INTEIRO — default vazio cai no braço `other` do match em
+    // `quota_from_limits` (inofensivo, apenas logado).
+    #[serde(default)]
     kind: String,
     #[serde(default)]
     percent: Option<f64>,
@@ -776,6 +780,41 @@ mod tests {
         assert_eq!(eu.used, 0.0);
         assert_eq!(eu.limit, 0.0);
         assert_eq!(eu.remaining, 0.0);
+    }
+
+    /// Regressão: um elemento de `limits[]` sem `kind` (API em evolução) não
+    /// pode derrubar o decode do corpo INTEIRO — `#[serde(default)]` em
+    /// `ClaudeLimitRaw.kind` garante que só esse elemento vira no-op (braço
+    /// `other` do match), sem afetar os demais elementos válidos.
+    #[tokio::test]
+    async fn claude_limits_element_missing_kind_does_not_break_decode() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "limits": [
+                    {"percent": 50, "severity": "normal"},
+                    {"kind": "session", "percent": 20, "severity": "normal",
+                     "resets_at": "2026-07-02T02:39:59Z", "scope": null, "is_active": true}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(q.available, "elemento sem kind não pode derrubar o decode");
+        assert_eq!(q.error, None);
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 80.0); // 100 - 20
     }
 
     #[tokio::test]
