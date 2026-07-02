@@ -16,6 +16,7 @@ use crate::providers::types::QuotaWindow;
 use crate::theme::{provider_hex, ColorToken};
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap, MouseTarget};
+use crate::tui::render::shared::series_now;
 use crate::tui::state::{AppState, ProviderView};
 use crate::tui::theme_bridge::{hex_to_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
@@ -61,16 +62,6 @@ pub fn render_dashboard(state: &AppState, frame: &mut Frame, area: Rect, hits: &
     }
 
     render_footer_chips(frame, footer_area, hits);
-}
-
-/// "now" para a série 24h do sparkline: NUNCA `OffsetDateTime::now_utc()`
-/// (render precisa ser puro/determinístico p/ snapshot). Fonte primária =
-/// `state.last_update`; fallback = timestamp mais recente de `state.history`;
-/// ambos ausentes → sem âncora, série fica vazia (sparkline vazio, ok).
-fn series_now(state: &AppState) -> Option<time::OffsetDateTime> {
-    state
-        .last_update
-        .or_else(|| state.history.as_deref().and_then(|r| r.iter().map(|u| u.ts).max()))
 }
 
 // ---------------------------------------------------------------------------

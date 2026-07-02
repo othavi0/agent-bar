@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod detail;
 pub mod history;
 pub mod login;
+mod shared;
 pub mod sidebar;
 
 use ratatui::layout::{Constraint, Layout};
