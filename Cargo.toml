@@ -2,7 +2,8 @@
 name = "agent-bar"
 version = "6.0.1"
 edition = "2021"
-rust-version = "1.80"
+# 1.88: piso real, não 1.80 — tui-scrollview exige 1.88; tachyonfx (via anpa) exige 1.82.
+rust-version = "1.88"
 license = "MIT"
 description = "LLM quota monitor for Waybar - Claude, Codex, Amp"
 repository = "https://github.com/othavioquiliao/agent-bar"
