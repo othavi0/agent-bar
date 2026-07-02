@@ -165,11 +165,19 @@ fn item_color(state: &AppState, item: SidebarItem) -> ratatui::style::Color {
                     // (`widgets::quota_gauge::pulse_color`) nos GAUGES do
                     // card/detalhe — os dois coexistem (alvo/cadência
                     // diferentes), este blink NÃO foi substituído.
-                    let blink_visible = (state.anim_frame / 15).is_multiple_of(2);
-                    if blink_visible {
+                    // spec §8: `animations=false` desativa TUDO — mesmo
+                    // gate do pulso dos gauges (dashboard.rs/detail.rs).
+                    // Com animações off, cor estática Red (não Muted: o
+                    // crítico não pode "sumir" só porque não pisca).
+                    if !state.animations {
                         to_ratatui(ColorToken::Red)
                     } else {
-                        to_ratatui(ColorToken::Muted)
+                        let blink_visible = (state.anim_frame / 15).is_multiple_of(2);
+                        if blink_visible {
+                            to_ratatui(ColorToken::Red)
+                        } else {
+                            to_ratatui(ColorToken::Muted)
+                        }
                     }
                 } else {
                     crate::tui::theme_bridge::hex_to_color(provider_hex(&pv.quota.provider))
@@ -270,6 +278,35 @@ mod tests {
         assert_eq!(dim, to_ratatui(ColorToken::Muted));
 
         assert_ne!(visible, dim);
+    }
+
+    #[test]
+    fn critical_quota_static_when_animations_off() {
+        // spec §8: animations=false desativa TUDO — o blink crítico da
+        // sidebar precisa respeitar o mesmo gate do pulso dos gauges
+        // (dashboard.rs/detail.rs). Cor estática Red (não Muted: o
+        // crítico não pode sumir só porque a animação está off).
+        let mut state = AppState::new();
+        state.providers = vec![make_provider("claude", "Claude", 5.0)];
+        state.animations = false;
+
+        state.anim_frame = 0;
+        let frame0 = item_color(&state, SidebarItem::Provider(0));
+        state.anim_frame = 15;
+        let frame15 = item_color(&state, SidebarItem::Provider(0));
+
+        assert_eq!(frame0, to_ratatui(ColorToken::Red));
+        assert_eq!(frame15, to_ratatui(ColorToken::Red));
+        assert_eq!(frame0, frame15, "sem animação, a cor não pode variar");
+
+        // Com animations=true (comportamento atual), os frames continuam
+        // diferentes — não quebrar o blink existente.
+        state.animations = true;
+        state.anim_frame = 0;
+        let anim_frame0 = item_color(&state, SidebarItem::Provider(0));
+        state.anim_frame = 15;
+        let anim_frame15 = item_color(&state, SidebarItem::Provider(0));
+        assert_ne!(anim_frame0, anim_frame15);
     }
 
     #[test]
