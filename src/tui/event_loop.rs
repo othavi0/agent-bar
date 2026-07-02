@@ -210,7 +210,12 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
             }
 
             _ = data_tick.tick() => {
-                super::fetch::spawn_fetch(&bg_tx, octx.clone(), None);
+                // Guard igual ao Refresh: nao dispara uma 2a onda de fetch se
+                // a anterior ainda estiver em voo (evita ondas sobrepostas
+                // corromperem fetch_pending/status/last_update).
+                if state.fetch_pending.is_empty() {
+                    super::fetch::spawn_fetch(&bg_tx, octx.clone(), None);
+                }
             }
 
             bg = bg_rx.recv() => {

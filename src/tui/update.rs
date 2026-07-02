@@ -325,7 +325,15 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
 
         Action::FetchStarted(ids) => {
             state.status = FetchStatus::Loading;
-            state.fetch_pending = ids;
+            // Uniao sem duplicatas (nao overwrite): ondas de fetch podem se
+            // sobrepor (Refresh/tick de 60s disparados enquanto uma onda
+            // anterior ainda resolve). Se um id ja esta pendente, a propria
+            // onda em voo vai resolve-lo de novo — nao precisa re-adicionar.
+            for id in ids {
+                if !state.fetch_pending.contains(&id) {
+                    state.fetch_pending.push(id);
+                }
+            }
             vec![]
         }
 
@@ -343,14 +351,25 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::FetchCompleted { fetched_at } => {
-            state.fetch_pending.clear();
-            state.status = FetchStatus::Loaded;
-            // Mesmo parse de timestamp usado pelo antigo DataFetched.
-            state.last_update = time::OffsetDateTime::parse(
+            // NAO limpa fetch_pending incondicionalmente: cada ProviderFetched
+            // ja remove o proprio id. Se sobrar algo aqui, e porque outra onda
+            // (Refresh/tick de 60s) ainda esta em voo — mantem Loading em vez
+            // de regredir pra Loaded (a onda que sobrar completa depois).
+            //
+            // Mesmo parse de timestamp usado pelo antigo DataFetched, mas
+            // nunca regride: fica o mais recente entre o atual e o parseado
+            // (ondas sobrepostas podem terminar fora de ordem).
+            let parsed = time::OffsetDateTime::parse(
                 &fetched_at,
                 &time::format_description::well_known::Rfc3339,
             )
             .ok();
+            if let Some(new) = parsed {
+                state.last_update = Some(state.last_update.map_or(new, |cur| cur.max(new)));
+            }
+            if state.fetch_pending.is_empty() {
+                state.status = FetchStatus::Loaded;
+            }
             // Clamp selection if providers list shrank.
             if !state.providers.is_empty() && state.selected >= state.providers.len() {
                 state.selected = state.providers.len() - 1;
@@ -361,6 +380,13 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         Action::ReloadUsage => vec![], // interceptada no event_loop; no update e no-op
 
         Action::FetchFailed(msg) => {
+            // Estreitado pela Task 5: so cobre erro de RUNTIME da thread de
+            // `spawn_fetch` (ex. falha ao construir o tokio Builder) — erros
+            // de provider (rede/parse/auth) viajam embutidos no
+            // ProviderQuota.error e chegam via ProviderFetched, nunca aqui.
+            // Limpa fetch_pending: senao a thread morta deixa o spinner
+            // girando pra sempre (nenhum ProviderFetched vai chegar).
+            state.fetch_pending.clear();
             state.status = FetchStatus::Failed(msg);
             vec![]
         }
@@ -641,6 +667,35 @@ mod tests {
     }
 
     #[test]
+    fn fetch_started_unions_without_duplicating_across_overlapping_waves() {
+        // Onda 1 (tick de 60s) resolve so "claude"; antes dela terminar, uma
+        // onda 2 (Refresh) comeca com "claude" (de novo) + "codex". O
+        // fetch_pending resultante deve ter cada id 1x, nao duplicado.
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        update(&mut state, Action::ProviderFetched(Box::new(test_quota("claude", 50.0))));
+        // "claude" ja saiu do pending; "amp" ainda esta em voo quando a onda 2 comeca.
+        assert_eq!(state.fetch_pending, vec!["amp".to_string()]);
+
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "codex".into()]),
+        );
+
+        // "amp" (da onda 1) + "claude"/"codex" (da onda 2), sem duplicar "amp".
+        let mut pending = state.fetch_pending.clone();
+        pending.sort();
+        assert_eq!(
+            pending,
+            vec!["amp".to_string(), "claude".to_string(), "codex".to_string()]
+        );
+        assert_eq!(state.status, FetchStatus::Loading);
+    }
+
+    #[test]
     fn provider_fetched_merges_by_id_and_clears_pending() {
         let mut state = AppState::new();
         update(&mut state, Action::FetchStarted(vec!["claude".into()]));
@@ -671,6 +726,101 @@ mod tests {
         assert_eq!(state.status, FetchStatus::Loaded);
         assert!(state.last_update.is_some());
         assert!(matches!(fu.as_slice(), [Action::ReloadUsage]));
+    }
+
+    #[test]
+    fn fetch_completed_with_pending_from_another_wave_stays_loading() {
+        // Onda 1 ("claude"+"amp") e onda 2 ("codex") se sobrepoem. A onda 1
+        // termina primeiro (FetchCompleted) mas "codex" (da onda 2) ainda
+        // esta em voo: status deve permanecer Loading, e o pending restante
+        // NAO pode ser apagado (senao a onda 2 nunca fecha o loop).
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        update(&mut state, Action::ProviderFetched(Box::new(test_quota("claude", 80.0))));
+        update(&mut state, Action::ProviderFetched(Box::new(test_quota("amp", 60.0))));
+        // Onda 2 comeca antes da onda 1 completar.
+        update(&mut state, Action::FetchStarted(vec!["codex".into()]));
+
+        let fu = update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+            },
+        );
+
+        assert_eq!(
+            state.status,
+            FetchStatus::Loading,
+            "status deve permanecer Loading — a onda 2 (codex) ainda esta em voo"
+        );
+        assert_eq!(
+            state.fetch_pending,
+            vec!["codex".to_string()],
+            "pending da onda 2 nao pode ser apagado pelo FetchCompleted da onda 1"
+        );
+        assert!(matches!(fu.as_slice(), [Action::ReloadUsage]));
+    }
+
+    #[test]
+    fn fetch_completed_never_regresses_last_update() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+            },
+        );
+        let after_first = state.last_update;
+        assert!(after_first.is_some());
+
+        // Uma 2a onda (mais lenta) termina com um fetched_at MAIS ANTIGO
+        // (ex.: comecou antes, mas so completou depois) — last_update nao
+        // pode regredir.
+        update(&mut state, Action::FetchStarted(vec!["amp".into()]));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("amp", 60.0))),
+        );
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T17:00:00.000Z".into(), // 1h antes
+            },
+        );
+
+        assert_eq!(
+            state.last_update, after_first,
+            "last_update nao deve regredir para um fetched_at mais antigo"
+        );
+    }
+
+    #[test]
+    fn fetch_failed_clears_pending() {
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        assert!(!state.fetch_pending.is_empty());
+
+        update(&mut state, Action::FetchFailed("fetch runtime: boom".into()));
+
+        assert!(
+            state.fetch_pending.is_empty(),
+            "FetchFailed deve limpar fetch_pending (senao o spinner gira pra sempre)"
+        );
+        assert_eq!(
+            state.status,
+            FetchStatus::Failed("fetch runtime: boom".to_string())
+        );
     }
 
     #[test]
