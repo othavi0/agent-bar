@@ -60,6 +60,9 @@ pub enum Action {
     LoginRequested(String),
     /// Feedback do resultado do login (exibido como status na aba).
     LoginResult(Result<(), String>),
+    /// Login terminou (IO ja concluido pelo event_loop). Interceptada no
+    /// drain para disparar refetch do provider, sem re-entrar no update.
+    LoginFinished(String),
     /// Abre/fecha o overlay de ajuda (atalhos de teclado).
     ToggleHelp,
 }

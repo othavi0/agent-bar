@@ -478,16 +478,16 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::SaveConfig => {
-            // Sinaliza ao event_loop que deve persistir as edit_settings.
-            // O update e puro, nao faz IO.
+            // Sinaliza pending_save: o event_loop pinta "Salvando..." no
+            // frame atual e SO ENTAO faz o IO (persist + reload Waybar) no
+            // topo do proximo loop. O update e puro, nao faz IO.
             if state.config_state.is_some() {
                 if let Some(cs) = state.config_state.as_mut() {
                     cs.status_msg = Some("Salvando...".to_string());
                 }
-                vec![Action::SaveConfig] // re-enfileira; event_loop intercepta
-            } else {
-                vec![]
+                state.pending_save = true;
             }
+            vec![]
         }
 
         Action::ConfigSaveResult(result) => {
@@ -519,18 +519,28 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::LoginRequested(id) => {
-            // Puro: sinaliza ao event_loop para executar o IO (RealLogin).
-            // O event_loop intercepta e chama RealLogin::launch(id).
+            // Puro: sinaliza pending_login. O event_loop pinta o status no
+            // frame atual e SO ENTAO suspende o terminal para o CLI de login
+            // (fix: "Abrindo login..." nunca era pintado antes desta task).
             state.login_status = Some(format!("Abrindo login para {}...", id));
-            vec![Action::LoginRequested(id)]
+            state.pending_login = Some(id);
+            vec![]
         }
 
         Action::LoginResult(result) => {
             state.login_status = Some(match result {
-                Ok(()) => "Login concluido. Pressione [r] para atualizar.".to_string(),
+                // Refetch agora e automatico (LoginFinished), sem precisar de [r].
+                Ok(()) => "Login concluido. Atualizando quota...".to_string(),
                 Err(e) => format!("Erro no login: {e}"),
             });
             vec![]
+        }
+
+        Action::LoginFinished(id) => {
+            // Re-enfileira UMA vez para o event_loop interceptar (mesmo
+            // padrao de Refresh/ReloadUsage): o drain chama spawn_fetch(only)
+            // direto, sem re-entrar no update com esta action.
+            vec![Action::LoginFinished(id)]
         }
 
         Action::HistoryLoaded(records) => {
@@ -1101,17 +1111,38 @@ mod tests {
     }
 
     #[test]
-    fn save_config_returns_save_config_action_and_sets_status() {
+    fn save_config_sets_pending_save_and_status() {
         let mut state = AppState::new();
         update(&mut state, Action::InitConfig(fake_settings()));
 
         let follow_ups = update(&mut state, Action::SaveConfig);
-        // Deve re-enfileirar SaveConfig para o event_loop interceptar
-        let has_save_config = follow_ups.iter().any(|a| matches!(a, Action::SaveConfig));
-        assert!(has_save_config, "SaveConfig deve ser re-enfileirado");
+        // Nao re-enfileira mais: o event_loop le pending_save no topo do loop.
+        assert!(follow_ups.is_empty());
+        assert!(state.pending_save, "pending_save deve ser sinalizado");
         // Status msg deve ser "Salvando..."
         let msg = state.config_state.as_ref().unwrap().status_msg.as_deref();
         assert_eq!(msg, Some("Salvando..."));
+    }
+
+    // ---- Aba Login ----
+
+    #[test]
+    fn login_requested_sets_pending_and_status() {
+        let mut state = AppState::new();
+        let fu = update(&mut state, Action::LoginRequested("codex".into()));
+        assert!(fu.is_empty()); // nao re-enfileira mais: o event_loop le pending_login
+        assert_eq!(state.pending_login.as_deref(), Some("codex"));
+        assert!(state.login_status.as_deref().unwrap_or("").contains("codex"));
+    }
+
+    #[test]
+    fn login_finished_success_requests_single_refetch() {
+        let mut state = AppState::new();
+        let fu = update(&mut state, Action::LoginFinished("codex".into()));
+        // O drain intercepta esta action diretamente (spawn_fetch(only=Some(id)))
+        // sem re-entrar no update — nao ha guard anti-loop porque o update
+        // nunca ve esta action de volta.
+        assert!(matches!(fu.as_slice(), [Action::LoginFinished(id)] if id == "codex"));
     }
 
     // ---- Refresh (tecla [r]) ----

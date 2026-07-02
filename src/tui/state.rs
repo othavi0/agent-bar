@@ -194,6 +194,11 @@ pub struct AppState {
     /// Ids de provider com fetch em voo (Task 5). Populado por `FetchStarted`,
     /// esvaziado incrementalmente por `ProviderFetched`/`FetchCompleted`.
     pub fetch_pending: Vec<String>,
+    /// Login pendente: o event_loop desenha 1 frame com o status e entao
+    /// suspende o terminal para o CLI de login.
+    pub pending_login: Option<String>,
+    /// Save pendente: mesmo padrao (frame "Salvando..." antes do IO).
+    pub pending_save: bool,
 }
 
 impl AppState {
@@ -216,6 +221,8 @@ impl AppState {
             history: None,
             show_help: false,
             fetch_pending: Vec::new(),
+            pending_login: None,
+            pending_save: false,
         }
     }
 }

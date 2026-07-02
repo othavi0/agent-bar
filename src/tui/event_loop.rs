@@ -111,16 +111,19 @@ fn handle_save_config(state: &mut AppState, octx: &OwnedCtx) {
 }
 
 /// Executa o login de um provider (IO): suspende o terminal, spawna o CLI,
-/// restaura o terminal, e despacha LoginResult com o resultado.
+/// restaura o terminal, e despacha LoginResult com o resultado. Chamado do
+/// event_loop quando pending_login e consumido (nao e puro — faz IO).
 fn handle_login(state: &mut AppState, provider_id: String) {
     use crate::tui::login_spawn::ProviderLogin as _;
     let login = RealLogin;
     let result = login.launch(&provider_id).map_err(|e| e.to_string());
-    update(state, Action::LoginResult(result));
+    for a in update(state, Action::LoginResult(result)) {
+        update(state, a);
+    }
 }
 
 /// Despacha todas as follow-up actions retornadas por update (1 nivel de profundidade).
-/// SaveConfig, LoginRequested, ReloadUsage e Refresh sao interceptados aqui para IO.
+/// InitConfig, ReloadUsage, Refresh e LoginFinished sao interceptados aqui para IO.
 fn drain(
     state: &mut AppState,
     octx: &OwnedCtx,
@@ -135,14 +138,6 @@ fn drain(
                     update(state, sub);
                 }
             }
-            // SaveConfig e interceptado: nao re-entra no update, faz IO aqui.
-            Action::SaveConfig => {
-                handle_save_config(state, octx);
-            }
-            // LoginRequested e interceptado: nao re-entra no update, faz IO aqui.
-            Action::LoginRequested(id) => {
-                handle_login(state, id);
-            }
             // ReloadUsage e interceptado: redispara o parse de usage em background.
             Action::ReloadUsage => {
                 spawn_usage_load(bg_tx, octx, state);
@@ -152,6 +147,12 @@ fn drain(
             // ha fetch em voo (evita spawn_fetch duplicado).
             Action::Refresh => {
                 super::fetch::spawn_fetch(bg_tx, octx.clone(), None);
+            }
+            // LoginFinished e interceptado: refetch so do provider que fez
+            // login (nao passa por Refresh — o guard de fetch_pending
+            // poderia engolir o refetch se uma onda cheia estiver em voo).
+            Action::LoginFinished(id) => {
+                super::fetch::spawn_fetch(bg_tx, octx.clone(), Some(id));
             }
             other => {
                 update(state, other);
@@ -184,6 +185,21 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
 
     loop {
         terminal.draw(|f| render(&state, f))?;
+
+        // IO pendente que exige frame previo: o draw acima ja pintou o
+        // status ("Abrindo login para X..." / "Salvando...") antes de
+        // suspender o terminal ou bloquear em IO (fix desta task).
+        if let Some(id) = state.pending_login.take() {
+            handle_login(&mut state, id.clone());
+            let follow_ups = update(&mut state, Action::LoginFinished(id));
+            drain(&mut state, &octx, &bg_tx, follow_ups);
+            continue;
+        }
+        if state.pending_save {
+            state.pending_save = false;
+            handle_save_config(&mut state, &octx);
+            continue;
+        }
 
         if state.should_quit {
             break;
