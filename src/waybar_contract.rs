@@ -421,31 +421,19 @@ pub fn get_default_waybar_asset_paths() -> WaybarAssetPaths {
 // resolve_asset_source_root
 // ---------------------------------------------------------------------------
 
-/// Resolve o diretório de dados de uma instalação standalone (curl|bash),
-/// mesma convenção do `install.sh`: `AGENT_BAR_DATA` env é usado *como está*
-/// (é o diretório final, não um pai); senão cai pra
-/// `${XDG_DATA_HOME:-~/.local/share}/agent-bar` (fallback extra via XDG,
-/// que o `install.sh` não tem — só `AGENT_BAR_DATA`/`$HOME` fixo).
-/// `None` se não houver candidato construível (nem env, nem `HOME`).
+/// Resolve o diretório de dados de uma instalação standalone (curl|bash).
+/// A decisão `XDG_DATA_HOME` vs `<home>/.local/share` (a parte que causava
+/// split-brain com `update::default_data_dir` — hotfix 7.0.1) é delegada pra
+/// `config::agent_bar_data_dir`, canônica pros dois. O short-circuit de
+/// `AGENT_BAR_DATA` fica duplicado aqui de propósito: não precisa de `HOME`
+/// pra resolver, então checamos antes de exigi-lo (`None` só quando nem
+/// `AGENT_BAR_DATA` nem `HOME` estão disponíveis).
 fn standalone_data_asset_dir() -> Option<PathBuf> {
     if let Some(v) = std::env::var_os("AGENT_BAR_DATA").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(v));
     }
-
-    let data_home = std::env::var_os("XDG_DATA_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute());
-
-    let data_home = match data_home {
-        Some(p) => p,
-        None => {
-            let home = std::env::var_os("HOME").filter(|v| !v.is_empty())?;
-            PathBuf::from(home).join(".local").join("share")
-        }
-    };
-
-    Some(data_home.join(APP_NAME))
+    let home = std::env::var_os("HOME").filter(|v| !v.is_empty())?;
+    Some(crate::config::agent_bar_data_dir(&PathBuf::from(home)))
 }
 
 /// Resolve o diretório raiz que contém `icons/` e `scripts/` de origem.
@@ -774,6 +762,31 @@ mod tests {
                     .join("share")
                     .join(APP_NAME);
                 assert_eq!(standalone_data_asset_dir(), Some(expected));
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn standalone_data_dir_matches_update_default_data_dir_with_xdg_set() {
+        // Hotfix 7.0.1 (fix(paths)): standalone_data_asset_dir (setup) e
+        // update::default_data_dir (self-update) tinham que resolver pro
+        // MESMO diretório — antes divergiam porque só um respeitava
+        // XDG_DATA_HOME. Não mexe em $HOME real (evita flake em testes
+        // não-serial de outros módulos que leem HOME concorrentemente);
+        // como XDG_DATA_HOME é setado aqui, ele domina de qualquer forma.
+        let real_home = std::env::var_os("HOME").expect("HOME must be set in test env");
+        let home_path = PathBuf::from(&real_home);
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", Some("/xdg/data")),
+            ],
+            || {
+                let from_setup = standalone_data_asset_dir().unwrap();
+                let from_update = crate::update::default_data_dir(&home_path);
+                assert_eq!(from_setup, from_update);
+                assert_eq!(from_setup, PathBuf::from("/xdg/data/agent-bar"));
             },
         );
     }

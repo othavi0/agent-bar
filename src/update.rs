@@ -477,11 +477,12 @@ fn asset_filename(ver_bare: &str) -> String {
 }
 
 /// Diretório de dados (`icons/`, `scripts/`) usado pelo `install.sh`.
-/// `AGENT_BAR_DATA` env override, senão `<home>/.local/share/agent-bar`.
+/// Resolução canônica em `config::agent_bar_data_dir` — compartilhada com
+/// `waybar_contract::standalone_data_asset_dir` (hotfix 7.0.1: as duas
+/// resolviam essa pasta de jeitos diferentes, split-brain pra quem setasse
+/// só `XDG_DATA_HOME`).
 pub fn default_data_dir(home: &Path) -> PathBuf {
-    std::env::var_os("AGENT_BAR_DATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".local/share/agent-bar"))
+    crate::config::agent_bar_data_dir(home)
 }
 
 async fn download_file(client: &reqwest::Client, url: &str, dest: &Path) -> anyhow::Result<()> {
@@ -1127,12 +1128,41 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn default_data_dir_falls_back_to_home() {
-        temp_env::with_var("AGENT_BAR_DATA", None::<&str>, || {
-            assert_eq!(
-                default_data_dir(Path::new("/home/test")),
-                PathBuf::from("/home/test/.local/share/agent-bar")
-            );
-        });
+        // XDG_DATA_HOME explicitamente unset — a máquina de dev real quase
+        // sempre tem esse env setado (gotcha do repo: XDG_* precisa ser
+        // controlado explicitamente em teste, nunca assumido ausente).
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", None::<&str>),
+            ],
+            || {
+                assert_eq!(
+                    default_data_dir(Path::new("/home/test")),
+                    PathBuf::from("/home/test/.local/share/agent-bar")
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn default_data_dir_honors_xdg_data_home() {
+        // Hotfix 7.0.1 (fix(paths)): antes `default_data_dir` ignorava
+        // XDG_DATA_HOME por completo — split-brain com
+        // `waybar_contract::standalone_data_asset_dir`, que já o respeitava.
+        temp_env::with_vars(
+            [
+                ("AGENT_BAR_DATA", None::<&str>),
+                ("XDG_DATA_HOME", Some("/xdg/data")),
+            ],
+            || {
+                assert_eq!(
+                    default_data_dir(Path::new("/home/test")),
+                    PathBuf::from("/xdg/data/agent-bar")
+                );
+            },
+        );
     }
 
     #[test]
