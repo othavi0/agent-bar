@@ -353,6 +353,13 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::Back => {
+            // Mesma regra do braço Activate: mudança de tela zera o scroll
+            // (compartilhado entre Overview/History) — só quando a screen
+            // de fato muda, senão Esc numa tela que já é Overview zeraria
+            // o scroll do usuário à toa.
+            if state.screen != Screen::Overview {
+                state.scroll = 0;
+            }
             state.screen = Screen::Overview;
             vec![]
         }
@@ -881,6 +888,19 @@ mod tests {
             state.scroll, 5,
             "reativar a tela ja ativa nao deve reset o scroll"
         );
+    }
+
+    #[test]
+    fn back_resets_scroll() {
+        // Mesmo gap do Activate (state.scroll compartilhado entre telas):
+        // Esc a partir de History tambem tem que zerar o scroll ao voltar
+        // pro Overview, senao o offset de uma tela vaza pra outra.
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.scroll = 5;
+        update(&mut state, Action::Back);
+        assert_eq!(state.screen, Screen::Overview);
+        assert_eq!(state.scroll, 0, "Esc pra outra tela deve zerar o scroll");
     }
 
     #[test]
