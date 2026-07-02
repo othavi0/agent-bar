@@ -29,6 +29,13 @@ pub struct RealLogin;
 
 impl ProviderLogin for RealLogin {
     fn launch(&self, provider_id: &str) -> anyhow::Result<()> {
+        // Desabilita a captura de mouse (Task 9) antes de devolver o terminal
+        // ao CLI externo — senao o CLI de login herdaria cliques como escape
+        // sequences no seu proprio stdin.
+        let _ = ratatui::crossterm::execute!(
+            std::io::stdout(),
+            ratatui::crossterm::event::DisableMouseCapture
+        );
         // Restaura o terminal antes de entregar o controle ao CLI externo.
         ratatui::restore();
 
@@ -38,6 +45,11 @@ impl ProviderLogin for RealLogin {
         match ratatui::try_init() {
             Ok(mut t) => {
                 let _ = t.clear();
+                // Reabilita a captura de mouse ao retomar a TUI.
+                let _ = ratatui::crossterm::execute!(
+                    std::io::stdout(),
+                    ratatui::crossterm::event::EnableMouseCapture
+                );
             }
             Err(e) => {
                 log::warn!("falha ao re-inicializar terminal apos login: {e}");

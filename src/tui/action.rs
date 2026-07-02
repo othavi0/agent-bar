@@ -4,6 +4,7 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::Settings;
 use crate::usage::{UsageRecord, UsageSummary};
 
+use super::mouse::MouseTarget;
 use super::state::SidebarItem;
 
 #[derive(Debug)]
@@ -68,4 +69,11 @@ pub enum Action {
     LoginFinished(String),
     /// Abre/fecha o overlay de ajuda (atalhos de teclado).
     ToggleHelp,
+    // --- Mouse (Task 9) ---
+    /// Clique esquerdo num alvo do HitMap (sidebar/card/chip).
+    Click(MouseTarget),
+    /// Mouse moveu; alvo do HitMap sob o cursor (None se fora de qualquer zona).
+    Hover(Option<MouseTarget>),
+    /// Roda do mouse: delta positivo desce, negativo sobe. Satura em 0 no update.
+    Scroll(i32),
 }

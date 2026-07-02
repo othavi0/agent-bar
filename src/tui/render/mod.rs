@@ -5,7 +5,7 @@ pub mod history;
 pub mod login;
 pub mod status_bar;
 
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem};
@@ -14,6 +14,7 @@ use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 use tui_popup::Popup;
 
 use crate::theme::ColorToken;
+use crate::tui::mouse::{HitMap, MouseTarget};
 use crate::tui::state::{AppState, FetchStatus, Screen};
 use crate::tui::theme_bridge::to_ratatui;
 use crate::tui::widgets::provider_list::provider_list_item;
@@ -209,7 +210,13 @@ fn help_text() -> Text<'static> {
 }
 
 /// Top-level render: lays out the full TUI and dispatches to sub-renders.
-pub fn render(state: &AppState, frame: &mut Frame) {
+///
+/// `hits` acumula as zonas clicaveis do frame atual (Task 9) — o event_loop
+/// consulta via `HitMap::at` ao processar `MouseEvent`. O caller e
+/// responsavel por `hits.clear()` antes de cada `terminal.draw` (render nao
+/// limpa sozinho: um HitMap vazio silenciosamente sem clear acumularia
+/// zonas obsoletas de frames anteriores).
+pub fn render(state: &AppState, frame: &mut Frame, hits: &mut HitMap) {
     let area = frame.area();
 
     // Vertical split: [body (fill), status_bar (1)]. Sem tab bar — navegacao
@@ -222,7 +229,7 @@ pub fn render(state: &AppState, frame: &mut Frame) {
     let body_area = vert[0];
     let status_area = vert[1];
 
-    render_body(state, frame, body_area);
+    render_body(state, frame, body_area, hits);
     render_status_bar(state, frame, status_area);
 
     // Overlay de ajuda: renderizado por cima de tudo quando show_help=true.
@@ -244,7 +251,7 @@ pub fn render(state: &AppState, frame: &mut Frame) {
 }
 
 /// Renders the body: sidebar (providers) + content panel.
-fn render_body(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
+fn render_body(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     // Horizontal split: [sidebar (17), content (fill)]
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
@@ -254,12 +261,19 @@ fn render_body(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect)
     let sidebar_area = horiz[0];
     let content_area = horiz[1];
 
-    render_sidebar(state, frame, sidebar_area);
+    render_sidebar(state, frame, sidebar_area, hits);
     render_content(state, frame, content_area);
 }
 
 /// Renders the provider sidebar.
-fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Rect) {
+///
+/// Registra no HitMap uma zona por linha visivel do painel PROVIDERS (Task
+/// 9). A sidebar visual atual so lista providers (nao Overview/History/
+/// Login/Waybar — isso e o redesign da Task 10); o indice logico registrado
+/// e `sidebar_items()[i+1]` (o item na posicao `i+1` porque `Overview`
+/// ocupa a posicao 0 sem ter uma linha propria hoje), consistente com o
+/// espaco de indices que `Action::Click(MouseTarget::Sidebar(_))` consome.
+fn render_sidebar(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     // Sidebar sempre em foco (nao ha mais painel de conteudo com foco
     // proprio nesta versao minima — Task 10 redesenha o layout completo).
     let border_color = to_ratatui(ColorToken::Blue);
@@ -273,6 +287,10 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(border_color))
         .title(Span::styled("PROVIDERS", title_style));
+
+    // Area interna (sem as bordas) — usada abaixo para calcular a linha de
+    // cada zona clicavel. Calculado ANTES de `block` ser movido pro `List`.
+    let inner = block.inner(area);
 
     // Animação D (pulse crítico): blink lento ~450ms.
     // 30ms/tick → 450ms = 15 ticks. Visível nos primeiros 7-8 ticks, dim nos seguintes.
@@ -337,6 +355,21 @@ fn render_sidebar(state: &AppState, frame: &mut Frame, area: ratatui::layout::Re
 
         v
     };
+
+    // Zonas clicaveis: uma por linha de provider visivel (a lista nao tem
+    // scroll — itens alem de `inner.height` sao clipados pelo widget e nao
+    // ficam clicaveis). A linha da throbber/err (acima) nao registra zona:
+    // nao tem MouseTarget correspondente ainda.
+    for (i, _) in state.providers.iter().enumerate() {
+        if (i as u16) >= inner.height {
+            break;
+        }
+        let row = Rect::new(inner.x, inner.y + i as u16, inner.width, 1);
+        // sidebar_items() = [Overview, Provider(0), Provider(1), ..., History,
+        // Login, Waybar]; a linha visual `i` do provider corresponde ao
+        // indice logico `i + 1` (Overview ocupa o indice 0 sem linha propria).
+        hits.push(row, MouseTarget::Sidebar(i + 1));
+    }
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
@@ -472,7 +505,9 @@ mod tests {
             ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
         ];
         state.status = FetchStatus::Loaded;
-        terminal.draw(|f| render(&state, f)).unwrap();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
 
@@ -498,7 +533,9 @@ mod tests {
         ];
         state.status = FetchStatus::Loaded;
         state.usage = Some(fake_usage());
-        terminal.draw(|f| render(&state, f)).unwrap();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
 
@@ -525,7 +562,9 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.show_help = true;
-        terminal.draw(|f| render(&state, f)).unwrap();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
 
@@ -551,7 +590,33 @@ mod tests {
         ];
         state.status = FetchStatus::Loaded;
         state.usage = Some(fake_usage());
-        terminal.draw(|f| render(&state, f)).unwrap();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn render_registers_sidebar_hit_zones() {
+        let backend = ratatui::backend::TestBackend::new(64, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![
+            ProviderView::new(make_quota("claude", "Claude", 26.0, None)),
+            ProviderView::new(make_quota("codex", "Codex", 1.0, None)),
+        ];
+        state.status = FetchStatus::Loaded;
+        let mut hits = HitMap::default();
+        terminal.draw(|f| render(&state, f, &mut hits)).unwrap();
+
+        // Sidebar: x=0, largura 17, borda ALL -> inner comeca em (1,1).
+        // Linha visual 0 (claude) = indice logico 1 (Overview ocupa 0).
+        assert_eq!(hits.at(1, 1), Some(MouseTarget::Sidebar(1)));
+        // Linha visual 1 (codex) = indice logico 2.
+        assert_eq!(hits.at(1, 2), Some(MouseTarget::Sidebar(2)));
+        // Sem 3o provider — nao ha zona ali.
+        assert_eq!(hits.at(1, 3), None);
+        // Fora da sidebar inteiramente (coluna do content_area).
+        assert_eq!(hits.at(30, 1), None);
     }
 }

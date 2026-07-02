@@ -1,6 +1,7 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use super::action::Action;
+use super::mouse::{ChipKind, MouseTarget};
 use super::state::{
     sidebar_items, AppState, ConfigField, ConfigState, FetchStatus, ProviderView, Screen,
     SidebarItem,
@@ -603,6 +604,54 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             state.throbber.advance();
             // Animação D (pulse): contador de frames para blink do ● crítico.
             state.anim_frame = state.anim_frame.wrapping_add(1);
+            vec![]
+        }
+
+        // --- Mouse (Task 9) ---
+        // Recursa via update() em vez de so devolver a action mapeada como
+        // follow-up (mesmo padrao de Action::Key/Action::OpenDetail acima):
+        // aplica o efeito NA HORA. Alem de manter clique e teclado simetricos
+        // (ex. o Refresh clicado passa pelo MESMO guard anti-fetch-duplicado
+        // que o Refresh da tecla [r] — devolver a action crua ignoraria o
+        // guard, ja que drain() intercepta Action::Refresh direto sem
+        // reentrar no update), a sincronicidade e o que os testes observam.
+        Action::Click(target) => match target {
+            MouseTarget::Sidebar(i) => {
+                // sidebar_items() e a unica fonte de verdade dos indices validos
+                // (SelectSidebar nao tem bounds-check); ignora i fora de faixa em
+                // vez de deixar sidebar_selected apontando pra um item inexistente.
+                let items = sidebar_items(state.providers.len());
+                match items.get(i).copied() {
+                    Some(item) => {
+                        state.sidebar_selected = i;
+                        update(state, Action::Activate(item))
+                    }
+                    None => vec![],
+                }
+            }
+            MouseTarget::Card(i) => update(state, Action::Activate(SidebarItem::Provider(i))),
+            MouseTarget::Chip(ChipKind::Open) => update(state, Action::OpenDetail),
+            MouseTarget::Chip(ChipKind::Refresh) => update(state, Action::Refresh),
+            MouseTarget::Chip(ChipKind::Help) => update(state, Action::ToggleHelp),
+            MouseTarget::Chip(ChipKind::Quit) => update(state, Action::Quit),
+            MouseTarget::Chip(ChipKind::Back) => update(state, Action::Back),
+            MouseTarget::Chip(ChipKind::Login) => {
+                update(state, Action::Activate(SidebarItem::Login))
+            }
+            MouseTarget::Chip(ChipKind::History) => {
+                update(state, Action::Activate(SidebarItem::History))
+            }
+        },
+
+        Action::Hover(t) => {
+            state.hover = t;
+            vec![]
+        }
+
+        Action::Scroll(delta) => {
+            // saturating_add_signed ja satura em 0 (limite inferior de u16) —
+            // .max(0) e redundante (clippy::unnecessary_min_or_max).
+            state.scroll = state.scroll.saturating_add_signed(delta as i16);
             vec![]
         }
     }
@@ -1292,5 +1341,44 @@ mod tests {
             fu.is_empty(),
             "Refresh deve ser no-op quando ja ha fetch em voo (evita duplicar spawn_fetch)"
         );
+    }
+
+    // ---- Mouse (Task 9) ----
+
+    #[test]
+    fn click_sidebar_selects_and_activates() {
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
+        update(&mut state, Action::Click(MouseTarget::Sidebar(1)));
+        assert_eq!(state.sidebar_selected, 1);
+        assert_eq!(state.screen, Screen::Detail); // Provider(0) ativado
+    }
+
+    #[test]
+    fn click_sidebar_out_of_range_is_noop() {
+        // sidebar_items(0) = [Overview, History, Login, Waybar] (4 itens, indices 0..=3).
+        let mut state = AppState::new();
+        let fu = update(&mut state, Action::Click(MouseTarget::Sidebar(99)));
+        assert_eq!(
+            state.sidebar_selected, 0,
+            "indice fora de faixa e ignorado — cursor nao se move"
+        );
+        assert!(
+            fu.is_empty(),
+            "indice fora de sidebar_items() nao deve gerar Activate"
+        );
+        assert_eq!(state.screen, Screen::Overview, "tela nao muda sem Activate");
+    }
+
+    #[test]
+    fn hover_and_scroll_update_state() {
+        let mut state = AppState::new();
+        update(&mut state, Action::Hover(Some(MouseTarget::Card(0))));
+        assert_eq!(state.hover, Some(MouseTarget::Card(0)));
+        state.scroll = 2;
+        update(&mut state, Action::Scroll(-1));
+        assert_eq!(state.scroll, 1);
+        update(&mut state, Action::Scroll(-5));
+        assert_eq!(state.scroll, 0); // saturating
     }
 }

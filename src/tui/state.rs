@@ -2,6 +2,8 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::Settings;
 use crate::usage::{UsageRecord, UsageSummary};
 
+use super::mouse::MouseTarget;
+
 /// Animação C: estado do throbber braille (índice do frame).
 /// Avança via `AnimTick` no `update`.
 #[derive(Debug, Clone, Default)]
@@ -194,6 +196,8 @@ pub struct AppState {
     pub pending_login: Option<String>,
     /// Save pendente: mesmo padrao (frame "Salvando..." antes do IO).
     pub pending_save: bool,
+    /// Alvo do HitMap sob o cursor do mouse (Task 9). None fora de qualquer zona.
+    pub hover: Option<MouseTarget>,
 }
 
 impl AppState {
@@ -218,6 +222,7 @@ impl AppState {
             fetch_pending: Vec::new(),
             pending_login: None,
             pending_save: false,
+            hover: None,
         }
     }
 }

@@ -248,6 +248,7 @@ mod tests {
     use indexmap::IndexMap;
 
     use crate::providers::types::{ProviderQuota, QuotaWindow};
+    use crate::tui::mouse::HitMap;
     use crate::tui::render::render;
     use crate::tui::state::{AppState, FetchStatus, ProviderView, Screen};
     use crate::usage::amp::AmpDollars;
@@ -372,7 +373,9 @@ mod tests {
         state.selected = 0;
         state.screen = Screen::Detail;
         state.status = FetchStatus::Loaded;
-        terminal.draw(|f| render(&state, f)).unwrap();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
 
@@ -386,7 +389,9 @@ mod tests {
         state.screen = Screen::Detail;
         state.status = FetchStatus::Loaded;
         state.usage = Some(fake_usage());
-        terminal.draw(|f| render(&state, f)).unwrap();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
 
@@ -400,7 +405,9 @@ mod tests {
         state.screen = Screen::Detail;
         state.status = FetchStatus::Loaded;
         state.usage = Some(fake_usage());
-        terminal.draw(|f| render(&state, f)).unwrap();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
         insta::assert_snapshot!(terminal.backend());
     }
 }

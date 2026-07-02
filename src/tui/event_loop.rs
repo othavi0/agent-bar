@@ -166,6 +166,9 @@ fn drain(
 /// — o `select!` NUNCA espera rede; teclas e animacao respondem durante o fetch.
 pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
     let mut state = AppState::new();
+    // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
+    // a cada `terminal.draw` (frames antigos nao devem vazar cliques).
+    let mut hits = super::mouse::HitMap::default();
 
     // Canal p/ os resultados do fetch e do parse de usage em background. Mantém o loop livre.
     let (bg_tx, mut bg_rx) = tokio::sync::mpsc::unbounded_channel::<Action>();
@@ -184,7 +187,10 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     super::fetch::spawn_fetch(&bg_tx, octx.clone(), None);
 
     loop {
-        terminal.draw(|f| render(&state, f))?;
+        terminal.draw(|f| {
+            hits.clear();
+            render(&state, f, &mut hits)
+        })?;
 
         // IO pendente que exige frame previo: o draw acima ja pintou o
         // status ("Abrindo login para X..." / "Salvando...") antes de
@@ -223,6 +229,21 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
                         }
                         let follow_ups = update(&mut state, Action::Key(*key));
                         drain(&mut state, &octx, &bg_tx, follow_ups);
+                    } else if let Event::Mouse(m) = &ev {
+                        use ratatui::crossterm::event::{MouseButton, MouseEventKind};
+                        let action = match m.kind {
+                            MouseEventKind::Down(MouseButton::Left) => {
+                                hits.at(m.column, m.row).map(Action::Click)
+                            }
+                            MouseEventKind::Moved => Some(Action::Hover(hits.at(m.column, m.row))),
+                            MouseEventKind::ScrollUp => Some(Action::Scroll(-1)),
+                            MouseEventKind::ScrollDown => Some(Action::Scroll(1)),
+                            _ => None,
+                        };
+                        if let Some(a) = action {
+                            let follow_ups = update(&mut state, a);
+                            drain(&mut state, &octx, &bg_tx, follow_ups);
+                        }
                     }
                 }
             }
