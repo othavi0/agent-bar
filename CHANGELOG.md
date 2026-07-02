@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-07-02
+
+Redesign completo da TUI do `agent-bar menu` (spec e plano em
+`docs/superpowers/`). O contrato Waybar (módulos, JSON, CSS, tooltips) está
+**intacto** — a mudança é toda no menu interativo.
+
+### Added
+- **Navegação por sidebar única** (Geral / providers / Histórico / Login /
+  Waybar) com drill-down por provider — as 4 abas antigas foram removidas.
+- **Suporte completo a mouse**: click seleciona/ativa (sidebar, cards, chips),
+  hover destaca, wheel rola (cards e tabela do histórico).
+- **Cobertura completa do `/usage` do Claude**: provider migrado pros blocos
+  novos `limits[]` + `spend` da API OAuth — sessão, semana, limite semanal
+  por-modelo (nome vindo da API) e extra usage/créditos, com severidade
+  oficial da API e fallback transparente pros campos legados.
+- **Tela Overview** com um card denso por provider: gauges com gradiente por
+  célula, sparkline real de tokens/h (24h), custo do dia e estado de login
+  confiável; estados desenhados pra deslogado/carregando/vazio.
+- **Tela Histórico** com chart braille de área (24h/7d via tecla `t`) e
+  tabela dia × provider × tokens × custo com scroll; linha do Amp com saldo
+  real e nota de ausência de logs locais.
+- **Bucketing horário** do histórico (`usage::buckets`) — gráficos com dado
+  real por hora em vez de 7 pontos diários esticados.
+- **Motion** gated por `menu.animations`: sweep no fetch iniciado pelo
+  usuário, coalesce na troca de tela, pulse/blink em quota crítica (<10%) e
+  count-up no custo (tachyonfx).
+- **Ícones Nerd Font** com fallback Unicode via `glyphMode`.
+- **Fonte configurável do menu**: `menu.fontFamily` (default "IBM Plex Mono")
+  e `menu.fontSize`, aplicadas pelo helper via flags do terminal
+  (alacritty/kitty/foot/ghostty); comando interno `agent-bar menu-font`.
+- Settings novas: `menu.animations`, `menu.fontFamily`, `menu.fontSize`.
+
+### Changed
+- **Fetch, login e save saíram do event loop**: a TUI nunca mais congela —
+  spinner e progresso por provider aparecem de verdade, teclas respondem
+  durante o fetch, e o refetch pós-login é automático.
+- **Estado de login derivado do fetch real** (5 estados, incluindo `erro`
+  distinto de `deslogado`) — fim do `[ok]` baseado em existência de arquivo.
+- **Cascata do helper de terminal** (`agent-bar-open-terminal`): honra
+  `$TERMINAL` (lança o terminal preferido com flags de fonte quando
+  suportado; desconhecido → caminho xdg); alacritty direto vem antes do
+  caminho uwsm/xdg pra aplicar fonte preservando o float do Hyprland.
+- **MSRV corrigida para 1.88** (piso real das dependências); dependências
+  novas: `tachyonfx`, `tui-scrollview`; `tui-popup` removida.
+- "pico HHh" e labels de eixo do histórico em hora local (antes UTC).
+
+### Fixed
+- **Tecla `r` (refresh) nunca funcionou** — setava "Loading" sem disparar
+  fetch; agora dispara refetch real (com guard contra fetch duplicado).
+- **Comando de login do Codex era inválido** (`codex auth login` não existe
+  na CLI; corrigido para `codex login`).
+- **Tela corrompida ao voltar do login** — repaint completo ressincroniza o
+  buffer do terminal.
+- **Help overlay corrompia a tabela por baixo** (texto vazando "pr"/"sto") —
+  área limpa com `Clear` antes do popup.
+- Sparkline "tokens/h" do detalhe era um placeholder hardcoded idêntico para
+  todos os providers — substituído por dado real por provider.
+- Nomes truncados com corte seco ("Free Tie") — truncagem com `…`.
+- Race de ondas de fetch sobrepostas corrompendo spinner/`last_update`.
+- `abbrev` de tokens estourava a fronteira de unidade ("1000.0K" → "1.0M").
+- Extra usage habilitado sem limite configurado renderizava gauge
+  autocontraditório ("$X de $0.00") — agora "usado · sem limite".
+
 ## [6.0.1] - 2026-06-21
 
 ### Fixed
