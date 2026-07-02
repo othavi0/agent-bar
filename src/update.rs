@@ -14,7 +14,6 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::bail;
 use serde_json::Value;
@@ -419,35 +418,6 @@ pub fn run_managed_update(opts: ManagedUpdateOptions<'_>) -> anyhow::Result<Mana
 // Standalone self-update (GitHub Releases) — substitui o caminho `Npm`
 // ---------------------------------------------------------------------------
 
-/// Diretório temporário próprio: evita promover `tempfile` de dev-dependency
-/// pra `[dependencies]` numa hotfix. Limpo via `Drop` (best-effort, como o
-/// `trap "rm -rf ..." EXIT` do `install.sh`).
-struct SelfUpdateTempDir(PathBuf);
-
-impl SelfUpdateTempDir {
-    fn new() -> anyhow::Result<Self> {
-        let pid = std::process::id();
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("agent-bar-selfupdate-{pid}-{nanos}"));
-        fs::create_dir_all(&dir)
-            .map_err(|e| anyhow::anyhow!("Failed to create tempdir {}: {e}", dir.display()))?;
-        Ok(Self(dir))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for SelfUpdateTempDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
 /// Extrai `tag_name` de um payload JSON de release do GitHub. Port do
 /// `grep '"tag_name"' | sed ...` do `install.sh`.
 fn parse_release_tag(body: &str) -> anyhow::Result<String> {
@@ -543,8 +513,15 @@ fn replace_binary_atomic(new_binary: &Path, target_exe: &Path) -> anyhow::Result
     let staging = target_exe.with_extension("new");
     fs::copy(new_binary, &staging)
         .map_err(|e| anyhow::anyhow!("Failed to stage new binary at {}: {e}", staging.display()))?;
-    fs::set_permissions(&staging, fs::Permissions::from_mode(0o755))
-        .map_err(|e| anyhow::anyhow!("Failed to set permissions on {}: {e}", staging.display()))?;
+    if let Err(e) = fs::set_permissions(&staging, fs::Permissions::from_mode(0o755)) {
+        // Best-effort: não deixa o `<exe>.new` órfão pra trás no diretório do
+        // binário atual antes de propagar o erro.
+        let _ = fs::remove_file(&staging);
+        return Err(anyhow::anyhow!(
+            "Failed to set permissions on {}: {e}",
+            staging.display()
+        ));
+    }
     fs::rename(&staging, target_exe).map_err(|e| {
         anyhow::anyhow!(
             "Failed to install new binary at {}: {e}",
@@ -670,7 +647,13 @@ pub async fn run_standalone_update(
     let ver_bare = version_bare(&tag).to_string();
     let asset = asset_filename(&ver_bare);
 
-    let tmp = SelfUpdateTempDir::new()?;
+    // `tempfile::tempdir()` (já em `[dependencies]`, usado em produção por
+    // `cache.rs`/`notify.rs`): criação atômica com perms 0700 e sem aceitar
+    // um path pré-existente/symlink plantado — este diretório segura o
+    // tarball que vira o executável do usuário, então o hand-rolled
+    // (pid+nanos em `/tmp`) era exatamente o padrão TOCTOU que `tempfile`
+    // existe pra evitar.
+    let tmp = tempfile::tempdir().map_err(|e| anyhow::anyhow!("Failed to create tempdir: {e}"))?;
     let tmp_path = tmp.path();
 
     download_file(
