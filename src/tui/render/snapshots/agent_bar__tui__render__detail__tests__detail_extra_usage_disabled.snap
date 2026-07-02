@@ -1,5 +1,6 @@
 ---
 source: src/tui/render/detail.rs
+assertion_line: 1083
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
@@ -9,10 +10,10 @@ expression: terminal.backend()
 "│ PROVIDERS       ┃ Opus         ██████████████████████████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒   60%  → -    ┃│"
 "│ ◆ Claude  89%   ┃ Fable        █████████████████████████████████████████████████▒   97%  → 22:59┃│"
 "│                 ┃                                                                               ┃│"
-"│ MAIS            ┃ tokens/h  sem uso nas últimas 24h                                             ┃│"
+"│ MAIS            ┃ tokens/h  coletando histórico…                                                ┃│"
 "│   Histórico     ┃ extra usage  desativado                                                       ┃│"
 "│   Login         ┃                                                                               ┃│"
-"│   Waybar        ┃ hoje 0 tok · -    7 dias 0 tok · -                                            ┃│"
+"│   Waybar        ┃ hoje coletando…    7 dias coletando…                                          ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"

@@ -54,29 +54,24 @@ fn spawn_usage_load(
     // estatística fire-and-forget; abandoná-lo no quit é correto.
     let tx = bg_tx.clone();
     std::thread::spawn(move || {
+        // UM parse só dos session logs (o cold leva ~10-20s em árvores
+        // grandes); as duas janelas (hoje / 7d) são filtros em memória
+        // sobre o mesmo Vec — chamar `records_since` duas vezes dobrava a
+        // espera, alargando a janela em que a TUI mostra "coletando".
+        let all = usage::records(usage::AggregateOptions {
+            claude_dir: &claude_dir,
+            codex_dir: &codex_dir,
+            fx_rate,
+            amp_meta: None,
+        });
+
         // Custo de HOJE (escopado a meia-noite local).
-        let today = usage::records_since(
-            usage::AggregateOptions {
-                claude_dir: &claude_dir,
-                codex_dir: &codex_dir,
-                fx_rate,
-                amp_meta: None,
-            },
-            today_start,
-        );
+        let today: Vec<_> = all.iter().filter(|r| r.ts >= today_start).cloned().collect();
         let summary = usage::aggregate_records(today, fx_rate, amp_meta.as_ref());
         let _ = tx.send(Action::UsageComputed(summary));
 
         // History dos últimos 7 dias (records crus p/ a aba History).
-        let records = usage::records_since(
-            usage::AggregateOptions {
-                claude_dir: &claude_dir,
-                codex_dir: &codex_dir,
-                fx_rate,
-                amp_meta: None,
-            },
-            history_cutoff,
-        );
+        let records: Vec<_> = all.into_iter().filter(|r| r.ts >= history_cutoff).collect();
         let _ = tx.send(Action::HistoryLoaded(records));
     });
 }

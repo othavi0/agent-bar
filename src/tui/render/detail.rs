@@ -240,6 +240,15 @@ fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'sta
 /// Sem âncora OU sem uso na janela → placeholder textual (nunca inventa
 /// pico sobre dado inexistente).
 fn spark_line(state: &AppState, provider: &str, content_width: u16) -> Line<'static> {
+    // `history=None` = parse dos session logs em voo — dizer "sem uso"
+    // aqui seria afirmar zero sobre dado que só não chegou (regressão
+    // "hoje 0 tok" da máquina real).
+    if state.history.is_none() {
+        return Line::from(Span::styled(
+            " tokens/h  coletando hist\u{f3}rico\u{2026}",
+            Style::default().fg(to_ratatui(ColorToken::Muted)),
+        ));
+    }
     let now = series_now(state);
     let series: Vec<u64> = match now {
         Some(n) => state
@@ -349,10 +358,27 @@ fn totals_line(
     provider_usage: Option<&ProviderUsage>,
     provider: &str,
 ) -> Line<'static> {
-    let (today_tokens, today_cost) = match provider_usage {
-        Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
-        None => (0, "-".to_string()),
+    // Cada metade tem seu próprio sinal de loading: "hoje" vem do
+    // UsageComputed (`state.usage`), "7 dias" do HistoryLoaded
+    // (`state.history`) — eles chegam em momentos diferentes. Enquanto o
+    // respectivo dado não chegou, a metade diz "coletando…" em vez de
+    // afirmar zero (regressão "hoje 0 tok").
+    let today_str = if state.usage.is_none() {
+        "coletando\u{2026}".to_string()
+    } else {
+        let (today_tokens, today_cost) = match provider_usage {
+            Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
+            None => (0, "-".to_string()),
+        };
+        format!("{} tok \u{b7} {}", abbrev_tokens(today_tokens), today_cost)
     };
+
+    if state.history.is_none() {
+        return Line::from(Span::styled(
+            format!(" hoje {today_str}    7 dias coletando\u{2026}"),
+            Style::default().fg(to_ratatui(ColorToken::TextBright)),
+        ));
+    }
 
     let week_records: Vec<&UsageRecord> = state
         .history
@@ -377,9 +403,8 @@ fn totals_line(
 
     Line::from(Span::styled(
         format!(
-            " hoje {} tok \u{b7} {}    7 dias {} tok \u{b7} {}",
-            abbrev_tokens(today_tokens),
-            today_cost,
+            " hoje {}    7 dias {} tok \u{b7} {}",
+            today_str,
             abbrev_tokens(week_tokens),
             week_cost_str
         ),
@@ -725,6 +750,43 @@ mod tests {
         assert!(
             text.contains("pico 01h:"),
             "esperava hora UTC (offset default) 01h na linha, obtido: {text:?}"
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // Loading vs zero (regressão "hoje 0 tok"): enquanto o parse dos
+    // session logs não terminou (`state.usage`/`state.history` = None),
+    // as linhas de uso devem dizer "coletando", nunca afirmar zero.
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn spark_line_loading_shows_coletando_not_sem_uso() {
+        let mut state = AppState::new();
+        state.last_update = Some(time::macros::datetime!(2026-07-02 12:00:00 UTC));
+        state.history = None; // HistoryLoaded ainda não chegou
+        let text = spark_line_text(&state);
+        assert!(
+            text.contains("coletando"),
+            "history=None deve mostrar loading, obtido: {text:?}"
+        );
+        assert!(
+            !text.contains("sem uso"),
+            "history=None não pode afirmar 'sem uso': {text:?}"
+        );
+    }
+
+    #[test]
+    fn totals_line_loading_shows_coletando_not_zero() {
+        let state = AppState::new(); // usage=None, history=None
+        let line = super::totals_line(&state, None, "claude");
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            text.contains("coletando"),
+            "usage/history=None deve mostrar loading, obtido: {text:?}"
+        );
+        assert!(
+            !text.contains("0 tok"),
+            "usage/history=None não pode afirmar '0 tok': {text:?}"
         );
     }
 

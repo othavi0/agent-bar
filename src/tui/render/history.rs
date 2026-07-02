@@ -144,12 +144,15 @@ fn amp_dollars_of(state: &AppState) -> Option<&AmpDollars> {
 /// Renderiza a aba History: chart braille (claude/codex) + tabela por
 /// dia/provider + chips. `hits` recebe as zonas clicáveis dos chips.
 pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
+    // `None` = HistoryLoaded ainda não chegou (parse em voo) → skeleton.
+    // `Some` = carregado (mesmo vazio) → tela real. O gate antigo derivava
+    // loading de `records.is_empty() && amp_dollars.is_none()` — como o
+    // `UsageComputed` (que traz o Amp) chega SEGUNDOS antes do
+    // `HistoryLoaded`, a tela afirmava "sem uso de tokens" com o parse do
+    // Claude/Codex ainda rodando ("hoje 0 tok" da máquina real). O caso
+    // só-Amp continua coberto: `Some(vec![])` não é skeleton.
+    let loading = state.history.is_none();
     let records: &[UsageRecord] = state.history.as_deref().unwrap_or(&[]);
-    // Calculado ANTES de qualquer early-return (fix pós-review): o early
-    // return antigo checava só `records.is_empty()`, sem olhar pro Amp —
-    // Amp nunca gera `UsageRecord` (sem log local de token), então um
-    // usuário só-Amp ficava preso em "coletando histórico…" pra sempre,
-    // mesmo com `amp_dollars` já carregado em `state.usage`.
     let amp_dollars = amp_dollars_of(state);
 
     let title = match state.history_range {
@@ -167,20 +170,19 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
                 .add_modifier(Modifier::BOLD),
         ));
 
-    // Rodapé "Total 7d" some só quando NÃO HÁ NADA pra mostrar (nem token
-    // nem Amp). Com Amp-only (records vazio, amp_dollars presente), ainda
-    // mostra "Total 7d: 0 tokens" — honesto, não esconde o rodapé por causa
-    // de um campo vazio.
-    if !records.is_empty() || amp_dollars.is_some() {
+    // Rodapé "Total 7d" some enquanto carrega e quando NÃO HÁ NADA pra
+    // mostrar (nem token nem Amp). Com Amp-only (records vazio,
+    // amp_dollars presente), ainda mostra "Total 7d: 0 tokens" — honesto,
+    // não esconde o rodapé por causa de um campo vazio.
+    if !loading && (!records.is_empty() || amp_dollars.is_some()) {
         block = block.title_bottom(footer_line(records));
     }
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Skeleton com spinner SÓ quando não há absolutamente nada — nem
-    // tokens locais (`records`) nem $ do Amp. NUNCA branco.
-    if records.is_empty() && amp_dollars.is_none() {
+    // Skeleton com spinner enquanto o parse está em voo. NUNCA branco.
+    if loading {
         render_skeleton_screen(state, frame, inner, hits);
         return;
     }
@@ -789,6 +791,45 @@ mod tests {
             .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// Regressão do "hoje 0 tok" visto na máquina real: `UsageComputed`
+    /// (que traz `amp_dollars`) chega SEGUNDOS antes de `HistoryLoaded`.
+    /// Nessa janela, `state.history` ainda é `None` (carregando) — a tela
+    /// deve continuar no skeleton "coletando histórico…", NUNCA afirmar
+    /// "sem uso de tokens" (mentira: o parse só não terminou). O sinal de
+    /// loading é `state.history.is_none()`, não a presença do Amp.
+    #[test]
+    fn history_loading_with_amp_shows_skeleton() {
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.history = None; // HistoryLoaded ainda não chegou
+        state.usage = Some(amp_usage(0.81, 5.0, 4.19)); // UsageComputed já chegou
+
+        terminal
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let mut screen = String::new();
+        for y in 0..32u16 {
+            for x in 0..100u16 {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    screen.push_str(cell.symbol());
+                }
+            }
+            screen.push('\n');
+        }
+        assert!(
+            screen.contains("coletando hist\u{f3}rico"),
+            "history=None deve mostrar skeleton de loading:\n{screen}"
+        );
+        assert!(
+            !screen.contains("sem uso de tokens"),
+            "history=None não pode afirmar 'sem uso' (ainda carregando):\n{screen}"
+        );
     }
 
     /// Regressão pós-review: usuário só-Amp (`state.history` carregado mas
