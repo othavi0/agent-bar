@@ -3,8 +3,8 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use super::action::Action;
 use super::mouse::{ChipKind, MouseTarget};
 use super::state::{
-    sidebar_items, AppState, ConfigField, ConfigState, FetchStatus, ProviderView, Screen,
-    SidebarItem,
+    sidebar_items, AppState, ConfigField, ConfigState, FetchStatus, HistoryRange, ProviderView,
+    Screen, SidebarItem,
 };
 
 /// Translates a raw KeyEvent into a semantic Action, if applicable.
@@ -99,6 +99,14 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
             KeyCode::Char('q') => Some(Action::Quit),
             _ => None,
         };
+    }
+
+    // Tela History: 't' alterna o range do chart (24h/7d). Escopado à tela
+    // (não junto do match genérico abaixo) — 't' ainda não tem significado
+    // em Overview/Detail, então fica reservado em vez de virar global cedo
+    // demais (mesmo racional do `in_config_edit` acima).
+    if state.screen == Screen::History && key.code == KeyCode::Char('t') {
+        return Some(Action::ToggleHistoryRange);
     }
 
     match key.code {
@@ -587,6 +595,14 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
+        Action::ToggleHistoryRange => {
+            state.history_range = match state.history_range {
+                HistoryRange::Day => HistoryRange::Week,
+                HistoryRange::Week => HistoryRange::Day,
+            };
+            vec![]
+        }
+
         Action::ToggleHelp => {
             state.show_help = !state.show_help;
             vec![]
@@ -640,6 +656,9 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             }
             MouseTarget::Chip(ChipKind::History) => {
                 update(state, Action::Activate(SidebarItem::History))
+            }
+            MouseTarget::Chip(ChipKind::ToggleRange) => {
+                update(state, Action::ToggleHistoryRange)
             }
         },
 
@@ -1368,6 +1387,50 @@ mod tests {
             "indice fora de sidebar_items() nao deve gerar Activate"
         );
         assert_eq!(state.screen, Screen::Overview, "tela nao muda sem Activate");
+    }
+
+    // ---- Aba History (Task 13) ----
+
+    #[test]
+    fn toggle_history_range_flips() {
+        let mut state = AppState::new();
+        assert_eq!(state.history_range, HistoryRange::Week);
+        update(&mut state, Action::ToggleHistoryRange);
+        assert_eq!(state.history_range, HistoryRange::Day);
+        update(&mut state, Action::ToggleHistoryRange);
+        assert_eq!(state.history_range, HistoryRange::Week);
+    }
+
+    #[test]
+    fn click_toggle_range_chip_flips_range() {
+        let mut state = AppState::new();
+        assert_eq!(state.history_range, HistoryRange::Week);
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::ToggleRange)),
+        );
+        assert_eq!(state.history_range, HistoryRange::Day);
+    }
+
+    #[test]
+    fn key_t_on_history_screen_toggles_range() {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        update(&mut state, Action::Key(key_event(KeyCode::Char('t'))));
+        assert_eq!(state.history_range, HistoryRange::Day);
+    }
+
+    #[test]
+    fn key_t_outside_history_screen_is_noop() {
+        let mut state = AppState::new();
+        assert_eq!(state.screen, Screen::Overview);
+        let fu = update(&mut state, Action::Key(key_event(KeyCode::Char('t'))));
+        assert!(fu.is_empty());
+        assert_eq!(
+            state.history_range,
+            HistoryRange::Week,
+            "'t' fora da tela History nao deve alternar o range"
+        );
     }
 
     #[test]

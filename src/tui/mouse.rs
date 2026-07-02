@@ -12,6 +12,8 @@ pub enum ChipKind {
     Back,
     Login,
     History,
+    /// Alterna o range do chart da aba History (24h/7d) — tecla `t` (T13).
+    ToggleRange,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

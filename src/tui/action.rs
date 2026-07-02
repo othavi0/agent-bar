@@ -54,6 +54,8 @@ pub enum Action {
     // --- Aba History ---
     /// Records carregados via records_since (7d). IO acontece no event_loop.
     HistoryLoaded(Vec<UsageRecord>),
+    /// Alterna o range do chart (24h/7d) — tecla `t` na tela History.
+    ToggleHistoryRange,
     // --- Aba Login ---
     /// Navega para cima na lista de providers da aba Login.
     LoginUp,

@@ -19,6 +19,17 @@ impl ThrobberAnim {
     }
 }
 
+/// Janela temporal do chart da aba History (T13). `Day` = últimas 24h (24
+/// buckets horários); `Week` = últimos 7 dias (24*7=168 buckets horários).
+/// Alterna via tecla `t` (`Action::ToggleHistoryRange`) — SÓ o chart
+/// respeita este campo; a tabela e o rodapé "Total 7d" sempre cobrem os
+/// 7 dias inteiros de `state.history` (a fonte já é records_since(7d)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryRange {
+    Day,
+    Week,
+}
+
 /// Tela atual da TUI. Substitui `Tab` + `Mode`: cada tela e um estado
 /// distinto navegado via sidebar (sem abas).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,6 +197,9 @@ pub struct AppState {
     pub login_status: Option<String>,
     /// Records da aba History (ultimos 7 dias). Carregado via HistoryLoaded.
     pub history: Option<Vec<UsageRecord>>,
+    /// Janela temporal exibida no chart da aba History (T13). Default Week;
+    /// alterna com Day via tecla `t`.
+    pub history_range: HistoryRange,
     /// Overlay de ajuda visivel (toggle via `?`, fecha com Esc ou `?`).
     pub show_help: bool,
     /// Ids de provider com fetch em voo (Task 5). Populado por `FetchStarted`,
@@ -224,6 +238,7 @@ impl AppState {
             login_selected: 0,
             login_status: None,
             history: None,
+            history_range: HistoryRange::Week,
             show_help: false,
             fetch_pending: Vec::new(),
             pending_login: None,
