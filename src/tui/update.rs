@@ -23,8 +23,11 @@ pub fn key_to_action(key: KeyEvent) -> Option<Action> {
     }
 }
 
-/// Translates a KeyEvent into a semantic Action using current tab state for
-/// cyclic left/right tab switching.
+/// Translates a KeyEvent into a semantic Action using current screen state:
+/// up/down move the sidebar cursor, Enter/h/g/w activate a sidebar item
+/// (jumping directly to Detail/History/Login/Waybar), Esc goes back to
+/// Overview. Some screens (Waybar editing, Login list) intercept keys with
+/// their own local semantics before falling through to this navigation.
 fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
     // Se o overlay de ajuda esta aberto, qualquer tecla fecha (Esc ou '?').
     if state.show_help {
@@ -259,58 +262,71 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             }
         }
 
-        Action::Activate(item) => match item {
-            SidebarItem::Overview => {
-                state.screen = Screen::Overview;
-                vec![]
-            }
-            SidebarItem::Provider(i) => {
-                state.selected = i;
-                state.screen = Screen::Detail;
-                vec![]
-            }
-            SidebarItem::History => {
-                state.screen = Screen::History;
-                vec![]
-            }
-            SidebarItem::Login => {
-                state.screen = Screen::Login;
-                vec![]
-            }
-            SidebarItem::Waybar => {
-                state.screen = Screen::Waybar;
-                // Inicializa config_state ao entrar na tela Waybar pela 1a vez.
-                // Nao podemos acessar settings aqui (update e puro), entao sinalizamos
-                // com um placeholder — o event_loop (drain) sobrescreve com as
-                // settings reais ao interceptar InitConfig (mesmo mecanismo do
-                // antigo SwitchTab para a aba Waybar).
-                if state.config_state.is_none() {
-                    vec![Action::InitConfig(crate::settings::Settings {
-                        version: 0, // sentinela; event_loop sobrescreve com real
-                        waybar: crate::settings::Waybar {
-                            providers: vec![],
-                            show_percentage: true,
-                            separators: crate::settings::SeparatorStyle::Gap,
-                            provider_order: vec![],
-                            display_mode: crate::settings::DisplayMode::Remaining,
-                            signal: None,
-                            interval: 60,
-                        },
-                        tooltip: crate::settings::Tooltip {},
-                        models: Default::default(),
-                        window_policy: Default::default(),
-                        notify: crate::settings::Notify { enabled: true },
-                        cache: crate::settings::CacheSettings {
-                            ttl: Default::default(),
-                        },
-                        glyph_mode: crate::settings::GlyphMode::Box,
-                        fx_rate: 5.50,
-                    })]
-                } else {
+        Action::Activate(item) => {
+            let follow_ups = match item {
+                SidebarItem::Overview => {
+                    state.screen = Screen::Overview;
                     vec![]
                 }
+                SidebarItem::Provider(i) => {
+                    state.selected = i;
+                    state.screen = Screen::Detail;
+                    vec![]
+                }
+                SidebarItem::History => {
+                    state.screen = Screen::History;
+                    vec![]
+                }
+                SidebarItem::Login => {
+                    state.screen = Screen::Login;
+                    vec![]
+                }
+                SidebarItem::Waybar => {
+                    state.screen = Screen::Waybar;
+                    // Inicializa config_state ao entrar na tela Waybar pela 1a vez.
+                    // Nao podemos acessar settings aqui (update e puro), entao sinalizamos
+                    // com um placeholder — o event_loop (drain) sobrescreve com as
+                    // settings reais ao interceptar InitConfig (mesmo mecanismo do
+                    // antigo SwitchTab para a aba Waybar).
+                    if state.config_state.is_none() {
+                        vec![Action::InitConfig(crate::settings::Settings {
+                            version: 0, // sentinela; event_loop sobrescreve com real
+                            waybar: crate::settings::Waybar {
+                                providers: vec![],
+                                show_percentage: true,
+                                separators: crate::settings::SeparatorStyle::Gap,
+                                provider_order: vec![],
+                                display_mode: crate::settings::DisplayMode::Remaining,
+                                signal: None,
+                                interval: 60,
+                            },
+                            tooltip: crate::settings::Tooltip {},
+                            models: Default::default(),
+                            window_policy: Default::default(),
+                            notify: crate::settings::Notify { enabled: true },
+                            cache: crate::settings::CacheSettings {
+                                ttl: Default::default(),
+                            },
+                            glyph_mode: crate::settings::GlyphMode::Box,
+                            fx_rate: 5.50,
+                        })]
+                    } else {
+                        vec![]
+                    }
+                }
+            };
+            // Sincroniza o cursor da sidebar com o item ativado — cobre
+            // h/g/w, Enter (via OpenDetail) e cliques futuros da Task 9.
+            // Sem isso, ativar por atalho deixa sidebar_selected apontando
+            // pra outro item quando a Task 10 desenhar o highlight.
+            if let Some(idx) = sidebar_items(state.providers.len())
+                .iter()
+                .position(|i| *i == item)
+            {
+                state.sidebar_selected = idx;
             }
-        },
+            follow_ups
+        }
 
         Action::SelectSidebar(i) => {
             state.sidebar_selected = i;
@@ -349,13 +365,25 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
 
         Action::ProviderFetched(q) => {
             state.fetch_pending.retain(|id| id != &q.provider);
+            let old_len = state.providers.len();
             match state
                 .providers
                 .iter_mut()
                 .find(|pv| pv.quota.provider == q.provider)
             {
                 Some(pv) => pv.quota = *q,
-                None => state.providers.push(ProviderView::new(*q)),
+                None => {
+                    state.providers.push(ProviderView::new(*q));
+                    // Provider novo insere Provider(old_len) na posicao
+                    // 1+old_len da sidebar (Overview + old_len providers
+                    // antigos vem antes). Um cursor que ja apontava pra
+                    // History/Login/Waybar (indices >= 1+old_len) passaria a
+                    // apontar pro item seguinte sem isso — desloca 1 posicao
+                    // pra manter o cursor no MESMO item logico.
+                    if state.sidebar_selected > old_len {
+                        state.sidebar_selected += 1;
+                    }
+                }
             }
             vec![]
         }
@@ -691,6 +719,69 @@ mod tests {
         assert_eq!(state.screen, Screen::Waybar);
         // Entrar na Waybar inicializa o config (comportamento atual do SwitchTab):
         assert!(matches!(fu.as_slice(), [Action::InitConfig(_)]));
+    }
+
+    #[test]
+    fn provider_fetched_growth_shifts_sidebar_cursor_to_keep_same_item() {
+        // Cursor comeca em History (indice 1 com 0 providers: [Overview,
+        // History, Login, Waybar]). Um provider novo chega via
+        // ProviderFetched (nao havia nenhum antes) — a sidebar cresce pra
+        // [Overview, Provider(0), History, Login, Waybar] e History passa
+        // pro indice 2. O cursor deve seguir o item logico (History), nao
+        // ficar parado num indice que agora aponta pra outra coisa.
+        let mut state = AppState::new();
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        assert_eq!(state.sidebar_selected, 1);
+
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
+
+        assert_eq!(
+            state.sidebar_selected, 2,
+            "cursor deve seguir History (indice deslocado pelo provider novo)"
+        );
+        assert_eq!(
+            sidebar_items(state.providers.len())[state.sidebar_selected],
+            SidebarItem::History,
+            "indice apos o shift deve continuar apontando pra History"
+        );
+    }
+
+    #[test]
+    fn activate_via_shortcut_syncs_sidebar_selected() {
+        // Simula h/g/w: Activate chamado diretamente (nao via Down repetido)
+        // deve sincronizar sidebar_selected pro indice do item ativado.
+        let mut state = state_with_providers(2);
+        assert_eq!(state.sidebar_selected, 0);
+
+        update(&mut state, Action::Activate(SidebarItem::History));
+
+        let expected = sidebar_items(2)
+            .iter()
+            .position(|i| *i == SidebarItem::History)
+            .unwrap();
+        assert_eq!(state.sidebar_selected, expected);
+    }
+
+    #[test]
+    fn activate_provider_syncs_sidebar_selected() {
+        let mut state = state_with_providers(2);
+        // Cursor comeca em outro item (History) para provar que Activate
+        // move o cursor, nao so o `selected` do Detail.
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_ne!(state.sidebar_selected, 1);
+
+        update(&mut state, Action::Activate(SidebarItem::Provider(0)));
+
+        assert_eq!(state.screen, Screen::Detail);
+        assert_eq!(state.selected, 0);
+        assert_eq!(
+            state.sidebar_selected, 1,
+            "cursor deve sincronizar pro indice de Provider(0) na sidebar"
+        );
     }
 
     #[test]
