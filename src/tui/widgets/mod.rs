@@ -5,8 +5,8 @@
 //! into the existing `Paragraph`/`Table`/`List` call sites without fighting
 //! ratatui's ownership model.
 
-pub mod key_hint;
-pub mod provider_list;
+pub mod chips;
+pub mod icons;
 pub mod quota_gauge;
 pub mod severity;
 pub mod sparkline;

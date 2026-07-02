@@ -103,6 +103,10 @@ struct ClaudeUsageResponse {
     extra_usage: Option<ClaudeExtraUsageRaw>,
     #[serde(default)]
     error: Option<ClaudeErrorRaw>,
+    #[serde(default)]
+    limits: Vec<ClaudeLimitRaw>,
+    #[serde(default)]
+    spend: Option<ClaudeSpendRaw>,
 }
 
 fn read_credentials(path: &Path) -> Option<ClaudeCredentials> {
@@ -117,6 +121,123 @@ fn window_from(raw: &ClaudeWindowRaw) -> QuotaWindow {
         resets_at: raw.resets_at.clone().filter(|s| !s.is_empty()),
         window_minutes: None,
         used: None,
+        severity: None,
+    }
+}
+
+// ---- limits[] (novo shape, substitui five_hour/seven_day* quando presente) ----
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClaudeLimitScopeModelRaw {
+    #[serde(default)]
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClaudeLimitScopeRaw {
+    #[serde(default)]
+    model: Option<ClaudeLimitScopeModelRaw>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClaudeLimitRaw {
+    // Elemento malformado (sem `kind`) não pode derrubar o decode do corpo
+    // INTEIRO — default vazio cai no braço `other` do match em
+    // `quota_from_limits` (inofensivo, apenas logado).
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    percent: Option<f64>,
+    #[serde(default)]
+    severity: Option<String>,
+    #[serde(default)]
+    resets_at: Option<String>,
+    #[serde(default)]
+    scope: Option<ClaudeLimitScopeRaw>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClaudeSpendMoneyRaw {
+    #[serde(default)]
+    amount_minor: Option<i64>,
+    #[serde(default)]
+    exponent: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClaudeSpendRaw {
+    #[serde(default)]
+    used: Option<ClaudeSpendMoneyRaw>,
+    #[serde(default)]
+    limit: Option<ClaudeSpendMoneyRaw>,
+    #[serde(default)]
+    enabled: Option<bool>,
+}
+
+fn window_from_limit(l: &ClaudeLimitRaw) -> QuotaWindow {
+    let used = l.percent.unwrap_or(0.0).round();
+    QuotaWindow {
+        remaining: 100.0 - used,
+        resets_at: l.resets_at.clone().filter(|s| !s.is_empty()),
+        window_minutes: None,
+        used: Some(used),
+        severity: l.severity.clone(),
+    }
+}
+
+/// `limits[]` → (primary, secondary, weekly_models). `None` se a lista está
+/// vazia (conta antiga) → chamador usa o caminho legado.
+#[allow(clippy::type_complexity)]
+fn quota_from_limits(
+    u: &ClaudeUsageResponse,
+) -> Option<(
+    Option<QuotaWindow>,
+    Option<QuotaWindow>,
+    IndexMap<String, QuotaWindow>,
+)> {
+    if u.limits.is_empty() {
+        return None;
+    }
+    let mut primary = None;
+    let mut secondary = None;
+    let mut weekly = IndexMap::new();
+    for l in &u.limits {
+        match l.kind.as_str() {
+            "session" => primary = Some(window_from_limit(l)),
+            "weekly_all" => secondary = Some(window_from_limit(l)),
+            "weekly_scoped" => {
+                let name = l
+                    .scope
+                    .as_ref()
+                    .and_then(|s| s.model.as_ref())
+                    .and_then(|m| m.display_name.clone());
+                if let Some(name) = name {
+                    weekly.insert(name, window_from_limit(l));
+                }
+            }
+            other => log::debug!("Claude limits[]: kind desconhecido ignorado: {other}"),
+        }
+    }
+    Some((primary, secondary, weekly))
+}
+
+fn money_of(m: &Option<ClaudeSpendMoneyRaw>) -> f64 {
+    m.as_ref()
+        .and_then(|m| {
+            m.amount_minor
+                .map(|a| a as f64 / 10f64.powi(m.exponent.unwrap_or(2) as i32))
+        })
+        .unwrap_or(0.0)
+}
+
+fn extra_usage_from_spend(s: &ClaudeSpendRaw) -> ExtraUsage {
+    let used = money_of(&s.used);
+    let limit = money_of(&s.limit);
+    ExtraUsage {
+        enabled: s.enabled.unwrap_or(false),
+        remaining: (limit - used).max(0.0),
+        limit,
+        used,
     }
 }
 
@@ -282,35 +403,52 @@ impl Provider for ClaudeProvider {
             };
         }
 
-        let primary = usage.five_hour.as_ref().map(window_from);
-        let secondary = usage.seven_day.as_ref().map(window_from);
+        // limits[] (novo shape) tem precedência; five_hour/seven_day* legado é
+        // o fallback para contas que ainda não recebem o bloco novo.
+        let (primary, secondary, weekly) = match quota_from_limits(&usage) {
+            Some(t) => t,
+            None => {
+                let primary = usage.five_hour.as_ref().map(window_from);
+                let secondary = usage.seven_day.as_ref().map(window_from);
+                let mut weekly: IndexMap<String, QuotaWindow> = IndexMap::new();
+                if let Some(w) = usage.seven_day_opus.as_ref() {
+                    weekly.insert("Opus".to_string(), window_from(w));
+                }
+                if let Some(w) = usage.seven_day_sonnet.as_ref() {
+                    weekly.insert("Sonnet".to_string(), window_from(w));
+                }
+                if let Some(w) = usage.seven_day_cowork.as_ref() {
+                    weekly.insert("Cowork".to_string(), window_from(w));
+                }
+                (primary, secondary, weekly)
+            }
+        };
 
-        let mut weekly: IndexMap<String, QuotaWindow> = IndexMap::new();
-        if let Some(w) = usage.seven_day_opus.as_ref() {
-            weekly.insert("Opus".to_string(), window_from(w));
-        }
-        if let Some(w) = usage.seven_day_sonnet.as_ref() {
-            weekly.insert("Sonnet".to_string(), window_from(w));
-        }
-        if let Some(w) = usage.seven_day_cowork.as_ref() {
-            weekly.insert("Cowork".to_string(), window_from(w));
-        }
+        // extra_usage: spend novo tem precedência; legado como fallback.
+        let extra_usage = match usage.spend.as_ref() {
+            Some(s) => Some(extra_usage_from_spend(s)),
+            None => usage
+                .extra_usage
+                .as_ref()
+                .filter(|e| e.is_enabled)
+                .and_then(|e| {
+                    // A API nova pode mandar is_enabled=true com os 3 campos null
+                    // (crédito migrou p/ `spend`). Só montamos ExtraUsage se houver
+                    // dados reais — senão omitimos (não inventar 0%/$0).
+                    Some(ExtraUsage {
+                        enabled: true,
+                        remaining: (100.0 - e.utilization?).round(),
+                        limit: e.monthly_limit?,
+                        used: e.used_credits?.round(),
+                    })
+                }),
+        };
 
-        let extra_usage = usage
-            .extra_usage
-            .as_ref()
-            .filter(|e| e.is_enabled)
-            .and_then(|e| {
-                // A API nova pode mandar is_enabled=true com os 3 campos null
-                // (crédito migrou p/ `spend`). Só montamos ExtraUsage se houver
-                // dados reais — senão omitimos (não inventar 0%/$0).
-                Some(ExtraUsage {
-                    enabled: true,
-                    remaining: (100.0 - e.utilization?).round(),
-                    limit: e.monthly_limit?,
-                    used: e.used_credits?.round(),
-                })
-            });
+        let models = if weekly.is_empty() {
+            None
+        } else {
+            Some(weekly.clone())
+        };
 
         let extra = if !weekly.is_empty() || extra_usage.is_some() {
             Some(ProviderExtra::Claude(ClaudeQuotaExtra {
@@ -330,6 +468,7 @@ impl Provider for ClaudeProvider {
             plan: Some(plan),
             primary,
             secondary,
+            models,
             extra,
             ..base
         }
@@ -460,9 +599,11 @@ mod tests {
     }
 
     /// Regressão: a API do Claude passou a mandar `extra_usage` com campos `null`
-    /// e novos blocos `limits`/`spend` + `*_dollars` nas janelas. Antes isso
-    /// quebrava a desserialização do corpo INTEIRO (Claude indisponível). O shape
-    /// abaixo é o real observado em 2026-06-20.
+    /// e `*_dollars` nas janelas. Antes isso quebrava a desserialização do corpo
+    /// INTEIRO (Claude indisponível). O shape abaixo é o real observado em
+    /// 2026-06-20. (`limits`/`spend` ganharam parser dedicado — ver os testes
+    /// `claude_limits_block_*`/`claude_spend_*` abaixo; aqui ficam ausentes de
+    /// propósito para exercitar só o fallback legado.)
     #[tokio::test]
     async fn parses_new_api_shape_with_null_extra_usage() {
         let server = MockServer::start().await;
@@ -478,11 +619,7 @@ mod tests {
                 "seven_day_sonnet": {"utilization": 35.0, "resets_at": "2026-06-25T00:00:00Z"},
                 "seven_day_cowork": null,
                 "extra_usage": {"is_enabled": true, "monthly_limit": null, "used_credits": null,
-                    "utilization": null, "currency": null, "daily": null, "weekly": null},
-                "limits": [{"kind": "five_hour", "group": "all", "percent": 11, "severity": "ok",
-                    "resets_at": "2026-06-20T20:00:00Z", "scope": null, "is_active": true}],
-                "spend": {"used": {"amount_minor": 0, "currency": "USD", "exponent": 2},
-                    "limit": null, "percent": 0, "severity": "ok", "enabled": false, "disabled_reason": null}
+                    "utilization": null, "currency": null, "daily": null, "weekly": null}
             })))
             .mount(&server)
             .await;
@@ -506,6 +643,178 @@ mod tests {
         if let Some(ProviderExtra::Claude(c)) = q.extra.as_ref() {
             assert!(c.extra_usage.is_none(), "extra_usage null deve ser omitido");
         }
+    }
+
+    // ---- limits[] / spend (novo shape, 2026-07-01) ----
+
+    const LIMITS_BODY: &str = r#"{
+  "five_hour": {"utilization": 55.0, "resets_at": "2026-07-02T02:39:59Z"},
+  "seven_day": {"utilization": 44.0, "resets_at": "2026-07-03T22:59:59Z"},
+  "limits": [
+    {"kind": "session", "group": "session", "percent": 11,
+     "severity": "normal", "resets_at": "2026-07-02T02:39:59.132436+00:00",
+     "scope": null, "is_active": true},
+    {"kind": "weekly_all", "group": "weekly", "percent": 3,
+     "severity": "normal", "resets_at": "2026-07-03T22:59:59.132457+00:00",
+     "scope": null, "is_active": false},
+    {"kind": "weekly_scoped", "group": "weekly", "percent": 3,
+     "severity": "normal", "resets_at": "2026-07-03T22:59:59.132697+00:00",
+     "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null},
+     "is_active": false},
+    {"kind": "algum_kind_novo", "percent": 1, "severity": "normal"}
+  ],
+  "spend": {
+    "used": {"amount_minor": 1234, "currency": "USD", "exponent": 2},
+    "limit": {"amount_minor": 10000, "currency": "USD", "exponent": 2},
+    "percent": 12, "severity": "normal", "enabled": true,
+    "disclaimer": "x", "can_purchase_credits": false, "can_toggle": false
+  }
+}"#;
+
+    #[tokio::test]
+    async fn claude_limits_block_takes_precedence_over_legacy() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(LIMITS_BODY, "application/json"))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        // limits[] vence os campos legados five_hour/seven_day:
+        let p = q.primary.as_ref().unwrap();
+        assert_eq!(p.remaining, 89.0); // 100 - 11 (limits), NÃO 45 (legacy 55)
+        assert_eq!(p.severity.as_deref(), Some("normal"));
+        assert_eq!(p.used, Some(11.0));
+        let s = q.secondary.as_ref().unwrap();
+        assert_eq!(s.remaining, 97.0);
+        // weekly_scoped vira models["Fable"]:
+        let models = q.models.as_ref().unwrap();
+        assert_eq!(models.get("Fable").unwrap().remaining, 97.0);
+        // spend vira extra_usage habilitado com $12.34 de $100.00:
+        let extra = match q.extra.as_ref().unwrap() {
+            crate::providers::types::ProviderExtra::Claude(c) => c,
+            _ => panic!("extra deve ser Claude"),
+        };
+        let eu = extra.extra_usage.as_ref().unwrap();
+        assert!(eu.enabled);
+        assert!((eu.used - 12.34).abs() < 1e-9);
+        assert!((eu.limit - 100.0).abs() < 1e-9);
+        assert!((eu.remaining - 87.66).abs() < 1e-9);
+    }
+
+    #[tokio::test]
+    async fn claude_falls_back_to_legacy_when_limits_absent() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "five_hour": {"utilization": 25.0, "resets_at": "2026-03-28T14:00:00Z"},
+                "seven_day": {"utilization": 40.0, "resets_at": "2026-04-01T00:00:00Z"}
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        // sem limits[]: cai no legado (five_hour/seven_day).
+        let p = q.primary.as_ref().unwrap();
+        assert_eq!(p.remaining, 75.0); // 100 - 25
+        assert_eq!(p.severity, None, "fallback não inventa severidade");
+        assert_eq!(q.secondary.as_ref().unwrap().remaining, 60.0); // 100 - 40
+    }
+
+    #[tokio::test]
+    async fn claude_spend_disabled_still_maps_extra_usage_off() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "spend": {
+                    "used": {"amount_minor": 0, "currency": "USD", "exponent": 2},
+                    "limit": null,
+                    "percent": 0,
+                    "severity": "normal",
+                    "enabled": false
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        let extra = match q.extra.as_ref().unwrap() {
+            crate::providers::types::ProviderExtra::Claude(c) => c,
+            _ => panic!("extra deve ser Claude"),
+        };
+        let eu = extra.extra_usage.as_ref().unwrap();
+        assert!(!eu.enabled);
+        assert_eq!(eu.used, 0.0);
+        assert_eq!(eu.limit, 0.0);
+        assert_eq!(eu.remaining, 0.0);
+    }
+
+    /// Regressão: um elemento de `limits[]` sem `kind` (API em evolução) não
+    /// pode derrubar o decode do corpo INTEIRO — `#[serde(default)]` em
+    /// `ClaudeLimitRaw.kind` garante que só esse elemento vira no-op (braço
+    /// `other` do match), sem afetar os demais elementos válidos.
+    #[tokio::test]
+    async fn claude_limits_element_missing_kind_does_not_break_decode() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "limits": [
+                    {"percent": 50, "severity": "normal"},
+                    {"kind": "session", "percent": 20, "severity": "normal",
+                     "resets_at": "2026-07-02T02:39:59Z", "scope": null, "is_active": true}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(q.available, "elemento sem kind não pode derrubar o decode");
+        assert_eq!(q.error, None);
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 80.0); // 100 - 20
     }
 
     #[tokio::test]

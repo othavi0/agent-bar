@@ -316,6 +316,7 @@ mod tests {
             resets_at: None,
             window_minutes: None,
             used: Some(70.0),
+            severity: None,
         };
         assert_eq!(to_window_display(Some(&w), DisplayMode::Used), Some(70.0));
         assert_eq!(

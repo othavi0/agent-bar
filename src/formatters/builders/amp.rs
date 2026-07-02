@@ -348,6 +348,7 @@ mod tests {
             resets_at: Some("2026-06-19T14:00:00Z".into()),
             window_minutes: None,
             used: None,
+            severity: None,
         }
     }
 

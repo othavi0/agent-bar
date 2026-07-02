@@ -110,6 +110,7 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
             resets_at: full_at.clone(),
             window_minutes: None,
             used: None,
+            severity: None,
         };
         primary = Some(window.clone());
         models.insert("Free Tier".to_string(), window);
@@ -132,6 +133,7 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
                 resets_at: None,
                 window_minutes: None,
                 used: None,
+                severity: None,
             },
         );
         meta.insert("creditsBalance".to_string(), dollars(balance));

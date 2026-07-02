@@ -264,6 +264,7 @@ mod tests {
             resets_at: resets.map(str::to_string),
             window_minutes: None,
             used: None,
+            severity: None,
         }
     }
 
@@ -403,6 +404,7 @@ mod tests {
             resets_at: None,
             window_minutes: None,
             used: Some(232.0),
+            severity: None,
         });
         let plan = plan_notifications(&wrap(vec![c]), &HashMap::new());
         assert_eq!(plan.fires[0].label, "primary");

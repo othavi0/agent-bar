@@ -1,28 +1,17 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use time::OffsetDateTime;
 
 use super::action::Action;
-use super::state::{AppState, ConfigField, ConfigState, FetchStatus, Mode, ProviderView, Tab};
+use super::mouse::{ChipKind, MouseTarget};
+use super::state::{
+    sidebar_items, AppState, ConfigField, ConfigState, FetchStatus, FxEvent, HistoryRange,
+    ProviderView, Screen, SidebarItem,
+};
 
-/// Translates a raw KeyEvent into a semantic Action, if applicable.
-pub fn key_to_action(key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
-        KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
-        KeyCode::Enter => Some(Action::OpenDetail),
-        KeyCode::Esc => Some(Action::Back),
-        KeyCode::Left => {
-            // Will be resolved in update using current tab; return sentinel via Char('<')
-            // Actually we return a SwitchTab action resolved here is not possible without state.
-            // So we return a raw Left action wrapped — update will handle it.
-            None // handled below
-        }
-        _ => None,
-    }
-}
-
-/// Translates a KeyEvent into a semantic Action using current tab state for
-/// cyclic left/right tab switching.
+/// Translates a KeyEvent into a semantic Action using current screen state:
+/// up/down move the sidebar cursor, Enter/h/g/w activate a sidebar item
+/// (jumping directly to Detail/History/Login/Waybar), Esc goes back to
+/// Overview. Some screens (Waybar editing, Login list) intercept keys with
+/// their own local semantics before falling through to this navigation.
 fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
     // Se o overlay de ajuda esta aberto, qualquer tecla fecha (Esc ou '?').
     if state.show_help {
@@ -33,7 +22,7 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
     }
 
     // '?' global: abre o overlay de ajuda de qualquer contexto (exceto edicao).
-    let in_config_edit = state.tab == Tab::Waybar
+    let in_config_edit = state.screen == Screen::Waybar
         && state
             .config_state
             .as_ref()
@@ -44,8 +33,8 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         return Some(Action::ToggleHelp);
     }
 
-    // Na aba Waybar com campo em edicao, delega ao input buffer (so Esc/Enter escapam).
-    if state.tab == Tab::Waybar {
+    // Na tela Waybar com campo em edicao, delega ao input buffer (so Esc/Enter escapam).
+    if state.screen == Screen::Waybar {
         if let Some(cs) = &state.config_state {
             if cs.editing {
                 return match key.code {
@@ -55,54 +44,47 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
                 };
             }
         }
-        // Aba Waybar, fora do modo edicao.
+        // Tela Waybar, fora do modo edicao. h/g/w saltam direto para outra
+        // tela (substituem o antigo ←→ de troca de aba — sem conflito com
+        // j/k/Enter/s/Esc/q, ja usados aqui).
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(Action::ConfigDown),
             KeyCode::Char('k') | KeyCode::Up => Some(Action::ConfigUp),
             KeyCode::Enter => Some(Action::ConfigEnterEdit),
             KeyCode::Char('s') => Some(Action::SaveConfig),
             KeyCode::Esc => Some(Action::Back),
-            KeyCode::Left | KeyCode::BackTab => {
-                let idx = state.tab.index();
-                let next = if idx == 0 { 3 } else { idx - 1 };
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
-            KeyCode::Right | KeyCode::Tab => {
-                let idx = state.tab.index();
-                let next = (idx + 1) % 4;
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
+            KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
+            KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
+            KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
             KeyCode::Char('q') => Some(Action::Quit),
             _ => None,
         };
     }
 
-    // Aba Login: navegacao e acao de login.
-    if state.tab == Tab::Login {
+    // Tela Login: navegacao e acao de login. h/w saltam direto para outra
+    // tela (mesmo racional da tela Waybar acima).
+    if state.screen == Screen::Login {
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(Action::LoginDown),
             KeyCode::Char('k') | KeyCode::Up => Some(Action::LoginUp),
-            KeyCode::Enter => {
-                let id = match state.login_selected {
-                    0 => "claude",
-                    1 => "codex",
-                    _ => "amp",
-                };
-                Some(Action::LoginRequested(id.to_string()))
-            }
-            KeyCode::Left | KeyCode::BackTab => {
-                let idx = state.tab.index();
-                let next = if idx == 0 { 3 } else { idx - 1 };
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
-            KeyCode::Right | KeyCode::Tab => {
-                let idx = state.tab.index();
-                let next = (idx + 1) % 4;
-                Some(Action::SwitchTab(Tab::from_index(next)))
-            }
+            KeyCode::Enter => Some(Action::LoginRequested(
+                login_selected_id(state.login_selected).to_string(),
+            )),
+            KeyCode::Esc => Some(Action::Back),
+            KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
+            KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
+            KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
             KeyCode::Char('q') => Some(Action::Quit),
             _ => None,
         };
+    }
+
+    // Tela History: 't' alterna o range do chart (24h/7d). Escopado à tela
+    // (não junto do match genérico abaixo) — 't' ainda não tem significado
+    // em Overview/Detail, então fica reservado em vez de virar global cedo
+    // demais (mesmo racional do `in_config_edit` acima).
+    if state.screen == Screen::History && key.code == KeyCode::Char('t') {
+        return Some(Action::ToggleHistoryRange);
     }
 
     match key.code {
@@ -110,19 +92,24 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
         KeyCode::Enter => Some(Action::OpenDetail),
         KeyCode::Esc => Some(Action::Back),
-        KeyCode::Left | KeyCode::BackTab => {
-            let idx = state.tab.index();
-            let next = if idx == 0 { 3 } else { idx - 1 };
-            Some(Action::SwitchTab(Tab::from_index(next)))
-        }
-        KeyCode::Right | KeyCode::Tab => {
-            let idx = state.tab.index();
-            let next = (idx + 1) % 4;
-            Some(Action::SwitchTab(Tab::from_index(next)))
-        }
+        KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
+        KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
+        KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
         KeyCode::Char('r') => Some(Action::Refresh),
         KeyCode::Char('q') => Some(Action::Quit),
         _ => None,
+    }
+}
+
+/// Mapeia o índice selecionado da aba Login pro id do provider — mesma
+/// ordem de `render/login.rs::PROVIDERS`. Compartilhado entre o Enter
+/// (`key_to_action_with_state`) e o clique no chip `StartLogin` (T14):
+/// os dois precisam disparar a MESMA action pro provider selecionado.
+fn login_selected_id(idx: usize) -> &'static str {
+    match idx {
+        0 => "claude",
+        1 => "codex",
+        _ => "amp",
     }
 }
 
@@ -252,89 +239,232 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
-        Action::Down => {
-            let max = state.providers.len().saturating_sub(1);
-            if state.selected < max {
-                state.selected += 1;
-            }
+        Action::Up => {
+            state.sidebar_selected = state.sidebar_selected.saturating_sub(1);
             vec![]
         }
 
-        Action::Up => {
-            if state.selected > 0 {
-                state.selected -= 1;
-            }
+        Action::Down => {
+            let max = sidebar_items(state.providers.len()).len() - 1;
+            state.sidebar_selected = (state.sidebar_selected + 1).min(max);
             vec![]
         }
 
         Action::OpenDetail => {
-            state.mode = Mode::Detail;
+            // Recursa (mesmo padrao do braço Action::Key): aplica a ativacao
+            // na hora e propaga os follow-ups dela (ex. InitConfig ao ativar
+            // Waybar), em vez de so devolver Activate sem aplicar.
+            let items = sidebar_items(state.providers.len());
+            match items.get(state.sidebar_selected).copied() {
+                Some(item) => update(state, Action::Activate(item)),
+                None => vec![],
+            }
+        }
+
+        Action::Activate(item) => {
+            let old_screen = state.screen;
+            let follow_ups = match item {
+                SidebarItem::Overview => {
+                    state.screen = Screen::Overview;
+                    vec![]
+                }
+                SidebarItem::Provider(i) => {
+                    state.selected = i;
+                    state.screen = Screen::Detail;
+                    vec![]
+                }
+                SidebarItem::History => {
+                    state.screen = Screen::History;
+                    vec![]
+                }
+                SidebarItem::Login => {
+                    state.screen = Screen::Login;
+                    vec![]
+                }
+                SidebarItem::Waybar => {
+                    state.screen = Screen::Waybar;
+                    // Inicializa config_state ao entrar na tela Waybar pela 1a vez.
+                    // Nao podemos acessar settings aqui (update e puro), entao sinalizamos
+                    // com um placeholder — o event_loop (drain) sobrescreve com as
+                    // settings reais ao interceptar InitConfig (mesmo mecanismo do
+                    // antigo SwitchTab para a aba Waybar).
+                    if state.config_state.is_none() {
+                        vec![Action::InitConfig(crate::settings::Settings {
+                            version: 0, // sentinela; event_loop sobrescreve com real
+                            waybar: crate::settings::Waybar {
+                                providers: vec![],
+                                show_percentage: true,
+                                separators: crate::settings::SeparatorStyle::Gap,
+                                provider_order: vec![],
+                                display_mode: crate::settings::DisplayMode::Remaining,
+                                signal: None,
+                                interval: 60,
+                            },
+                            tooltip: crate::settings::Tooltip {},
+                            models: Default::default(),
+                            window_policy: Default::default(),
+                            notify: crate::settings::Notify { enabled: true },
+                            cache: crate::settings::CacheSettings {
+                                ttl: Default::default(),
+                            },
+                            menu: crate::settings::MenuSettings {
+                                animations: true,
+                                font_family: "IBM Plex Mono".to_string(),
+                                font_size: 12,
+                            },
+                            glyph_mode: crate::settings::GlyphMode::Box,
+                            fx_rate: 5.50,
+                        })]
+                    } else {
+                        vec![]
+                    }
+                }
+            };
+            // Sincroniza o cursor da sidebar com o item ativado — cobre
+            // h/g/w, Enter (via OpenDetail) e cliques futuros da Task 9.
+            // Sem isso, ativar por atalho deixa sidebar_selected apontando
+            // pra outro item quando a Task 10 desenhar o highlight.
+            if let Some(idx) = sidebar_items(state.providers.len())
+                .iter()
+                .position(|i| *i == item)
+            {
+                state.sidebar_selected = idx;
+            }
+            // Efeito coalesce (T16): só quando a tela de fato muda — ativar
+            // o item já ativo (ex. Enter em cima de si mesmo) não deve
+            // re-disparar o efeito.
+            if state.screen != old_screen {
+                state.fx_queue.push(FxEvent::ScreenChanged);
+                // `state.scroll` é compartilhado entre telas (ScrollView do
+                // Overview e, agora, a tabela do History) — sem reset, uma
+                // posição de scroll deixada numa tela (ex. Overview rolado)
+                // vaza pra outra tela sem relação nenhuma com aquele offset
+                // (History abriria com linhas de dado já puladas). Reseta
+                // só quando a tela de fato muda, não quando reativa a que
+                // já está ativa (mesmo critério do ScreenChanged acima).
+                state.scroll = 0;
+            }
+            follow_ups
+        }
+
+        Action::SelectSidebar(i) => {
+            state.sidebar_selected = i;
             vec![]
         }
 
         Action::Back => {
-            state.mode = Mode::List;
-            vec![]
-        }
-
-        Action::SwitchTab(tab) => {
-            let is_waybar = tab == Tab::Waybar;
-            state.tab = tab;
-            state.mode = Mode::List;
-            // Inicializa config_state ao entrar na aba Waybar pela 1a vez.
-            // Nao podemos acessar settings aqui (update e puro), entao sinalizamos.
-            if is_waybar && state.config_state.is_none() {
-                return vec![Action::InitConfig(
-                    // Usa as edit_settings se ja existirem (re-entrada), senao placeholder.
-                    // O event_loop vai enviar InitConfig com as settings reais.
-                    crate::settings::Settings {
-                        version: 0, // sentinela; event_loop sobrescreve com real
-                        waybar: crate::settings::Waybar {
-                            providers: vec![],
-                            show_percentage: true,
-                            separators: crate::settings::SeparatorStyle::Gap,
-                            provider_order: vec![],
-                            display_mode: crate::settings::DisplayMode::Remaining,
-                            signal: None,
-                            interval: 60,
-                        },
-                        tooltip: crate::settings::Tooltip {},
-                        models: Default::default(),
-                        window_policy: Default::default(),
-                        notify: crate::settings::Notify { enabled: true },
-                        cache: crate::settings::CacheSettings {
-                            ttl: Default::default(),
-                        },
-                        glyph_mode: crate::settings::GlyphMode::Box,
-                        fx_rate: 5.50,
-                    },
-                )];
+            // Mesma regra do braço Activate: mudança de tela zera o scroll
+            // (compartilhado entre Overview/History) — só quando a screen
+            // de fato muda, senão Esc numa tela que já é Overview zeraria
+            // o scroll do usuário à toa.
+            if state.screen != Screen::Overview {
+                state.scroll = 0;
             }
+            state.screen = Screen::Overview;
             vec![]
         }
 
         Action::Refresh => {
-            state.status = FetchStatus::Loading;
-            // The event loop observes Loading and fires the actual fetch.
-            vec![]
+            // Evita fetch duplicado se ja tem um em voo; senao, re-enfileira
+            // Refresh UMA vez para o event_loop interceptar (mesmo padrao de
+            // ReloadUsage/SaveConfig — o drain NAO re-entra no update com ele).
+            if state.fetch_pending.is_empty() {
+                vec![Action::Refresh]
+            } else {
+                vec![]
+            }
         }
 
-        Action::DataFetched(quotas) => {
-            state.providers = quotas
-                .providers
-                .into_iter()
-                .map(ProviderView::new)
-                .collect();
-            state.status = FetchStatus::Loaded;
-            state.last_update = Some(OffsetDateTime::now_utc());
-            // Clamp selection if providers list shrank.
-            if !state.providers.is_empty() && state.selected >= state.providers.len() {
-                state.selected = state.providers.len() - 1;
+        Action::FetchStarted(ids) => {
+            state.status = FetchStatus::Loading;
+            // Uniao sem duplicatas (nao overwrite): ondas de fetch podem se
+            // sobrepor (Refresh/tick de 60s disparados enquanto uma onda
+            // anterior ainda resolve). Se um id ja esta pendente, a propria
+            // onda em voo vai resolve-lo de novo — nao precisa re-adicionar.
+            for id in ids {
+                if !state.fetch_pending.contains(&id) {
+                    state.fetch_pending.push(id);
+                }
             }
             vec![]
         }
 
+        Action::ProviderFetched(q) => {
+            state.fetch_pending.retain(|id| id != &q.provider);
+            let old_len = state.providers.len();
+            match state
+                .providers
+                .iter_mut()
+                .find(|pv| pv.quota.provider == q.provider)
+            {
+                Some(pv) => pv.quota = *q,
+                None => {
+                    state.providers.push(ProviderView::new(*q));
+                    // Provider novo insere Provider(old_len) na posicao
+                    // 1+old_len da sidebar (Overview + old_len providers
+                    // antigos vem antes). Um cursor que ja apontava pra
+                    // History/Login/Waybar (indices >= 1+old_len) passaria a
+                    // apontar pro item seguinte sem isso — desloca 1 posicao
+                    // pra manter o cursor no MESMO item logico.
+                    if state.sidebar_selected > old_len {
+                        state.sidebar_selected += 1;
+                    }
+                }
+            }
+            vec![]
+        }
+
+        Action::FetchCompleted { fetched_at, silent } => {
+            // Efeito sweep (T16, fix pós-review): dispara quando uma onda
+            // de fetch termina, mesmo se outra onda sobreposta ainda
+            // estiver em voo (gatilho é a action chegando, não o status
+            // final agregado) — MAS só para ondas pedidas pelo usuário
+            // (load inicial, `r`/chip Refresh, LoginFinished). O poll
+            // silencioso de 60s (`silent=true`) NUNCA dispara o sweep
+            // (spec §8: efeito é feedback de ação, não deve repetir a cada
+            // minuto sem o usuário fazer nada). O resto do bookkeeping
+            // abaixo (last_update monotônico, status, ReloadUsage) é
+            // agnóstico à origem da onda — count-up do header pode
+            // continuar re-lerpando num poll silencioso, é sutil.
+            if !silent {
+                state.fx_queue.push(FxEvent::FetchLanded);
+            }
+            // NAO limpa fetch_pending incondicionalmente: cada ProviderFetched
+            // ja remove o proprio id. Se sobrar algo aqui, e porque outra onda
+            // (Refresh/tick de 60s) ainda esta em voo — mantem Loading em vez
+            // de regredir pra Loaded (a onda que sobrar completa depois).
+            //
+            // Mesmo parse de timestamp usado pelo antigo DataFetched, mas
+            // nunca regride: fica o mais recente entre o atual e o parseado
+            // (ondas sobrepostas podem terminar fora de ordem).
+            let parsed = time::OffsetDateTime::parse(
+                &fetched_at,
+                &time::format_description::well_known::Rfc3339,
+            )
+            .ok();
+            if let Some(new) = parsed {
+                state.last_update = Some(state.last_update.map_or(new, |cur| cur.max(new)));
+            }
+            if state.fetch_pending.is_empty() {
+                state.status = FetchStatus::Loaded;
+            }
+            // Clamp selection if providers list shrank.
+            if !state.providers.is_empty() && state.selected >= state.providers.len() {
+                state.selected = state.providers.len() - 1;
+            }
+            vec![Action::ReloadUsage]
+        }
+
+        Action::ReloadUsage => vec![], // interceptada no event_loop; no update e no-op
+
         Action::FetchFailed(msg) => {
+            // Estreitado pela Task 5: so cobre erro de RUNTIME da thread de
+            // `spawn_fetch` (ex. falha ao construir o tokio Builder) — erros
+            // de provider (rede/parse/auth) viajam embutidos no
+            // ProviderQuota.error e chegam via ProviderFetched, nunca aqui.
+            // Limpa fetch_pending: senao a thread morta deixa o spinner
+            // girando pra sempre (nenhum ProviderFetched vai chegar).
+            state.fetch_pending.clear();
             state.status = FetchStatus::Failed(msg);
             vec![]
         }
@@ -345,6 +475,13 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::UsageComputed(summary) => {
+            // 1º load (usage ainda None): pinta display_cost = alvo direto,
+            // sem animar a partir de zero — mesmo racional do
+            // display_ratio em ProviderView::new(). Loads seguintes deixam
+            // o AnimTick fazer o count-up até o novo alvo.
+            if state.usage.is_none() {
+                state.display_cost = summary.total_cost.usd;
+            }
             state.usage = Some(summary);
             vec![]
         }
@@ -426,16 +563,16 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::SaveConfig => {
-            // Sinaliza ao event_loop que deve persistir as edit_settings.
-            // O update e puro, nao faz IO.
+            // Sinaliza pending_save: o event_loop pinta "Salvando..." no
+            // frame atual e SO ENTAO faz o IO (persist + reload Waybar) no
+            // topo do proximo loop. O update e puro, nao faz IO.
             if state.config_state.is_some() {
                 if let Some(cs) = state.config_state.as_mut() {
                     cs.status_msg = Some("Salvando...".to_string());
                 }
-                vec![Action::SaveConfig] // re-enfileira; event_loop intercepta
-            } else {
-                vec![]
+                state.pending_save = true;
             }
+            vec![]
         }
 
         Action::ConfigSaveResult(result) => {
@@ -467,22 +604,40 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         }
 
         Action::LoginRequested(id) => {
-            // Puro: sinaliza ao event_loop para executar o IO (RealLogin).
-            // O event_loop intercepta e chama RealLogin::launch(id).
+            // Puro: sinaliza pending_login. O event_loop pinta o status no
+            // frame atual e SO ENTAO suspende o terminal para o CLI de login
+            // (fix: "Abrindo login..." nunca era pintado antes desta task).
             state.login_status = Some(format!("Abrindo login para {}...", id));
-            vec![Action::LoginRequested(id)]
+            state.pending_login = Some(id);
+            vec![]
         }
 
         Action::LoginResult(result) => {
             state.login_status = Some(match result {
-                Ok(()) => "Login concluido. Pressione [r] para atualizar.".to_string(),
+                // Refetch agora e automatico (LoginFinished), sem precisar de [r].
+                Ok(()) => "Login concluido. Atualizando quota...".to_string(),
                 Err(e) => format!("Erro no login: {e}"),
             });
             vec![]
         }
 
+        Action::LoginFinished(id) => {
+            // Re-enfileira UMA vez para o event_loop interceptar (mesmo
+            // padrao de Refresh/ReloadUsage): o drain chama spawn_fetch(only)
+            // direto, sem re-entrar no update com esta action.
+            vec![Action::LoginFinished(id)]
+        }
+
         Action::HistoryLoaded(records) => {
             state.history = Some(records);
+            vec![]
+        }
+
+        Action::ToggleHistoryRange => {
+            state.history_range = match state.history_range {
+                HistoryRange::Day => HistoryRange::Week,
+                HistoryRange::Week => HistoryRange::Day,
+            };
             vec![]
         }
 
@@ -501,8 +656,100 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             }
             // Animação C (throbber): avança o frame do spinner braille.
             state.throbber.advance();
-            // Animação D (pulse): contador de frames para blink do ● crítico.
+            // Animação D (pulse): contador de frames para blink do ● crítico
+            // da sidebar (Task 10) E para o pulse dos gauges críticos do
+            // card/detalhe (Task 16, `widgets::quota_gauge::pulse_color`) —
+            // os dois efeitos coexistem, um não substitui o outro.
             state.anim_frame = state.anim_frame.wrapping_add(1);
+            // Count-up do custo do header (T16): ease exponencial (~800ms
+            // em ticks de 30ms, fator 0.12). animations=false → snapa
+            // direto pro alvo, sem lerp visual.
+            let target_cost = state
+                .usage
+                .as_ref()
+                .map(|u| u.total_cost.usd)
+                .unwrap_or(0.0);
+            if state.animations {
+                state.display_cost += (target_cost - state.display_cost) * 0.12;
+                if (target_cost - state.display_cost).abs() < 0.01 {
+                    state.display_cost = target_cost;
+                }
+            } else {
+                state.display_cost = target_cost;
+            }
+            vec![]
+        }
+
+        // --- Mouse (Task 9) ---
+        // Recursa via update() em vez de so devolver a action mapeada como
+        // follow-up (mesmo padrao de Action::Key/Action::OpenDetail acima):
+        // aplica o efeito NA HORA. Alem de manter clique e teclado simetricos
+        // (ex. o Refresh clicado passa pelo MESMO guard anti-fetch-duplicado
+        // que o Refresh da tecla [r] — devolver a action crua ignoraria o
+        // guard, ja que drain() intercepta Action::Refresh direto sem
+        // reentrar no update), a sincronicidade e o que os testes observam.
+        Action::Click(target) => match target {
+            MouseTarget::Sidebar(i) => {
+                // sidebar_items() e a unica fonte de verdade dos indices validos
+                // (SelectSidebar nao tem bounds-check); ignora i fora de faixa em
+                // vez de deixar sidebar_selected apontando pra um item inexistente.
+                let items = sidebar_items(state.providers.len());
+                match items.get(i).copied() {
+                    Some(item) => {
+                        state.sidebar_selected = i;
+                        update(state, Action::Activate(item))
+                    }
+                    None => vec![],
+                }
+            }
+            // Na tela Login, os itens da lista de providers TAMBÉM registram
+            // MouseTarget::Card(i) (mesma linguagem visual dos cards do
+            // Overview) — mas aqui o clique so SELECIONA (mesmo efeito de
+            // LoginUp/LoginDown), nunca ativa Detail. Reusar o braço
+            // genérico abaixo (Activate(Provider(i))) navegaria pra fora da
+            // tela Login no primeiro clique, contrariando "click seleciona;
+            // ativação continua pelo Enter/chip" (T14).
+            MouseTarget::Card(i) if state.screen == Screen::Login => {
+                if i < 3 {
+                    state.login_selected = i;
+                    state.login_status = None;
+                }
+                vec![]
+            }
+            MouseTarget::Card(i) => update(state, Action::Activate(SidebarItem::Provider(i))),
+            MouseTarget::Chip(ChipKind::Open) => update(state, Action::OpenDetail),
+            MouseTarget::Chip(ChipKind::Refresh) => update(state, Action::Refresh),
+            MouseTarget::Chip(ChipKind::Help) => update(state, Action::ToggleHelp),
+            MouseTarget::Chip(ChipKind::Quit) => update(state, Action::Quit),
+            MouseTarget::Chip(ChipKind::Back) => update(state, Action::Back),
+            MouseTarget::Chip(ChipKind::Login) => {
+                update(state, Action::Activate(SidebarItem::Login))
+            }
+            MouseTarget::Chip(ChipKind::History) => {
+                update(state, Action::Activate(SidebarItem::History))
+            }
+            MouseTarget::Chip(ChipKind::ToggleRange) => update(state, Action::ToggleHistoryRange),
+            // Chip "iniciar login" da tela Login: dispara a MESMA action que
+            // o Enter dispara lá (Action::LoginRequested pro provider
+            // selecionado) — nunca Activate(Login), que seria no-op (a
+            // tela já está ativa) e ignoraria o clique (T14).
+            MouseTarget::Chip(ChipKind::StartLogin) => update(
+                state,
+                Action::LoginRequested(login_selected_id(state.login_selected).to_string()),
+            ),
+            MouseTarget::Chip(ChipKind::EnterEdit) => update(state, Action::ConfigEnterEdit),
+            MouseTarget::Chip(ChipKind::SaveConfig) => update(state, Action::SaveConfig),
+        },
+
+        Action::Hover(t) => {
+            state.hover = t;
+            vec![]
+        }
+
+        Action::Scroll(delta) => {
+            // saturating_add_signed ja satura em 0 (limite inferior de u16) —
+            // .max(0) e redundante (clippy::unnecessary_min_or_max).
+            state.scroll = state.scroll.saturating_add_signed(delta as i16);
             vec![]
         }
     }
@@ -513,7 +760,7 @@ mod tests {
     use ratatui::crossterm::event::KeyModifiers;
 
     use super::*;
-    use crate::providers::types::{AllQuotas, ProviderQuota};
+    use crate::providers::types::ProviderQuota;
 
     fn fake_quota(id: &str) -> ProviderQuota {
         ProviderQuota {
@@ -531,6 +778,21 @@ mod tests {
         }
     }
 
+    /// Quota com `primary.remaining` preenchido — usado pelos testes do fluxo
+    /// de fetch assincrono (Task 5) que validam ProviderView/target_ratio.
+    fn test_quota(id: &str, remaining: f64) -> ProviderQuota {
+        use crate::providers::types::QuotaWindow;
+        let mut q = fake_quota(id);
+        q.primary = Some(QuotaWindow {
+            remaining,
+            resets_at: None,
+            window_minutes: None,
+            used: Some(100.0 - remaining),
+            severity: None,
+        });
+        q
+    }
+
     fn state_with_providers(n: usize) -> AppState {
         let mut s = AppState::new();
         s.providers = (0..n)
@@ -544,59 +806,384 @@ mod tests {
     }
 
     #[test]
-    fn down_moves_selection_and_clamps() {
+    fn down_moves_sidebar_selected_and_clamps() {
         let mut state = state_with_providers(3);
+        assert_eq!(state.sidebar_selected, 0);
+
+        update(&mut state, Action::Down);
+        assert_eq!(state.sidebar_selected, 1);
+
+        update(&mut state, Action::Down);
+        assert_eq!(state.sidebar_selected, 2);
+
+        // sidebar_items(3) = [Overview, Provider(0..3), History, Login, Waybar] = 7 itens (indices 0..=6).
+        for _ in 0..10 {
+            update(&mut state, Action::Down);
+        }
+        assert_eq!(
+            state.sidebar_selected, 6,
+            "should clamp at sidebar_items.len()-1"
+        );
+    }
+
+    #[test]
+    fn sidebar_items_order() {
+        let items = sidebar_items(2);
+        assert_eq!(
+            items,
+            vec![
+                SidebarItem::Overview,
+                SidebarItem::Provider(0),
+                SidebarItem::Provider(1),
+                SidebarItem::History,
+                SidebarItem::Login,
+                SidebarItem::Waybar,
+            ]
+        );
+    }
+
+    #[test]
+    fn up_down_move_sidebar_and_enter_activates() {
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
+        update(&mut state, Action::Down); // Overview → Provider(0)
+        assert_eq!(state.sidebar_selected, 1);
+        update(&mut state, Action::OpenDetail); // Enter
+        assert_eq!(state.screen, Screen::Detail);
         assert_eq!(state.selected, 0);
-
-        update(&mut state, Action::Down);
-        assert_eq!(state.selected, 1);
-
-        update(&mut state, Action::Down);
-        assert_eq!(state.selected, 2);
-
-        // Clamp: already at max
-        update(&mut state, Action::Down);
-        assert_eq!(state.selected, 2, "should clamp at providers.len()-1");
+        update(&mut state, Action::Back); // Esc
+        assert_eq!(state.screen, Screen::Overview);
     }
 
     #[test]
-    fn open_detail_then_back() {
+    fn activate_history_login_waybar() {
         let mut state = AppState::new();
-        assert_eq!(state.mode, Mode::List);
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        update(&mut state, Action::Activate(SidebarItem::Login));
+        assert_eq!(state.screen, Screen::Login);
+        let fu = update(&mut state, Action::Activate(SidebarItem::Waybar));
+        assert_eq!(state.screen, Screen::Waybar);
+        // Entrar na Waybar inicializa o config (comportamento atual do SwitchTab):
+        assert!(matches!(fu.as_slice(), [Action::InitConfig(_)]));
+    }
 
-        update(&mut state, Action::OpenDetail);
-        assert_eq!(state.mode, Mode::Detail);
+    #[test]
+    fn activate_screen_change_resets_scroll() {
+        // `state.scroll` e compartilhado entre telas (ScrollView do Overview
+        // e a tabela do History) — sem reset, uma posicao de scroll deixada
+        // numa tela vaza pra outra sem relacao nenhuma com aquele offset.
+        let mut state = AppState::new();
+        state.scroll = 12;
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        assert_eq!(state.scroll, 0, "trocar de tela deve zerar o scroll");
 
+        // Reativar a MESMA tela (ex. atalho 'h' de novo em cima de History)
+        // nao deve mexer no scroll do usuario ali dentro.
+        state.scroll = 5;
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        assert_eq!(
+            state.scroll, 5,
+            "reativar a tela ja ativa nao deve reset o scroll"
+        );
+    }
+
+    #[test]
+    fn back_resets_scroll() {
+        // Mesmo gap do Activate (state.scroll compartilhado entre telas):
+        // Esc a partir de History tambem tem que zerar o scroll ao voltar
+        // pro Overview, senao o offset de uma tela vaza pra outra.
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.scroll = 5;
         update(&mut state, Action::Back);
-        assert_eq!(state.mode, Mode::List);
+        assert_eq!(state.screen, Screen::Overview);
+        assert_eq!(state.scroll, 0, "Esc pra outra tela deve zerar o scroll");
     }
 
     #[test]
-    fn switch_tab_changes_tab_resets_mode() {
+    fn provider_fetched_growth_shifts_sidebar_cursor_to_keep_same_item() {
+        // Cursor comeca em History (indice 1 com 0 providers: [Overview,
+        // History, Login, Waybar]). Um provider novo chega via
+        // ProviderFetched (nao havia nenhum antes) — a sidebar cresce pra
+        // [Overview, Provider(0), History, Login, Waybar] e History passa
+        // pro indice 2. O cursor deve seguir o item logico (History), nao
+        // ficar parado num indice que agora aponta pra outra coisa.
         let mut state = AppState::new();
-        // Set detail mode to verify reset
-        state.mode = Mode::Detail;
-        state.tab = Tab::Dashboard;
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_eq!(state.screen, Screen::History);
+        assert_eq!(state.sidebar_selected, 1);
 
-        update(&mut state, Action::SwitchTab(Tab::Waybar));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
 
-        assert_eq!(state.tab, Tab::Waybar, "tab should switch to Waybar");
-        assert_eq!(state.mode, Mode::List, "mode should reset to List");
+        assert_eq!(
+            state.sidebar_selected, 2,
+            "cursor deve seguir History (indice deslocado pelo provider novo)"
+        );
+        assert_eq!(
+            sidebar_items(state.providers.len())[state.sidebar_selected],
+            SidebarItem::History,
+            "indice apos o shift deve continuar apontando pra History"
+        );
     }
 
     #[test]
-    fn data_fetched_populates_providers_and_status() {
+    fn activate_via_shortcut_syncs_sidebar_selected() {
+        // Simula h/g/w: Activate chamado diretamente (nao via Down repetido)
+        // deve sincronizar sidebar_selected pro indice do item ativado.
+        let mut state = state_with_providers(2);
+        assert_eq!(state.sidebar_selected, 0);
+
+        update(&mut state, Action::Activate(SidebarItem::History));
+
+        let expected = sidebar_items(2)
+            .iter()
+            .position(|i| *i == SidebarItem::History)
+            .unwrap();
+        assert_eq!(state.sidebar_selected, expected);
+    }
+
+    #[test]
+    fn activate_provider_syncs_sidebar_selected() {
+        let mut state = state_with_providers(2);
+        // Cursor comeca em outro item (History) para provar que Activate
+        // move o cursor, nao so o `selected` do Detail.
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert_ne!(state.sidebar_selected, 1);
+
+        update(&mut state, Action::Activate(SidebarItem::Provider(0)));
+
+        assert_eq!(state.screen, Screen::Detail);
+        assert_eq!(state.selected, 0);
+        assert_eq!(
+            state.sidebar_selected, 1,
+            "cursor deve sincronizar pro indice de Provider(0) na sidebar"
+        );
+    }
+
+    #[test]
+    fn fetch_started_sets_loading_and_pending() {
+        let mut state = AppState::new();
+        let fu = update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        assert!(fu.is_empty());
+        assert_eq!(state.status, FetchStatus::Loading);
+        assert_eq!(
+            state.fetch_pending,
+            vec!["claude".to_string(), "amp".to_string()]
+        );
+    }
+
+    #[test]
+    fn fetch_started_unions_without_duplicating_across_overlapping_waves() {
+        // Onda 1 (tick de 60s) resolve so "claude"; antes dela terminar, uma
+        // onda 2 (Refresh) comeca com "claude" (de novo) + "codex". O
+        // fetch_pending resultante deve ter cada id 1x, nao duplicado.
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 50.0))),
+        );
+        // "claude" ja saiu do pending; "amp" ainda esta em voo quando a onda 2 comeca.
+        assert_eq!(state.fetch_pending, vec!["amp".to_string()]);
+
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "codex".into()]),
+        );
+
+        // "amp" (da onda 1) + "claude"/"codex" (da onda 2), sem duplicar "amp".
+        let mut pending = state.fetch_pending.clone();
+        pending.sort();
+        assert_eq!(
+            pending,
+            vec!["amp".to_string(), "claude".to_string(), "codex".to_string()]
+        );
+        assert_eq!(state.status, FetchStatus::Loading);
+    }
+
+    #[test]
+    fn provider_fetched_merges_by_id_and_clears_pending() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        let q = test_quota("claude", 80.0);
+        update(&mut state, Action::ProviderFetched(Box::new(q.clone())));
+        assert!(state.fetch_pending.is_empty());
+        assert_eq!(state.providers.len(), 1);
+        assert_eq!(state.providers[0].quota.provider, "claude");
+        // Segundo fetch do mesmo provider substitui (nao duplica):
+        update(&mut state, Action::ProviderFetched(Box::new(q)));
+        assert_eq!(state.providers.len(), 1);
+    }
+
+    #[test]
+    fn fetch_completed_sets_loaded_and_requests_usage_reload() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
+        let fu = update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
+            },
+        );
+        assert_eq!(state.status, FetchStatus::Loaded);
+        assert!(state.last_update.is_some());
+        assert!(matches!(fu.as_slice(), [Action::ReloadUsage]));
+    }
+
+    #[test]
+    fn fetch_completed_with_pending_from_another_wave_stays_loading() {
+        // Onda 1 ("claude"+"amp") e onda 2 ("codex") se sobrepoem. A onda 1
+        // termina primeiro (FetchCompleted) mas "codex" (da onda 2) ainda
+        // esta em voo: status deve permanecer Loading, e o pending restante
+        // NAO pode ser apagado (senao a onda 2 nunca fecha o loop).
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("amp", 60.0))),
+        );
+        // Onda 2 comeca antes da onda 1 completar.
+        update(&mut state, Action::FetchStarted(vec!["codex".into()]));
+
+        let fu = update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
+            },
+        );
+
+        assert_eq!(
+            state.status,
+            FetchStatus::Loading,
+            "status deve permanecer Loading — a onda 2 (codex) ainda esta em voo"
+        );
+        assert_eq!(
+            state.fetch_pending,
+            vec!["codex".to_string()],
+            "pending da onda 2 nao pode ser apagado pelo FetchCompleted da onda 1"
+        );
+        assert!(matches!(fu.as_slice(), [Action::ReloadUsage]));
+    }
+
+    #[test]
+    fn fetch_completed_never_regresses_last_update() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("claude", 80.0))),
+        );
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
+            },
+        );
+        let after_first = state.last_update;
+        assert!(after_first.is_some());
+
+        // Uma 2a onda (mais lenta) termina com um fetched_at MAIS ANTIGO
+        // (ex.: comecou antes, mas so completou depois) — last_update nao
+        // pode regredir.
+        update(&mut state, Action::FetchStarted(vec!["amp".into()]));
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("amp", 60.0))),
+        );
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T17:00:00.000Z".into(), // 1h antes
+                silent: false,
+            },
+        );
+
+        assert_eq!(
+            state.last_update, after_first,
+            "last_update nao deve regredir para um fetched_at mais antigo"
+        );
+    }
+
+    #[test]
+    fn fetch_failed_clears_pending() {
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "amp".into()]),
+        );
+        assert!(!state.fetch_pending.is_empty());
+
+        update(
+            &mut state,
+            Action::FetchFailed("fetch runtime: boom".into()),
+        );
+
+        assert!(
+            state.fetch_pending.is_empty(),
+            "FetchFailed deve limpar fetch_pending (senao o spinner gira pra sempre)"
+        );
+        assert_eq!(
+            state.status,
+            FetchStatus::Failed("fetch runtime: boom".to_string())
+        );
+    }
+
+    #[test]
+    fn fetch_flow_populates_providers_and_status() {
+        // Migrado de `data_fetched_populates_providers_and_status` (Task 5):
+        // o fluxo FetchStarted->ProviderFetched->FetchCompleted substitui o
+        // antigo Action::DataFetched(AllQuotas), preservando as mesmas
+        // validacoes (providers populados, status Loaded, last_update parseado).
         let mut state = AppState::new();
         assert_eq!(state.status, FetchStatus::Idle);
         assert!(state.providers.is_empty());
         assert!(state.last_update.is_none());
 
-        let quotas = AllQuotas {
-            providers: vec![fake_quota("claude"), fake_quota("codex")],
-            fetched_at: "2026-06-19T12:00:00.000Z".to_string(),
-        };
-
-        update(&mut state, Action::DataFetched(quotas));
+        update(
+            &mut state,
+            Action::FetchStarted(vec!["claude".into(), "codex".into()]),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(fake_quota("claude"))),
+        );
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(fake_quota("codex"))),
+        );
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-06-19T12:00:00.000Z".to_string(),
+                silent: false,
+            },
+        );
 
         assert_eq!(state.status, FetchStatus::Loaded);
         assert_eq!(state.providers.len(), 2);
@@ -604,7 +1191,7 @@ mod tests {
         assert_eq!(state.providers[1].quota.provider, "codex");
         assert!(
             state.last_update.is_some(),
-            "last_update should be Some after DataFetched"
+            "last_update should be Some after FetchCompleted"
         );
     }
 
@@ -633,6 +1220,7 @@ mod tests {
             resets_at: None,
             window_minutes: None,
             used: Some(20.0),
+            severity: None,
         });
         let mut state = AppState::new();
         // Inicializa com 0 (forçamos display_ratio inicial diferente do target)
@@ -675,6 +1263,153 @@ mod tests {
         assert_eq!(state.anim_frame, 6);
     }
 
+    // ---- Motion: tachyonfx + lerps (Task 16) ----
+
+    /// UsageSummary com `total_cost.usd` fixo — helper pro teste de count-up
+    /// de `display_cost` (não interessa o resto do summary).
+    fn test_usage_summary_with_cost(usd: f64) -> crate::usage::UsageSummary {
+        crate::usage::UsageSummary {
+            providers: vec![],
+            total_cost: crate::usage::Cost {
+                usd,
+                brl: usd * 5.50,
+            },
+            fx_rate: 5.50,
+        }
+    }
+
+    #[test]
+    fn screen_change_pushes_fx_event() {
+        let mut state = AppState::new();
+        update(&mut state, Action::Activate(SidebarItem::History));
+        assert!(state
+            .fx_queue
+            .contains(&crate::tui::state::FxEvent::ScreenChanged));
+    }
+
+    #[test]
+    fn activate_same_screen_does_not_repush_fx_event() {
+        // Reativar o item já ativo (ex. Enter em cima de si mesmo) não deve
+        // disparar um 2º coalesce — só a mudança real de tela dispara.
+        let mut state = AppState::new();
+        update(&mut state, Action::Activate(SidebarItem::History));
+        state.fx_queue.clear();
+
+        update(&mut state, Action::Activate(SidebarItem::History));
+
+        assert!(
+            state.fx_queue.is_empty(),
+            "reativar a MESMA tela não deve empurrar ScreenChanged de novo"
+        );
+    }
+
+    #[test]
+    fn fetch_completed_pushes_fetch_landed() {
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: false,
+            },
+        );
+        assert!(state
+            .fx_queue
+            .contains(&crate::tui::state::FxEvent::FetchLanded));
+    }
+
+    /// Fix pós-review (T16): `silent=true` (poll de 60s do `data_tick`) NÃO
+    /// deve disparar o sweep — spec §8 quer o efeito só em ondas pedidas
+    /// pelo usuário (load inicial, `r`/chip Refresh, LoginFinished).
+    #[test]
+    fn fetch_completed_silent_does_not_push_fetch_landed() {
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::FetchCompleted {
+                fetched_at: "2026-07-01T18:00:00.000Z".into(),
+                silent: true,
+            },
+        );
+        assert!(
+            !state
+                .fx_queue
+                .contains(&crate::tui::state::FxEvent::FetchLanded),
+            "onda silenciosa (poll de 60s) não deve empurrar FetchLanded"
+        );
+    }
+
+    #[test]
+    fn anim_tick_lerps_display_cost_toward_target() {
+        let mut state = AppState::new();
+        // usage já presente (não é o 1º load) para exercitar o lerp, não o
+        // snap de UsageComputed — display_cost começa em 0.0 (default).
+        state.usage = Some(test_usage_summary_with_cost(100.0));
+        state.display_cost = 0.0;
+
+        update(&mut state, Action::AnimTick);
+        assert!(state.display_cost > 0.0 && state.display_cost < 100.0);
+
+        for _ in 0..400 {
+            update(&mut state, Action::AnimTick);
+        }
+        assert!((state.display_cost - 100.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn anim_tick_snaps_display_cost_when_animations_off() {
+        // Self-review: animations=false → zero lerp visual (snap direto).
+        let mut state = AppState::new();
+        state.animations = false;
+        state.usage = Some(test_usage_summary_with_cost(42.0));
+        state.display_cost = 0.0;
+
+        update(&mut state, Action::AnimTick);
+
+        assert_eq!(
+            state.display_cost, 42.0,
+            "com animations=false, 1 único AnimTick já deve snapar pro alvo"
+        );
+    }
+
+    #[test]
+    fn usage_computed_first_load_snaps_display_cost_without_animating() {
+        // Mesmo racional do display_ratio em ProviderView::new(): o 1º load
+        // não deve animar a partir de zero.
+        let mut state = AppState::new();
+        assert!(state.usage.is_none());
+        assert_eq!(state.display_cost, 0.0);
+
+        update(
+            &mut state,
+            Action::UsageComputed(test_usage_summary_with_cost(7.5)),
+        );
+
+        assert_eq!(state.display_cost, 7.5);
+    }
+
+    #[test]
+    fn usage_computed_second_load_does_not_reset_display_cost() {
+        // Loads seguintes (usage já Some) preservam display_cost — o
+        // AnimTick é quem faz o count-up até o novo alvo, não o snap.
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::UsageComputed(test_usage_summary_with_cost(10.0)),
+        );
+        assert_eq!(state.display_cost, 10.0);
+
+        update(
+            &mut state,
+            Action::UsageComputed(test_usage_summary_with_cost(50.0)),
+        );
+
+        assert_eq!(
+            state.display_cost, 10.0,
+            "2º load não deve resetar display_cost — AnimTick faz o count-up"
+        );
+    }
+
     #[test]
     fn display_ratio_initializes_to_target() {
         use crate::providers::types::QuotaWindow;
@@ -684,6 +1419,7 @@ mod tests {
             resets_at: None,
             window_minutes: None,
             used: Some(58.0),
+            severity: None,
         });
         let pv = crate::tui::state::ProviderView::new(q);
         // Na inicialização, display_ratio deve ser igual ao target (sem animação no 1º frame).
@@ -718,6 +1454,11 @@ mod tests {
             notify: Notify { enabled: true },
             cache: CacheSettings {
                 ttl: BTreeMap::new(),
+            },
+            menu: MenuSettings {
+                animations: true,
+                font_family: "IBM Plex Mono".to_string(),
+                font_size: 12,
             },
             glyph_mode: GlyphMode::Box,
             fx_rate: 5.50,
@@ -844,16 +1585,260 @@ mod tests {
     }
 
     #[test]
-    fn save_config_returns_save_config_action_and_sets_status() {
+    fn save_config_sets_pending_save_and_status() {
         let mut state = AppState::new();
         update(&mut state, Action::InitConfig(fake_settings()));
 
         let follow_ups = update(&mut state, Action::SaveConfig);
-        // Deve re-enfileirar SaveConfig para o event_loop interceptar
-        let has_save_config = follow_ups.iter().any(|a| matches!(a, Action::SaveConfig));
-        assert!(has_save_config, "SaveConfig deve ser re-enfileirado");
+        // Nao re-enfileira mais: o event_loop le pending_save no topo do loop.
+        assert!(follow_ups.is_empty());
+        assert!(state.pending_save, "pending_save deve ser sinalizado");
         // Status msg deve ser "Salvando..."
         let msg = state.config_state.as_ref().unwrap().status_msg.as_deref();
         assert_eq!(msg, Some("Salvando..."));
+    }
+
+    // ---- Aba Login ----
+
+    #[test]
+    fn login_requested_sets_pending_and_status() {
+        let mut state = AppState::new();
+        let fu = update(&mut state, Action::LoginRequested("codex".into()));
+        assert!(fu.is_empty()); // nao re-enfileira mais: o event_loop le pending_login
+        assert_eq!(state.pending_login.as_deref(), Some("codex"));
+        assert!(state
+            .login_status
+            .as_deref()
+            .unwrap_or("")
+            .contains("codex"));
+    }
+
+    #[test]
+    fn login_finished_success_requests_single_refetch() {
+        let mut state = AppState::new();
+        let fu = update(&mut state, Action::LoginFinished("codex".into()));
+        // O drain intercepta esta action diretamente (spawn_fetch(only=Some(id)))
+        // sem re-entrar no update — nao ha guard anti-loop porque o update
+        // nunca ve esta action de volta.
+        assert!(matches!(fu.as_slice(), [Action::LoginFinished(id)] if id == "codex"));
+    }
+
+    // ---- Refresh (tecla [r]) ----
+
+    #[test]
+    fn refresh_with_no_pending_fetch_reenqueues_once() {
+        let mut state = AppState::new();
+        assert!(state.fetch_pending.is_empty());
+
+        let fu = update(&mut state, Action::Refresh);
+
+        assert!(matches!(fu.as_slice(), [Action::Refresh]));
+    }
+
+    #[test]
+    fn refresh_with_pending_fetch_is_noop() {
+        let mut state = AppState::new();
+        update(&mut state, Action::FetchStarted(vec!["claude".into()]));
+        assert!(!state.fetch_pending.is_empty());
+
+        let fu = update(&mut state, Action::Refresh);
+
+        assert!(
+            fu.is_empty(),
+            "Refresh deve ser no-op quando ja ha fetch em voo (evita duplicar spawn_fetch)"
+        );
+    }
+
+    // ---- Mouse (Task 9) ----
+
+    #[test]
+    fn click_sidebar_selects_and_activates() {
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
+        update(&mut state, Action::Click(MouseTarget::Sidebar(1)));
+        assert_eq!(state.sidebar_selected, 1);
+        assert_eq!(state.screen, Screen::Detail); // Provider(0) ativado
+    }
+
+    #[test]
+    fn click_sidebar_out_of_range_is_noop() {
+        // sidebar_items(0) = [Overview, History, Login, Waybar] (4 itens, indices 0..=3).
+        let mut state = AppState::new();
+        let fu = update(&mut state, Action::Click(MouseTarget::Sidebar(99)));
+        assert_eq!(
+            state.sidebar_selected, 0,
+            "indice fora de faixa e ignorado — cursor nao se move"
+        );
+        assert!(
+            fu.is_empty(),
+            "indice fora de sidebar_items() nao deve gerar Activate"
+        );
+        assert_eq!(state.screen, Screen::Overview, "tela nao muda sem Activate");
+    }
+
+    // ---- Aba Login: reskin (Task 14) ----
+
+    #[test]
+    fn click_card_on_login_screen_only_selects_never_activates_detail() {
+        // Regressão do bug que esta task evita: MouseTarget::Card(i) já
+        // significa "Activate(Provider(i))" no Overview (ativa Detail). A
+        // lista de providers da tela Login reusa Card(i) pro mesmo visual,
+        // mas o clique deve APENAS selecionar (mesmo efeito de
+        // LoginUp/LoginDown) — nunca navegar pra fora da tela Login.
+        let mut state = AppState::new();
+        state.screen = Screen::Login;
+        state.login_selected = 0;
+        state.login_status = Some("Abrindo login para claude...".to_string());
+
+        let fu = update(&mut state, Action::Click(MouseTarget::Card(1)));
+
+        assert_eq!(state.login_selected, 1, "clique deve selecionar o item 1");
+        assert_eq!(
+            state.screen,
+            Screen::Login,
+            "clique num item da lista NUNCA deve navegar pra Detail"
+        );
+        assert_eq!(
+            state.login_status, None,
+            "seleção limpa o status (mesmo comportamento de LoginUp/LoginDown)"
+        );
+        assert!(fu.is_empty());
+    }
+
+    #[test]
+    fn click_card_on_login_screen_ignores_out_of_range_index() {
+        let mut state = AppState::new();
+        state.screen = Screen::Login;
+        state.login_selected = 0;
+
+        update(&mut state, Action::Click(MouseTarget::Card(99)));
+
+        assert_eq!(
+            state.login_selected, 0,
+            "índice fora de faixa (só 3 providers) é ignorado"
+        );
+    }
+
+    #[test]
+    fn click_card_outside_login_screen_still_activates_detail() {
+        // Garante que o guard acima NÃO regrediu o comportamento existente
+        // do Overview (Card(i) → Activate(Provider(i))).
+        let mut state = AppState::new();
+        state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
+        update(&mut state, Action::Click(MouseTarget::Card(0)));
+        assert_eq!(state.screen, Screen::Detail);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn click_start_login_chip_fires_same_action_as_enter_for_selected_provider() {
+        // O chip "iniciar login" tem que disparar a MESMA action que o
+        // Enter dispara na tela Login (Action::LoginRequested pro provider
+        // selecionado) — nunca Action::Activate(Login) (ChipKind::Login
+        // seria no-op ali, a tela já está ativa; T14 introduz
+        // ChipKind::StartLogin exatamente pra evitar essa armadilha).
+        let mut state = AppState::new();
+        state.screen = Screen::Login;
+        state.login_selected = 1; // codex
+
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::StartLogin)),
+        );
+
+        assert_eq!(state.pending_login.as_deref(), Some("codex"));
+        assert!(state
+            .login_status
+            .as_deref()
+            .unwrap_or("")
+            .contains("codex"));
+    }
+
+    // ---- Tela Waybar: reskin (Task 14) ----
+
+    #[test]
+    fn click_enter_edit_chip_starts_editing_selected_field() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::EnterEdit)),
+        );
+
+        let cs = state.config_state.as_ref().unwrap();
+        assert!(cs.editing, "chip 'editar' deve entrar em modo de edição");
+    }
+
+    #[test]
+    fn click_save_config_chip_sets_pending_save() {
+        let mut state = AppState::new();
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::SaveConfig)),
+        );
+
+        assert!(
+            state.pending_save,
+            "chip 'salvar' deve sinalizar pending_save (mesmo efeito da tecla [s])"
+        );
+    }
+
+    // ---- Aba History (Task 13) ----
+
+    #[test]
+    fn toggle_history_range_flips() {
+        let mut state = AppState::new();
+        assert_eq!(state.history_range, HistoryRange::Week);
+        update(&mut state, Action::ToggleHistoryRange);
+        assert_eq!(state.history_range, HistoryRange::Day);
+        update(&mut state, Action::ToggleHistoryRange);
+        assert_eq!(state.history_range, HistoryRange::Week);
+    }
+
+    #[test]
+    fn click_toggle_range_chip_flips_range() {
+        let mut state = AppState::new();
+        assert_eq!(state.history_range, HistoryRange::Week);
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::ToggleRange)),
+        );
+        assert_eq!(state.history_range, HistoryRange::Day);
+    }
+
+    #[test]
+    fn key_t_on_history_screen_toggles_range() {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        update(&mut state, Action::Key(key_event(KeyCode::Char('t'))));
+        assert_eq!(state.history_range, HistoryRange::Day);
+    }
+
+    #[test]
+    fn key_t_outside_history_screen_is_noop() {
+        let mut state = AppState::new();
+        assert_eq!(state.screen, Screen::Overview);
+        let fu = update(&mut state, Action::Key(key_event(KeyCode::Char('t'))));
+        assert!(fu.is_empty());
+        assert_eq!(
+            state.history_range,
+            HistoryRange::Week,
+            "'t' fora da tela History nao deve alternar o range"
+        );
+    }
+
+    #[test]
+    fn hover_and_scroll_update_state() {
+        let mut state = AppState::new();
+        update(&mut state, Action::Hover(Some(MouseTarget::Card(0))));
+        assert_eq!(state.hover, Some(MouseTarget::Card(0)));
+        state.scroll = 2;
+        update(&mut state, Action::Scroll(-1));
+        assert_eq!(state.scroll, 1);
+        update(&mut state, Action::Scroll(-5));
+        assert_eq!(state.scroll, 0); // saturating
     }
 }

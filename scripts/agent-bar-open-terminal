@@ -19,7 +19,54 @@ fi
 
 cmd="$*"
 
-# 1) Omarchy/uwsm path (best UX on Omarchy)
+# Fonte do menu (settings menu.fontFamily/fontSize) — best-effort:
+# se o binário não responder, cai na fonte padrão do terminal.
+font_family=""
+font_size=""
+if command -v agent-bar >/dev/null 2>&1; then
+  if font_spec="$(agent-bar menu-font 2>/dev/null)"; then
+    font_family="${font_spec%%	*}"
+    font_size="${font_spec##*	}"
+  fi
+fi
+
+# 1) Alacritty direto (Omarchy incluso): fonte configurável + classe p/ float.
+# Guard: fonte só se aplica em terminais com flag própria — se $TERMINAL está
+# setado e não é alacritty, respeitamos a escolha e pulamos pro resto da cascata.
+if { [ -z "${TERMINAL:-}" ] || [ "$(basename -- "$TERMINAL")" = "alacritty" ]; } \
+  && command -v alacritty >/dev/null 2>&1; then
+  font_opts=()
+  if [ -n "$font_family" ]; then
+    font_opts+=(--option "font.normal.family=\"$font_family\"")
+    [ -n "$font_size" ] && font_opts+=(--option "font.size=$font_size")
+  fi
+  exec setsid alacritty --class org.omarchy.terminal --title "Agent Bar" \
+    "${font_opts[@]}" -e bash -lc "$cmd"
+fi
+
+# 2) kitty / foot / ghostty com flag de fonte:
+if command -v kitty >/dev/null 2>&1; then
+  font_opts=()
+  [ -n "$font_family" ] && font_opts+=(-o "font_family=$font_family")
+  [ -n "$font_size" ] && font_opts+=(-o "font_size=$font_size")
+  exec setsid kitty --title "Agent Bar" "${font_opts[@]}" bash -lc "$cmd"
+fi
+
+if command -v foot >/dev/null 2>&1; then
+  if [ -n "$font_family" ]; then
+    exec setsid foot -T "Agent Bar" -o "main.font=$font_family:size=${font_size:-12}" bash -lc "$cmd"
+  fi
+  exec setsid foot -T "Agent Bar" bash -lc "$cmd"
+fi
+
+if command -v ghostty >/dev/null 2>&1; then
+  font_opts=()
+  [ -n "$font_family" ] && font_opts+=("--font-family=$font_family")
+  [ -n "$font_size" ] && font_opts+=("--font-size=${font_size:-12}")
+  exec setsid ghostty --title="Agent Bar" "${font_opts[@]}" -e bash -lc "$cmd"
+fi
+
+# 3) uwsm/xdg genérico (sem suporte a fonte — fallback documentado):
 if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
   exec setsid uwsm-app -- xdg-terminal-exec \
     --app-id=org.omarchy.terminal \
@@ -27,26 +74,15 @@ if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/nul
     -e bash -lc "$cmd"
 fi
 
-# 2) Generic fallbacks (works on most distros)
 if command -v xdg-terminal-exec >/dev/null 2>&1; then
   exec setsid xdg-terminal-exec --title="Agent Bar" -e bash -lc "$cmd"
 fi
 
-if command -v alacritty >/dev/null 2>&1; then
-  exec setsid alacritty --title "Agent Bar" -e bash -lc "$cmd"
-fi
-
-if command -v kitty >/dev/null 2>&1; then
-  exec setsid kitty --title "Agent Bar" bash -lc "$cmd"
-fi
-
-if command -v foot >/dev/null 2>&1; then
-  exec setsid foot -T "Agent Bar" bash -lc "$cmd"
-fi
-
+# wezterm: launch atual, sem fonte. `--config font=...` tem sintaxe Lua
+# frágil; não-suportado aqui (documentado, não implementado).
 if command -v wezterm >/dev/null 2>&1; then
   exec setsid wezterm start --always-new-process --class "AgentBar" bash -lc "$cmd"
 fi
 
-echo "No supported terminal launcher found (xdg-terminal-exec/alacritty/kitty/foot/wezterm)." >&2
+echo "No supported terminal launcher found (xdg-terminal-exec/alacritty/kitty/foot/ghostty/wezterm)." >&2
 exit 1

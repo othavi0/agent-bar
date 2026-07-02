@@ -1,7 +1,9 @@
 //! Sparkline widget: renders a braille block-element sparkline from a data slice.
 //!
-//! Wraps ratatui's built-in `Sparkline` widget, or falls back to a manual
-//! block-element string (`▁▂▃▄▅▆▇`) when the data slice is empty.
+//! Manual implementation (does not use ratatui's built-in `Sparkline` widget):
+//! values are normalized against the slice max and mapped to one of 7
+//! block-element characters (`▁▂▃▄▅▆▇`). Returns an empty string when the
+//! data slice is empty.
 
 use ratatui::style::Style;
 use ratatui::text::Span;
