@@ -193,6 +193,8 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
             handle_login(&mut state, id.clone());
             let follow_ups = update(&mut state, Action::LoginFinished(id));
             drain(&mut state, &octx, &bg_tx, follow_ups);
+            // login_spawn suspende/reinicializa o terminal com instância própria; clear() ressincroniza o buffer deste run()
+            terminal.clear()?;
             continue;
         }
         if state.pending_save {
