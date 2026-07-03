@@ -207,19 +207,41 @@ impl UsageCache {
             return;
         };
 
+        // Primeiro descobre quem morreu com uma READ txn; se ninguém morreu,
+        // não abre write txn (evita lock exclusivo desnecessário a cada
+        // chamada de `records()`, que roda em todo poll do Waybar).
+        let dead = (|| -> anyhow::Result<Vec<String>> {
+            let txn = db.begin_read()?;
+            let table = match txn.open_table(FILES) {
+                Ok(t) => t,
+                Err(redb::TableError::TableDoesNotExist(_)) => return Ok(vec![]),
+                Err(e) => return Err(e.into()),
+            };
+            Ok(table
+                .iter()?
+                .filter_map(|entry| entry.ok())
+                .map(|(k, _v)| k.value().to_string())
+                .filter(|k| !live.contains(Path::new(k.as_str())))
+                .collect())
+        })();
+
+        let dead = match dead {
+            Ok(d) => d,
+            Err(e) => {
+                log::warn!("usage cache: gc (leitura) falhou ({e})");
+                return;
+            }
+        };
+
+        if dead.is_empty() {
+            return;
+        }
+
         let result = (|| -> anyhow::Result<()> {
             let txn = db.begin_write()?;
             {
                 let mut table = txn.open_table(FILES)?;
-                let dead: Vec<String> = {
-                    table
-                        .iter()?
-                        .filter_map(|entry| entry.ok())
-                        .map(|(k, _v)| k.value().to_string())
-                        .filter(|k| !live.contains(Path::new(k.as_str())))
-                        .collect()
-                };
-                for k in dead {
+                for k in &dead {
                     table.remove(k.as_str())?;
                 }
             }
@@ -253,8 +275,12 @@ impl UsageCache {
     }
 }
 
-/// Abre (ou cria) o redb em `path`. Corrupção/erro de abertura → apaga e
-/// tenta uma vez mais; falha de novo → `None` (cache degrada pra memória).
+/// Abre (ou cria) o redb em `path`. `DatabaseAlreadyOpen` é lock exclusivo de
+/// OUTRO processo/handle no mesmo path (flock por open-file-description) —
+/// NÃO é corrupção, e apagar o arquivo apagaria o db saudável do dono atual
+/// do lock (unlink deixa ele escrevendo num inode órfão). Só degrada pra
+/// memória nesse caso. Demais erros = corrupção/storage real: apaga e tenta
+/// uma vez mais; falha de novo → `None` (cache degrada pra memória).
 /// Nunca panica.
 fn open_db(path: &Path) -> Option<Database> {
     if let Some(parent) = path.parent() {
@@ -263,11 +289,21 @@ fn open_db(path: &Path) -> Option<Database> {
 
     match Database::create(path) {
         Ok(db) => Some(db),
+        Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
+            log::warn!("usage cache: {path:?} em uso por outro processo; degradando pra memória");
+            None
+        }
         Err(e) => {
             log::warn!("usage cache: abrir {path:?} falhou ({e}); tentando recriar");
             let _ = std::fs::remove_file(path);
             match Database::create(path) {
                 Ok(db) => Some(db),
+                Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
+                    log::warn!(
+                        "usage cache: {path:?} em uso por outro processo após recriar; degradando pra memória"
+                    );
+                    None
+                }
                 Err(e2) => {
                     log::warn!(
                         "usage cache: recriação de {path:?} falhou ({e2}); rodando só em memória"
@@ -373,6 +409,34 @@ mod tests {
         let f = dir.path().join("s.jsonl");
         std::fs::write(&f, "x").unwrap();
         assert_eq!(c.cached_or_parse(&f, |_| vec![dummy_record()]).len(), 1);
+    }
+
+    #[test]
+    fn second_open_while_locked_degrades_to_memory_without_deleting() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("usage.redb");
+        let f = dir.path().join("s.jsonl");
+        std::fs::write(&f, "x").unwrap();
+
+        let mut c1 = UsageCache::open(Some(&db));
+        let _ = c1.cached_or_parse(&f, |_| vec![dummy_record()]);
+        assert_eq!(c1.persisted_len(), 1);
+
+        // 2º open com o 1º ainda vivo (lock ativo): não pode apagar o db.
+        let mut c2 = UsageCache::open(Some(&db));
+        let r = c2.cached_or_parse(&f, |_| vec![dummy_record()]); // funciona em memória
+        assert_eq!(r.len(), 1);
+
+        drop(c1);
+        drop(c2);
+
+        // O arquivo NÃO foi deletado e o dado do 1º sobreviveu.
+        let c3 = UsageCache::open(Some(&db));
+        assert_eq!(
+            c3.persisted_len(),
+            1,
+            "db saudável não pode ter sido apagado pelo 2º open"
+        );
     }
 
     #[test]
