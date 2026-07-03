@@ -205,10 +205,15 @@ fn header_status(state: &AppState) -> Line<'static> {
     }
 
     // Count-up (T16): mostra `display_cost` (persegue `usage.total_cost.usd`
-    // via lerp em AnimTick), não o valor bruto — "-" enquanto usage ainda
-    // não carregou nenhuma vez (display_cost fica em 0.0 até o 1º load).
+    // via lerp em AnimTick), não o valor bruto — fallback enquanto usage
+    // ainda não carregou nenhuma vez (display_cost fica em 0.0 até o 1º
+    // load). Fix desta task: com fetch em voo (1º load real, "verificando…")
+    // o fallback é "…"; sem fetch em voo e sem dado, "-" (estado
+    // genuinamente vazio, ex. erro) — comportamento anterior preservado.
     let cost = if state.usage.is_some() {
         format!("${:.2}", state.display_cost)
+    } else if !state.fetch_pending.is_empty() {
+        "…".to_string()
     } else {
         "-".to_string()
     };
@@ -707,5 +712,15 @@ mod tests {
         assert_eq!(hits.at(1, 2), Some(MouseTarget::Sidebar(0)));
         assert_eq!(hits.at(3, 2), Some(MouseTarget::Sidebar(0))); // ultima col da sidebar colapsada (largura 3: x=1..4)
         assert_eq!(hits.at(4, 2), None); // area de conteudo comeca na coluna 4
+    }
+
+    #[test]
+    fn header_first_load_shows_ellipsis_not_dash() {
+        let mut state = AppState::new();
+        state.fetch_pending = vec!["claude".to_string()];
+        let line = header_status(&state);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(!text.contains('-'), "primeiro load não mostra '-': {text:?}");
+        assert!(text.contains('…'), "primeiro load mostra reticências: {text:?}");
     }
 }
