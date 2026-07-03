@@ -26,14 +26,17 @@ pub struct DayBucket {
 /// Acumulador intermediário de um bucket: (tokens io, cache_tokens, custo).
 type BucketAcc = (u64, u64, Option<f64>);
 
-/// Agrupa records por dia (ts.date()) somando tokens e custo.
+/// Agrupa records por dia local (`ts.to_offset(local_offset).date()`) somando
+/// tokens e custo. `local_offset` decide a fronteira de "dia" — sem ele o
+/// bucket cai na data UTC, que discorda do "hoje" cortado à meia-noite local
+/// usado no resto do painel.
 /// Records com modelo desconhecido contribuem tokens mas nao custo (igual ao engine).
 /// Retorna vec ordenado por data crescente.
-pub fn bucket_by_day(records: &[UsageRecord]) -> Vec<DayBucket> {
+pub fn bucket_by_day(records: &[UsageRecord], local_offset: time::UtcOffset) -> Vec<DayBucket> {
     let mut map: BTreeMap<Date, BucketAcc> = BTreeMap::new();
 
     for rec in records {
-        let date = rec.ts.date();
+        let date = rec.ts.to_offset(local_offset).date();
         let tokens = rec.input + rec.output;
         let cache_tokens = rec.cache_read + rec.cache_write;
         let cost = cost_usd_of(rec);
@@ -58,14 +61,18 @@ pub fn bucket_by_day(records: &[UsageRecord]) -> Vec<DayBucket> {
         .collect()
 }
 
-/// Agrupa records por (provider, day) para o grafico por-provider.
+/// Agrupa records por (provider, day local) para o grafico por-provider.
+/// Mesma fronteira de dia de `bucket_by_day` (`local_offset`).
 /// Retorna BTreeMap<provider_name, Vec<DayBucket>> ordenado por data.
-pub fn bucket_by_provider_day(records: &[UsageRecord]) -> BTreeMap<String, Vec<DayBucket>> {
+pub fn bucket_by_provider_day(
+    records: &[UsageRecord],
+    local_offset: time::UtcOffset,
+) -> BTreeMap<String, Vec<DayBucket>> {
     // (provider, date) -> (tokens, cache_tokens, cost)
     let mut map: BTreeMap<(String, Date), BucketAcc> = BTreeMap::new();
 
     for rec in records {
-        let date = rec.ts.date();
+        let date = rec.ts.to_offset(local_offset).date();
         let tokens = rec.input + rec.output;
         let cache_tokens = rec.cache_read + rec.cache_write;
         let cost = cost_usd_of(rec);
@@ -276,7 +283,7 @@ mod day_bucket_tests {
 
     #[test]
     fn bucket_by_day_empty_input() {
-        let result = bucket_by_day(&[]);
+        let result = bucket_by_day(&[], time::UtcOffset::UTC);
         assert!(result.is_empty());
     }
 
@@ -289,7 +296,7 @@ mod day_bucket_tests {
             1000,
             500,
         )];
-        let buckets = bucket_by_day(&records);
+        let buckets = bucket_by_day(&records, time::UtcOffset::UTC);
         assert_eq!(buckets.len(), 1);
         assert_eq!(buckets[0].date, date!(2026 - 06 - 17));
         assert_eq!(buckets[0].tokens, 1500);
@@ -320,7 +327,7 @@ mod day_bucket_tests {
             rec("claude", None, "2026-06-19T09:00:00Z", 800, 200),
         ];
 
-        let buckets = bucket_by_day(&records);
+        let buckets = bucket_by_day(&records, time::UtcOffset::UTC);
 
         // Deve ter 3 buckets (um por data unica)
         assert_eq!(
@@ -370,7 +377,7 @@ mod day_bucket_tests {
             ),
             rec("codex", Some("gpt-5.5"), "2026-06-17T12:00:00Z", 500, 0),
         ];
-        let buckets = bucket_by_day(&records);
+        let buckets = bucket_by_day(&records, time::UtcOffset::UTC);
         assert_eq!(buckets.len(), 1);
         assert_eq!(
             buckets[0].tokens, 1500,
@@ -381,7 +388,7 @@ mod day_bucket_tests {
     #[test]
     fn bucket_by_day_unknown_model_contributes_tokens_not_cost() {
         let records = vec![rec("claude", None, "2026-06-17T10:00:00Z", 1000, 200)];
-        let buckets = bucket_by_day(&records);
+        let buckets = bucket_by_day(&records, time::UtcOffset::UTC);
         assert_eq!(buckets.len(), 1);
         assert_eq!(buckets[0].tokens, 1200);
         assert!(
@@ -401,7 +408,7 @@ mod day_bucket_tests {
         r1.cache_write = 100;
         let mut r2 = rec("claude", Some("claude-sonnet-4-6"), "2026-06-17T14:00:00Z", 300, 50);
         r2.cache_read = 200;
-        let buckets = bucket_by_day(&[r1, r2]);
+        let buckets = bucket_by_day(&[r1, r2], time::UtcOffset::UTC);
         assert_eq!(buckets.len(), 1);
         assert_eq!(buckets[0].tokens, 1550, "tokens deve continuar so input+output");
         assert_eq!(buckets[0].cache_tokens, 800, "cache_tokens = 500+100+200");
@@ -413,8 +420,54 @@ mod day_bucket_tests {
         r1.cache_read = 400;
         let mut r2 = rec("codex", Some("gpt-5.5"), "2026-06-17T09:00:00Z", 2000, 0);
         r2.cache_write = 900;
-        let by_provider = bucket_by_provider_day(&[r1, r2]);
+        let by_provider = bucket_by_provider_day(&[r1, r2], time::UtcOffset::UTC);
         assert_eq!(by_provider["claude"][0].cache_tokens, 400);
         assert_eq!(by_provider["codex"][0].cache_tokens, 900);
+    }
+}
+
+/// T5: fronteira de dia usa o offset local, não UTC — sem isso a tabela de
+/// History discorda do "hoje" cortado à meia-noite local do resto do painel.
+#[cfg(test)]
+mod local_day_boundary_tests {
+    use super::*;
+    use time::macros::datetime;
+
+    fn rec(provider: &str, model: &str, ts: time::OffsetDateTime, tokens: u64) -> UsageRecord {
+        UsageRecord {
+            provider: provider.to_string(),
+            model: Some(model.to_string()),
+            input: tokens,
+            output: 0,
+            cache_read: 0,
+            cache_write: 0,
+            cache_write_1h: 0,
+            fast: false,
+            geo_us: false,
+            ts,
+        }
+    }
+
+    #[test]
+    fn buckets_use_local_day_not_utc() {
+        // 02:00 UTC com offset -3 = 23:00 do dia ANTERIOR local.
+        let r = rec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-03 02:00 UTC),
+            100,
+        );
+        let off = time::UtcOffset::from_hms(-3, 0, 0).unwrap();
+        let buckets = bucket_by_day(&[r], off);
+        assert_eq!(buckets[0].date, time::macros::date!(2026 - 07 - 02));
+        // Offset zero preserva o comportamento anterior (snapshots intactos).
+        let r2 = rec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-03 02:00 UTC),
+            100,
+        );
+        let utc = bucket_by_day(&[r2], time::UtcOffset::UTC);
+        assert_eq!(utc[0].date, time::macros::date!(2026 - 07 - 03));
     }
 }

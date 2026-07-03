@@ -160,7 +160,7 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
     // amp_dollars presente), ainda mostra "Total 7d: 0 tokens" — honesto,
     // não esconde o rodapé por causa de um campo vazio.
     if !loading && (!records.is_empty() || amp_dollars.is_some()) {
-        block = block.title_bottom(footer_line(records));
+        block = block.title_bottom(footer_line(records, state.local_offset));
     }
 
     let inner = block.inner(area);
@@ -198,7 +198,7 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         HistoryRange::Week => 24 * 7,
     };
 
-    let provider_buckets = bucket_by_provider_day(records);
+    let provider_buckets = bucket_by_provider_day(records, state.local_offset);
 
     let mut n_rows: u16 = provider_buckets.values().map(|v| v.len() as u16).sum();
     if amp_dollars.is_some() {
@@ -222,8 +222,8 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
 /// sobre os 7 dias inteiros de `records` — independe do toggle 24h/7d.
 /// Rótulo duplo (T4, `fmt_tokens_dual`) SEMPRE (nunca dropa o sufixo por
 /// largura — o rodapé tem a linha inteira do bloco pra si).
-fn footer_line(records: &[UsageRecord]) -> Line<'static> {
-    let total_buckets = bucket_by_day(records);
+fn footer_line(records: &[UsageRecord], local_offset: time::UtcOffset) -> Line<'static> {
+    let total_buckets = bucket_by_day(records, local_offset);
     let total_io: u64 = total_buckets.iter().map(|b| b.tokens).sum();
     let total_cache: u64 = total_buckets.iter().map(|b| b.cache_tokens).sum();
     let total_cost: Option<f64> = {
