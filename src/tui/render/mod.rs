@@ -692,6 +692,79 @@ mod tests {
     }
 
     #[test]
+    fn help_text_fitting_compacts_without_truncating_at_level_2() {
+        // Nível 2 (b): `help_text()` completa (28 linhas) não cabe, mas a
+        // versão compactada (23 linhas, sem os 5 separadores em branco)
+        // cabe. Faixa de `max_rows` que cai aqui é 23..=27 — 24 fica no
+        // meio, longe dos limites já cobertos por
+        // `help_overlay_shows_all_sections_at_110x32` (nível 1, >=28) e
+        // `help_overlay_compacts_then_truncates_at_78x24` (nível 3, =22).
+        // Sem este teste, uma regressão no filtro
+        // `!line.spans.is_empty()` (ex. trocar por
+        // `line.width() == 0`, que também classificaria títulos/atalhos
+        // vazios de forma diferente) passaria despercebida.
+        let text = help_text_fitting(24);
+
+        // Exatamente 23 linhas: 28 - 5 separadores. Nem uma a mais
+        // (indicaria que o filtro não removeu algum separador) nem uma a
+        // menos (indicaria que o filtro comeu uma linha de conteúdo).
+        assert_eq!(
+            text.lines.len(),
+            23,
+            "nível 2 deve compactar pra exatamente 23 linhas, sem truncar"
+        );
+
+        // Nenhuma linha vazia (separador) sobrou entre seções — é
+        // exatamente o que o filtro `!line.spans.is_empty()` garante.
+        assert!(
+            text.lines.iter().all(|line| !line.spans.is_empty()),
+            "compactação não deve deixar linha com spans vazios (separador sobrevivente)"
+        );
+
+        let screen: String = text
+            .lines
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Títulos das 5 seções presentes — se o filtro engolisse um
+        // título por engano (ex. um título viesse a ter spans vazios em
+        // alguma reescrita futura de `help_section`), este assert pega.
+        for title in [
+            "Navegação global",
+            "Overview",
+            "Config do Waybar",
+            "Login",
+            "Histórico",
+        ] {
+            assert!(
+                screen.contains(title),
+                "título de seção ausente na compactação: {title:?}\n{screen}"
+            );
+        }
+
+        // Atalhos representativos de cada seção, íntegros (nada truncado
+        // — nível 2 nunca corta conteúdo, só remove respiro visual).
+        for shortcut in [
+            "alterna 24h/7d",
+            "iniciar login do provider",
+            "shift+drag seleciona texto",
+        ] {
+            assert!(
+                screen.contains(shortcut),
+                "atalho ausente/truncado na compactação: {shortcut:?}\n{screen}"
+            );
+        }
+
+        // Nível 2 nunca trunca — não deve haver indicador de corte.
+        assert!(
+            !screen.contains("atalhos)"),
+            "nível 2 não deve truncar (achou indicador de corte '… (+N atalhos)'):\n{screen}"
+        );
+    }
+
+    #[test]
     fn help_overlay_clears_over_login_screen() {
         // Mesma regressão, sobre a tela Login (reskin da T14) — confirma
         // que o Clear cobre a área do popup em QUALQUER tela, não só
