@@ -127,17 +127,75 @@ fn help_text() -> Text<'static> {
     Text::from(lines)
 }
 
-/// Área do popup de ajuda: dimensionada pelo CONTEÚDO de `help_text()`
-/// (altura = linhas + 2 bordas; largura = linha mais longa + bordas e
-/// respiro), clampada ao frame e centralizada. A área era um percentual
-/// fixo do frame (60%x70%) — em terminais reais menores que o dos
-/// snapshots (ex. 110x32), 70% dava menos linhas que o conteúdo e as
-/// seções finais (Login/Histórico) morriam cortadas na borda de baixo.
+/// Uma linha é "de atalho" (não título, não separador) se tiver mais de um
+/// span — `help_section` monta títulos como Line de 1 span centrado e
+/// linhas de atalho como Line de 2 spans (tecla + ação); os separadores são
+/// `Line::from("")`, também 1 span (vazio). Usado por `help_text_fitting`
+/// pra truncar sem cortar um título no meio e pra contar `n_ocultos` só de
+/// atalhos de verdade.
+fn is_shortcut_line(line: &Line<'static>) -> bool {
+    line.spans.len() > 1
+}
+
+/// Monta o conteúdo do popup de ajuda que CABE em `max_rows` linhas,
+/// em 3 níveis progressivos (T-10, corte mudo era o bug: terminal baixo
+/// <30 linhas cortava as últimas seções sem avisar):
+///
+/// (a) `help_text()` completo já cabe (`height() <= max_rows`) → retorna
+///     como está — é o caso comum (>=30 linhas de terminal).
+/// (b) não cabe: reconstrói removendo os separadores `Line::from("")` entre
+///     seções (compactação). Se o resultado cabe, retorna — nenhum atalho
+///     é perdido, só o respiro visual.
+/// (c) ainda não cabe: trunca a versão compactada em `max_rows - 1` linhas
+///     e acrescenta uma linha final `… (+N atalhos)` em `Muted`. `N` =
+///     quantidade de linhas de ATALHO (`is_shortcut_line`, não título/
+///     separador) que ficaram de fora do corte — títulos de seção não
+///     entram na contagem porque por si só não são um atalho perdido.
+fn help_text_fitting(max_rows: usize) -> Text<'static> {
+    let full = help_text();
+    if full.height() <= max_rows {
+        return full;
+    }
+
+    let compact: Vec<Line<'static>> = full
+        .lines
+        .into_iter()
+        .filter(|line| !line.spans.is_empty())
+        .collect();
+    if compact.len() <= max_rows {
+        return Text::from(compact);
+    }
+
+    let keep = max_rows.saturating_sub(1);
+    let n_ocultos = compact[keep..]
+        .iter()
+        .filter(|l| is_shortcut_line(l))
+        .count();
+    let mut truncated: Vec<Line<'static>> = compact.into_iter().take(keep).collect();
+    truncated.push(
+        Line::from(Span::styled(
+            format!("… (+{n_ocultos} atalhos)"),
+            Style::default().fg(to_ratatui(ColorToken::Muted)),
+        ))
+        .centered(),
+    );
+    Text::from(truncated)
+}
+
+/// Área do popup de ajuda: dimensionada pelo CONTEÚDO de `text` (altura =
+/// linhas + 2 bordas; largura = linha mais longa + bordas e respiro),
+/// clampada ao frame e centralizada. A área era um percentual fixo do frame
+/// (60%x70%) — em terminais reais menores que o dos snapshots (ex.
+/// 110x32), 70% dava menos linhas que o conteúdo e as seções finais
+/// (Login/Histórico) morriam cortadas na borda de baixo.
+/// Recebe `text` (em vez de chamar `help_text()`/`help_text_fitting()`
+/// internamente) pra garantir que área e conteúdo derivem da MESMA `Text` —
+/// duas chamadas independentes de `help_text_fitting` podiam, em teoria,
+/// divergir se o cálculo dependesse de algo além do `max_rows` (T-10).
 /// O `Clear` explícito ANTES do conteúdo (em `render_help_overlay`)
 /// continua obrigatório: sem ele, células da tela por baixo sobrevivem
 /// dentro do popup (bug "pr"/"sto" da T14).
-fn help_popup_area(frame_area: Rect) -> Rect {
-    let text = help_text();
+fn help_popup_area(frame_area: Rect, text: &Text<'static>) -> Rect {
     let width = (text.width() as u16).saturating_add(6).min(frame_area.width);
     let height = (text.height() as u16)
         .saturating_add(2)
@@ -153,7 +211,11 @@ fn help_popup_area(frame_area: Rect) -> Rect {
 /// vazamento/sujeira do popup.
 fn render_help_overlay(frame: &mut Frame) {
     let area = frame.area();
-    let popup_area = help_popup_area(area);
+    // max_rows = altura do frame menos as 2 bordas do popup (topo/base) —
+    // é o número de linhas de CONTEÚDO que cabem dentro do inner.
+    let max_rows = area.height.saturating_sub(2) as usize;
+    let text = help_text_fitting(max_rows);
+    let popup_area = help_popup_area(area, &text);
 
     frame.render_widget(
         Block::default().style(Style::default().add_modifier(Modifier::DIM)),
@@ -176,7 +238,7 @@ fn render_help_overlay(frame: &mut Frame) {
     let inner = block.inner(popup_area);
     frame.render_widget(block, popup_area);
 
-    let content = Paragraph::new(help_text())
+    let content = Paragraph::new(text)
         .style(Style::default().fg(to_ratatui(ColorToken::Text)))
         .wrap(Wrap { trim: false });
     frame.render_widget(content, inner);
@@ -542,7 +604,9 @@ mod tests {
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
 
-        let popup_area = help_popup_area(Rect::new(0, 0, 100, 44));
+        let frame_area = Rect::new(0, 0, 100, 44);
+        let text = help_text_fitting(frame_area.height.saturating_sub(2) as usize);
+        let popup_area = help_popup_area(frame_area, &text);
         let buffer = terminal.backend().buffer();
         let mut popup_text = String::new();
         for y in popup_area.y..popup_area.y + popup_area.height {
@@ -598,6 +662,33 @@ mod tests {
                 "conteúdo do help cortado ({expected:?} ausente):\n{screen}"
             );
         }
+    }
+
+    #[test]
+    fn help_overlay_compacts_then_truncates_at_78x24() {
+        let backend = ratatui::backend::TestBackend::new(78, 24);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.show_help = true;
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut screen = String::new();
+        for y in 0..24u16 {
+            for x in 0..78u16 {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    screen.push_str(cell.symbol());
+                }
+            }
+            screen.push('\n');
+        }
+        // 22 linhas úteis: compactação (23 linhas de conteúdo) não basta →
+        // trunca com indicador. NUNCA corte mudo.
+        assert!(
+            screen.contains("atalhos)"),
+            "corte deve ser anunciado com '… (+N atalhos)':\n{screen}"
+        );
     }
 
     #[test]
