@@ -5,7 +5,7 @@
 The primary install flow uses the hosted installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/othavioquiliao/agent-bar/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/othavi0/agent-bar/master/install.sh | bash
 ```
 
 It installs the binary and optionally runs `agent-bar setup`. `agent-bar setup`

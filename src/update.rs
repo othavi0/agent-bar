@@ -26,7 +26,7 @@ use crate::runtime::is_system_install;
 // ---------------------------------------------------------------------------
 
 /// `owner/repo` do GitHub — mesmo valor usado por `install.sh` (`GITHUB_REPO`).
-pub const GITHUB_REPO: &str = "othavioquiliao/agent-bar";
+pub const GITHUB_REPO: &str = "othavi0/agent-bar";
 
 /// User-Agent dedicado pro self-update (GitHub exige um; o cliente HTTP
 /// compartilhado em `http::client()` é específico do Claude — timeout curto

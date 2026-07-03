@@ -18,7 +18,7 @@ Supported providers:
 **Hosted installer** (recommended — runs setup automatically):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/othavioquiliao/agent-bar/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/othavi0/agent-bar/master/install.sh | bash
 ```
 
 Installs the standalone binary to `~/.local/bin/agent-bar` and runs

@@ -130,7 +130,7 @@ Para cortar release: bumpar `version` em `Cargo.toml`, atualizar
 
 ### Issue tracker
 
-Issues vivem no GitHub Issues de `othavioquiliao/agent-bar` (via `gh` CLI). PRs
+Issues vivem no GitHub Issues de `othavi0/agent-bar` (via `gh` CLI). PRs
 externos não são superfície de triage. Ver `docs/agents/issue-tracker.md`.
 
 ### Triage labels

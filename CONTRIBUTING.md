@@ -17,7 +17,7 @@ Wire your local checkout straight into Waybar so every build shows up on the
 next poll:
 
 ```bash
-git clone git@github.com:othavioquiliao/agent-bar.git
+git clone git@github.com:othavi0/agent-bar.git
 cd agent-bar
 cargo build
 ./target/debug/agent-bar setup
