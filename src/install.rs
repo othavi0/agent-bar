@@ -48,6 +48,7 @@ mod tests {
     // has_cmd detecta comandos reais do sistema (sh sempre existe em Linux).
     #[test]
     fn has_cmd_finds_sh() {
+        let _env = crate::test_support::env_guard();
         assert!(has_cmd("sh"), "sh deve existir no PATH");
     }
 
@@ -58,12 +59,14 @@ mod tests {
 
     #[test]
     fn ensure_command_true_when_present() {
+        let _env = crate::test_support::env_guard();
         // sh esta disponivel; nao loga warn.
         assert!(ensure_command("sh", "hint nao deve aparecer"));
     }
 
     #[test]
     fn ensure_command_false_when_absent() {
+        let _env = crate::test_support::env_guard();
         assert!(!ensure_command(
             "__agent_bar_nonexistent_cmd_xyz__",
             "instale-o"
@@ -72,6 +75,7 @@ mod tests {
 
     #[test]
     fn ensure_amp_cli_absent_returns_false() {
+        let _env = crate::test_support::env_guard();
         // Em ambiente CI/test, amp provavelmente nao esta instalado.
         // Se estiver, o test passa com true; se nao, com false. Ambos sao corretos.
         let _ = ensure_amp_cli(); // apenas verifica que nao panica
