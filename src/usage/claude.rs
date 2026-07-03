@@ -51,6 +51,13 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
             .unwrap_or_else(|| format!("__line_{i}"));
 
         let u = |k: &str| usage.get(k).and_then(Value::as_u64).unwrap_or(0);
+        let cache_creation = usage.get("cache_creation");
+        let tier = |k: &str| {
+            cache_creation
+                .and_then(|c| c.get(k))
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+        };
         let rec = UsageRecord {
             provider: "claude".to_string(),
             model: msg
@@ -61,6 +68,9 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
             output: u("output_tokens"),
             cache_read: u("cache_read_input_tokens"),
             cache_write: u("cache_creation_input_tokens"),
+            cache_write_1h: tier("ephemeral_1h_input_tokens"),
+            fast: usage.get("speed").and_then(Value::as_str) == Some("fast"),
+            geo_us: usage.get("inference_geo").and_then(Value::as_str) == Some("us"),
             ts,
         };
         if by_request.insert(key.clone(), rec).is_none() {
@@ -129,6 +139,27 @@ mod tests {
             .expect("última entrada de req_1");
         assert_eq!(req1.input, 100);
         assert_eq!(recs.iter().map(|r| r.output).sum::<u64>(), 91);
+    }
+
+    #[test]
+    fn extracts_cache_tiers_speed_and_geo() {
+        let line = r#"{"type":"assistant","requestId":"r9","timestamp":"2026-07-03T10:00:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5,"cache_creation_input_tokens":300,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":200},"speed":"fast","inference_geo":"us"}}}"#;
+        let recs = parse_claude_lines([line].into_iter());
+        let r = &recs[0];
+        assert_eq!(r.cache_write, 300, "total continua o campo agregado");
+        assert_eq!(r.cache_write_1h, 200);
+        assert!(r.fast);
+        assert!(r.geo_us);
+    }
+
+    #[test]
+    fn missing_breakdown_defaults_to_zero_1h_and_standard() {
+        let line = r#"{"type":"assistant","requestId":"r8","timestamp":"2026-07-03T10:00:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5,"cache_creation_input_tokens":300}}}"#;
+        let r = &parse_claude_lines([line].into_iter())[0];
+        // Fallback documentado da spec: sem breakdown, tratar tudo como 5m.
+        assert_eq!(r.cache_write_1h, 0);
+        assert!(!r.fast);
+        assert!(!r.geo_us);
     }
 
     #[test]

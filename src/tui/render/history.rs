@@ -610,6 +610,9 @@ mod tests {
             output: 0,
             cache_read: 0,
             cache_write: 0,
+            cache_write_1h: 0,
+            fast: false,
+            geo_us: false,
             ts,
         }
     }

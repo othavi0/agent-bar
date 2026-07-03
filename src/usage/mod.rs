@@ -27,7 +27,16 @@ pub struct UsageRecord {
     pub input: u64,
     pub output: u64,
     pub cache_read: u64,
+    /// TOTAL de cache write (5m + 1h) — é o que o display soma.
     pub cache_write: u64,
+    /// Subconjunto de `cache_write` gravado no tier 1h (2× o input base).
+    /// 5m = `cache_write - cache_write_1h`. 0 quando o log não traz o
+    /// breakdown `usage.cache_creation` (fallback: tudo 5m, conservador).
+    pub cache_write_1h: u64,
+    /// `usage.speed == "fast"` (fast mode, preço premium em Opus 4.7/4.8).
+    pub fast: bool,
+    /// `usage.inference_geo == "us"` (multiplicador 1.1× em tudo).
+    pub geo_us: bool,
     pub ts: OffsetDateTime,
 }
 
@@ -505,6 +514,9 @@ mod tests {
             output: 1_000_000,
             cache_read: 0,
             cache_write: 0,
+            cache_write_1h: 0,
+            fast: false,
+            geo_us: false,
             ts: datetime!(2026-06-20 09:00 UTC),
         };
         let summary = aggregate_records(vec![rec], 5.0, None);

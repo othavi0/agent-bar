@@ -84,6 +84,9 @@ mod tests {
             output: 1,
             cache_read: 0,
             cache_write: 0,
+            cache_write_1h: 0,
+            fast: false,
+            geo_us: false,
             ts: datetime!(2026-06-19 12:00 UTC),
         }
     }
