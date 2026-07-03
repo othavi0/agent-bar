@@ -201,7 +201,19 @@ fn model_window_line(
 /// Uma linha de "Modelos hoje": label(12) + barra PROPORCIONAL a tokens
 /// (não a 100% — normalizada pelo modelo de maior consumo) + tokens
 /// abreviados + custo, ambos right-aligned.
-fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'static> {
+///
+/// `content_width` gate o rótulo duplo (regra dura do produto: sufixo de
+/// cache pode sumir, label principal e custo NUNCA). Sem cap, `fmt_tokens_dual`
+/// podia produzir uma linha maior que a área e o `Paragraph` sem `wrap`
+/// (chamador, sem scroll) clipa na borda direita — regressão vista em
+/// review: em 80 colunas o custo `$42.55` virava `$4`. Mesmo padrão do
+/// gate `has_cache`/`tokens_column_width` de `render/history.rs`.
+fn model_usage_line(
+    mu: &ModelUsage,
+    max_tokens: u64,
+    brand: Color,
+    content_width: u16,
+) -> Line<'static> {
     let (io, cache) = model_tokens_split(mu);
     let tokens = io + cache;
     let pct = if max_tokens > 0 {
@@ -219,8 +231,23 @@ fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'sta
         Style::default().fg(to_ratatui(ColorToken::Text)),
     )];
     spans.extend(gauge_spans(pct, FIXED_GAUGE_W, brand));
+
+    // Orçamento restante pra coluna de tokens: label(LABEL_W+2) + gauge
+    // (FIXED_GAUGE_W) + espaço antes do tokens(1) + custo(" "+9=10) já
+    // consumidos; o que sobrar de `content_width` decide dual vs abbrev.
+    // Custo é o ÚLTIMO span da linha — garantir que ele sempre caiba é o
+    // que impede o clipe do `$42.55 -> $4` visto em review.
+    let fixed_w = (LABEL_W + 2) + FIXED_GAUGE_W + 1 + 10;
+    let tokens_budget = (content_width as usize).saturating_sub(fixed_w);
+    let dual = fmt_tokens_dual(io, cache);
+    let tokens_str = if dual.chars().count() <= tokens_budget {
+        dual
+    } else {
+        abbrev_tokens(io)
+    };
+    let pad_w = tokens_str.chars().count().max(8.min(tokens_budget));
     spans.push(Span::styled(
-        format!(" {:>8}", fmt_tokens_dual(io, cache)),
+        format!(" {tokens_str:>pad_w$}"),
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     ));
     spans.push(Span::styled(
@@ -549,7 +576,7 @@ fn render_full(
                 .unwrap_or(0)
                 .max(1);
             for mu in &pu.by_model {
-                lines.push(model_usage_line(mu, max_tokens, brand));
+                lines.push(model_usage_line(mu, max_tokens, brand, area.width));
             }
         }
     }
@@ -1069,6 +1096,104 @@ mod tests {
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// Renderiza a tela num TestBackend e devolve o texto plano do buffer
+    /// (mesmo padrão de `dashboard.rs::tests::screen_text`).
+    fn screen_text(state: &AppState, w: u16, h: u16) -> String {
+        let backend = ratatui::backend::TestBackend::new(w, h);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| render(state, f, &mut HitMap::default()))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut out = String::new();
+        for y in 0..h {
+            for x in 0..w {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    out.push_str(cell.symbol());
+                }
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    /// Regressão (review, Critical #1): `model_usage_line` montava
+    /// `fmt_tokens_dual` sem cap de largura; o `Paragraph` do Detail não tem
+    /// `wrap` (linha `frame.render_widget(Paragraph::new(lines), area)`),
+    /// então o ratatui CLIPA na borda direita — em 80 colunas (content
+    /// ~61) o custo real virava "$4" em vez de "$42.55". Fixture com
+    /// cache>0 (gap real de cobertura: toda fixture existente tinha
+    /// cache=0, o bug nunca aparecia nos testes).
+    #[test]
+    fn model_usage_line_80_cols_never_clips_cost_or_principal() {
+        let mut state = AppState::new();
+        let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
+        state.providers = vec![make_claude_full()];
+        state.selected = 0;
+        state.screen = Screen::Detail;
+        state.status = FetchStatus::Loaded;
+        state.last_update = Some(now);
+        state.usage = Some(UsageSummary {
+            providers: vec![ProviderUsage {
+                provider: "claude".to_string(),
+                total_input: 9_000_000,
+                total_output: 900_000,
+                total_cache_read: 1_000_000_000,
+                total_cache_write: 400_000_000,
+                cost: Some(Cost {
+                    usd: 42.55,
+                    brl: 234.03,
+                }),
+                by_model: vec![ModelUsage {
+                    model: "claude-opus-4-8".to_string(),
+                    input: 9_000_000,
+                    output: 900_000, // io = 9.9M
+                    cache_read: 1_000_000_000,
+                    cache_write: 400_000_000, // cache = 1.4B
+                    cost: Some(Cost {
+                        usd: 42.55,
+                        brl: 234.03,
+                    }),
+                }],
+                amp_dollars: None,
+            }],
+            total_cost: Cost {
+                usd: 42.55,
+                brl: 234.03,
+            },
+            fx_rate: 5.50,
+        });
+        state.history = Some(vec![rec(
+            "claude",
+            "claude-opus-4-8",
+            now - time::Duration::hours(1),
+            900_000,
+        )]);
+
+        let text = screen_text(&state, 80, 32);
+        // A linha do modelo em "Modelos hoje" (`model_usage_line`) é o alvo
+        // deste fix — `totals_line` (seção 5, "hoje X (+Y cache) tok")
+        // também aparece na tela mas é outra função, fora deste escopo.
+        let model_line = text
+            .lines()
+            .find(|l| l.contains("claude-opus"))
+            .unwrap_or_else(|| panic!("linha do modelo não encontrada:\n{text}"));
+        assert!(
+            model_line.contains("$42.55"),
+            "custo nunca pode ser clipado em 80 colunas: {model_line:?}"
+        );
+        assert!(
+            model_line.contains("9.9M"),
+            "principal (io) nunca pode ser clipado em 80 colunas: {model_line:?}"
+        );
+        // Nessa largura o dual não cabe — ausência do sufixo de cache É o
+        // comportamento esperado (nunca o principal ou o custo).
+        assert!(
+            !model_line.contains("cache)"),
+            "sufixo de cache devia ter sido dropado nessa largura: {model_line:?}"
+        );
     }
 
     // -----------------------------------------------------------------

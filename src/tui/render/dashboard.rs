@@ -105,7 +105,15 @@ fn render_trend_panel(state: &AppState, frame: &mut Frame, area: Rect) {
                 .add_modifier(Modifier::BOLD),
         ));
     if !loading {
-        if let Some(totals) = trend_totals_line(state, records) {
+        // Largura real do título-rodapé (Block::titles_area): area.width
+        // menos as 2 bordas (LEFT+RIGHT, `Borders::ALL` acima) — o mesmo
+        // orçamento que `trend_totals_line` usa pra decidir dual vs
+        // principal-só. Regressão vista em review: `Line` right-aligned
+        // clipa pela ESQUERDA quando o título estoura essa largura, então
+        // sem esse gate "hoje 9.9M" sumia e sobrava só o rabo do sufixo
+        // de cache ("╰1.4B cache) tok · $42.55...").
+        let avail_w = area.width.saturating_sub(2);
+        if let Some(totals) = trend_totals_line(state, records, avail_w) {
             block = block.title_bottom(totals);
         }
     }
@@ -150,9 +158,18 @@ fn render_trend_panel(state: &AppState, frame: &mut Frame, area: Rect) {
 /// vocabulário do History (tabela/rodapé) e do Detail (`totals_line`), então
 /// as três telas nunca mais divergem entre si (era "6.2B" no Detail vs
 /// "37M" aqui, mesmo dado).
+///
+/// `avail_w` = largura real do título (`Block::titles_area`, área menos
+/// bordas): o texto vai em `title_bottom`, que o ratatui trunca pela
+/// ESQUERDA quando o título (right-aligned) estoura a área — regressão
+/// vista em review, "hoje 9.9M" sumia e sobrava só o rabo do sufixo de
+/// cache. Se o dual não couber, dropa os sufixos de cache dos DOIS lados
+/// (hoje e 7d) e volta ao formato antigo só-principal; o principal e o "hoje"
+/// nunca somem, custe o que custar ao sufixo.
 fn trend_totals_line(
     state: &AppState,
     records: &[crate::usage::UsageRecord],
+    avail_w: u16,
 ) -> Option<Line<'static>> {
     let usage = state.usage.as_ref()?;
     let today_io: u64 = usage
@@ -170,20 +187,31 @@ fn trend_totals_line(
         .iter()
         .map(|r| r.cache_read + r.cache_write)
         .sum();
-    Some(
-        Line::from(Span::styled(
-            format!(
-                " hoje {} tok \u{b7} ${:.2}  \u{b7}  7d {} tok ",
-                fmt_tokens_dual(today_io, today_cache),
-                usage.total_cost.usd,
-                fmt_tokens_dual(week_io, week_cache),
-            ),
-            Style::default()
-                .fg(to_ratatui(ColorToken::TextBright))
-                .add_modifier(Modifier::BOLD),
-        ))
-        .alignment(Alignment::Right),
-    )
+
+    let style = Style::default()
+        .fg(to_ratatui(ColorToken::TextBright))
+        .add_modifier(Modifier::BOLD);
+
+    let dual_text = format!(
+        " hoje {} tok \u{b7} ${:.2}  \u{b7}  7d {} tok ",
+        fmt_tokens_dual(today_io, today_cache),
+        usage.total_cost.usd,
+        fmt_tokens_dual(week_io, week_cache),
+    );
+    if dual_text.chars().count() <= avail_w as usize {
+        return Some(Line::from(Span::styled(dual_text, style)).alignment(Alignment::Right));
+    }
+
+    // Não coube: dropa os sufixos de cache (fmt_tokens_dual com cache=0
+    // devolve só o principal, equivalente ao formato antigo) — nunca o
+    // "hoje X" principal.
+    let plain_text = format!(
+        " hoje {} tok \u{b7} ${:.2}  \u{b7}  7d {} tok ",
+        fmt_tokens_dual(today_io, 0),
+        usage.total_cost.usd,
+        fmt_tokens_dual(week_io, 0),
+    );
+    Some(Line::from(Span::styled(plain_text, style)).alignment(Alignment::Right))
 }
 
 // ---------------------------------------------------------------------------
@@ -729,6 +757,78 @@ mod tests {
         assert!(
             !text.contains("sem uso"),
             "history=None não pode afirmar 'sem uso':\n{text}"
+        );
+    }
+
+    /// Regressão (review, Critical #2): `trend_totals_line` ia direto pro
+    /// `title_bottom` sem considerar a largura real do título. O ratatui
+    /// trunca título right-aligned pela ESQUERDA quando ele estoura a área
+    /// — em ~50 colunas o render real virava "╰1.4B cache) tok · $42.55 ...",
+    /// com "hoje 9.9M" (o principal) sumido por completo. Fixture com
+    /// cache>0 (gap real de cobertura: toda fixture existente até aqui
+    /// tinha cache=0, então o bug nunca aparecia nos testes).
+    #[test]
+    fn trend_totals_narrow_drops_cache_suffix_keeps_principal() {
+        let mut state = AppState::new();
+        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
+        state.last_update = Some(now);
+        state.providers = vec![ProviderView::new(make_quota(
+            "claude",
+            "Claude",
+            26.0,
+            Some("2026-06-19T23:00:00Z"),
+            None,
+        ))];
+        state.status = FetchStatus::Loaded;
+        state.usage = Some(UsageSummary {
+            providers: vec![ProviderUsage {
+                provider: "claude".to_string(),
+                total_input: 9_000_000,
+                total_output: 900_000, // io = 9.9M
+                total_cache_read: 1_000_000_000,
+                total_cache_write: 400_000_000, // cache = 1.4B
+                cost: Some(Cost {
+                    usd: 42.55,
+                    brl: 234.03,
+                }),
+                by_model: vec![],
+                amp_dollars: None,
+            }],
+            total_cost: Cost {
+                usd: 42.55,
+                brl: 234.03,
+            },
+            fx_rate: 5.50,
+        });
+        state.history = Some(vec![crate::usage::UsageRecord {
+            provider: "claude".into(),
+            model: Some("claude-opus-4-8".into()),
+            input: 9_000_000,
+            output: 900_000,
+            cache_read: 1_000_000_000,
+            cache_write: 400_000_000,
+            cache_write_1h: 0,
+            fast: false,
+            geo_us: false,
+            ts: now - time::Duration::hours(1),
+        }]);
+
+        // 1 card (6 linhas) + TREND_MIN_H(8) cabem em 20; largura 52 == o
+        // dual-text ("hoje 9.9M (+1.4B cache) tok · $42.55  ·  7d 9.9M
+        // (+1.4B cache) tok", 68 chars) NÃO cabe no título (52-2=50 de
+        // área útil), mas o formato só-principal (40 chars) cabe folgado.
+        let text = screen_text(&state, 52, 20);
+        assert!(
+            text.contains("hoje 9.9M"),
+            "largura apertada não pode sumir com o principal 'hoje 9.9M':\n{text}"
+        );
+        assert!(
+            text.contains("$42.55"),
+            "custo nunca pode ser clipado:\n{text}"
+        );
+        assert!(
+            !text.contains("cache)"),
+            "sufixo de cache devia ter sido dropado nessa largura, não escondido no meio:\n{text}"
         );
     }
 

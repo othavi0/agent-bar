@@ -363,9 +363,10 @@ pub(super) fn render_trend_chart(
 /// Largura mínima da coluna "tokens" pra caber o sufixo de cache (pior caso
 /// realista, "999.9M (+999.9M cache)", cabe folgado em 20) — abaixo disso o
 /// dual estouraria a coluna seguinte, então cai só pro principal. Só entra
-/// em jogo quando ALGUM bucket visível tem `cache_tokens > 0`: sem cache
-/// pra mostrar, `render_table` mantém a coluna na largura mínima (8) — não
-/// alarga a tabela à toa quando o sufixo nem apareceria.
+/// em jogo quando ALGUM bucket dos 7 dias (não só os visíveis no scroll)
+/// tem `cache_tokens > 0`: sem cache pra mostrar, `render_table` mantém a
+/// coluna na largura mínima (8) — não alarga a tabela à toa quando o
+/// sufixo nem apareceria.
 const TOKENS_DUAL_MIN_W: usize = 20;
 
 /// Deriva a largura da coluna "tokens" a partir da área real da tabela,
@@ -412,7 +413,10 @@ fn render_table(
     // `fmt_tokens_dual`), então manter a largura mínima preserva o layout
     // apertado de sempre (regressão vista em review: coluna "tokens" ficava
     // larga e cheia de espaço em branco mesmo com `cache_tokens == 0`
-    // em todo bucket).
+    // em todo bucket). Varre TODOS os buckets dos 7 dias, não só os
+    // visíveis no viewport rolado — comportamento correto: a largura da
+    // coluna fica estável durante o scroll, em vez de "pular" conforme o
+    // usuário rola por dias com/sem cache.
     let has_cache = provider_buckets.values().flatten().any(|b| b.cache_tokens > 0);
     let tokens_w = if has_cache {
         tokens_column_width(area.width)
