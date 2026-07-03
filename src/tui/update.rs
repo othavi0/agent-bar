@@ -1020,6 +1020,29 @@ mod tests {
     }
 
     #[test]
+    fn provider_fetched_replaces_seeded_slot_in_place() {
+        let mut state = AppState::new();
+        state.providers = vec![
+            ProviderView::new(crate::tui::state::skeleton_quota("claude")),
+            ProviderView::new(crate::tui::state::skeleton_quota("codex")),
+            ProviderView::new(crate::tui::state::skeleton_quota("amp")),
+        ];
+        state.fetch_pending = vec!["claude".into(), "codex".into(), "amp".into()];
+        // Codex chega PRIMEIRO (ordem de chegada != ordem configurada).
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(test_quota("codex", 55.0))),
+        );
+        assert_eq!(state.providers.len(), 3, "nenhum slot novo — substitui in-place");
+        assert_eq!(state.providers[1].quota.provider, "codex", "posicao estavel");
+        assert!(state.providers[1].quota.available);
+        assert_eq!(
+            state.providers[0].quota.provider, "claude",
+            "slot ainda skeleton"
+        );
+    }
+
+    #[test]
     fn fetch_completed_sets_loaded_and_requests_usage_reload() {
         let mut state = AppState::new();
         update(&mut state, Action::FetchStarted(vec!["claude".into()]));

@@ -158,6 +158,34 @@ impl ProviderView {
     }
 }
 
+/// Quota-esqueleto pro seed do boot: slot visivel desde o 1o frame, na
+/// ordem configurada — sem isto a sidebar/Overview crescem conforme cada
+/// ProviderFetched chega e os itens pulam de posicao na frente do usuario.
+/// `login_state_for(Some(q), fetch_pending=true)` mapeia isto pra
+/// "verificando…" no card.
+pub fn skeleton_quota(id: &str) -> ProviderQuota {
+    let display_name = match id {
+        "claude" => "Claude",
+        "codex" => "Codex",
+        "amp" => "Amp",
+        other => other,
+    }
+    .to_string();
+    ProviderQuota {
+        provider: id.to_string(),
+        display_name,
+        available: false,
+        account: None,
+        plan: None,
+        plan_type: None,
+        primary: None,
+        secondary: None,
+        models: None,
+        extra: None,
+        error: None,
+    }
+}
+
 #[derive(Debug)]
 pub struct AppState {
     /// Tela atual (navegacao via sidebar, sem abas).

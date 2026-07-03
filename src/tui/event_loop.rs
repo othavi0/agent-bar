@@ -177,6 +177,21 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     // default `true` do AppState::new() mesmo com "animations":false
     // configurado — o count-up e o pulse crítico nunca desligariam.
     state.animations = octx.settings.menu.animations;
+    // Seed de slots skeleton (fix desta task): sem isto, `state.providers`
+    // comeca vazio e cresce conforme cada `ProviderFetched` chega — a ordem
+    // de rede (nao a configurada) faz a sidebar/Overview "pularem" de
+    // posicao na frente do usuario durante o fetch inicial. Semeando 1 slot
+    // por provider habilitado, na ordem de `waybar.providers`, o braço
+    // `Action::ProviderFetched` (update.rs) substitui in-place por id —
+    // nenhuma posicao muda depois disso. `fetch_pending` ganha os mesmos
+    // ids pra cada card semeado renderizar "verificando…" via
+    // `login_state_for` em vez de "deslogado".
+    for id in &octx.settings.waybar.providers {
+        state.providers.push(super::state::ProviderView::new(
+            super::state::skeleton_quota(id),
+        ));
+        state.fetch_pending.push(id.clone());
+    }
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).
     let mut hits = super::mouse::HitMap::default();

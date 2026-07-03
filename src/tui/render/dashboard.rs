@@ -928,6 +928,34 @@ mod tests {
     }
 
     #[test]
+    fn overview_seeded_skeleton_slots() {
+        // Fix desta task: boot real semeia `state.providers` (event_loop::run)
+        // com 1 slot skeleton por provider habilitado ANTES do 1o
+        // ProviderFetched chegar — diferente de `overview_loading_skeleton`
+        // acima (providers vazio, so os 3 cards fixos de `render_skeleton`).
+        // Aqui os 3 slots ja existem (skeleton_quota) com fetch_pending=true:
+        // `render_cards` roda (nao `render_skeleton`), e cada card mostra
+        // "verificando…" via `login_state_for` — sem gauges (primary/secondary
+        // None), na ordem configurada (claude, codex, amp).
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.providers = vec![
+            ProviderView::new(crate::tui::state::skeleton_quota("claude")),
+            ProviderView::new(crate::tui::state::skeleton_quota("codex")),
+            ProviderView::new(crate::tui::state::skeleton_quota("amp")),
+        ];
+        state.fetch_pending = vec!["claude".to_string(), "codex".to_string(), "amp".to_string()];
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_dashboard(&state, f, area, &mut HitMap::default());
+            })
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
     fn overview_empty_no_providers_no_fetch() {
         let backend = ratatui::backend::TestBackend::new(100, 32);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
