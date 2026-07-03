@@ -23,7 +23,7 @@ use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 
 use crate::theme::{provider_hex, ColorToken};
 use crate::tui::mouse::{ChipKind, HitMap};
-use crate::tui::render::shared::{abbrev_tokens, series_now};
+use crate::tui::render::shared::{abbrev_tokens, fmt_tokens_dual, series_now};
 use crate::tui::state::{AppState, HistoryRange};
 use crate::tui::theme_bridge::{hex_to_color, provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
@@ -39,21 +39,6 @@ const CHART_PROVIDERS: [&str; 2] = ["claude", "codex"];
 // ---------------------------------------------------------------------------
 // Formatação
 // ---------------------------------------------------------------------------
-
-/// Formata tokens do rodapé "Total 7d" — formato PRÉ-EXISTENTE (0 casas
-/// decimais em K, 1 em M), mantido de propósito (contrato do brief: "formato
-/// atual mantido"). Diferente de `abbrev_tokens` (shared.rs — 1 casa decimal
-/// em toda unidade, usado pelo chart/tabela, elementos NOVOS desta task).
-/// As duas funções coexistem por design, não por descuido.
-fn fmt_tokens(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.0}K", n as f64 / 1_000.0)
-    } else {
-        format!("{n}")
-    }
-}
 
 /// Abreviação PT de dia-da-semana (`seg`..`dom`) para o eixo X do chart no
 /// range Week.
@@ -235,9 +220,12 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
 
 /// Rodapé fixo do bloco: "Total 7d: X tokens / $Y" (right-aligned), sempre
 /// sobre os 7 dias inteiros de `records` — independe do toggle 24h/7d.
+/// Rótulo duplo (T4, `fmt_tokens_dual`) SEMPRE (nunca dropa o sufixo por
+/// largura — o rodapé tem a linha inteira do bloco pra si).
 fn footer_line(records: &[UsageRecord]) -> Line<'static> {
     let total_buckets = bucket_by_day(records);
-    let total_tokens: u64 = total_buckets.iter().map(|b| b.tokens).sum();
+    let total_io: u64 = total_buckets.iter().map(|b| b.tokens).sum();
+    let total_cache: u64 = total_buckets.iter().map(|b| b.cache_tokens).sum();
     let total_cost: Option<f64> = {
         let costs: Vec<f64> = total_buckets.iter().filter_map(|b| b.cost_usd).collect();
         if costs.is_empty() {
@@ -246,9 +234,10 @@ fn footer_line(records: &[UsageRecord]) -> Line<'static> {
             Some(costs.iter().sum())
         }
     };
+    let tokens_str = fmt_tokens_dual(total_io, total_cache);
     let footer_str = match total_cost {
-        Some(c) => format!(" Total 7d: {} tokens / ${c:.2} ", fmt_tokens(total_tokens)),
-        None => format!(" Total 7d: {} tokens ", fmt_tokens(total_tokens)),
+        Some(c) => format!(" Total 7d: {tokens_str} tokens / ${c:.2} "),
+        None => format!(" Total 7d: {tokens_str} tokens "),
     };
     Line::from(Span::styled(
         footer_str,
@@ -371,6 +360,28 @@ pub(super) fn render_trend_chart(
 // Tabela (metade inferior)
 // ---------------------------------------------------------------------------
 
+/// Largura mínima da coluna "tokens" pra caber o sufixo de cache (pior caso
+/// realista, "999.9M (+999.9M cache)", cabe folgado em 20) — abaixo disso o
+/// dual estouraria a coluna seguinte, então cai só pro principal. Só entra
+/// em jogo quando ALGUM bucket visível tem `cache_tokens > 0`: sem cache
+/// pra mostrar, `render_table` mantém a coluna na largura mínima (8) — não
+/// alarga a tabela à toa quando o sufixo nem apareceria.
+const TOKENS_DUAL_MIN_W: usize = 20;
+
+/// Deriva a largura da coluna "tokens" a partir da área real da tabela,
+/// quando há cache pra mostrar: `dia`(6) + `provider`(9) são fixas, 3 gaps
+/// de `column_spacing(1)`, e um piso de 10 colunas reservado pro `custo` —
+/// o resto vai pra `tokens` (tetado em 28, o sufixo de cache não precisa de
+/// mais que isso). Mesma largura decide o fallback em `render_table`
+/// (contrato: >= 20 chars usa `fmt_tokens_dual`, senão só `abbrev_tokens`).
+fn tokens_column_width(area_width: u16) -> usize {
+    let other_fixed = 6 + 9 + 10; // dia + provider + custo mínimo
+    let gaps = 3; // column_spacing(1) * 3 gaps entre 4 colunas
+    (area_width as usize)
+        .saturating_sub(other_fixed + gaps)
+        .clamp(8, 28)
+}
+
 /// Tabela `dia | provider | tokens | custo`: uma linha por (provider, dia)
 /// de `bucket_by_provider_day`, cor da linha = marca do provider. Linha
 /// final do Amp (se `amp_dollars` presente): tokens "–", custo com o resumo
@@ -396,6 +407,19 @@ fn render_table(
         return;
     }
 
+    // Só alarga a coluna quando há cache de verdade pra mostrar — sem isso
+    // o dual reduz a `abbrev_tokens` de qualquer forma (regra de
+    // `fmt_tokens_dual`), então manter a largura mínima preserva o layout
+    // apertado de sempre (regressão vista em review: coluna "tokens" ficava
+    // larga e cheia de espaço em branco mesmo com `cache_tokens == 0`
+    // em todo bucket).
+    let has_cache = provider_buckets.values().flatten().any(|b| b.cache_tokens > 0);
+    let tokens_w = if has_cache {
+        tokens_column_width(area.width)
+    } else {
+        8
+    };
+
     let header_style = Style::default()
         .fg(to_ratatui(ColorToken::Muted))
         .add_modifier(Modifier::BOLD);
@@ -411,7 +435,11 @@ fn render_table(
         let p_color = provider_color(provider);
         for b in buckets {
             let dia = format!("{:02}/{:02}", b.date.month() as u8, b.date.day());
-            let tokens = abbrev_tokens(b.tokens);
+            let tokens = if tokens_w >= TOKENS_DUAL_MIN_W {
+                fmt_tokens_dual(b.tokens, b.cache_tokens)
+            } else {
+                abbrev_tokens(b.tokens)
+            };
             let custo = match b.cost_usd {
                 Some(c) => format!("${c:.2}"),
                 None => "-".to_string(),
@@ -463,7 +491,7 @@ fn render_table(
     let widths = [
         Constraint::Length(6),
         Constraint::Length(9),
-        Constraint::Length(8),
+        Constraint::Length(tokens_w as u16),
         Constraint::Fill(1),
     ];
 
@@ -618,17 +646,8 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // Unit tests: fmt_tokens / weekday_abbrev / x_axis_labels / chart_series
+    // Unit tests: weekday_abbrev / x_axis_labels / chart_series
     // -----------------------------------------------------------------
-
-    #[test]
-    fn fmt_tokens_footer_format_differs_from_abbrev_in_k_scale() {
-        // fmt_tokens (rodapé, formato preservado) usa 0 casas em K —
-        // abbrev_tokens (shared.rs, chart/tabela) usaria "1.2K" pro mesmo n.
-        assert_eq!(fmt_tokens(1_200), "1K");
-        assert_eq!(fmt_tokens(29_100_000), "29.1M");
-        assert_eq!(fmt_tokens(500), "500");
-    }
 
     #[test]
     fn weekday_abbrev_pt_short_names() {
@@ -696,6 +715,24 @@ mod tests {
             .iter()
             .enumerate()
             .all(|(i, &(_, y))| i == 22 || y == 0.0));
+    }
+
+    // -----------------------------------------------------------------
+    // Unit tests: tokens_column_width (T4 — decide dual vs. principal)
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn tokens_column_width_wide_area_allows_dual() {
+        // Área larga (tabela típica dos snapshots, ~98 cols de conteúdo):
+        // sobra >> 20, então o dual cabe.
+        assert!(tokens_column_width(98) >= TOKENS_DUAL_MIN_W);
+    }
+
+    #[test]
+    fn tokens_column_width_narrow_area_falls_back() {
+        // Área apertada: sobra pouco além das colunas fixas, fica abaixo do
+        // piso do dual (20) — cai pro principal sozinho.
+        assert!(tokens_column_width(30) < TOKENS_DUAL_MIN_W);
     }
 
     // -----------------------------------------------------------------
@@ -818,6 +855,34 @@ mod tests {
         state.last_update = Some(now);
         state.history = Some(synth_wave("claude", "claude-opus-4-8", now, 24 * 3));
         state.usage = Some(amp_usage(0.81, 5.0, 4.19));
+        terminal
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// Rótulo duplo (T4): bucket com cache_read/cache_write > 0 mostra o
+    /// sufixo "(+X cache)" na coluna "tokens" da tabela E no rodapé "Total
+    /// 7d" — a área de teste (100 cols) dá espaço de sobra pra coluna
+    /// (`tokens_column_width` >= `TOKENS_DUAL_MIN_W`), então o dual completo
+    /// (não o fallback estreito) é o caminho exercitado aqui.
+    #[test]
+    fn history_table_shows_dual_tokens_with_cache_suffix() {
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
+        state.last_update = Some(now);
+        let mut r = rec(
+            "claude",
+            "claude-opus-4-8",
+            now - time::Duration::hours(1),
+            900_000,
+        );
+        r.cache_read = 400_000;
+        r.cache_write = 100_000;
+        state.history = Some(vec![r]);
         terminal
             .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();

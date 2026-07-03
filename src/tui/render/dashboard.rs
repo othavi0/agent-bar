@@ -17,7 +17,7 @@ use crate::settings::GlyphMode;
 use crate::theme::{provider_hex, ColorToken};
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap, MouseTarget};
-use crate::tui::render::shared::series_now;
+use crate::tui::render::shared::{fmt_tokens_dual, series_now};
 use crate::tui::state::{AppState, ProviderView};
 use crate::tui::theme_bridge::{hex_to_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
@@ -142,32 +142,41 @@ fn render_trend_panel(state: &AppState, frame: &mut Frame, area: Rect) {
     );
 }
 
-/// Rodapé do painel de tendência: "hoje X tok · $Y  ·  7d Z tok". "hoje"
-/// vem de `state.usage` (janela de hoje do UsageComputed); "7d" soma os
-/// records crus (mesma janela do HistoryLoaded). `usage=None` → sem rodapé
-/// (não inventa zero).
+/// Rodapé do painel de tendência: "hoje X (+Y cache) tok · $Z  ·  7d W tok".
+/// "hoje" vem de `state.usage` (janela de hoje do UsageComputed); "7d" soma
+/// os records crus (mesma janela do HistoryLoaded). `usage=None` → sem
+/// rodapé (não inventa zero). Vocabulário DUAL (T4, `fmt_tokens_dual`):
+/// principal = input+output, sufixo "(+X cache)" quando > 0 — MESMO
+/// vocabulário do History (tabela/rodapé) e do Detail (`totals_line`), então
+/// as três telas nunca mais divergem entre si (era "6.2B" no Detail vs
+/// "37M" aqui, mesmo dado).
 fn trend_totals_line(
     state: &AppState,
     records: &[crate::usage::UsageRecord],
 ) -> Option<Line<'static>> {
-    // Vocabulário de tokens dos TOTAIS = input+output (o mesmo do
-    // `DayBucket` que alimenta a tabela e o "Total 7d" do History) —
-    // somar cache aqui faria este rodapé contradizer o History na tela
-    // ao lado (6.2B vs 37M na máquina real).
     let usage = state.usage.as_ref()?;
-    let today_tokens: u64 = usage
+    let today_io: u64 = usage
         .providers
         .iter()
         .map(|pu| pu.total_input + pu.total_output)
         .sum();
-    let week_tokens: u64 = records.iter().map(|r| r.input + r.output).sum();
+    let today_cache: u64 = usage
+        .providers
+        .iter()
+        .map(|pu| pu.total_cache_read + pu.total_cache_write)
+        .sum();
+    let week_io: u64 = records.iter().map(|r| r.input + r.output).sum();
+    let week_cache: u64 = records
+        .iter()
+        .map(|r| r.cache_read + r.cache_write)
+        .sum();
     Some(
         Line::from(Span::styled(
             format!(
                 " hoje {} tok \u{b7} ${:.2}  \u{b7}  7d {} tok ",
-                crate::tui::render::shared::abbrev_tokens(today_tokens),
+                fmt_tokens_dual(today_io, today_cache),
                 usage.total_cost.usd,
-                crate::tui::render::shared::abbrev_tokens(week_tokens),
+                fmt_tokens_dual(week_io, week_cache),
             ),
             Style::default()
                 .fg(to_ratatui(ColorToken::TextBright))

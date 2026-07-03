@@ -45,6 +45,20 @@ pub fn abbrev_tokens(n: u64) -> String {
     format!("{:.1}{}", n as f64 / scale, UNITS[idx])
 }
 
+/// Rótulo duplo de tokens (decisão de produto, spec 2026-07-03): principal
+/// = input+output (o que o usuário entende por "tokens que usei"); sufixo
+/// = cache (read+write), presente só quando > 0. Em largura apertada, quem
+/// chama pode dropar o sufixo — NUNCA o principal. Mata a divergência entre
+/// `render/detail.rs` (que somava cache no total) e `render/history.rs`/
+/// `render/dashboard.rs` (que só somavam input+output): as três telas agora
+/// falam o mesmo vocabulário.
+pub fn fmt_tokens_dual(io: u64, cache: u64) -> String {
+    if cache == 0 {
+        return abbrev_tokens(io);
+    }
+    format!("{} (+{} cache)", abbrev_tokens(io), abbrev_tokens(cache))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,5 +88,12 @@ mod tests {
         assert_eq!(abbrev_tokens(999_950), "1.0M");
         assert_eq!(abbrev_tokens(999_999_999), "1.0B");
         assert_eq!(abbrev_tokens(5_686_100_000), "5.7B");
+    }
+
+    #[test]
+    fn fmt_tokens_dual_formats_io_plus_cache() {
+        assert_eq!(fmt_tokens_dual(9_900_000, 1_400_000_000), "9.9M (+1.4B cache)");
+        assert_eq!(fmt_tokens_dual(9_900_000, 0), "9.9M");
+        assert_eq!(fmt_tokens_dual(0, 500), "0 (+500 cache)");
     }
 }

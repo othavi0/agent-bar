@@ -17,7 +17,7 @@ use crate::settings::GlyphMode;
 use crate::theme::ColorToken;
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap};
-use crate::tui::render::shared::{abbrev_tokens, series_now};
+use crate::tui::render::shared::{abbrev_tokens, fmt_tokens_dual, series_now};
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
@@ -64,18 +64,23 @@ fn truncate_name(name: &str, max: usize) -> String {
     }
 }
 
-/// Tokens totais de um `ModelUsage` (todas as 4 categorias — mesma
-/// convenção do bucket horário em `usage::buckets::bucket_by_hour`, que
-/// alimenta o sparkline da seção 3; mantém as duas seções coerentes entre
-/// si mesmo divergindo do bucket diário de `render/history.rs`, que soma
-/// só input+output).
-fn model_tokens(mu: &ModelUsage) -> u64 {
-    mu.input + mu.output + mu.cache_read + mu.cache_write
+/// Tokens duplos (io, cache) de um `ModelUsage` — io = input+output (rótulo
+/// principal de `fmt_tokens_dual`), cache = cache_read+cache_write (sufixo
+/// "(+X cache)"). Mesmo vocabulário do `DayBucket` de `usage::buckets`
+/// (T4): a divergência antiga (esta função somava as 4 categorias num só
+/// total, "1.4B", enquanto `render/history.rs` só somava input+output,
+/// "10M") morre aqui.
+fn model_tokens_split(mu: &ModelUsage) -> (u64, u64) {
+    (mu.input + mu.output, mu.cache_read + mu.cache_write)
 }
 
-/// Tokens totais de um `ProviderUsage` (mesma convenção de `model_tokens`).
-fn provider_usage_tokens(pu: &ProviderUsage) -> u64 {
-    pu.total_input + pu.total_output + pu.total_cache_read + pu.total_cache_write
+/// Tokens duplos (io, cache) de um `ProviderUsage` — mesma convenção de
+/// `model_tokens_split`.
+fn provider_tokens_split(pu: &ProviderUsage) -> (u64, u64) {
+    (
+        pu.total_input + pu.total_output,
+        pu.total_cache_read + pu.total_cache_write,
+    )
 }
 
 /// Encontra um ModelUsage cujo nome contem `quota_name` (case-insensitive).
@@ -197,7 +202,8 @@ fn model_window_line(
 /// (não a 100% — normalizada pelo modelo de maior consumo) + tokens
 /// abreviados + custo, ambos right-aligned.
 fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'static> {
-    let tokens = model_tokens(mu);
+    let (io, cache) = model_tokens_split(mu);
+    let tokens = io + cache;
     let pct = if max_tokens > 0 {
         (tokens as f64 / max_tokens as f64 * 100.0).clamp(0.0, 100.0)
     } else {
@@ -214,7 +220,7 @@ fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'sta
     )];
     spans.extend(gauge_spans(pct, FIXED_GAUGE_W, brand));
     spans.push(Span::styled(
-        format!(" {:>8}", abbrev_tokens(tokens)),
+        format!(" {:>8}", fmt_tokens_dual(io, cache)),
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     ));
     spans.push(Span::styled(
@@ -364,11 +370,18 @@ fn totals_line(
     let today_str = if state.usage.is_none() {
         "coletando\u{2026}".to_string()
     } else {
-        let (today_tokens, today_cost) = match provider_usage {
-            Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
-            None => (0, "-".to_string()),
+        let (today_io, today_cache, today_cost) = match provider_usage {
+            Some(pu) => {
+                let (io, cache) = provider_tokens_split(pu);
+                (io, cache, fmt_cost_generic(pu))
+            }
+            None => (0, 0, "-".to_string()),
         };
-        format!("{} tok \u{b7} {}", abbrev_tokens(today_tokens), today_cost)
+        format!(
+            "{} tok \u{b7} {}",
+            fmt_tokens_dual(today_io, today_cache),
+            today_cost
+        )
     };
 
     if state.history.is_none() {
@@ -385,9 +398,10 @@ fn totals_line(
         .iter()
         .filter(|r| r.provider == provider)
         .collect();
-    let week_tokens: u64 = week_records
+    let week_io: u64 = week_records.iter().map(|r| r.input + r.output).sum();
+    let week_cache: u64 = week_records
         .iter()
-        .map(|r| r.input + r.output + r.cache_read + r.cache_write)
+        .map(|r| r.cache_read + r.cache_write)
         .sum();
     let week_cost: Option<f64> = week_records
         .iter()
@@ -403,7 +417,7 @@ fn totals_line(
         format!(
             " hoje {}    7 dias {} tok \u{b7} {}",
             today_str,
-            abbrev_tokens(week_tokens),
+            fmt_tokens_dual(week_io, week_cache),
             week_cost_str
         ),
         Style::default().fg(to_ratatui(ColorToken::TextBright)),
@@ -527,7 +541,10 @@ fn render_full(
             let max_tokens = pu
                 .by_model
                 .iter()
-                .map(model_tokens)
+                .map(|mu| {
+                    let (io, cache) = model_tokens_split(mu);
+                    io + cache
+                })
                 .max()
                 .unwrap_or(0)
                 .max(1);

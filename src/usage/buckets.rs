@@ -11,38 +11,48 @@ use crate::usage::UsageRecord;
 // Day bucketing
 // ---------------------------------------------------------------------------
 
-/// Um bucket diario: date, soma de tokens (input+output), custo opcional em USD.
+/// Um bucket diario: date, soma de tokens (input+output), soma de cache
+/// (cache_read+cache_write, T4 rótulo duplo — alimenta o sufixo "(+X cache)"
+/// de `fmt_tokens_dual`; `tokens` continua SÓ input+output), custo opcional
+/// em USD.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DayBucket {
     pub date: Date,
     pub tokens: u64,
+    pub cache_tokens: u64,
     pub cost_usd: Option<f64>,
 }
+
+/// Acumulador intermediário de um bucket: (tokens io, cache_tokens, custo).
+type BucketAcc = (u64, u64, Option<f64>);
 
 /// Agrupa records por dia (ts.date()) somando tokens e custo.
 /// Records com modelo desconhecido contribuem tokens mas nao custo (igual ao engine).
 /// Retorna vec ordenado por data crescente.
 pub fn bucket_by_day(records: &[UsageRecord]) -> Vec<DayBucket> {
-    let mut map: BTreeMap<Date, (u64, Option<f64>)> = BTreeMap::new();
+    let mut map: BTreeMap<Date, BucketAcc> = BTreeMap::new();
 
     for rec in records {
         let date = rec.ts.date();
         let tokens = rec.input + rec.output;
+        let cache_tokens = rec.cache_read + rec.cache_write;
         let cost = cost_usd_of(rec);
 
-        let entry = map.entry(date).or_insert((0, None));
+        let entry = map.entry(date).or_insert((0, 0, None));
         entry.0 += tokens;
-        match (cost, entry.1.as_mut()) {
+        entry.1 += cache_tokens;
+        match (cost, entry.2.as_mut()) {
             (Some(c), Some(acc)) => *acc += c,
-            (Some(c), None) => entry.1 = Some(c),
+            (Some(c), None) => entry.2 = Some(c),
             (None, _) => {}
         }
     }
 
     map.into_iter()
-        .map(|(date, (tokens, cost_usd))| DayBucket {
+        .map(|(date, (tokens, cache_tokens, cost_usd))| DayBucket {
             date,
             tokens,
+            cache_tokens,
             cost_usd,
         })
         .collect()
@@ -51,31 +61,33 @@ pub fn bucket_by_day(records: &[UsageRecord]) -> Vec<DayBucket> {
 /// Agrupa records por (provider, day) para o grafico por-provider.
 /// Retorna BTreeMap<provider_name, Vec<DayBucket>> ordenado por data.
 pub fn bucket_by_provider_day(records: &[UsageRecord]) -> BTreeMap<String, Vec<DayBucket>> {
-    // (provider, date) -> (tokens, cost)
-    let mut map: BTreeMap<(String, Date), (u64, Option<f64>)> = BTreeMap::new();
+    // (provider, date) -> (tokens, cache_tokens, cost)
+    let mut map: BTreeMap<(String, Date), BucketAcc> = BTreeMap::new();
 
     for rec in records {
         let date = rec.ts.date();
         let tokens = rec.input + rec.output;
+        let cache_tokens = rec.cache_read + rec.cache_write;
         let cost = cost_usd_of(rec);
         let key = (rec.provider.clone(), date);
 
-        let entry = map.entry(key).or_insert((0, None));
+        let entry = map.entry(key).or_insert((0, 0, None));
         entry.0 += tokens;
-        match (cost, entry.1.as_mut()) {
+        entry.1 += cache_tokens;
+        match (cost, entry.2.as_mut()) {
             (Some(c), Some(acc)) => *acc += c,
-            (Some(c), None) => entry.1 = Some(c),
+            (Some(c), None) => entry.2 = Some(c),
             (None, _) => {}
         }
     }
 
     // Reorganiza por provider
-    let mut by_provider: BTreeMap<String, BTreeMap<Date, (u64, Option<f64>)>> = BTreeMap::new();
-    for ((provider, date), (tokens, cost)) in map {
+    let mut by_provider: BTreeMap<String, BTreeMap<Date, BucketAcc>> = BTreeMap::new();
+    for ((provider, date), (tokens, cache_tokens, cost)) in map {
         by_provider
             .entry(provider)
             .or_default()
-            .insert(date, (tokens, cost));
+            .insert(date, (tokens, cache_tokens, cost));
     }
 
     by_provider
@@ -83,9 +95,10 @@ pub fn bucket_by_provider_day(records: &[UsageRecord]) -> BTreeMap<String, Vec<D
         .map(|(provider, date_map)| {
             let buckets = date_map
                 .into_iter()
-                .map(|(date, (tokens, cost_usd))| DayBucket {
+                .map(|(date, (tokens, cache_tokens, cost_usd))| DayBucket {
                     date,
                     tokens,
+                    cache_tokens,
                     cost_usd,
                 })
                 .collect();
@@ -375,5 +388,33 @@ mod day_bucket_tests {
             buckets[0].cost_usd.is_none(),
             "modelo None nao deve gerar custo"
         );
+    }
+
+    /// `cache_tokens` (T4) soma cache_read+cache_write num campo SEPARADO de
+    /// `tokens` (que continua só input+output) — a distinção é o ponto: o
+    /// rótulo duplo em `render/history.rs` precisa dos dois valores, nunca
+    /// misturados.
+    #[test]
+    fn bucket_by_day_accumulates_cache_tokens_separately_from_tokens() {
+        let mut r1 = rec("claude", Some("claude-sonnet-4-6"), "2026-06-17T08:00:00Z", 1000, 200);
+        r1.cache_read = 500;
+        r1.cache_write = 100;
+        let mut r2 = rec("claude", Some("claude-sonnet-4-6"), "2026-06-17T14:00:00Z", 300, 50);
+        r2.cache_read = 200;
+        let buckets = bucket_by_day(&[r1, r2]);
+        assert_eq!(buckets.len(), 1);
+        assert_eq!(buckets[0].tokens, 1550, "tokens deve continuar so input+output");
+        assert_eq!(buckets[0].cache_tokens, 800, "cache_tokens = 500+100+200");
+    }
+
+    #[test]
+    fn bucket_by_provider_day_accumulates_cache_tokens_per_provider() {
+        let mut r1 = rec("claude", Some("claude-sonnet-4-6"), "2026-06-17T08:00:00Z", 1000, 0);
+        r1.cache_read = 400;
+        let mut r2 = rec("codex", Some("gpt-5.5"), "2026-06-17T09:00:00Z", 2000, 0);
+        r2.cache_write = 900;
+        let by_provider = bucket_by_provider_day(&[r1, r2]);
+        assert_eq!(by_provider["claude"][0].cache_tokens, 400);
+        assert_eq!(by_provider["codex"][0].cache_tokens, 900);
     }
 }

@@ -1,5 +1,6 @@
 ---
 source: src/tui/render/history.rs
+assertion_line: 960
 expression: terminal.backend()
 ---
 "┏ Histórico (7 dias) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -21,4 +22,4 @@ expression: terminal.backend()
 "┃07/02  amp2      1.0K     -                                                                       ┃"
 "┃06/23  claude    1.0K     -                                                                  ▼ +19┃"
 "┃                             t 24h/7d     r atualizar     esc voltar                              ┃"
-"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Total 7d: 30K tokens ┛"
+"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Total 7d: 30.1K tokens ┛"
