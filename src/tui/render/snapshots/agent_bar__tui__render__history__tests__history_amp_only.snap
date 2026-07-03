@@ -1,9 +1,9 @@
 ---
 source: src/tui/render/history.rs
+assertion_line: 987
 expression: terminal.backend()
 ---
 "┏ Histórico (7 dias) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃ sem uso de tokens no período selecionado                                                         ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
@@ -17,6 +17,7 @@ expression: terminal.backend()
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
+"┃                              sem uso de tokens no período selecionado                            ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"

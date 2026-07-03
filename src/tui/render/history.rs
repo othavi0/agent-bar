@@ -310,11 +310,19 @@ pub(super) fn render_trend_chart(
     }
 
     if series_by_provider.is_empty() {
+        let y = area.y + area.height / 2;
+        let line_area = Rect::new(
+            area.x,
+            y.min(area.y + area.height.saturating_sub(1)),
+            area.width,
+            1,
+        );
         let p = Paragraph::new(Span::styled(
             empty_msg.to_string(),
             Style::default().fg(to_ratatui(ColorToken::Muted)),
-        ));
-        frame.render_widget(p, area);
+        ))
+        .alignment(Alignment::Center);
+        frame.render_widget(p, line_area);
         return;
     }
 
@@ -834,6 +842,34 @@ mod tests {
             .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn empty_chart_message_is_vertically_centered() {
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.history = Some(vec![]);
+        state.usage = Some(amp_usage(0.81, 5.0, 4.19)); // só-Amp: tabela de 1 linha
+        terminal
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut msg_row = None;
+        for y in 0..32u16 {
+            let row: String = (0..100u16)
+                .filter_map(|x| buffer.cell((x, y)).map(|c| c.symbol().to_string()))
+                .collect();
+            if row.contains("sem uso de tokens") {
+                msg_row = Some(y);
+            }
+        }
+        let y = msg_row.expect("mensagem presente");
+        assert!(
+            (8..=20).contains(&y),
+            "mensagem deve estar centrada na área do chart, não colada no topo (y={y})"
+        );
     }
 
     #[test]
