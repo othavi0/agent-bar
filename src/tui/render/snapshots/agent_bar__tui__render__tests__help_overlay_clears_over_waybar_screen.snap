@@ -1,9 +1,9 @@
 ---
 source: src/tui/render/mod.rs
-assertion_line: 625
+assertion_line: 795
 expression: terminal.backend()
 ---
-"╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
+"╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────… ╮"
 "│ VISÃO           ╭ Config do Waybar ╮╭ providers  ───────────────────────────────────────────────╮│"
 "│ ▸ Geral         │ > providers      ││ claude, codex                                             ││"
 "│                 │   providerOrder  │╰───────────────────────────────────────────────────────────╯│"

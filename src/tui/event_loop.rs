@@ -181,16 +181,23 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     // comeca vazio e cresce conforme cada `ProviderFetched` chega — a ordem
     // de rede (nao a configurada) faz a sidebar/Overview "pularem" de
     // posicao na frente do usuario durante o fetch inicial. Semeando 1 slot
-    // por provider habilitado, na ordem de `waybar.providers`, o braço
-    // `Action::ProviderFetched` (update.rs) substitui in-place por id —
-    // nenhuma posicao muda depois disso. `fetch_pending` ganha os mesmos
-    // ids pra cada card semeado renderizar "verificando…" via
+    // por provider registrado, na ordem canonica de `registered_provider_ids`
+    // (mesma fonte que `spawn_fetch` usa via `registry()` — slots e fetch
+    // sempre casam), o braço `Action::ProviderFetched` (update.rs) substitui
+    // in-place por id — nenhuma posicao muda depois disso. `fetch_pending`
+    // ganha os mesmos ids pra cada card semeado renderizar "verificando…" via
     // `login_state_for` em vez de "deslogado".
-    for id in &octx.settings.waybar.providers {
+    //
+    // Fix (review final): o menu deliberadamente ignora `waybar.providers`
+    // (isso é config da BARRA, não do menu — filtra só o que aparece no
+    // Waybar). Semear a partir dele aqui deixava o menu escondendo
+    // providers registrados que o usuário desligou só da barra. O menu
+    // sempre lista todos os providers do registry.
+    for id in crate::providers::registered_provider_ids() {
         state.providers.push(super::state::ProviderView::new(
             super::state::skeleton_quota(id),
         ));
-        state.fetch_pending.push(id.clone());
+        state.fetch_pending.push(id.to_string());
     }
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).

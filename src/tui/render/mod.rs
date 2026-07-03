@@ -269,15 +269,16 @@ fn header_status(state: &AppState) -> Line<'static> {
     // Count-up (T16): mostra `display_cost` (persegue `usage.total_cost.usd`
     // via lerp em AnimTick), não o valor bruto — fallback enquanto usage
     // ainda não carregou nenhuma vez (display_cost fica em 0.0 até o 1º
-    // load). Fix desta task: com fetch em voo (1º load real, "verificando…")
-    // o fallback é "…"; sem fetch em voo e sem dado, "-" (estado
-    // genuinamente vazio, ex. erro) — comportamento anterior preservado.
+    // load). Fix (review final): o fallback era `!fetch_pending.is_empty()`,
+    // que é o fetch de QUOTA — mas o parse de usage roda em outra thread e,
+    // quando a quota resolve via cache antes do parse terminar, o header
+    // mostrava "-" por segundos no 1º boot. `usage.is_none()` já basta como
+    // condição do "…": o parse inicial sempre dispara no boot, então não há
+    // estado real de "vazio" distinto de "ainda carregando" pro custo.
     let cost = if state.usage.is_some() {
         format!("${:.2}", state.display_cost)
-    } else if !state.fetch_pending.is_empty() {
-        "…".to_string()
     } else {
-        "-".to_string()
+        "…".to_string()
     };
     spans.push(Span::styled(
         cost,
@@ -886,5 +887,20 @@ mod tests {
         let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(!text.contains('-'), "primeiro load não mostra '-': {text:?}");
         assert!(text.contains('…'), "primeiro load mostra reticências: {text:?}");
+    }
+
+    #[test]
+    fn header_shows_ellipsis_even_with_no_fetch_pending() {
+        // Regressão do review final: quota resolve por cache (fetch_pending
+        // fica vazio) mas o parse de usage — outra thread — ainda não
+        // terminou. `usage.is_none()` sozinho já basta como condição do
+        // "…"; não deve sobrar caminho pro "-" nesse cenário.
+        let state = AppState::new();
+        assert!(state.fetch_pending.is_empty());
+        assert!(state.usage.is_none());
+        let line = header_status(&state);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(!text.contains('-'), "sem fetch pendente não mostra '-': {text:?}");
+        assert!(text.contains('…'), "sem fetch pendente mostra reticências: {text:?}");
     }
 }

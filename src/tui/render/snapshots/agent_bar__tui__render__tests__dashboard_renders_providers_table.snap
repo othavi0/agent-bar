@@ -1,9 +1,9 @@
 ---
 source: src/tui/render/mod.rs
-assertion_line: 435
+assertion_line: 503
 expression: terminal.backend()
 ---
-"╭ agent-bar ─────────────────────────────────────────────────- ╮"
+"╭ agent-bar ─────────────────────────────────────────────────… ╮"
 "│   ╭ Claude ────────────────────────────────────────────✓ ok╮▲│"
 "│ ▸ │sessão  ████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒   26%  → 23:00   │█│"
 "│   │   coletando…                                           │█│"
