@@ -29,6 +29,7 @@ fn spawn_usage_load(
 ) {
     let claude_dir = octx.home.join(".claude").join("projects");
     let codex_dir = octx.home.join(".codex").join("sessions");
+    let cache_db = octx.paths.cache_dir.join("usage.redb");
     let fx_rate = octx.settings.fx_rate;
 
     // amp_meta do ProviderView do Amp (clone OWNED p/ cruzar o spawn_blocking).
@@ -63,6 +64,7 @@ fn spawn_usage_load(
             codex_dir: &codex_dir,
             fx_rate,
             amp_meta: None,
+            cache_db: Some(&cache_db),
         });
 
         // Custo de HOJE (escopado a meia-noite local).

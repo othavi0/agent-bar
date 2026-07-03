@@ -20,7 +20,7 @@ use crate::usage::codex::parse_codex_lines;
 use crate::usage::pricing::cost_usd_of;
 
 /// Uma chamada de API normalizada, extraída de um session log.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UsageRecord {
     pub provider: String,
     pub model: Option<String>,
@@ -37,6 +37,7 @@ pub struct UsageRecord {
     pub fast: bool,
     /// `usage.inference_geo == "us"` (multiplicador 1.1× em tudo).
     pub geo_us: bool,
+    #[serde(with = "time::serde::timestamp")]
     pub ts: OffsetDateTime,
 }
 
@@ -92,6 +93,10 @@ pub struct AggregateOptions<'a> {
     /// Meta do provider Amp (já parseado por `providers::amp`). Se `Some`,
     /// adiciona um `ProviderUsage { provider:"amp", amp_dollars: Some(...) }`.
     pub amp_meta: Option<&'a BTreeMap<String, String>>,
+    /// Path do redb de cache persistente de parse (`UsageCache::open`).
+    /// `None` = cache só em memória (comportamento anterior) — usado pelos
+    /// testes que não precisam de persistência entre processos.
+    pub cache_db: Option<&'a Path>,
 }
 
 // ---------------------------------------------------------------------------
@@ -129,18 +134,23 @@ fn collect_jsonl_inner(dir: &Path, out: &mut Vec<PathBuf>) {
 /// Consumido pela aba History para montagem de tendência temporal; o bucketing
 /// por dia/janela é responsabilidade do consumidor.
 pub fn records(opts: AggregateOptions) -> Vec<UsageRecord> {
-    let mut cache = UsageCache::new();
+    let mut cache = UsageCache::open(opts.cache_db);
     let mut all: Vec<UsageRecord> = Vec::new();
+    let mut live: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
 
     for path in collect_jsonl(opts.claude_dir) {
         let recs = cache.cached_or_parse(&path, |content| parse_claude_lines(content.lines()));
         all.extend(recs);
+        live.insert(path);
     }
 
     for path in collect_jsonl(opts.codex_dir) {
         let recs = cache.cached_or_parse(&path, |content| parse_codex_lines(content.lines()));
         all.extend(recs);
+        live.insert(path);
     }
+
+    cache.gc(&live);
 
     all.sort_by_key(|r| r.ts);
     all
@@ -318,6 +328,7 @@ pub fn aggregate(opts: AggregateOptions) -> UsageSummary {
         codex_dir: opts.codex_dir,
         fx_rate,
         amp_meta: None, // amp não tem records de token
+        cache_db: None,
     });
 
     aggregate_records(all, fx_rate, amp_meta)
@@ -361,6 +372,7 @@ mod tests {
             codex_dir: codex.path(),
             fx_rate: 5.0,
             amp_meta: None,
+            cache_db: None,
         });
 
         let cl = s.providers.iter().find(|p| p.provider == "claude").unwrap();
@@ -393,6 +405,7 @@ mod tests {
             codex_dir: codex.path(),
             fx_rate: 5.0,
             amp_meta: None,
+            cache_db: None,
         });
         let cl = s.providers.iter().find(|p| p.provider == "claude").unwrap();
         assert_eq!(cl.total_input, 500);
@@ -430,6 +443,7 @@ mod tests {
             codex_dir: codex.path(),
             fx_rate: 5.0,
             amp_meta: None,
+            cache_db: None,
         });
 
         assert_eq!(recs.len(), 2);
@@ -468,6 +482,7 @@ mod tests {
                 codex_dir: codex.path(),
                 fx_rate: 5.0,
                 amp_meta: None,
+                cache_db: None,
             },
             cutoff,
         );
@@ -491,6 +506,7 @@ mod tests {
             codex_dir: codex.path(),
             fx_rate: 5.0,
             amp_meta: Some(&meta),
+            cache_db: None,
         });
 
         let amp = s.providers.iter().find(|p| p.provider == "amp").unwrap();
@@ -554,6 +570,7 @@ mod tests {
             codex_dir: codex.path(),
             fx_rate: 5.0,
             amp_meta: None,
+            cache_db: None,
         });
         assert!(s.providers.is_empty());
         assert_eq!(s.total_cost.usd, 0.0);
@@ -569,6 +586,7 @@ mod tests {
             codex_dir: Path::new("/nonexistent/codex"),
             fx_rate: 5.0,
             amp_meta: None,
+            cache_db: None,
         });
         assert!(s.providers.is_empty());
     }
