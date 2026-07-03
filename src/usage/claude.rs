@@ -1,5 +1,7 @@
 //! Parser do session log do Claude (`~/.claude/projects/**/*.jsonl`). Ver spec §4b.
 
+use std::collections::HashMap;
+
 use serde_json::Value;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -9,8 +11,16 @@ use super::UsageRecord;
 /// Extrai `UsageRecord`s de linhas JSONL do Claude. Linhas sem `type:"assistant"`,
 /// sem `message.usage`, sem timestamp parseável, ou não-JSON → puladas.
 pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<UsageRecord> {
-    let mut out = Vec::new();
-    for line in lines {
+    // Dedup de streaming: o Claude Code grava várias entradas por request
+    // (mesmo requestId, output_tokens crescendo). A ÚLTIMA entrada vista
+    // (ordem do arquivo) é o estado final da request — as anteriores são
+    // parciais e somá-las multiplicaria tokens/custo (claude-devtools#74).
+    // Chave: requestId; fallback message.id; sem ambos → índice da linha
+    // (nunca colide: linha vale sozinha).
+    let mut by_request: HashMap<String, UsageRecord> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+
+    for (i, line) in lines.enumerate() {
         let v: Value = match serde_json::from_str(line) {
             Ok(v) => v,
             Err(_) => continue,
@@ -33,8 +43,15 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
             },
             None => continue,
         };
+        let key = v
+            .get("requestId")
+            .and_then(Value::as_str)
+            .or_else(|| msg.get("id").and_then(Value::as_str))
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("__line_{i}"));
+
         let u = |k: &str| usage.get(k).and_then(Value::as_u64).unwrap_or(0);
-        out.push(UsageRecord {
+        let rec = UsageRecord {
             provider: "claude".to_string(),
             model: msg
                 .get("model")
@@ -45,9 +62,12 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
             cache_read: u("cache_read_input_tokens"),
             cache_write: u("cache_creation_input_tokens"),
             ts,
-        });
+        };
+        if by_request.insert(key.clone(), rec).is_none() {
+            order.push(key);
+        }
     }
-    out
+    order.into_iter().filter_map(|k| by_request.remove(&k)).collect()
 }
 
 #[cfg(test)]
@@ -88,5 +108,40 @@ mod tests {
         let recs = parse_claude_lines([line].into_iter());
         assert_eq!(recs[0].cache_read, 0);
         assert_eq!(recs[0].cache_write, 0);
+    }
+
+    #[test]
+    fn streaming_entries_same_request_dedupe_to_last() {
+        // 3 entradas do MESMO requestId com output_tokens crescendo (streaming
+        // real do Claude Code) — só a última pode contar, senão a request é
+        // somada 3x (bug documentado em claude-devtools#74).
+        let lines = [
+            r#"{"type":"assistant","requestId":"req_1","timestamp":"2026-07-03T10:00:00.000Z","message":{"id":"msg_1","model":"claude-fable-5","usage":{"input_tokens":100,"output_tokens":5}}}"#,
+            r#"{"type":"assistant","requestId":"req_1","timestamp":"2026-07-03T10:00:01.000Z","message":{"id":"msg_1","model":"claude-fable-5","usage":{"input_tokens":100,"output_tokens":50}}}"#,
+            r#"{"type":"assistant","requestId":"req_1","timestamp":"2026-07-03T10:00:02.000Z","message":{"id":"msg_1","model":"claude-fable-5","usage":{"input_tokens":100,"output_tokens":90}}}"#,
+            r#"{"type":"assistant","requestId":"req_2","timestamp":"2026-07-03T10:01:00.000Z","message":{"id":"msg_2","model":"claude-fable-5","usage":{"input_tokens":10,"output_tokens":1}}}"#,
+        ];
+        let recs = parse_claude_lines(lines.into_iter());
+        assert_eq!(recs.len(), 2, "1 record por request, não por linha");
+        let req1 = recs
+            .iter()
+            .find(|r| r.output == 90)
+            .expect("última entrada de req_1");
+        assert_eq!(req1.input, 100);
+        assert_eq!(recs.iter().map(|r| r.output).sum::<u64>(), 91);
+    }
+
+    #[test]
+    fn lines_without_request_id_fall_back_to_message_id_then_standalone() {
+        // Sem requestId: dedup por message.id. Sem ambos: linha vale sozinha.
+        let lines = [
+            r#"{"type":"assistant","timestamp":"2026-07-03T10:00:00Z","message":{"id":"msg_a","model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":1}}}"#,
+            r#"{"type":"assistant","timestamp":"2026-07-03T10:00:01Z","message":{"id":"msg_a","model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":7}}}"#,
+            r#"{"type":"assistant","timestamp":"2026-07-03T10:00:02Z","message":{"model":"claude-fable-5","usage":{"input_tokens":3,"output_tokens":3}}}"#,
+        ];
+        let recs = parse_claude_lines(lines.into_iter());
+        assert_eq!(recs.len(), 2);
+        assert!(recs.iter().any(|r| r.output == 7), "msg_a dedupado pra última");
+        assert!(recs.iter().any(|r| r.output == 3), "linha sem id vale sozinha");
     }
 }
