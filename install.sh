@@ -2,7 +2,7 @@
 #
 # agent-bar installer — zero-toolchain binary install.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/othavioquiliao/agent-bar/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/othavi0/agent-bar/master/install.sh | bash
 #
 # Flags:
 #   --force      Reinstall even if already up to date (no prompting).
@@ -17,7 +17,7 @@ set -euo pipefail
 
 # --- config ----------------------------------------------------------------
 
-GITHUB_REPO="othavioquiliao/agent-bar"
+GITHUB_REPO="othavi0/agent-bar"
 BIN_DIR="$HOME/.local/bin"
 DATA_DIR="${AGENT_BAR_DATA:-$HOME/.local/share/agent-bar}"
 
