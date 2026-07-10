@@ -107,8 +107,13 @@ pub fn column_chart_lines(
                     }
                     // Não há mais de onde roubar sem derrubar alguma série
                     // abaixo de 1 oitavo (mais séries ativas do que oitavos
-                    // disponíveis nesta faixa) — situação degenerada, para
-                    // aqui em vez de violar o mínimo de visibilidade.
+                    // disponíveis nesta faixa) — situação degenerada e
+                    // DOCUMENTADA: para aqui em vez de violar o mínimo de
+                    // visibilidade de outra série pra manter este. O resgate
+                    // de linha em `cell_grid` (abaixo) tem o mesmo tipo de
+                    // teto honesto quando sobram mais séries ativas do que
+                    // linhas do plot — não é bug, é o limite físico da
+                    // resolução escolhida.
                     None => break,
                 }
             }
@@ -127,6 +132,24 @@ pub fn column_chart_lines(
     // header. Resgate: se uma série com altura>0 nunca vence a votação em
     // nenhuma linha, força a cor dela na linha onde teve a MAIOR sobreposição
     // (só recolore aquela linha; não mexe no fill/glyph de ninguém).
+    //
+    // Colisão entre resgates (achado de review): com 3+ séries num bucket é
+    // possível DUAS séries minoritárias terem a MESMA única linha de overlap
+    // (ex.: A=1 oitavo e B=1 oitavo, ambos inteiramente dentro da linha-base,
+    // enquanto C domina as linhas de cima). Um resgate ingênuo processa em
+    // ordem de stack e sobrescreve cegamente — a segunda série resgatada
+    // reenterra a primeira, violando o mesmo contrato que o resgate deveria
+    // proteger. A correção usa reserva: linhas já concedidas nesta passada,
+    // ou que são a ÚNICA linha visível de outra série, não podem ser
+    // roubadas de novo. Quando nem a melhor linha de overlap real está livre,
+    // um último recurso rouba uma linha de QUALQUER série que ainda tenha
+    // folga (visible_count > 1) — mesmo princípio de "rouba de quem pode
+    // ceder sem sumir" do excess-steal acima — preferindo quem tem MAIS
+    // folga. Isso troca precisão geométrica (a linha recolorida pode não ter
+    // overlap real com a série resgatada) pelo contrato "uso>0 nunca
+    // invisível", e só se aplica quando ainda cabe: se o número de séries
+    // ativas exceder o de linhas do plot, sobra série sem resgate possível —
+    // degenerado e documentado, mesmo bound do excess-steal.
     let mut cell_grid: Vec<Vec<(usize, Option<u8>)>> = Vec::with_capacity(stacks.len());
     for cols in &stacks {
         let h_total: usize = cols.iter().map(|(h, _)| *h).sum();
@@ -162,15 +185,33 @@ pub fn column_chart_lines(
             }
             rows.push((fill, best.map(|(_, s)| s)));
         }
+        // Dono atual de cada linha + quantas linhas cada slot ainda detém
+        // (usado pra saber se uma linha é a ÚNICA visível de alguém).
+        let mut row_owner: Vec<Option<u8>> = rows.iter().map(|(_, s)| *s).collect();
+        let mut visible_count: std::collections::HashMap<u8, usize> =
+            std::collections::HashMap::new();
+        for owner in row_owner.iter().flatten() {
+            *visible_count.entry(*owner).or_insert(0) += 1;
+        }
+
+        // Séries com tokens>0 que nunca venceram nenhuma linha, com as linhas
+        // onde REALMENTE têm overlap (tier 1), ordenadas por overlap DESC.
+        struct Invisible {
+            slot: u8,
+            tier1: Vec<usize>,
+        }
+        let mut invisible: Vec<Invisible> = Vec::new();
         for (h, slot) in cols {
             if *h == 0 {
                 continue;
             }
-            let already_visible = rows.iter().any(|(_, s)| *s == Some(*slot));
-            if already_visible {
+            if row_owner.contains(&Some(*slot)) {
                 continue;
             }
-            let rescue_row = occ_by_row
+            if invisible.iter().any(|iv| iv.slot == *slot) {
+                continue; // slot duplicado no mesmo bucket não deveria ocorrer
+            }
+            let mut cands: Vec<(usize, usize)> = occ_by_row
                 .iter()
                 .enumerate()
                 .filter_map(|(row, occs)| {
@@ -178,11 +219,77 @@ pub fn column_chart_lines(
                         .find(|(s, _)| s == slot)
                         .map(|(_, occ)| (row, *occ))
                 })
-                .max_by_key(|(_, occ)| *occ)
-                .map(|(row, _)| row);
-            if let Some(row) = rescue_row {
-                rows[row].1 = Some(*slot);
+                .collect();
+            cands.sort_by_key(|(_, occ)| std::cmp::Reverse(*occ)); // overlap DESC
+            invisible.push(Invisible {
+                slot: *slot,
+                tier1: cands.into_iter().map(|(row, _)| row).collect(),
+            });
+        }
+        // Menos opções primeiro; empate mantém ordem de stack (`cols`).
+        invisible.sort_by_key(|iv| iv.tier1.len());
+
+        // Tenta mover a linha `row` pro `slot`. Recusa se a linha já é a
+        // ÚNICA visível de quem a detém hoje (isso reenterraria essa série —
+        // exatamente o bug de "resgate cego" que este pass substitui).
+        fn try_reserve(
+            row: usize,
+            slot: u8,
+            row_owner: &mut [Option<u8>],
+            visible_count: &mut std::collections::HashMap<u8, usize>,
+        ) -> bool {
+            let Some(owner) = row_owner[row] else {
+                return false;
+            };
+            if owner == slot {
+                return true;
             }
+            if visible_count.get(&owner).copied().unwrap_or(0) <= 1 {
+                return false;
+            }
+            if let Some(c) = visible_count.get_mut(&owner) {
+                *c -= 1;
+            }
+            *visible_count.entry(slot).or_insert(0) += 1;
+            row_owner[row] = Some(slot);
+            true
+        }
+
+        for iv in &invisible {
+            let mut assigned = false;
+            // Tier 1: linha(s) onde a série tem overlap geométrico real.
+            for &row in &iv.tier1 {
+                if try_reserve(row, iv.slot, &mut row_owner, &mut visible_count) {
+                    assigned = true;
+                    break;
+                }
+            }
+            // Tier 2 (último recurso, documentado no comentário acima de
+            // `cell_grid`): nenhuma linha de overlap real ficou livre — rouba
+            // uma linha de quem ainda tem folga (visible_count > 1),
+            // preferindo quem tem MAIS folga pra ceder.
+            if !assigned {
+                let steal_from = (0..plot_rows)
+                    .filter_map(|row| {
+                        let owner = row_owner[row]?;
+                        let cnt = visible_count.get(&owner).copied().unwrap_or(0);
+                        (cnt > 1).then_some((row, cnt))
+                    })
+                    .max_by_key(|(_, cnt)| *cnt)
+                    .map(|(row, _)| row);
+                if let Some(row) = steal_from {
+                    assigned = try_reserve(row, iv.slot, &mut row_owner, &mut visible_count);
+                }
+            }
+            // Degenerado real (mais séries ativas do que linhas do plot):
+            // nenhuma linha assinalável sobrou nem no último recurso — a
+            // série fica sem oitavo visível. Documentado, não é bug (mesmo
+            // teto do excess-steal acima).
+            let _ = assigned;
+        }
+
+        for (row, owner) in row_owner.into_iter().enumerate() {
+            rows[row].1 = owner;
         }
         cell_grid.push(rows);
     }
@@ -470,5 +577,35 @@ mod tests {
         );
         let text: Vec<String> = plain(&lines);
         insta::assert_snapshot!(text.join("\n"));
+    }
+
+    #[test]
+    fn chart_three_series_all_visible_in_plot() {
+        // A=50, B=50, C=1000 no mesmo bucket: com plot_rows pequeno (altura 6
+        // → plot_rows 3, cap 24), A e B ficam com 1 oitavo cada e SÓ tem
+        // overlap na row0 (a base da pilha) — resgate ingênuo (last-writer-
+        // wins) faz B sobrescrever a cor de A na row0, reenterrando A.
+        let s = vec![
+            series("A", 0, vec![50]),
+            series("B", 1, vec![50]),
+            series("C", 2, vec![1000]),
+        ];
+        let lines = column_chart_lines(
+            &s,
+            30,
+            6,
+            datetime!(2026-07-10 12:00:00 UTC),
+            time::UtcOffset::UTC,
+        );
+        let plot = &lines[..lines.len() - 3]; // exclui eixo X, labels e legenda
+        for slot in 0..3u8 {
+            let color = crate::tui::theme_bridge::to_ratatui(crate::theme::series_token(slot));
+            let visible = plot.iter().any(|l| {
+                l.spans
+                    .iter()
+                    .any(|sp| sp.style.fg == Some(color) && !sp.content.trim().is_empty())
+            });
+            assert!(visible, "série slot {slot} invisível no plot");
+        }
     }
 }
