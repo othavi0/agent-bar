@@ -226,6 +226,109 @@ pub fn bucket_by_model_hour(
 }
 
 // ---------------------------------------------------------------------------
+// Session bucketing
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionAgg {
+    pub session_id: String,
+    pub start: OffsetDateTime,
+    pub project: Option<String>,
+    /// Display name do modelo com mais tokens na sessão (ex. "Fable 5").
+    pub dominant_model: Option<String>,
+    pub tokens: u64,
+    pub cost_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DaySessions {
+    pub date: Date,
+    pub tokens: u64,
+    pub cost_usd: Option<f64>,
+    pub sessions: Vec<SessionAgg>,
+}
+
+/// Sessões agrupadas por dia LOCAL (desc). Sessão = session_id do record;
+/// records sem session_id agrupam em "—".
+pub fn sessions_by_day(records: &[UsageRecord], offset: time::UtcOffset) -> Vec<DaySessions> {
+    struct SessAcc {
+        start: OffsetDateTime,
+        project: Option<String>,
+        by_model: BTreeMap<String, u64>,
+        tokens: u64,
+        cost_usd: Option<f64>,
+    }
+    // (date, session_id) → acumulador
+    let mut map: BTreeMap<(Date, String), SessAcc> = BTreeMap::new();
+
+    for r in records {
+        let local = r.ts.to_offset(offset);
+        let key = (
+            local.date(),
+            r.session_id.clone().unwrap_or_else(|| "—".into()),
+        );
+        let acc = map.entry(key).or_insert(SessAcc {
+            start: r.ts,
+            project: None,
+            by_model: BTreeMap::new(),
+            tokens: 0,
+            cost_usd: None,
+        });
+        acc.start = acc.start.min(r.ts);
+        if acc.project.is_none() {
+            acc.project = r.project.clone();
+        }
+        let t = record_tokens(r);
+        acc.tokens += t;
+        if let Some(m) = &r.model {
+            *acc.by_model.entry(m.clone()).or_insert(0) += t;
+        }
+        match (cost_usd_of(r), acc.cost_usd.as_mut()) {
+            (Some(c), Some(sum)) => *sum += c,
+            (Some(c), None) => acc.cost_usd = Some(c),
+            (None, _) => {}
+        }
+    }
+
+    let mut by_day: BTreeMap<Date, Vec<SessionAgg>> = BTreeMap::new();
+    for ((date, session_id), acc) in map {
+        let dominant_model = acc
+            .by_model
+            .iter()
+            .max_by_key(|(_, t)| **t)
+            .map(|(m, _)| display_model_name(m));
+        by_day.entry(date).or_default().push(SessionAgg {
+            session_id,
+            start: acc.start,
+            project: acc.project,
+            dominant_model,
+            tokens: acc.tokens,
+            cost_usd: acc.cost_usd,
+        });
+    }
+
+    let mut out: Vec<DaySessions> = by_day
+        .into_iter()
+        .map(|(date, mut sessions)| {
+            sessions.sort_by_key(|s| std::cmp::Reverse(s.start));
+            let tokens = sessions.iter().map(|s| s.tokens).sum();
+            let cost_usd = sessions
+                .iter()
+                .filter_map(|s| s.cost_usd)
+                .fold(None, |acc, c| Some(acc.unwrap_or(0.0) + c));
+            DaySessions {
+                date,
+                tokens,
+                cost_usd,
+                sessions,
+            }
+        })
+        .collect();
+    out.reverse(); // BTreeMap é asc; queremos desc por data
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -357,6 +460,80 @@ mod tests {
         assert_eq!(series.len(), 1); // haiku fora da janela → total 0 → omitido
         assert_eq!(series[0].label, "Opus 4.8");
         assert_eq!(series[0].total, 15);
+    }
+
+    #[test]
+    fn sessions_by_day_groups_and_orders_desc() {
+        use time::UtcOffset;
+        let mut a = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-10 10:00:00 UTC),
+            100,
+        );
+        a.session_id = Some("s1".into());
+        a.project = Some("crm".into());
+        let mut b = mrec(
+            "claude",
+            "claude-opus-4-8",
+            datetime!(2026-07-10 11:00:00 UTC),
+            40,
+        );
+        b.session_id = Some("s2".into());
+        let mut c = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-09 09:00:00 UTC),
+            7,
+        );
+        c.session_id = Some("s3".into());
+
+        let days = sessions_by_day(&[a, b, c], UtcOffset::UTC);
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].date, time::macros::date!(2026 - 07 - 10)); // desc
+        assert_eq!(days[0].sessions.len(), 2);
+        // sessões desc por start: s2 (11:00) antes de s1 (10:00)
+        assert_eq!(days[0].sessions[0].session_id, "s2");
+        assert_eq!(days[0].sessions[1].project.as_deref(), Some("crm"));
+        assert_eq!(days[0].tokens, 140);
+        assert!(days[0].cost_usd.is_some());
+    }
+
+    #[test]
+    fn session_dominant_model_is_treated_name_of_biggest() {
+        use time::UtcOffset;
+        let mut a = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-10 10:00:00 UTC),
+            100,
+        );
+        a.session_id = Some("s1".into());
+        let mut b = mrec(
+            "claude",
+            "claude-opus-4-8",
+            datetime!(2026-07-10 10:05:00 UTC),
+            30,
+        );
+        b.session_id = Some("s1".into());
+        let days = sessions_by_day(&[a, b], UtcOffset::UTC);
+        assert_eq!(days[0].sessions[0].dominant_model.as_deref(), Some("Fable 5"));
+        assert_eq!(days[0].sessions[0].tokens, 130);
+    }
+
+    #[test]
+    fn sessions_by_day_uses_local_offset_for_date() {
+        // 2026-07-10 01:00 UTC = 2026-07-09 22:00 em UTC-3.
+        let offset = time::UtcOffset::from_hms(-3, 0, 0).unwrap();
+        let mut a = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-10 01:00:00 UTC),
+            10,
+        );
+        a.session_id = Some("s1".into());
+        let days = sessions_by_day(&[a], offset);
+        assert_eq!(days[0].date, time::macros::date!(2026 - 07 - 09));
     }
 }
 
