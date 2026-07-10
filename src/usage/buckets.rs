@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use time::{Date, OffsetDateTime};
 
+use crate::usage::model_names::{display_model_name, series_slot_for_model};
 use crate::usage::pricing::cost_usd_of;
 use crate::usage::UsageRecord;
 
@@ -165,6 +166,65 @@ pub fn provider_series_24h(
         .collect()
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModelHourSeries {
+    /// Nome já tratado pra display (ex. "Fable 5").
+    pub label: String,
+    /// Slot de cor 0..=5 (theme::ColorToken::Series1..6).
+    pub slot: u8,
+    /// Exatamente `hours` pontos, mais antigo → mais novo.
+    pub tokens: Vec<u64>,
+    pub total: u64,
+}
+
+/// Séries tokens/h por modelo (display name) de um provider, `hours` buckets
+/// terminando na hora de `now`. Ordenadas por slot asc, total desc.
+pub fn bucket_by_model_hour(
+    records: &[UsageRecord],
+    provider: &str,
+    now: OffsetDateTime,
+    hours: usize,
+) -> Vec<ModelHourSeries> {
+    let end_hour = floor_to_hour(now);
+    let start = end_hour - time::Duration::hours(hours.saturating_sub(1) as i64);
+
+    // label → (slot, tokens por bucket)
+    let mut map: BTreeMap<String, (u8, Vec<u64>)> = BTreeMap::new();
+    for r in records {
+        if r.provider != provider || r.ts < start || r.ts >= end_hour + time::Duration::hours(1) {
+            continue;
+        }
+        let raw = r.model.as_deref();
+        let (label, slot) = match raw {
+            Some(m) => (display_model_name(m), series_slot_for_model(m)),
+            None => ("—".to_string(), 5),
+        };
+        let idx = (floor_to_hour(r.ts) - start).whole_hours() as usize;
+        let entry = map
+            .entry(label)
+            .or_insert_with(|| (slot, vec![0; hours]));
+        if let Some(b) = entry.1.get_mut(idx) {
+            *b += record_tokens(r);
+        }
+    }
+
+    let mut out: Vec<ModelHourSeries> = map
+        .into_iter()
+        .map(|(label, (slot, tokens))| {
+            let total = tokens.iter().sum();
+            ModelHourSeries {
+                label,
+                slot,
+                tokens,
+                total,
+            }
+        })
+        .filter(|s| s.total > 0)
+        .collect();
+    out.sort_by(|a, b| a.slot.cmp(&b.slot).then(b.total.cmp(&a.total)));
+    out
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -227,6 +287,76 @@ mod tests {
         r.cache_write = 4;
         let buckets = bucket_by_hour(&[r], now, 1);
         assert_eq!(buckets[0].tokens, 10);
+    }
+
+    fn mrec(provider: &str, model: &str, ts: time::OffsetDateTime, tokens: u64) -> UsageRecord {
+        let mut r = rec(provider, ts, tokens);
+        r.model = Some(model.into());
+        r
+    }
+
+    #[test]
+    fn model_hour_series_split_by_model_and_slot_order() {
+        let now = datetime!(2026-07-10 12:30:00 UTC);
+        let records = vec![
+            mrec(
+                "claude",
+                "claude-opus-4-8",
+                datetime!(2026-07-10 12:05:00 UTC),
+                50,
+            ),
+            mrec(
+                "claude",
+                "claude-fable-5",
+                datetime!(2026-07-10 12:10:00 UTC),
+                100,
+            ),
+            mrec(
+                "claude",
+                "claude-fable-5",
+                datetime!(2026-07-10 11:10:00 UTC),
+                30,
+            ),
+            mrec("codex", "gpt-5.5", datetime!(2026-07-10 12:00:00 UTC), 999), // outro provider: fora
+        ];
+        let series = bucket_by_model_hour(&records, "claude", now, 3);
+        assert_eq!(series.len(), 2);
+        // Slot 0 (fable) vem antes do slot 1 (opus).
+        assert_eq!(series[0].label, "Fable 5");
+        assert_eq!(series[0].slot, 0);
+        assert_eq!(series[0].tokens, vec![0, 30, 100]);
+        assert_eq!(series[0].total, 130);
+        assert_eq!(series[1].label, "Opus 4.8");
+        assert_eq!(series[1].tokens, vec![0, 0, 50]);
+    }
+
+    #[test]
+    fn model_hour_series_merges_same_display_name_and_skips_empty() {
+        let now = datetime!(2026-07-10 12:30:00 UTC);
+        let records = vec![
+            mrec(
+                "claude",
+                "claude-opus-4-8",
+                datetime!(2026-07-10 12:05:00 UTC),
+                10,
+            ),
+            mrec(
+                "claude",
+                "claude-opus-4-8-20260101",
+                datetime!(2026-07-10 12:06:00 UTC),
+                5,
+            ),
+            mrec(
+                "claude",
+                "claude-haiku-4-5",
+                datetime!(2026-07-01 12:00:00 UTC),
+                7,
+            ), // fora da janela
+        ];
+        let series = bucket_by_model_hour(&records, "claude", now, 2);
+        assert_eq!(series.len(), 1); // haiku fora da janela → total 0 → omitido
+        assert_eq!(series[0].label, "Opus 4.8");
+        assert_eq!(series[0].total, 15);
     }
 }
 
