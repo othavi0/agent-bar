@@ -42,7 +42,7 @@ pub fn pricing_for(model: &str) -> Option<Pricing> {
     }
     if m.contains("opus") {
         // Legado (≤4.1): claude-opus-4-1 / claude-opus-4 sem minor ≥5 / opus-3.
-        if m.contains("opus-4-1") || m.contains("opus-3") {
+        if m.contains("opus-4-1") || m.contains("3-opus") || m.contains("opus-3") {
             return Some(Pricing {
                 input: 15.0,
                 output: 75.0,
@@ -229,6 +229,12 @@ mod tests {
         assert_eq!((o41.input, o41.output), (15.0, 75.0));
         let o48 = pricing_for("claude-opus-4-8").unwrap();
         assert_eq!((o48.input, o48.output), (5.0, 25.0));
+    }
+
+    #[test]
+    fn real_claude_3_opus_id_gets_legacy_pricing() {
+        let o3 = pricing_for("claude-3-opus-20240229").unwrap();
+        assert_eq!((o3.input, o3.output), (15.0, 75.0));
     }
 
     #[test]
