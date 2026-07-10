@@ -10,7 +10,7 @@ pipeline and exits. There is no long-running daemon (except `--watch`, which
 keeps one process alive and emits NDJSON).
 
 ```text
-Waybar  (interval 120s · exec-on-event · left/right click)
+Waybar  (interval configurable via settings, default 60s · exec-on-event · left/right click)
    │   one process per poll
    ▼
 agent-bar --provider <id>                          src/main.rs       entry / dispatch
@@ -113,42 +113,27 @@ locally-expired access token (the API would reject it anyway, and agent-bar must
 never refresh it: the single-use refresh token races Claude Code) — and
 `rateLimitTier`, to surface the Max multiplier in the plan label (e.g. `Max 5x`).
 
-## The Two Caches
+## The Quota Cache
 
-agent-bar has two independent caches at different layers and lifetimes. They are
-not redundant — they solve different problems.
+`src/cache.rs` is a file-based cache (`$XDG_CACHE_HOME/agent-bar/<key>.json`,
+default `~/.cache`) with a **5-minute TTL** (`CONFIG.cache.ttl_ms`) and
+**cross-process** lifetime — it survives between polls, which is what matters
+here: Waybar polls at the configured interval (`waybar.interval`, default 60s;
+see [Waybar contract](waybar-contract.md)) but each poll is a *separate
+process*, so an in-memory cache would never hit. The file-based cache means
+most polls within a 5-minute window read the cached response from disk and
+one triggers a fresh fetch — the provider API is hit at most once per
+5-minute window regardless of the configured poll interval. `get_or_fetch`
+reads the cache, and on a miss runs the fetcher once, writing atomically
+(temp file + `rename`) because concurrent provider processes can write the
+same key. An in-flight dedup map deduplicates concurrent fetches *within* one
+process; failed fetches are never cached (a non-200 errors before `set`);
+cache keys are validated against path traversal.
 
-| | Quota cache | Settings cache |
-| --- | --- | --- |
-| File | `src/cache.rs` | `src/formatters/waybar.rs` |
-| Backing | File on disk (`$XDG_CACHE_HOME/agent-bar/<key>.json`, default `~/.cache`) | In-memory static variable |
-| TTL | **5 minutes** (`CONFIG.cache.ttl_ms`) | **5 seconds** (`SETTINGS_CACHE_TTL_MS`) |
-| Lifetime | **Cross-process** — survives between polls | **In-process** — dies when the process exits |
-| Protects | Provider APIs / CLIs from being hit every poll | Repeated `settings.json` disk reads within one render |
-
-**Quota cache (5 min, cross-process).** This is the load-bearing one. Waybar
-polls every 120s but each poll is a *separate process*, so an in-memory cache
-would never hit. The file-based cache means roughly one poll in three serves a
-fresh API response and the rest read disk (a 5-min TTL over a 120s interval) —
-the provider API is hit at most once per 5-minute window. `get_or_fetch` reads
-the cache, and on a miss runs the fetcher once, writing atomically (temp file +
-`rename`) because concurrent provider processes can write the same key. An
-in-flight dedup map deduplicates concurrent fetches *within* one process; failed
-fetches are never cached (a non-200 errors before `set`); cache keys are
-validated against path traversal.
-
-**Settings cache (5 s, in-process).** `load_settings_cached` memoizes
-`load_settings_sync()` in a static variable. Because each Waybar poll is a
-fresh process, this only dedups repeated settings reads *within a single render*
-(the Codex tooltip view-model path reads settings); the 5s TTL is a cheap upper
-bound on staleness for that window. One-shot entry points (`action-right`,
-`refresh`, terminal) deliberately bypass it and call `load_settings_sync`
-directly — caching there is YAGNI. The Waybar hot path (`src/formatters/waybar.rs`)
-uses the cached loader because Waybar polls tightly.
-
-The mental model: **the quota cache is what makes polling cheap across processes;
-the settings cache is a small intra-render memo.** Confusing the two leads to
-wrong assumptions about when a provider API actually gets called.
+There is no separate settings cache — `settings::load` reads `settings.json`
+directly on every call; no in-process memoization layer exists in the Rust
+codebase (an in-memory settings cache existed in the pre-rewrite TS version,
+not here).
 
 ## Formatter Layer — `src/formatters/`
 
@@ -160,7 +145,9 @@ Quotas are rendered three ways from the same `ProviderQuota`:
   `agent-bar-<provider> <status>` for a single module, or `agent-bar` plus
   `<provider>-<status>` tokens in aggregate (see [Waybar contract](waybar-contract.md)).
   States: `ok`/`low`/`warn`/`critical`/`disconnected`.
-- **Terminal** (`terminal.rs`) → ANSI view for `status` and `action-right`.
+- **Terminal** (`terminal.rs`) → ANSI view for `status`. `action-right` no
+  longer uses this path — it resolves focus and opens the TUI instead (see
+  `src/action_right.rs` below).
 - **JSON** (`json.rs`) → versioned, Pango-free envelope
   (`{ schemaVersion, fetchedAt, providers[] }`) for non-Waybar bars. See
   [`json-output.md`](json-output.md).
@@ -185,13 +172,13 @@ injection bug, so all Pango output goes through it.
 | `src/providers/base.rs` | `BaseProvider` `get_quota()` orchestration. |
 | `src/providers/{claude,codex,amp}.rs` | Concrete providers. Claude is direct; others extend `BaseProvider`. |
 | `src/providers/types.rs` | `ProviderQuota`, `QuotaWindow`, `Provider`, `AllQuotas`. |
-| `src/formatters/waybar.rs` | Waybar JSON + 5s in-process settings cache. |
+| `src/formatters/waybar.rs` | Waybar JSON assembly ({text,tooltip,class}). |
 | `src/formatters/render_pango.rs` | Single XML-escape boundary for Pango. |
 | `src/formatters/terminal.rs` | ANSI terminal view. |
 | `src/formatters/json.rs` | Versioned JSON envelope (`schemaVersion`). |
 | `src/waybar_contract.rs` | Generated Waybar modules/CSS/asset install (the integration contract). |
 | `src/notify.rs` | Best-effort low/critical desktop notifications. |
-| `src/action_right.rs` | Right-click handler (refresh-or-login). |
+| `src/action_right.rs` | Right-click handler — resolves TUI focus (provider detail or Login) from connection state. |
 
 ## See Also
 

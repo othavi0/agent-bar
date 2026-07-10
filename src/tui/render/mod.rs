@@ -32,7 +32,7 @@ const HELP_KEY_COL: usize = 12;
 
 /// Uma seção de atalhos: título centrado + linhas tecla/ação alinhadas em 2
 /// colunas. Reutilizado por `help_text` pra cada tela (Navegação global,
-/// Waybar Config, Login, Histórico) — data-driven em vez de repetir a mesma
+/// Config, Login, Histórico) — data-driven em vez de repetir a mesma
 /// construção de `Line` várias vezes. (Task 11: a seção "Overview" morreu
 /// junto com a tela — Detail já é coberto pela Navegação global.)
 fn help_section(title: &str, rows: &[(&str, &str)]) -> Vec<Line<'static>> {
@@ -71,7 +71,7 @@ fn help_text() -> Text<'static> {
             ("[?] / Esc", "abre/fecha esta ajuda"),
             ("up/down", "mover seleção na sidebar"),
             ("Enter", "ativar item selecionado"),
-            ("h / g / w", "Histórico / Login / Waybar"),
+            ("h / g / w", "Histórico / Login / Config"),
             ("q", "sair"),
             ("r", "atualizar quotas"),
         ],
@@ -79,7 +79,7 @@ fn help_text() -> Text<'static> {
     lines.push(Line::from(""));
 
     lines.extend(help_section(
-        "Config do Waybar",
+        "Config",
         &[
             ("up/down", "selecionar campo"),
             ("Enter", "editar campo"),

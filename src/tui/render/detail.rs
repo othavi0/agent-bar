@@ -740,7 +740,7 @@ fn render_empty(frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let vert = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
 
     let para = Paragraph::new(Span::styled(
-        " nenhum provider habilitado \u{2014} veja a tela Waybar",
+        " nenhum provider habilitado \u{2014} veja a tela Config",
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     ));
     frame.render_widget(para, vert[0]);

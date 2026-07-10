@@ -36,7 +36,7 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
             // com a sidebar colapsada.
             SidebarItem::History => Line::from(" H".to_string()),
             SidebarItem::Login => Line::from(" L".to_string()),
-            SidebarItem::Waybar => Line::from(" W".to_string()),
+            SidebarItem::Waybar => Line::from(" C".to_string()),
         };
     }
     match item {

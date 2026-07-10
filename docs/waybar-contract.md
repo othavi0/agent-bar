@@ -39,7 +39,8 @@ Each module includes:
 
 - `exec` — `<app-bin> --provider <provider>`
 - `return-type: json`
-- `interval` (120 seconds)
+- `interval` — from `waybar.interval` in settings (default 60 seconds),
+  configurable via `agent-bar menu` → Config
 - `exec-on-event`
 - `tooltip`
 - `on-click` — left click; runs `<terminal-script> <app-bin> menu`
@@ -48,8 +49,10 @@ Each module includes:
 ### Click Actions
 
 Both click handlers wrap the command in the terminal helper so it opens a
-window. `menu` is the interactive TUI; `action-right` refreshes the provider, or
-starts its login flow when it is disconnected. See
+window. `menu` is the interactive TUI, booting on the first enabled provider;
+`action-right` opens that same TUI already focused on the clicked provider —
+its detail view when connected, or the Login screen preselected on it when
+disconnected. See
 [commands.md → Internal Commands](commands.md#internal-commands-waybar-triggered)
 for the `action-right` branch logic.
 
