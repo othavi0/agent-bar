@@ -143,6 +143,7 @@ async fn main() {
                 &term_str,
                 settings.waybar.signal,
                 &settings.waybar.provider_order,
+                settings.waybar.interval,
             );
             println!(
                 "{}",
