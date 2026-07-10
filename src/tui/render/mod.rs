@@ -1,5 +1,4 @@
 pub mod config;
-pub mod dashboard;
 pub mod detail;
 pub mod history;
 pub mod login;
@@ -19,7 +18,6 @@ use crate::tui::state::{AppState, Screen};
 use crate::tui::theme_bridge::to_ratatui;
 
 use self::config::render_config;
-use self::dashboard::render_dashboard;
 use self::detail::render_detail;
 use self::history::render_history;
 use self::login::render_login;
@@ -34,8 +32,9 @@ const HELP_KEY_COL: usize = 12;
 
 /// Uma seção de atalhos: título centrado + linhas tecla/ação alinhadas em 2
 /// colunas. Reutilizado por `help_text` pra cada tela (Navegação global,
-/// Overview, Waybar Config, Login) — data-driven em vez de repetir a mesma
-/// construção de `Line` 4x.
+/// Waybar Config, Login, Histórico) — data-driven em vez de repetir a mesma
+/// construção de `Line` várias vezes. (Task 11: a seção "Overview" morreu
+/// junto com a tela — Detail já é coberto pela Navegação global.)
 fn help_section(title: &str, rows: &[(&str, &str)]) -> Vec<Line<'static>> {
     let mut lines = vec![Line::from(Span::styled(
         format!(" {title} "),
@@ -75,16 +74,6 @@ fn help_text() -> Text<'static> {
             ("h / g / w", "Histórico / Login / Waybar"),
             ("q", "sair"),
             ("r", "atualizar quotas"),
-        ],
-    ));
-    lines.push(Line::from(""));
-
-    lines.extend(help_section(
-        "Overview",
-        &[
-            ("up/down", "selecionar provider"),
-            ("Enter", "abrir detalhe"),
-            ("Esc", "voltar para lista"),
         ],
     ));
     lines.push(Line::from(""));
@@ -263,7 +252,6 @@ pub fn render(state: &AppState, frame: &mut Frame, hits: &mut HitMap) {
 
     render_sidebar(state, frame, cols[0], hits);
     match state.screen {
-        Screen::Overview => render_dashboard(state, frame, cols[1], hits),
         Screen::Detail => render_detail(state, frame, cols[1], hits),
         Screen::History => render_history(state, frame, cols[1], hits),
         Screen::Login => render_login(state, frame, cols[1], hits),
@@ -282,8 +270,6 @@ mod tests {
     use crate::providers::types::{ProviderQuota, QuotaWindow};
     use crate::tui::mouse::MouseTarget;
     use crate::tui::state::{FetchStatus, ProviderView};
-    use crate::usage::amp::AmpDollars;
-    use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageSummary};
 
     /// Settings mínimas pra inicializar `ConfigState` (usada só pelos
     /// testes de help overlay sobre a tela Waybar — não exercita edição).
@@ -345,145 +331,6 @@ mod tests {
         }
     }
 
-    /// Constroi um UsageSummary falso para testes de dashboard:
-    /// - claude: $2.10 / R$11.55
-    /// - codex: tokens sem custo conhecido (cost None)
-    /// - amp: amp_dollars (remaining $4.19)
-    fn fake_usage() -> UsageSummary {
-        UsageSummary {
-            providers: vec![
-                ProviderUsage {
-                    provider: "claude".to_string(),
-                    total_input: 1_000_000,
-                    total_output: 200_000,
-                    total_cache_read: 0,
-                    total_cache_write: 0,
-                    cost: Some(Cost {
-                        usd: 2.10,
-                        brl: 11.55,
-                    }),
-                    by_model: vec![ModelUsage {
-                        model: "claude-opus-4-8".to_string(),
-                        input: 800_000,
-                        output: 100_000,
-                        cache_read: 0,
-                        cache_write: 0,
-                        cost: Some(Cost {
-                            usd: 1.40,
-                            brl: 7.70,
-                        }),
-                    }],
-                    amp_dollars: None,
-                },
-                ProviderUsage {
-                    provider: "codex".to_string(),
-                    total_input: 500_000,
-                    total_output: 80_000,
-                    total_cache_read: 0,
-                    total_cache_write: 0,
-                    cost: None,
-                    by_model: vec![],
-                    amp_dollars: None,
-                },
-                ProviderUsage {
-                    provider: "amp".to_string(),
-                    total_input: 0,
-                    total_output: 0,
-                    total_cache_read: 0,
-                    total_cache_write: 0,
-                    cost: None,
-                    by_model: vec![],
-                    amp_dollars: Some(AmpDollars {
-                        spent: Some(0.81),
-                        remaining: Some(4.19),
-                        total: Some(5.0),
-                    }),
-                },
-            ],
-            total_cost: Cost {
-                usd: 2.10,
-                brl: 11.55,
-            },
-            fx_rate: 5.50,
-        }
-    }
-
-    #[test]
-    fn dashboard_renders_providers_table() {
-        let backend = ratatui::backend::TestBackend::new(64, 20);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let mut state = AppState::new();
-        state.providers = vec![
-            ProviderView::new(make_quota(
-                "claude",
-                "Claude",
-                26.0,
-                Some("2026-06-19T23:00:00Z"),
-            )),
-            ProviderView::new(make_quota(
-                "codex",
-                "Codex",
-                1.0,
-                Some("2026-06-20T01:28:00Z"),
-            )),
-            ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
-        ];
-        state.status = FetchStatus::Loaded;
-        terminal
-            .draw(|f| render(&state, f, &mut HitMap::default()))
-            .unwrap();
-        insta::assert_snapshot!(terminal.backend());
-    }
-
-    #[test]
-    fn dashboard_renders_with_real_cost() {
-        let backend = ratatui::backend::TestBackend::new(64, 20);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let mut state = AppState::new();
-        state.providers = vec![
-            ProviderView::new(make_quota(
-                "claude",
-                "Claude",
-                26.0,
-                Some("2026-06-19T23:00:00Z"),
-            )),
-            ProviderView::new(make_quota(
-                "codex",
-                "Codex",
-                1.0,
-                Some("2026-06-20T01:28:00Z"),
-            )),
-            ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
-        ];
-        state.status = FetchStatus::Loaded;
-        // display_cost (T16): header agora mostra o count-up, não
-        // usage.total_cost.usd direto — sem isto, o header ficaria em
-        // "$0.00" (default de AppState::new()) em vez do custo real.
-        let usage = fake_usage();
-        state.display_cost = usage.total_cost.usd;
-        state.usage = Some(usage);
-        terminal
-            .draw(|f| render(&state, f, &mut HitMap::default()))
-            .unwrap();
-        insta::assert_snapshot!(terminal.backend());
-    }
-
-    #[test]
-    fn quota_bar_logic() {
-        // 100% remaining = all filled (nothing consumed)
-        let bar_100 = dashboard::quota_bar_pub(100.0);
-        // 0% remaining = all empty (fully consumed)
-        let bar_0 = dashboard::quota_bar_pub(0.0);
-        assert_eq!(
-            bar_100,
-            "\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}"
-        ); // all filled
-        assert_eq!(
-            bar_0,
-            "\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}"
-        ); // all empty (trilho ░)
-    }
-
     #[test]
     fn help_overlay_renders_snapshot() {
         // Terminal generoso (o popup dimensionado pelo conteúdo cabe com
@@ -499,38 +346,19 @@ mod tests {
     }
 
     #[test]
-    fn help_overlay_clear_prevents_underlying_table_from_leaking() {
-        // Regressão do bug "pr"/"sto" (T14): fragmentos da tabela por
-        // baixo sobreviviam dentro das bordas do popup quando o Clear não
-        // cobria a área inteira. `Clear` roda ANTES de qualquer conteúdo
-        // na área exata de `help_popup_area` — célula a célula, nada da
-        // tabela do dashboard por baixo (aqui, os textos "sessão"/"26%"/
-        // "$2.10" dos cards) pode sobreviver dentro do popup.
+    fn help_overlay_clear_prevents_underlying_content_from_leaking() {
+        // Regressão do bug "pr"/"sto" (T14): fragmentos da tela por baixo
+        // sobreviviam dentro das bordas do popup quando o Clear não cobria
+        // a área inteira. `Clear` roda ANTES de qualquer conteúdo na área
+        // exata de `help_popup_area` — célula a célula. Migrado do
+        // Overview/dashboard (T11, apagados): a tela por baixo agora é o
+        // skeleton de boot do Detail (providers vazio + fetch em voo) —
+        // mesma garantia, fixture nova.
         let backend = ratatui::backend::TestBackend::new(100, 44);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
-        state.providers = vec![
-            ProviderView::new(make_quota(
-                "claude",
-                "Claude",
-                26.0,
-                Some("2026-06-19T23:00:00Z"),
-            )),
-            ProviderView::new(make_quota(
-                "codex",
-                "Codex",
-                1.0,
-                Some("2026-06-20T01:28:00Z"),
-            )),
-            ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
-        ];
-        state.status = FetchStatus::Loaded;
-        // display_cost (T16): header agora mostra o count-up, não
-        // usage.total_cost.usd direto — sem isto, o header ficaria em
-        // "$0.00" (default de AppState::new()) em vez do custo real.
-        let usage = fake_usage();
-        state.display_cost = usage.total_cost.usd;
-        state.usage = Some(usage);
+        state.pending_focus = Some("claude".to_string());
+        state.fetch_pending = vec!["claude".to_string()];
         state.show_help = true;
 
         terminal
@@ -549,10 +377,10 @@ mod tests {
             popup_text.push('\n');
         }
 
-        for leaked in ["sessão", "26%", "$2.10", "hoje", "23:00"] {
+        for leaked in ["carregando", "sess\u{e3}o", "semana", "Claude"] {
             assert!(
                 !popup_text.contains(leaked),
-                "conteúdo do dashboard por baixo vazou dentro do popup ({leaked:?} encontrado):\n{popup_text}"
+                "conteúdo do skeleton por baixo vazou dentro do popup ({leaked:?} encontrado):\n{popup_text}"
             );
         }
     }
@@ -599,7 +427,7 @@ mod tests {
     fn help_overlay_clears_over_login_screen() {
         // Mesma regressão, sobre a tela Login (reskin da T14) — confirma
         // que o Clear cobre a área do popup em QUALQUER tela, não só
-        // Overview.
+        // Detail.
         let backend = ratatui::backend::TestBackend::new(100, 44);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
@@ -626,39 +454,6 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_renders_wide_160() {
-        let backend = ratatui::backend::TestBackend::new(160, 40);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let mut state = AppState::new();
-        state.providers = vec![
-            ProviderView::new(make_quota(
-                "claude",
-                "Claude",
-                26.0,
-                Some("2026-06-19T23:00:00Z"),
-            )),
-            ProviderView::new(make_quota(
-                "codex",
-                "Codex",
-                1.0,
-                Some("2026-06-20T01:28:00Z"),
-            )),
-            ProviderView::new(make_quota("amp", "Amp", 0.0, None)),
-        ];
-        state.status = FetchStatus::Loaded;
-        // display_cost (T16): header agora mostra o count-up, não
-        // usage.total_cost.usd direto — sem isto, o header ficaria em
-        // "$0.00" (default de AppState::new()) em vez do custo real.
-        let usage = fake_usage();
-        state.display_cost = usage.total_cost.usd;
-        state.usage = Some(usage);
-        terminal
-            .draw(|f| render(&state, f, &mut HitMap::default()))
-            .unwrap();
-        insta::assert_snapshot!(terminal.backend());
-    }
-
-    #[test]
     fn render_registers_sidebar_hit_zones() {
         // Terminal largo (>=80) para exercitar a sidebar cheia (17 cols) —
         // a colapsada tem teste dedicado em `sidebar_collapses_below_80_cols`.
@@ -673,22 +468,17 @@ mod tests {
         let mut hits = HitMap::default();
         terminal.draw(|f| render(&state, f, &mut hits)).unwrap();
 
-        // Sidebar nova: TODOS os itens de sidebar_items() (Overview,
-        // Provider(0), Provider(1), History, Login, Waybar) tem zona
-        // clicavel 1:1 com o indice do cursor — nao so os providers como na
-        // sidebar antiga. Borda ALL Rounded -> inner comeca em (1,1);
-        // "VISAO" ocupa a 1a linha do inner, entao Overview cai na 2a.
-        assert_eq!(hits.at(1, 2), Some(MouseTarget::Sidebar(0))); // Overview
-        assert_eq!(hits.at(1, 5), Some(MouseTarget::Sidebar(1))); // claude
-        assert_eq!(hits.at(1, 6), Some(MouseTarget::Sidebar(2))); // codex
-        assert_eq!(hits.at(1, 9), Some(MouseTarget::Sidebar(3))); // History
-        assert_eq!(hits.at(1, 10), Some(MouseTarget::Sidebar(4))); // Login
-        assert_eq!(hits.at(1, 11), Some(MouseTarget::Sidebar(5))); // Waybar
-                                                                   // (50, 5) cai dentro do 1º card da Overview (Task 11: cards
-                                                                   // registram MouseTarget::Card) — deixou de ser "fora de qualquer
-                                                                   // zona" desde que o dashboard passou a ser cards clicáveis.
-        assert_eq!(hits.at(50, 5), Some(MouseTarget::Card(0)));
-        // Fora do frame inteiramente continua sem zona.
+        // Sidebar sem Overview (Task 11): TODOS os itens de sidebar_items()
+        // (Provider(0), Provider(1), History, Login, Waybar) tem zona
+        // clicavel 1:1 com o indice do cursor. Borda ALL Rounded -> inner
+        // comeca em (1,1); PROVEDORES ganha 1 linha em branco + o header
+        // antes do 1o provider, entao claude cai na 3a linha do inner.
+        assert_eq!(hits.at(1, 3), Some(MouseTarget::Sidebar(0))); // claude
+        assert_eq!(hits.at(1, 4), Some(MouseTarget::Sidebar(1))); // codex
+        assert_eq!(hits.at(1, 7), Some(MouseTarget::Sidebar(2))); // History
+        assert_eq!(hits.at(1, 8), Some(MouseTarget::Sidebar(3))); // Login
+        assert_eq!(hits.at(1, 9), Some(MouseTarget::Sidebar(4))); // Waybar
+                                                                  // Fora do frame inteiramente continua sem zona.
         assert_eq!(hits.at(200, 5), None);
     }
 
@@ -701,11 +491,12 @@ mod tests {
         let mut hits = HitMap::default();
         terminal.draw(|f| render(&state, f, &mut hits)).unwrap();
 
-        // Overview e sempre o 1o item (1a linha do inner e o header VISAO,
-        // Overview cai na linha seguinte) — estavel independente do numero
-        // de providers. Borda ALL Rounded -> inner comeca em (1,1).
-        assert_eq!(hits.at(1, 2), Some(MouseTarget::Sidebar(0)));
-        assert_eq!(hits.at(3, 2), Some(MouseTarget::Sidebar(0))); // ultima col da sidebar colapsada (largura 3: x=1..4)
-        assert_eq!(hits.at(4, 2), None); // area de conteudo comeca na coluna 4
+        // Sem providers, sidebar_items(0) = [History, Login, Waybar] (Task
+        // 11: sem Overview) — a seção MAIS ganha 1 linha em branco antes
+        // (mesmo padrão de PROVEDORES), então History cai na 3a linha do
+        // inner. Borda ALL Rounded -> inner comeca em (1,1).
+        assert_eq!(hits.at(1, 3), Some(MouseTarget::Sidebar(0)));
+        assert_eq!(hits.at(3, 3), Some(MouseTarget::Sidebar(0))); // ultima col da sidebar colapsada (largura 3: x=1..4)
+        assert_eq!(hits.at(4, 3), None); // area de conteudo comeca na coluna 4
     }
 }

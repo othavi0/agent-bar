@@ -33,10 +33,11 @@ pub enum HistoryRange {
 }
 
 /// Tela atual da TUI. Substitui `Tab` + `Mode`: cada tela e um estado
-/// distinto navegado via sidebar (sem abas).
+/// distinto navegado via sidebar (sem abas). `Overview` morreu na Task 11 —
+/// `Detail` agora é a tela default do boot (foco resolvido por ID, ver
+/// `AppState::pending_focus` e `update.rs::Action::ProviderFetched`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
-    Overview,
     Detail,
     History,
     Login,
@@ -55,18 +56,17 @@ pub enum FxEvent {
 /// Item da sidebar unica. `Provider(i)` indexa `AppState.providers`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarItem {
-    Overview,
     Provider(usize),
     History,
     Login,
     Waybar,
 }
 
-/// Constroi a lista de itens da sidebar na ordem de exibicao:
-/// Overview, 1 entrada por provider, History, Login, Waybar.
+/// Constroi a lista de itens da sidebar na ordem de exibicao: 1 entrada por
+/// provider, History, Login, Waybar. `Overview` morreu na Task 11 — não há
+/// mais item de lista/resumo antes dos providers.
 pub fn sidebar_items(n_providers: usize) -> Vec<SidebarItem> {
-    let mut v = vec![SidebarItem::Overview];
-    v.extend((0..n_providers).map(SidebarItem::Provider));
+    let mut v: Vec<SidebarItem> = (0..n_providers).map(SidebarItem::Provider).collect();
     v.extend([
         SidebarItem::History,
         SidebarItem::Login,
@@ -206,6 +206,14 @@ pub struct AppState {
     /// Ids de provider com fetch em voo (Task 5). Populado por `FetchStarted`,
     /// esvaziado incrementalmente por `ProviderFetched`/`FetchCompleted`.
     pub fetch_pending: Vec<String>,
+    /// Provider id aguardando foco (Task 11): setado no boot (menu default =
+    /// 1º provider habilitado nas settings; action-right = provider
+    /// específico via `InitialFocus::Provider`) e resolvido LAZY em
+    /// `Action::ProviderFetched` — por ID, nunca por índice fixo (o fetch de
+    /// OUTRO provider não pode roubar o foco). `None` quando não há foco
+    /// pendente (já resolvido, ou boot direto numa tela sem provider, ex.
+    /// `InitialFocus::Login`).
+    pub pending_focus: Option<String>,
     /// Login pendente: o event_loop desenha 1 frame com o status e entao
     /// suspende o terminal para o CLI de login.
     pub pending_login: Option<String>,
@@ -250,7 +258,7 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         Self {
-            screen: Screen::Overview,
+            screen: Screen::Detail,
             providers: Vec::new(),
             selected: 0,
             sidebar_selected: 0,
@@ -270,6 +278,7 @@ impl AppState {
             history_expanded: BTreeSet::new(),
             show_help: false,
             fetch_pending: Vec::new(),
+            pending_focus: None,
             pending_login: None,
             pending_save: false,
             hover: None,

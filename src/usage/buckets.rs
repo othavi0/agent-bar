@@ -148,24 +148,6 @@ pub fn bucket_by_hour(
     buckets
 }
 
-/// Serie de 24 pontos horarios (tokens) para um provider especifico, ate `now`.
-/// Usada pelo sparkline "tokens/h 24h" da aba de resumo.
-pub fn provider_series_24h(
-    records: &[UsageRecord],
-    provider: &str,
-    now: OffsetDateTime,
-) -> Vec<u64> {
-    let filtered: Vec<UsageRecord> = records
-        .iter()
-        .filter(|r| r.provider == provider)
-        .cloned()
-        .collect();
-    bucket_by_hour(&filtered, now, 24)
-        .into_iter()
-        .map(|b| b.tokens)
-        .collect()
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModelHourSeries {
     /// Nome já tratado pra display (ex. "Fable 5").
@@ -366,19 +348,6 @@ mod tests {
         assert_eq!(buckets[0].tokens, 40);
         assert_eq!(buckets[1].tokens, 0); // 17h vazia
         assert_eq!(buckets[2].tokens, 100);
-    }
-
-    #[test]
-    fn provider_series_24h_has_24_points_and_filters_provider() {
-        let now = datetime!(2026-07-01 18:30:00 UTC);
-        let records = vec![
-            rec("claude", datetime!(2026-07-01 18:00:01 UTC), 5),
-            rec("codex", datetime!(2026-07-01 18:00:01 UTC), 999),
-        ];
-        let series = provider_series_24h(&records, "claude", now);
-        assert_eq!(series.len(), 24);
-        assert_eq!(series[23], 5);
-        assert!(series[..23].iter().all(|&t| t == 0));
     }
 
     #[test]

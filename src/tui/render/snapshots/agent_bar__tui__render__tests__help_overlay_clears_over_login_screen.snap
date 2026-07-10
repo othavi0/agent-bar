@@ -1,16 +1,18 @@
 ---
 source: src/tui/render/mod.rs
-assertion_line: 611
+assertion_line: 439
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
-"│ VISÃO           ┏ Login ━━━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
-"│ ▸ Geral         ┃ > ◆ Claude ✗ deslogado     ┃┃ Claude                                          ┃│"
-"│                 ┃   ● Codex  ✗ deslogado     ┃┃                                                 ┃│"
-"│ MAIS            ┃   ● Amp    ✗ deslogado     ┃┃ Abre a REPL do Claude. Digite /login e siga as i┃│"
-"│   Histórico     ┃                            ┃┃                                                 ┃│"
-"│   Login         ┃                            ┃┃                                                 ┃│"
-"│   Waybar        ╭ agent-bar — atalhos ────────────────────────────────────────╮                 ┃│"
+"│                 ┏ Login ━━━━━━━━━━━━━━━━━━━━━┓┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
+"│ MAIS            ┃ > ◆ Claude ✗ deslogado     ┃┃ Claude                                          ┃│"
+"│   Histórico     ┃   ● Codex  ✗ deslogado     ┃┃                                                 ┃│"
+"│   Login         ┃   ● Amp    ✗ deslogado     ┃┃ Abre a REPL do Claude. Digite /login e siga as i┃│"
+"│   Waybar        ┃                            ┃┃                                                 ┃│"
+"│                 ┃                            ┃┃                                                 ┃│"
+"│                 ┃                            ┃┃                                                 ┃│"
+"│                 ┃                            ┃┃                                                 ┃│"
+"│                 ╭ agent-bar — atalhos ────────────────────────────────────────╮                 ┃│"
 "│                 │                      Navegação global                       │                 ┃│"
 "│                 │  [?] / Esc   abre/fecha esta ajuda                          │                 ┃│"
 "│                 │  up/down     mover seleção na sidebar                       │                 ┃│"
@@ -18,11 +20,6 @@ expression: terminal.backend()
 "│                 │  h / g / w   Histórico / Login / Waybar                     │                 ┃│"
 "│                 │  q           sair                                           │                 ┃│"
 "│                 │  r           atualizar quotas                               │                 ┃│"
-"│                 │                                                             │                 ┃│"
-"│                 │                          Overview                           │                 ┃│"
-"│                 │  up/down     selecionar provider                            │                 ┃│"
-"│                 │  Enter       abrir detalhe                                  │                 ┃│"
-"│                 │  Esc         voltar para lista                              │                 ┃│"
 "│                 │                                                             │                 ┃│"
 "│                 │                      Config do Waybar                       │                 ┃│"
 "│                 │  up/down     selecionar campo                               │                 ┃│"
@@ -40,6 +37,9 @@ expression: terminal.backend()
 "│                 │                                                             │                 ┃│"
 "│                 │  click seleciona · wheel rola · shift+drag seleciona texto  │                 ┃│"
 "│                 ╰─────────────────────────────────────────────────────────────╯                 ┃│"
+"│                 ┃                            ┃┃                                                 ┃│"
+"│                 ┃                            ┃┃                                                 ┃│"
+"│                 ┃                            ┃┃                                                 ┃│"
 "│                 ┃                            ┃┃                                                 ┃│"
 "│                 ┃                            ┃┃                                                 ┃│"
 "│                 ┃                            ┃┃                                                 ┃│"

@@ -1,18 +1,19 @@
 ---
 source: src/tui/render/detail.rs
+assertion_line: 1334
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
-"│ VISÃO           ┏ Codex ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
-"│ ▸ Geral         ┃                                                                               ┃│"
-"│                 ┃ Codex — sem sessão                                                            ┃│"
-"│ PROVIDERS       ┃                                                                               ┃│"
-"│ ● Codex    –    ┃ Nenhuma credencial válida encontrada para este provider.                      ┃│"
-"│                 ┃ Pressione [g] ou clique no chip "login" abaixo para autenticar.               ┃│"
-"│ MAIS            ┃                                                                               ┃│"
-"│   Histórico     ┃                                                                               ┃│"
+"│                 ┏ Codex ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
+"│ PROVEDORES      ┃                                                                               ┃│"
+"│ ● Codex    –    ┃ Codex — sem sessão                                                            ┃│"
+"│                 ┃                                                                               ┃│"
+"│ MAIS            ┃ Nenhuma credencial válida encontrada para este provider.                      ┃│"
+"│   Histórico     ┃ Pressione [g] ou clique no chip "login" abaixo para autenticar.               ┃│"
 "│   Login         ┃                                                                               ┃│"
 "│   Waybar        ┃                                                                               ┃│"
+"│                 ┃                                                                               ┃│"
+"│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"

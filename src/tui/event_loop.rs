@@ -17,6 +17,7 @@ use super::login_spawn::RealLogin;
 use super::render::render;
 use super::state::{AppState, Screen};
 use super::update::update;
+use super::InitialFocus;
 
 /// Dispara o parse pesado dos session logs FORA do thread do event loop
 /// (`spawn_blocking`) e devolve os resultados via canal (`Action::UsageComputed` +
@@ -159,11 +160,51 @@ fn drain(
     }
 }
 
+/// Índice do provider na tela Login (0=claude, 1=codex, 2=amp) — mesma ordem
+/// de `render/login.rs::PROVIDERS` e `update.rs::login_selected_id`
+/// (inverso). Usado só no boot (`InitialFocus::Login`, Task 11); id
+/// desconhecido cai em 0 (claude) em vez de panicar.
+fn login_index_of(id: &str) -> usize {
+    match id {
+        "codex" => 1,
+        "amp" => 2,
+        _ => 0,
+    }
+}
+
 /// Event loop principal. Corre ate `state.should_quit`. O fetch de quotas
 /// (inicial e a cada 60s) roda numa thread propria (`tui::fetch::spawn_fetch`)
 /// — o `select!` NUNCA espera rede; teclas e animacao respondem durante o fetch.
-pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
+///
+/// `focus` (Task 11): resolve o alvo do boot. `None` = 1º provider
+/// habilitado nas settings (menu default); `Provider(id)`/`Login(id)` vem do
+/// action-right/chip (T12). Nunca índice fixo — `Provider(id)` só vira
+/// `state.pending_focus`, resolvido lazy quando aquele fetch chegar
+/// (`update.rs::Action::ProviderFetched`) — um provider ainda não
+/// carregado no boot não é um bug, é o caminho normal.
+pub async fn run(
+    octx: OwnedCtx,
+    terminal: &mut DefaultTerminal,
+    focus: Option<InitialFocus>,
+) -> anyhow::Result<()> {
     let mut state = AppState::new();
+    match focus {
+        Some(InitialFocus::Provider(id)) => state.pending_focus = Some(id),
+        Some(InitialFocus::Login(id)) => {
+            state.screen = Screen::Login;
+            state.login_selected = login_index_of(&id);
+        }
+        None => {
+            // Boot default (menu): foca o 1º provider do registry filtrado
+            // por `settings.waybar.providers` — nunca um índice fixo (a
+            // ordem de chegada do fetch é assíncrona e não-determinística).
+            let first = crate::providers::registered_provider_ids()
+                .into_iter()
+                .find(|id| octx.settings.waybar.providers.iter().any(|p| p == id))
+                .map(|s| s.to_string());
+            state.pending_focus = first;
+        }
+    }
     // Offset local real (T12 fix): sem isto, `local_offset` fica no default
     // UTC do AppState::new() e o pico do sparkline de 24h mostra hora UTC
     // rotulada como "local".

@@ -572,7 +572,7 @@ async fn main() {
 
     // 6. Menu → abre a TUI.
     if matches!(opts.command, Command::Menu) {
-        if let Err(e) = tui::run_tui(&ctx).await {
+        if let Err(e) = tui::run_tui(&ctx, None).await {
             log::error!("TUI encerrou com erro: {e}");
             std::process::exit(1);
         }
@@ -675,7 +675,7 @@ async fn main() {
             // Waybar (default) — ou interativo sem args → TUI.
             let stdout_tty = std::io::stdout().is_terminal();
             if stdout_tty && raw.is_empty() {
-                if let Err(e) = tui::run_tui(&ctx).await {
+                if let Err(e) = tui::run_tui(&ctx, None).await {
                     log::error!("TUI encerrou com erro: {e}");
                     std::process::exit(1);
                 }

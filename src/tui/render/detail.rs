@@ -15,6 +15,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 use ratatui::Frame;
+use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 
 use crate::providers::extras::get_claude_extra;
 use crate::providers::types::{ExtraUsage, ProviderQuota, QuotaWindow};
@@ -658,10 +659,20 @@ fn render_footer_chips(frame: &mut Frame, area: Rect, hits: &mut HitMap) {
 }
 
 /// Renders the Detail view for the selected provider (Screen::Detail).
+/// `Detail` é a tela default do boot (Task 11: Overview morreu) — enquanto
+/// `state.providers` está vazio, NUNCA uma tela em branco: fetch em voo
+/// (`fetch_pending`) ou foco pendente (`pending_focus`) → skeleton com
+/// throbber; genuinamente sem providers habilitados → mensagem instrutiva.
 pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let provider = match state.providers.get(state.selected) {
         Some(pv) => pv,
-        None => return render_empty(frame, area),
+        None => {
+            return if state.fetch_pending.is_empty() && state.pending_focus.is_none() {
+                render_empty(frame, area, hits)
+            } else {
+                render_skeleton(state, frame, area, hits)
+            };
+        }
     };
     let q = &provider.quota;
     let p_color = provider_color(&q.provider);
@@ -713,21 +724,96 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut
     render_footer_chips(frame, footer_area, hits);
 }
 
-/// Fallback when no provider is selected (state.providers vazio — nunca
-/// aconteceu fetch algum, distinto de LoginState::LoggedOut).
-fn render_empty(frame: &mut Frame, area: Rect) {
+/// Fallback quando não há NENHUM provider habilitado e nenhum fetch em voo
+/// (`settings.waybar.providers` vazio — caso raro; distinto de
+/// `LoginState::LoggedOut`, que é POR provider). Chips continuam ativos
+/// (ex. `[h]`/`[g]` ainda abrem Histórico/Login) — nunca uma tela sem
+/// nenhuma ação possível.
+fn render_empty(frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let vert = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
 
     let para = Paragraph::new(Span::styled(
-        " Nenhum provider selecionado",
+        " nenhum provider habilitado \u{2014} veja a tela Waybar",
         Style::default().fg(to_ratatui(ColorToken::Muted)),
-    ))
-    .block(block);
+    ));
+    frame.render_widget(para, vert[0]);
 
-    frame.render_widget(para, area);
+    render_footer_chips(frame, vert[1], hits);
+}
+
+/// Skeleton do boot (Task 11): `state.providers` ainda vazio mas há fetch em
+/// voo (`fetch_pending`) ou foco pendente (`pending_focus`) aguardando
+/// resolução — NUNCA tela vazia enquanto isso. Título usa o nome real do
+/// provider de `pending_focus` quando conhecido (via
+/// `providers::get_provider`), senão "carregando…" genérico. Throbber
+/// (Animação C) no canto — mesmo padrão do antigo skeleton do Overview
+/// (`dashboard::render_skeleton_card`, órfão desta task, apagado).
+fn render_skeleton(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
+    let title = match state
+        .pending_focus
+        .as_deref()
+        .and_then(crate::providers::get_provider)
+    {
+        Some(p) => format!(" {} \u{b7} carregando\u{2026} ", p.name()),
+        None => " carregando\u{2026} ".to_string(),
+    };
+
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)))
+        .title(Span::styled(
+            title,
+            Style::default()
+                .fg(to_ratatui(ColorToken::Muted))
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let throbber_widget = Throbber::default()
+        .throbber_set(BRAILLE_SIX)
+        .throbber_style(Style::default().fg(to_ratatui(ColorToken::Cyan)))
+        .use_type(throbber_widgets_tui::WhichUse::Spin);
+    let mut throbber_state = ThrobberState::default();
+    for _ in 0..state.throbber.index {
+        throbber_state.calc_next();
+    }
+    block =
+        block.title(Line::from(throbber_widget.to_symbol_span(&throbber_state)).right_aligned());
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let vert = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
+    let content_area = vert[0];
+    let footer_area = vert[1];
+
+    let gauge_w = derive_bar_width(content_area.width, WINDOW_SUFFIX_W);
+    let lines = vec![
+        skeleton_gauge_line("sess\u{e3}o", gauge_w),
+        skeleton_gauge_line("semana", gauge_w),
+    ];
+    frame.render_widget(Paragraph::new(lines), content_area);
+
+    render_footer_chips(frame, footer_area, hits);
+}
+
+/// Uma linha de gauge vazio (trilho ░, sem % nem reset — não há dado ainda)
+/// do skeleton do boot. Mesmo `LABEL_W` das demais seções (coluna alinhada).
+fn skeleton_gauge_line(label: &str, gauge_w: usize) -> Line<'static> {
+    let name = truncate_name(label, LABEL_W);
+    let mut spans = vec![Span::styled(
+        format!(" {name:<LABEL_W$} "),
+        Style::default().fg(to_ratatui(ColorToken::Muted)),
+    )];
+    spans.extend(gauge_spans(0.0, gauge_w, to_ratatui(ColorToken::Comment)));
+    Line::from(spans)
 }
 
 #[cfg(test)]

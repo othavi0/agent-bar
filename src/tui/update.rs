@@ -9,9 +9,11 @@ use super::state::{
 
 /// Translates a KeyEvent into a semantic Action using current screen state:
 /// up/down move the sidebar cursor, Enter/h/g/w activate a sidebar item
-/// (jumping directly to Detail/History/Login/Waybar), Esc goes back to
-/// Overview. Some screens (Waybar editing, Login list) intercept keys with
-/// their own local semantics before falling through to this navigation.
+/// (jumping directly to Detail/History/Login/Waybar). Esc goes back to
+/// Detail from History/Login/Waybar (Task 11: Detail é a tela default —
+/// Esc nela é no-op, ver o match genérico abaixo). Some screens (Waybar
+/// editing, Login list) intercept keys with their own local semantics
+/// before falling through to this navigation.
 fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
     // Se o overlay de ajuda esta aberto, qualquer tecla fecha (Esc ou '?').
     if state.show_help {
@@ -100,11 +102,13 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         };
     }
 
+    // Tela Detail (default, sem bloco dedicado acima): Esc é no-op de
+    // propósito (Task 11) — Detail é a base da navegação, não há "voltar"
+    // daqui (o overlay de ajuda já intercepta Esc antes de chegar aqui).
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => Some(Action::Down),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::Up),
         KeyCode::Enter => Some(Action::OpenDetail),
-        KeyCode::Esc => Some(Action::Back),
         KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
         KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
         KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
@@ -277,10 +281,6 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         Action::Activate(item) => {
             let old_screen = state.screen;
             let follow_ups = match item {
-                SidebarItem::Overview => {
-                    state.screen = Screen::Overview;
-                    vec![]
-                }
                 SidebarItem::Provider(i) => {
                     state.selected = i;
                     state.screen = Screen::Detail;
@@ -363,13 +363,14 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
 
         Action::Back => {
             // Mesma regra do braço Activate: mudança de tela zera o scroll
-            // (compartilhado entre Overview/History) — só quando a screen
-            // de fato muda, senão Esc numa tela que já é Overview zeraria
-            // o scroll do usuário à toa.
-            if state.screen != Screen::Overview {
+            // (compartilhado entre Detail/History) — só quando a screen de
+            // fato muda, senão Esc numa tela que já é Detail zeraria o
+            // scroll do usuário à toa. Task 11: Detail (não mais Overview) é
+            // o destino — Overview morreu, Detail é a tela default/home.
+            if state.screen != Screen::Detail {
                 state.scroll = 0;
             }
-            state.screen = Screen::Overview;
+            state.screen = Screen::Detail;
             vec![]
         }
 
@@ -401,6 +402,7 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
         Action::ProviderFetched(q) => {
             state.fetch_pending.retain(|id| id != &q.provider);
             let old_len = state.providers.len();
+            let provider_id = q.provider.clone();
             match state
                 .providers
                 .iter_mut()
@@ -410,14 +412,32 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
                 None => {
                     state.providers.push(ProviderView::new(*q));
                     // Provider novo insere Provider(old_len) na posicao
-                    // 1+old_len da sidebar (Overview + old_len providers
-                    // antigos vem antes). Um cursor que ja apontava pra
-                    // History/Login/Waybar (indices >= 1+old_len) passaria a
-                    // apontar pro item seguinte sem isso — desloca 1 posicao
-                    // pra manter o cursor no MESMO item logico.
-                    if state.sidebar_selected > old_len {
+                    // old_len da sidebar (Task 11: sem Overview, os
+                    // providers começam direto no índice 0 — sem o
+                    // deslocamento de +1 que a Overview antes exigia). Um
+                    // cursor que já apontava pra History/Login/Waybar
+                    // (índices >= old_len) passaria a apontar pro item
+                    // anterior sem isso — desloca 1 posição pra manter o
+                    // cursor no MESMO item lógico.
+                    if state.sidebar_selected >= old_len {
                         state.sidebar_selected += 1;
                     }
+                }
+            }
+            // Boot/foco pendente (Task 11): resolve por ID, lazy, nunca por
+            // índice fixo — o fetch de OUTRO provider não pode roubar o
+            // foco (só entra aqui quando o provider ALVO chega). Provider(i)
+            // é o i-ésimo item da sidebar (sem offset de Overview).
+            if state.pending_focus.as_deref() == Some(provider_id.as_str()) {
+                if let Some(idx) = state
+                    .providers
+                    .iter()
+                    .position(|p| p.quota.provider == provider_id)
+                {
+                    state.selected = idx;
+                    state.screen = Screen::Detail;
+                    state.sidebar_selected = idx;
+                    state.pending_focus = None;
                 }
             }
             vec![]
@@ -754,7 +774,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
                 }
                 vec![]
             }
-            MouseTarget::Card(i) => update(state, Action::Activate(SidebarItem::Provider(i))),
+            // Cards eram do Overview/dashboard (Task 11: ambos apagados) —
+            // fora da tela Login (guard acima), Card não tem mais nenhum
+            // efeito (a lista de providers da Detail é a sidebar, não
+            // cards clicáveis).
+            MouseTarget::Card(_) => vec![],
             MouseTarget::Chip(ChipKind::Open) => update(state, Action::OpenDetail),
             MouseTarget::Chip(ChipKind::Refresh) => update(state, Action::Refresh),
             MouseTarget::Chip(ChipKind::Help) => update(state, Action::ToggleHelp),
@@ -855,23 +879,23 @@ mod tests {
         update(&mut state, Action::Down);
         assert_eq!(state.sidebar_selected, 2);
 
-        // sidebar_items(3) = [Overview, Provider(0..3), History, Login, Waybar] = 7 itens (indices 0..=6).
+        // sidebar_items(3) = [Provider(0..3), History, Login, Waybar] = 6 itens (indices 0..=5).
+        // Overview morreu na Task 11 — sem o item extra do início.
         for _ in 0..10 {
             update(&mut state, Action::Down);
         }
         assert_eq!(
-            state.sidebar_selected, 6,
+            state.sidebar_selected, 5,
             "should clamp at sidebar_items.len()-1"
         );
     }
 
     #[test]
-    fn sidebar_items_order() {
+    fn sidebar_has_no_overview() {
         let items = sidebar_items(2);
         assert_eq!(
             items,
             vec![
-                SidebarItem::Overview,
                 SidebarItem::Provider(0),
                 SidebarItem::Provider(1),
                 SidebarItem::History,
@@ -885,13 +909,16 @@ mod tests {
     fn up_down_move_sidebar_and_enter_activates() {
         let mut state = AppState::new();
         state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
-        update(&mut state, Action::Down); // Overview → Provider(0)
+        // Provider(0) já é o primeiro item da sidebar (Task 11: sem Overview
+        // na frente) — sidebar_selected começa em 0, apontando pra ele.
+        assert_eq!(state.sidebar_selected, 0);
+        update(&mut state, Action::Down); // Provider(0) → History
         assert_eq!(state.sidebar_selected, 1);
+        update(&mut state, Action::Up); // History → Provider(0)
+        assert_eq!(state.sidebar_selected, 0);
         update(&mut state, Action::OpenDetail); // Enter
         assert_eq!(state.screen, Screen::Detail);
         assert_eq!(state.selected, 0);
-        update(&mut state, Action::Back); // Esc
-        assert_eq!(state.screen, Screen::Overview);
     }
 
     #[test]
@@ -933,27 +960,28 @@ mod tests {
     fn back_resets_scroll() {
         // Mesmo gap do Activate (state.scroll compartilhado entre telas):
         // Esc a partir de History tambem tem que zerar o scroll ao voltar
-        // pro Overview, senao o offset de uma tela vaza pra outra.
+        // pro Detail (Task 11: Overview morreu, Detail é o destino), senao
+        // o offset de uma tela vaza pra outra.
         let mut state = AppState::new();
         state.screen = Screen::History;
         state.scroll = 5;
         update(&mut state, Action::Back);
-        assert_eq!(state.screen, Screen::Overview);
+        assert_eq!(state.screen, Screen::Detail);
         assert_eq!(state.scroll, 0, "Esc pra outra tela deve zerar o scroll");
     }
 
     #[test]
     fn provider_fetched_growth_shifts_sidebar_cursor_to_keep_same_item() {
-        // Cursor comeca em History (indice 1 com 0 providers: [Overview,
-        // History, Login, Waybar]). Um provider novo chega via
-        // ProviderFetched (nao havia nenhum antes) — a sidebar cresce pra
-        // [Overview, Provider(0), History, Login, Waybar] e History passa
-        // pro indice 2. O cursor deve seguir o item logico (History), nao
-        // ficar parado num indice que agora aponta pra outra coisa.
+        // Cursor comeca em History (indice 0 com 0 providers: [History,
+        // Login, Waybar] — Task 11: sem Overview). Um provider novo chega
+        // via ProviderFetched (nao havia nenhum antes) — a sidebar cresce
+        // pra [Provider(0), History, Login, Waybar] e History passa pro
+        // indice 1. O cursor deve seguir o item logico (History), nao ficar
+        // parado num indice que agora aponta pra outra coisa.
         let mut state = AppState::new();
         update(&mut state, Action::Activate(SidebarItem::History));
         assert_eq!(state.screen, Screen::History);
-        assert_eq!(state.sidebar_selected, 1);
+        assert_eq!(state.sidebar_selected, 0);
 
         update(
             &mut state,
@@ -961,7 +989,7 @@ mod tests {
         );
 
         assert_eq!(
-            state.sidebar_selected, 2,
+            state.sidebar_selected, 1,
             "cursor deve seguir History (indice deslocado pelo provider novo)"
         );
         assert_eq!(
@@ -1000,7 +1028,7 @@ mod tests {
         assert_eq!(state.screen, Screen::Detail);
         assert_eq!(state.selected, 0);
         assert_eq!(
-            state.sidebar_selected, 1,
+            state.sidebar_selected, 0,
             "cursor deve sincronizar pro indice de Provider(0) na sidebar"
         );
     }
@@ -1625,14 +1653,15 @@ mod tests {
     fn click_sidebar_selects_and_activates() {
         let mut state = AppState::new();
         state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
-        update(&mut state, Action::Click(MouseTarget::Sidebar(1)));
-        assert_eq!(state.sidebar_selected, 1);
+        // Provider(0) é o item 0 da sidebar (Task 11: sem Overview na frente).
+        update(&mut state, Action::Click(MouseTarget::Sidebar(0)));
+        assert_eq!(state.sidebar_selected, 0);
         assert_eq!(state.screen, Screen::Detail); // Provider(0) ativado
     }
 
     #[test]
     fn click_sidebar_out_of_range_is_noop() {
-        // sidebar_items(0) = [Overview, History, Login, Waybar] (4 itens, indices 0..=3).
+        // sidebar_items(0) = [History, Login, Waybar] (3 itens, indices 0..=2).
         let mut state = AppState::new();
         let fu = update(&mut state, Action::Click(MouseTarget::Sidebar(99)));
         assert_eq!(
@@ -1643,7 +1672,7 @@ mod tests {
             fu.is_empty(),
             "indice fora de sidebar_items() nao deve gerar Activate"
         );
-        assert_eq!(state.screen, Screen::Overview, "tela nao muda sem Activate");
+        assert_eq!(state.screen, Screen::Detail, "tela nao muda sem Activate");
     }
 
     // ---- Aba Login: reskin (Task 14) ----
@@ -1690,14 +1719,15 @@ mod tests {
     }
 
     #[test]
-    fn click_card_outside_login_screen_still_activates_detail() {
-        // Garante que o guard acima NÃO regrediu o comportamento existente
-        // do Overview (Card(i) → Activate(Provider(i))).
+    fn click_card_outside_login_screen_is_noop() {
+        // Task 11: Card(i) era do Overview/dashboard (ambos apagados) —
+        // fora da tela Login, o clique não faz mais nada (a lista de
+        // providers da Detail é a sidebar, não cards clicáveis).
         let mut state = AppState::new();
         state.providers = vec![ProviderView::new(test_quota("claude", 80.0))];
-        update(&mut state, Action::Click(MouseTarget::Card(0)));
-        assert_eq!(state.screen, Screen::Detail);
-        assert_eq!(state.selected, 0);
+        let fu = update(&mut state, Action::Click(MouseTarget::Card(0)));
+        assert_eq!(state.screen, Screen::Detail, "screen default, sem mudança");
+        assert!(fu.is_empty());
     }
 
     #[test]
@@ -1790,7 +1820,7 @@ mod tests {
     #[test]
     fn key_t_outside_history_screen_is_noop() {
         let mut state = AppState::new();
-        assert_eq!(state.screen, Screen::Overview);
+        assert_eq!(state.screen, Screen::Detail);
         let fu = update(&mut state, Action::Key(key_event(KeyCode::Char('t'))));
         assert!(fu.is_empty());
         assert_eq!(
@@ -1934,8 +1964,8 @@ mod tests {
         update(&mut state, Action::Key(key_event(KeyCode::Esc)));
         assert_eq!(
             state.screen,
-            Screen::Overview,
-            "Esc deve continuar voltando pro Overview"
+            Screen::Detail,
+            "Esc deve continuar voltando pro Detail (Task 11: Overview morreu)"
         );
 
         state.screen = Screen::History;
@@ -1953,5 +1983,45 @@ mod tests {
         assert_eq!(state.scroll, 1);
         update(&mut state, Action::Scroll(-5));
         assert_eq!(state.scroll, 0); // saturating
+    }
+
+    // ---- Navegação: Overview morre, boot no provider (Task 11) ----
+
+    #[test]
+    fn boot_state_is_detail_skeleton_not_overview() {
+        let state = AppState::new();
+        assert_eq!(state.screen, Screen::Detail);
+    }
+
+    #[test]
+    fn provider_fetched_resolves_pending_focus_by_id() {
+        let mut state = AppState::new();
+        state.pending_focus = Some("codex".into());
+        // Chega claude primeiro: NÃO rouba o foco.
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(fake_quota("claude"))),
+        );
+        assert_eq!(state.pending_focus.as_deref(), Some("codex"));
+        // Chega codex: resolve — Detail + selected no índice recém-inserido (1).
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(fake_quota("codex"))),
+        );
+        assert_eq!(state.screen, Screen::Detail);
+        assert_eq!(state.selected, 1);
+        assert_eq!(state.pending_focus, None);
+    }
+
+    #[test]
+    fn esc_from_history_returns_to_selected_provider_detail() {
+        let mut state = AppState::new();
+        update(
+            &mut state,
+            Action::ProviderFetched(Box::new(fake_quota("claude"))),
+        );
+        state.screen = Screen::History;
+        update(&mut state, Action::Back);
+        assert_eq!(state.screen, Screen::Detail);
     }
 }

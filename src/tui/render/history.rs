@@ -5,52 +5,38 @@
 //! respeita o toggle; a lista de dias e o rodapé "7 DIAS" sempre cobrem os
 //! 7 dias inteiros de `state.history` (a fonte já é `records_since(7d)`, T2).
 //!
-//! `render_trend_chart`/`chart_series`/`x_axis_labels`/`weekday_abbrev`/
-//! `CHART_PROVIDERS` (o chart braille ORIGINAL desta tela) permanecem no
-//! arquivo: `dashboard.rs::render_trend_panel` (painel "Hoje (24h)" do
-//! Overview) ainda os consome, e mexer nesse painel está fora do escopo
-//! desta task. O plano (T21) apaga `dashboard.rs` inteiro — nesse ponto essa
-//! máquina de chart braille fica órfã de vez e morre junto. Até lá, ela
-//! convive com o `column_chart` novo desta tela sem conflito (funções
-//! independentes). `weekday_abbrev`, porém, é reaproveitada pelos rótulos de
-//! dia da lista nova (não é duplicata).
+//! O chart braille ORIGINAL desta tela (`render_trend_chart`/`chart_series`/
+//! `x_axis_labels`/`CHART_PROVIDERS`) morreu na Task 11 junto com
+//! `dashboard.rs` (único consumidor, painel "Hoje (24h)" do extinto
+//! Overview). `weekday_abbrev` sobreviveu — reaproveitada pelos rótulos de
+//! dia da lista nova (`day_list_lines`).
 
 use std::collections::BTreeSet;
 
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Axis, Block, BorderType, Borders, Chart, Dataset, GraphType, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 
-use crate::theme::{provider_hex, ColorToken};
+use crate::theme::ColorToken;
 use crate::tui::mouse::{ChipKind, HitMap};
-use crate::tui::render::shared::{abbrev_tokens, series_now};
+use crate::tui::render::shared::series_now;
 use crate::tui::state::{AppState, HistoryRange};
-use crate::tui::theme_bridge::{hex_to_color, provider_color, to_ratatui};
+use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
 use crate::tui::widgets::column_chart::{self, column_chart_lines_bucketed, fmt_tokens_short};
 use crate::usage::amp::AmpDollars;
-use crate::usage::buckets::{
-    bucket_by_hour, bucket_by_model_hour, sessions_by_day, DaySessions, ModelHourSeries,
-};
+use crate::usage::buckets::{bucket_by_model_hour, sessions_by_day, DaySessions, ModelHourSeries};
 use crate::usage::UsageRecord;
-
-/// Providers com log local de token — só estes ganham `Dataset` no chart
-/// braille ORIGINAL (`render_trend_chart`, ainda usado pelo Overview). O
-/// chart novo desta tela (`render_top_chart`, abaixo) não usa esta lista:
-/// itera os providers de fato presentes em `records`.
-const CHART_PROVIDERS: [&str; 2] = ["claude", "codex"];
 
 // ---------------------------------------------------------------------------
 // Formatação
 // ---------------------------------------------------------------------------
 
-/// Abreviação PT de dia-da-semana (`seg`..`dom`) — usada tanto pelo eixo X
-/// do chart braille legado (`x_axis_labels`, range Week) quanto pelo rótulo
-/// de dia da lista nova (`day_list_lines`, dia != hoje).
+/// Abreviação PT de dia-da-semana (`seg`..`dom`) — usada pelo rótulo de dia
+/// da lista de dias (`day_list_lines`, dia != hoje).
 fn weekday_abbrev(w: time::Weekday) -> &'static str {
     match w {
         time::Weekday::Monday => "seg",
@@ -63,60 +49,9 @@ fn weekday_abbrev(w: time::Weekday) -> &'static str {
     }
 }
 
-/// Labels do eixo X do chart braille legado: exatamente 3 pontos (mais que
-/// isso quebra o posicionamento das labels do meio — ver doc de
-/// `ratatui::widgets::Axis::labels`). `now` é a âncora determinística
-/// (`series_now`, NUNCA `OffsetDateTime::now_utc()`), convertida para
-/// `offset` (`state.local_offset`) ANTES de extrair hora/dia-da-semana —
-/// mesmo contrato de `spark_line` em `detail.rs` (T12): um `OffsetDateTime`
-/// não carrega "hora local" por si só, tem que converter explicitamente.
-fn x_axis_labels(
-    now: time::OffsetDateTime,
-    hours: usize,
-    range: HistoryRange,
-    offset: time::UtcOffset,
-) -> Vec<Line<'static>> {
-    let local_now = now.to_offset(offset);
-    let oldest = local_now - time::Duration::hours((hours - 1) as i64);
-    let mid = local_now - time::Duration::hours(((hours - 1) / 2) as i64);
-    match range {
-        HistoryRange::Day => vec![
-            Line::from(format!("{:02}h", oldest.hour())),
-            Line::from(format!("{:02}h", mid.hour())),
-            Line::from("agora"),
-        ],
-        HistoryRange::Week => vec![
-            Line::from(weekday_abbrev(oldest.weekday())),
-            Line::from(weekday_abbrev(mid.weekday())),
-            Line::from("hoje"),
-        ],
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Dados
 // ---------------------------------------------------------------------------
-
-/// Série (x, y) de tokens/hora de um provider, pronta para `Dataset::data`
-/// do chart braille LEGADO (`render_trend_chart`). Pura/testável sem
-/// depender de `Frame`.
-fn chart_series(
-    records: &[UsageRecord],
-    provider: &str,
-    now: time::OffsetDateTime,
-    hours: usize,
-) -> Vec<(f64, f64)> {
-    let filtered: Vec<UsageRecord> = records
-        .iter()
-        .filter(|r| r.provider == provider)
-        .cloned()
-        .collect();
-    bucket_by_hour(&filtered, now, hours)
-        .iter()
-        .enumerate()
-        .map(|(i, b)| (i as f64, b.tokens as f64))
-        .collect()
-}
 
 /// `AmpDollars` do `state.usage`, se o provider "amp" estiver presente.
 /// Amp nunca aparece em `state.history` (sem `UsageRecord`), então esta é a
@@ -365,92 +300,6 @@ fn render_top_chart(
         bucket_hours,
     );
     frame.render_widget(Paragraph::new(lines), area);
-}
-
-// ---------------------------------------------------------------------------
-// Chart braille legado — ainda consumido por `dashboard.rs` (Overview)
-// ---------------------------------------------------------------------------
-
-/// Corpo reusável do chart braille legado (painel "Hoje (24h)" do Overview,
-/// via `dashboard.rs::render_trend_panel`): mesma visualização de antes
-/// desta task, parametrizada em vez de ler `AppState` direto — `range`
-/// decide o estilo dos labels do eixo X, `empty_msg` é o placeholder quando
-/// nenhum provider tem dado no range. A aba History NÃO chama mais esta
-/// função (usa `render_top_chart`/`column_chart` acima); ela sobrevive só
-/// pelo Overview, e morre com `dashboard.rs` (T21).
-#[allow(clippy::too_many_arguments)]
-pub(super) fn render_trend_chart(
-    frame: &mut Frame,
-    area: Rect,
-    records: &[UsageRecord],
-    now: time::OffsetDateTime,
-    hours: usize,
-    range: HistoryRange,
-    local_offset: time::UtcOffset,
-    empty_msg: &str,
-) {
-    if area.width == 0 || area.height == 0 {
-        return;
-    }
-
-    // Materializa as séries ANTES de montar os `Dataset`s — `Dataset::data`
-    // recebe `&[(f64, f64)]`; um `Vec` criado dentro do `.map()` de um
-    // iterador não sobreviveria ao escopo (borrow pendurado). `series_by_
-    // provider` é o dono; `datasets` só empresta dele, e os dois ficam
-    // vivos até `frame.render_widget` consumir o `Chart`.
-    let mut series_by_provider: Vec<(&'static str, Vec<(f64, f64)>)> = Vec::new();
-    for pid in CHART_PROVIDERS {
-        let series = chart_series(records, pid, now, hours);
-        if series.iter().any(|&(_, y)| y > 0.0) {
-            series_by_provider.push((pid, series));
-        }
-    }
-
-    if series_by_provider.is_empty() {
-        let p = Paragraph::new(Span::styled(
-            empty_msg.to_string(),
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        ));
-        frame.render_widget(p, area);
-        return;
-    }
-
-    let y_max: f64 = series_by_provider
-        .iter()
-        .flat_map(|(_, s)| s.iter().map(|&(_, y)| y))
-        .fold(0.0_f64, f64::max)
-        .max(1.0);
-
-    let datasets: Vec<Dataset> = series_by_provider
-        .iter()
-        .map(|(pid, series)| {
-            Dataset::default()
-                .name(*pid)
-                .marker(Marker::Braille)
-                .graph_type(GraphType::Area)
-                .style(Style::default().fg(hex_to_color(provider_hex(pid))))
-                .data(series)
-        })
-        .collect();
-
-    let x_labels = x_axis_labels(now, hours, range, local_offset);
-    let y_labels = vec![Line::from("0"), Line::from(abbrev_tokens(y_max as u64))];
-
-    let chart = Chart::new(datasets)
-        .x_axis(
-            Axis::default()
-                .style(Style::default().fg(to_ratatui(ColorToken::Comment)))
-                .bounds([0.0, (hours - 1) as f64])
-                .labels(x_labels),
-        )
-        .y_axis(
-            Axis::default()
-                .style(Style::default().fg(to_ratatui(ColorToken::Comment)))
-                .bounds([0.0, y_max])
-                .labels(y_labels),
-        );
-
-    frame.render_widget(chart, area);
 }
 
 // ---------------------------------------------------------------------------
@@ -734,7 +583,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // Unit tests: weekday_abbrev / x_axis_labels / chart_series (legado)
+    // Unit tests: weekday_abbrev
     // -----------------------------------------------------------------
 
     #[test]
@@ -742,67 +591,6 @@ mod tests {
         assert_eq!(weekday_abbrev(time::Weekday::Monday), "seg");
         assert_eq!(weekday_abbrev(time::Weekday::Wednesday), "qua");
         assert_eq!(weekday_abbrev(time::Weekday::Sunday), "dom");
-    }
-
-    #[test]
-    fn x_axis_labels_day_ends_in_agora_and_uses_local_hours() {
-        let now = time::macros::datetime!(2026-07-02 05:00:00 UTC);
-        let labels = x_axis_labels(now, 24, HistoryRange::Day, time::UtcOffset::UTC);
-        assert_eq!(labels.len(), 3);
-        let text =
-            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
-        assert_eq!(
-            text(&labels[0]),
-            "06h",
-            "24h atras de 05h (offset UTC) = 06h do dia anterior"
-        );
-        assert_eq!(text(&labels[1]), "18h");
-        assert_eq!(text(&labels[2]), "agora");
-    }
-
-    #[test]
-    fn x_axis_labels_day_uses_local_offset_not_utc() {
-        // Regressao no espirito do fix T12 (spark_line): o eixo tem que
-        // converter pro offset local ANTES de extrair a hora, nunca vazar
-        // a hora UTC crua rotulada como "local".
-        let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
-        let offset = time::UtcOffset::from_hms(-3, 0, 0).unwrap();
-        let labels = x_axis_labels(now, 24, HistoryRange::Day, offset);
-        let text =
-            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
-        // now em -03:00 = 23h do dia anterior; 23h atras disso = 00h local
-        // (NAO "03h", que seria o resultado se a hora UTC vazasse crua).
-        assert_eq!(text(&labels[0]), "00h");
-    }
-
-    #[test]
-    fn x_axis_labels_week_ends_in_hoje() {
-        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
-        let hours = 24 * 7;
-        let labels = x_axis_labels(now, hours, HistoryRange::Week, time::UtcOffset::UTC);
-        let text =
-            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
-        assert_eq!(text(&labels[2]), "hoje");
-        let expected_oldest =
-            weekday_abbrev((now - time::Duration::hours((hours - 1) as i64)).weekday());
-        assert_eq!(text(&labels[0]), expected_oldest);
-    }
-
-    #[test]
-    fn chart_series_has_hours_points_and_filters_provider() {
-        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
-        let records = vec![
-            rec("claude", "m", now - time::Duration::hours(1), 500),
-            rec("codex", "m", now - time::Duration::hours(1), 999),
-        ];
-        let series = chart_series(&records, "claude", now, 24);
-        assert_eq!(series.len(), 24);
-        // Indice 22 = "1h atras" (indice 23 = hora atual/"now").
-        assert_eq!(series[22].1, 500.0);
-        assert!(series
-            .iter()
-            .enumerate()
-            .all(|(i, &(_, y))| i == 22 || y == 0.0));
     }
 
     // -----------------------------------------------------------------

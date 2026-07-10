@@ -1,8 +1,8 @@
-//! Helpers compartilhados entre telas de render. Hoje só `series_now`,
-//! extraída de `dashboard.rs` (Task 11) e reaproveitada por `detail.rs`
-//! (Task 12) — ambas as telas precisam da MESMA âncora temporal pra
-//! `provider_series_24h` (sparkline real de 24h), então a lógica mora aqui
-//! em vez de duplicada em cada módulo de tela.
+//! Helpers compartilhados entre telas de render. `series_now` era usada por
+//! `dashboard.rs` (apagado na Task 11 junto com o Overview) e por
+//! `detail.rs` (Task 12) — ambas as telas precisavam da MESMA âncora
+//! temporal pra série real de 24h, então a lógica mora aqui em vez de
+//! duplicada em cada módulo de tela; `detail.rs` continua consumindo.
 
 use crate::tui::state::AppState;
 
