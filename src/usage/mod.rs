@@ -131,7 +131,10 @@ pub fn records(opts: AggregateOptions) -> Vec<UsageRecord> {
 
     for path in collect_jsonl(opts.claude_dir) {
         let mut recs = cache.cached_or_parse(&path, |content| parse_claude_lines(content.lines()));
-        let stem = path.file_stem().and_then(|s| s.to_str()).map(str::to_string);
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string);
         for r in &mut recs {
             r.session_id = stem.clone();
         }
@@ -140,7 +143,10 @@ pub fn records(opts: AggregateOptions) -> Vec<UsageRecord> {
 
     for path in collect_jsonl(opts.codex_dir) {
         let mut recs = cache.cached_or_parse(&path, |content| parse_codex_lines(content.lines()));
-        let stem = path.file_stem().and_then(|s| s.to_str()).map(str::to_string);
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string);
         for r in &mut recs {
             r.session_id = stem.clone();
         }

@@ -127,7 +127,9 @@ fn help_text() -> Text<'static> {
 /// dentro do popup (bug "pr"/"sto" da T14).
 fn help_popup_area(frame_area: Rect) -> Rect {
     let text = help_text();
-    let width = (text.width() as u16).saturating_add(6).min(frame_area.width);
+    let width = (text.width() as u16)
+        .saturating_add(6)
+        .min(frame_area.width);
     let height = (text.height() as u16)
         .saturating_add(2)
         .min(frame_area.height);
@@ -412,9 +414,9 @@ mod tests {
             screen.push('\n');
         }
         for expected in [
-            "alterna 24h/7d",              // linha da seção Histórico
-            "iniciar login do provider",   // linha da seção Login
-            "shift+drag seleciona texto",  // dica de mouse (última linha)
+            "alterna 24h/7d",             // linha da seção Histórico
+            "iniciar login do provider",  // linha da seção Login
+            "shift+drag seleciona texto", // dica de mouse (última linha)
         ] {
             assert!(
                 screen.contains(expected),

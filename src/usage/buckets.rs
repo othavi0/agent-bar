@@ -144,9 +144,7 @@ pub fn bucket_by_model_hour(
             None => ("—".to_string(), 5),
         };
         let idx = (floor_to_hour(r.ts) - start).whole_hours() as usize;
-        let entry = map
-            .entry(label)
-            .or_insert_with(|| (slot, vec![0; hours]));
+        let entry = map.entry(label).or_insert_with(|| (slot, vec![0; hours]));
         if let Some(b) = entry.1.get_mut(idx) {
             *b += record_tokens(r);
         }
@@ -421,7 +419,10 @@ mod tests {
         );
         b.session_id = Some("s1".into());
         let days = sessions_by_day(&[a, b], UtcOffset::UTC);
-        assert_eq!(days[0].sessions[0].dominant_model.as_deref(), Some("Fable 5"));
+        assert_eq!(
+            days[0].sessions[0].dominant_model.as_deref(),
+            Some("Fable 5")
+        );
         assert_eq!(days[0].sessions[0].tokens, 130);
     }
 

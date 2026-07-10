@@ -67,7 +67,11 @@ fn spawn_usage_load(
         });
 
         // Custo de HOJE (escopado a meia-noite local).
-        let today: Vec<_> = all.iter().filter(|r| r.ts >= today_start).cloned().collect();
+        let today: Vec<_> = all
+            .iter()
+            .filter(|r| r.ts >= today_start)
+            .cloned()
+            .collect();
         let summary = usage::aggregate_records(today, fx_rate, amp_meta.as_ref());
         let _ = tx.send(Action::UsageComputed(summary));
 
