@@ -2,9 +2,10 @@
 //! família (os nomes exatos variam por versão). Modelo desconhecido → None
 //! (nunca chutar custo).
 //!
-//! Atualizado: 2026-06-20. Fontes oficiais (verificadas + cross-check adversarial):
+//! Atualizado: 2026-07-10. Fontes oficiais (verificadas + cross-check adversarial):
 //! - Anthropic: <https://platform.claude.com/docs/en/about-claude/pricing>
-//!   (Opus 4.x / Sonnet 4.x / Haiku 4.x; cache_read = 0.1×input, cache_write 5min = 1.25×input).
+//!   (Fable/Mythos, Sonnet 5 introdutório, Opus 4.5–4.8, Opus legado ≤4.1,
+//!   Sonnet ≤4.6, Haiku 4.5; cache_read = 0.1×input, cache_write 5min = 1.25×input).
 //! - OpenAI: <https://developers.openai.com/api/docs/models> (gpt-5.x / o-series / codex).
 //!   A OpenAI NÃO cobra escrita de cache separada (Prompt Caching automático) →
 //!   modelamos cache_write = input (sem sobretaxa); cache_read = "cached input".
@@ -12,6 +13,9 @@
 //! NOTA (revisar quando trocar de modelo): a match-key `codex` usa `gpt-5.3-codex`
 //! (padrão do CLI Codex, fev/2026) = $1.75/$14. O CLI também aceita `gpt-5.5`
 //! ($5/$30) e `gpt-5-codex` ($1.25/$10) — se teu Codex usa outro, ajustar aqui.
+
+use std::collections::HashSet;
+use std::sync::Mutex;
 
 use super::UsageRecord;
 
@@ -27,13 +31,39 @@ pub struct Pricing {
 pub fn pricing_for(model: &str) -> Option<Pricing> {
     let m = model.to_ascii_lowercase();
 
-    // --- Anthropic (Claude 4.x) ---
+    // --- Anthropic ---
+    if m.contains("fable") || m.contains("mythos") {
+        return Some(Pricing {
+            input: 10.0,
+            output: 50.0,
+            cache_read: 1.0,
+            cache_write: 12.5,
+        });
+    }
     if m.contains("opus") {
+        // Legado (≤4.1): claude-opus-4-1 / claude-opus-4 sem minor ≥5 / opus-3.
+        if m.contains("opus-4-1") || m.contains("opus-3") {
+            return Some(Pricing {
+                input: 15.0,
+                output: 75.0,
+                cache_read: 1.5,
+                cache_write: 18.75,
+            });
+        }
         return Some(Pricing {
             input: 5.0,
             output: 25.0,
             cache_read: 0.50,
             cache_write: 6.25,
+        });
+    }
+    if m.contains("sonnet-5") {
+        // Introdutório até 2026-08-31 (platform.claude.com); revisar em set/2026.
+        return Some(Pricing {
+            input: 2.0,
+            output: 10.0,
+            cache_read: 0.20,
+            cache_write: 2.50,
         });
     }
     if m.contains("sonnet") {
@@ -92,10 +122,24 @@ pub fn pricing_for(model: &str) -> Option<Pricing> {
     None
 }
 
+/// Modelos desconhecidos já avisados nesta execução (warn-once por modelo).
+static WARNED_UNKNOWN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
 /// Custo em USD do record. `None` se modelo ausente/desconhecido (mostra tokens sem $).
 pub fn cost_usd_of(rec: &UsageRecord) -> Option<f64> {
     let model = rec.model.as_deref()?;
-    let p = pricing_for(model)?;
+    let p = match pricing_for(model) {
+        Some(p) => p,
+        None => {
+            if let Ok(mut guard) = WARNED_UNKNOWN.lock() {
+                let set = guard.get_or_insert_with(HashSet::new);
+                if set.insert(model.to_string()) {
+                    log::warn!("modelo sem preço conhecido: {model} (custo aparecerá como —)");
+                }
+            }
+            return None;
+        }
+    };
     let cost = (rec.input as f64 * p.input
         + rec.output as f64 * p.output
         + rec.cache_read as f64 * p.cache_read
@@ -151,6 +195,40 @@ mod tests {
             pricing_for("gpt-5.3-codex"),
             pricing_for("some-codex-model")
         );
+    }
+
+    #[test]
+    fn fable_and_mythos_pricing_2026_07_10() {
+        let fable = pricing_for("claude-fable-5").unwrap();
+        assert_eq!(
+            (
+                fable.input,
+                fable.output,
+                fable.cache_read,
+                fable.cache_write
+            ),
+            (10.0, 50.0, 1.0, 12.5)
+        );
+        assert_eq!(
+            pricing_for("claude-mythos-5"),
+            pricing_for("claude-fable-5")
+        );
+    }
+
+    #[test]
+    fn sonnet_5_intro_pricing_differs_from_sonnet_4x() {
+        let s5 = pricing_for("claude-sonnet-5").unwrap();
+        assert_eq!((s5.input, s5.output), (2.0, 10.0));
+        let s46 = pricing_for("claude-sonnet-4-6").unwrap();
+        assert_eq!((s46.input, s46.output), (3.0, 15.0));
+    }
+
+    #[test]
+    fn legacy_opus_41_keeps_old_pricing() {
+        let o41 = pricing_for("claude-opus-4-1").unwrap();
+        assert_eq!((o41.input, o41.output), (15.0, 75.0));
+        let o48 = pricing_for("claude-opus-4-8").unwrap();
+        assert_eq!((o48.input, o48.output), (5.0, 25.0));
     }
 
     #[test]
