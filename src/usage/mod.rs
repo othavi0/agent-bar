@@ -6,6 +6,7 @@ pub mod buckets;
 pub mod cache;
 pub mod claude;
 pub mod codex;
+pub mod model_names;
 pub mod pricing;
 
 use std::collections::BTreeMap;
