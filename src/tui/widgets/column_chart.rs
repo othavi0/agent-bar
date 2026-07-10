@@ -11,8 +11,47 @@ use crate::usage::buckets::ModelHourSeries;
 
 /// Blocos parciais por oitavos (índice 1..=7); célula cheia é `█`.
 const EIGHTHS: [&str; 8] = ["", "▁", "▂", "▃", "▄", "▅", "▆", "▇"];
-const Y_AXIS_W: usize = 6; // "999M ┤"
+/// "999M ┤" — reserva de colunas do eixo Y. `pub(crate)` porque
+/// `history.rs::render_top_chart` precisa da mesma largura pro cálculo de
+/// fit (downsampling da semana) sem manter um número mágico espelhado.
+pub(crate) const Y_AXIS_W: usize = 6;
 
+/// Abreviação PT de dia-da-semana p/ os labels de eixo X do modo bucketed
+/// (`bucket_hours > 1`) — cópia pequena e autocontida de
+/// `history.rs::weekday_abbrev` (módulos não devem depender um do outro só
+/// por isso; o mapeamento é trivial e estável).
+fn weekday_abbrev_pt(w: time::Weekday) -> &'static str {
+    match w {
+        time::Weekday::Monday => "seg",
+        time::Weekday::Tuesday => "ter",
+        time::Weekday::Wednesday => "qua",
+        time::Weekday::Thursday => "qui",
+        time::Weekday::Friday => "sex",
+        time::Weekday::Saturday => "sáb",
+        time::Weekday::Sunday => "dom",
+    }
+}
+
+/// Valor agregado da série `tokens` na coluna `i` do chart. Com
+/// `bucket_hours == 1` é `tokens[i]` direto (resolução horária, idêntico ao
+/// comportamento antigo). Com `bucket_hours > 1`, soma as `bucket_hours`
+/// horas consecutivas `[i*bucket_hours, (i+1)*bucket_hours)` — o último
+/// grupo pode ser parcial se `tokens.len()` não for múltiplo exato.
+fn bucketed_value(tokens: &[u64], i: usize, bucket_hours: usize) -> u64 {
+    if bucket_hours <= 1 {
+        return tokens.get(i).copied().unwrap_or(0);
+    }
+    let lo = i.saturating_mul(bucket_hours);
+    if lo >= tokens.len() {
+        return 0;
+    }
+    let hi = (lo + bucket_hours).min(tokens.len());
+    tokens[lo..hi].iter().sum()
+}
+
+/// Chart de colunas em resolução horária (`bucket_hours = 1`) — delegação
+/// fina pra `column_chart_lines_bucketed`; assinatura preservada pro
+/// `detail.rs` e os testes existentes.
 pub fn column_chart_lines(
     series: &[ModelHourSeries],
     width: u16,
@@ -20,6 +59,24 @@ pub fn column_chart_lines(
     now: OffsetDateTime,
     local_offset: UtcOffset,
 ) -> Vec<Line<'static>> {
+    column_chart_lines_bucketed(series, width, height, now, local_offset, 1)
+}
+
+/// Chart de colunas com downsampling horizontal opcional. `series[].tokens`
+/// chega SEMPRE em resolução 1h; com `bucket_hours > 1`, cada grupo de N
+/// horas consecutivas vira 1 coluna (soma), permitindo cobrir uma janela
+/// maior (ex. 168h/semana) sem estourar a largura do terminal. Os totais da
+/// legenda continuam a soma de TODAS as horas de `series[].total` — o
+/// downsampling só afeta o desenho das colunas, nunca os totais.
+pub fn column_chart_lines_bucketed(
+    series: &[ModelHourSeries],
+    width: u16,
+    height: u16,
+    now: OffsetDateTime,
+    local_offset: UtcOffset,
+    bucket_hours: usize,
+) -> Vec<Line<'static>> {
+    let bucket_hours = bucket_hours.max(1);
     let width = width as usize;
     let height = height as usize;
     if series.is_empty() {
@@ -38,7 +95,15 @@ pub fn column_chart_lines(
         return out;
     }
 
-    let buckets = series.iter().map(|s| s.tokens.len()).max().unwrap_or(0);
+    let hourly_len = series.iter().map(|s| s.tokens.len()).max().unwrap_or(0);
+    // Nº de COLUNAS do chart: em resolução horária é `hourly_len` direto; com
+    // downsampling, cada grupo de `bucket_hours` horas vira 1 coluna (o
+    // último grupo pode ser parcial — `div_ceil` conta essa coluna também).
+    let buckets = if bucket_hours <= 1 {
+        hourly_len
+    } else {
+        hourly_len.div_ceil(bucket_hours)
+    };
     // Reserva: 1 linha eixo X, 1 linha labels X, 1 linha legenda.
     let plot_rows = height.saturating_sub(3).max(3);
 
@@ -57,7 +122,7 @@ pub fn column_chart_lines(
         .map(|i| {
             series
                 .iter()
-                .map(|s| s.tokens.get(i).copied().unwrap_or(0))
+                .map(|s| bucketed_value(&s.tokens, i, bucket_hours))
                 .sum()
         })
         .collect();
@@ -78,11 +143,11 @@ pub fn column_chart_lines(
             let mut used = 0usize;
             let active: Vec<&ModelHourSeries> = series
                 .iter()
-                .filter(|s| s.tokens.get(i).copied().unwrap_or(0) > 0)
+                .filter(|s| bucketed_value(&s.tokens, i, bucket_hours) > 0)
                 .collect();
             let mut heights: Vec<(usize, u8)> = Vec::with_capacity(active.len());
             for (k, s) in active.iter().enumerate() {
-                let v = s.tokens.get(i).copied().unwrap_or(0);
+                let v = bucketed_value(&s.tokens, i, bucket_hours);
                 let mut h = if k + 1 == active.len() {
                     target.saturating_sub(used) // último leva o resto (soma exata)
                 } else {
@@ -367,20 +432,57 @@ pub fn column_chart_lines(
         Style::default().fg(to_ratatui(ColorToken::Comment)),
     )));
 
-    // Labels de hora (a cada 3 buckets).
+    // Labels do eixo X: hora (a cada 3 buckets) em resolução horária, ou
+    // fronteira de dia local (seg/ter/.../dom) quando bucketed.
     let mut xl = String::with_capacity(width);
     xl.push_str(&" ".repeat(Y_AXIS_W));
-    for i in 0..buckets {
-        if i % 3 == 0 {
-            let bucket_time = now - time::Duration::hours((buckets - 1 - i) as i64);
-            let h = bucket_time.to_offset(local_offset).hour();
-            let lab = format!("{h:02}h");
-            let pos = Y_AXIS_W + i * (col_w + gap);
-            while xl.chars().count() < pos {
-                xl.push(' ');
+    if bucket_hours <= 1 {
+        for i in 0..buckets {
+            if i % 3 == 0 {
+                let bucket_time = now - time::Duration::hours((buckets - 1 - i) as i64);
+                let h = bucket_time.to_offset(local_offset).hour();
+                let lab = format!("{h:02}h");
+                let pos = Y_AXIS_W + i * (col_w + gap);
+                while xl.chars().count() < pos {
+                    xl.push(' ');
+                }
+                if xl.chars().count() + lab.len() <= width {
+                    xl.push_str(&lab);
+                }
             }
-            if xl.chars().count() + lab.len() <= width {
-                xl.push_str(&lab);
+        }
+    } else {
+        // Uma coluna ganha label se contém a PRIMEIRA hora de um novo dia
+        // local (meia-noite local) — varre as horas originais (não as
+        // colunas já agregadas) pra achar a fronteira exata. Guard de
+        // colisão/overflow: só escreve o label se a posição de início ainda
+        // não foi ultrapassada pelo conteúdo já escrito (evita sobrepor um
+        // label no anterior) E se cabe inteiro em `width` — mesmo espírito
+        // do guard do ramo horário acima, só que sem bunching: aqui prefere
+        // OMITIR o label a desenhá-lo fora de posição.
+        let mut prev_date: Option<time::Date> = None;
+        let mut last_labeled_col: Option<usize> = None;
+        for j in 0..hourly_len {
+            let t =
+                (now - time::Duration::hours((hourly_len - 1 - j) as i64)).to_offset(local_offset);
+            let d = t.date();
+            let is_new_day = matches!(prev_date, Some(p) if p != d);
+            prev_date = Some(d);
+            if !is_new_day {
+                continue;
+            }
+            let col = j / bucket_hours;
+            if last_labeled_col == Some(col) {
+                continue;
+            }
+            let lab = weekday_abbrev_pt(d.weekday());
+            let pos = Y_AXIS_W + col * (col_w + gap);
+            if xl.chars().count() <= pos && pos + lab.chars().count() <= width {
+                while xl.chars().count() < pos {
+                    xl.push(' ');
+                }
+                xl.push_str(lab);
+                last_labeled_col = Some(col);
             }
         }
     }
@@ -630,6 +732,80 @@ mod tests {
                     .any(|sp| sp.style.fg == Some(color) && !sp.content.trim().is_empty())
             });
             assert!(visible, "série slot {slot} invisível no plot");
+        }
+    }
+
+    #[test]
+    fn chart_bucketed_aggregates_hours_into_columns() {
+        // 168 horas sequenciais (valor = índice) agregadas em blocos de 6h:
+        // coluna i = soma de tokens[i*6..i*6+6] = 36*i + 15 (soma de 6
+        // inteiros consecutivos começando em 6*i).
+        let tokens: Vec<u64> = (0..168u64).collect();
+        for i in 0..28usize {
+            let expected = 36 * i as u64 + 15;
+            assert_eq!(
+                bucketed_value(&tokens, i, 6),
+                expected,
+                "coluna {i} deveria somar as 6 horas [{}, {})",
+                i * 6,
+                i * 6 + 6
+            );
+        }
+        // Grupo parcial: 5 horas com bucket_hours=3 → 2 colunas, última
+        // parcial (só 2 horas em vez de 3).
+        let partial: Vec<u64> = vec![1, 2, 3, 4, 5];
+        assert_eq!(bucketed_value(&partial, 0, 3), 1 + 2 + 3);
+        assert_eq!(bucketed_value(&partial, 1, 3), 4 + 5);
+        assert_eq!(bucketed_value(&partial, 2, 3), 0); // fora do range
+
+        // Legenda: total continua a soma de TODAS as 168 horas, independente
+        // do downsampling em colunas de 6h (contrato do achado: totais da
+        // semana não podem ficar presos à janela visível).
+        let total: u64 = tokens.iter().sum();
+        let s = vec![series("Fable 5", 0, tokens)];
+        let lines = column_chart_lines_bucketed(
+            &s,
+            100,
+            12,
+            datetime!(2026-07-10 12:00:00 UTC),
+            time::UtcOffset::UTC,
+            6,
+        );
+        let text = plain(&lines);
+        let legend = text.last().unwrap();
+        assert!(
+            legend.contains(&fmt_tokens_short(total)),
+            "legenda deveria mostrar o total das 168h ({}): {legend}",
+            fmt_tokens_short(total)
+        );
+    }
+
+    #[test]
+    fn chart_bucketed_shows_day_labels_and_fits_width() {
+        let s = vec![series(
+            "Fable 5",
+            0,
+            (0..168u64).map(|h| (h % 5) * 1000).collect(),
+        )];
+        for w in [80u16, 100, 160] {
+            let lines = column_chart_lines_bucketed(
+                &s,
+                w,
+                12,
+                datetime!(2026-07-10 12:00:00 UTC),
+                time::UtcOffset::UTC,
+                6,
+            );
+            let text = plain(&lines);
+            for l in &text {
+                assert!(l.chars().count() <= w as usize, "linha estourou {w}: {l:?}");
+            }
+            // Linhas, de baixo pra cima: legenda, labels X, eixo X, plot...
+            let xl = &text[text.len() - 2];
+            let has_weekday = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+                .iter()
+                .any(|d| xl.contains(d));
+            assert!(has_weekday, "largura {w}: eixo X sem label de dia: {xl:?}");
         }
     }
 }

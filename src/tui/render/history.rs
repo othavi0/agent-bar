@@ -31,7 +31,7 @@ use crate::tui::render::shared::{abbrev_tokens, series_now};
 use crate::tui::state::{AppState, HistoryRange};
 use crate::tui::theme_bridge::{hex_to_color, provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
-use crate::tui::widgets::column_chart::{column_chart_lines, fmt_tokens_short};
+use crate::tui::widgets::column_chart::{self, column_chart_lines_bucketed, fmt_tokens_short};
 use crate::usage::amp::AmpDollars;
 use crate::usage::buckets::{
     bucket_by_hour, bucket_by_model_hour, sessions_by_day, DaySessions, ModelHourSeries,
@@ -149,20 +149,49 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
     let records: &[UsageRecord] = state.history.as_deref().unwrap_or(&[]);
     let amp_dollars = amp_dollars_of(state);
 
-    let title = match state.history_range {
-        HistoryRange::Day => " Hist\u{f3}rico (24h) ",
-        HistoryRange::Week => " Hist\u{f3}rico (7 dias) ",
-    };
     let mut block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
-        .title(Span::styled(
-            title,
-            Style::default()
-                .fg(to_ratatui(ColorToken::TextBright))
-                .add_modifier(Modifier::BOLD),
-        ));
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)));
+
+    // `inner.width` decide o plano do chart (downsampling horizontal da
+    // semana, `week_chart_plan`) ANTES do título — o título tem que refletir
+    // a janela REAL que o chart desenha (achado Critical: "(7 dias)" no
+    // título enquanto o chart só cobria o que coubesse na largura, com a
+    // legenda contradizendo o rodapé). `.inner()` só depende das bordas, não
+    // do título, então dá pra consultar aqui e anexar o `Span` do título
+    // depois, sem duplicar a conta de bordas.
+    let inner = block.inner(area);
+    let (chart_hours, bucket_hours) = match state.history_range {
+        HistoryRange::Day => (24usize, 1usize),
+        HistoryRange::Week => {
+            let avail = (inner.width as usize)
+                .saturating_sub(column_chart::Y_AXIS_W)
+                .max(1);
+            match week_chart_plan(avail) {
+                Some(n) => (24 * 7, n),
+                // Último recurso: nem N=24 (7 colunas de 24h) cabe — terminal
+                // absurdamente estreito. Mesmo clamp horário de antes
+                // (bucket_hours=1, ver `render_top_chart`), mas o título
+                // abaixo não pode mais afirmar "7 dias" se a janela real
+                // encolheu.
+                None => (avail.min(24 * 7), 1),
+            }
+        }
+    };
+    let title = match state.history_range {
+        HistoryRange::Day => " Hist\u{f3}rico (24h) ".to_string(),
+        HistoryRange::Week if chart_hours < 24 * 7 => {
+            format!(" Hist\u{f3}rico (\u{fa}ltimas {chart_hours}h) ")
+        }
+        HistoryRange::Week => " Hist\u{f3}rico (7 dias) ".to_string(),
+    };
+    block = block.title(Span::styled(
+        title,
+        Style::default()
+            .fg(to_ratatui(ColorToken::TextBright))
+            .add_modifier(Modifier::BOLD),
+    ));
 
     // Sessões por dia (T5) — fonte única da lista E do rodapé "7 DIAS".
     // Computada mesmo com `loading=true` seria sempre vazia (records vazio),
@@ -177,7 +206,6 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         block = block.title_bottom(footer_line(&days));
     }
 
-    let inner = block.inner(area);
     frame.render_widget(block, area);
 
     // Skeleton com spinner enquanto o parse está em voo. NUNCA branco.
@@ -208,11 +236,6 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         }
     };
 
-    let hours = match state.history_range {
-        HistoryRange::Day => 24,
-        HistoryRange::Week => 24 * 7,
-    };
-
     let today_local = now.to_offset(state.local_offset).date();
 
     let mut list_lines = day_list_lines(
@@ -234,7 +257,15 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
     ])
     .split(inner);
 
-    render_top_chart(frame, vert[0], records, now, hours, state.local_offset);
+    render_top_chart(
+        frame,
+        vert[0],
+        records,
+        now,
+        chart_hours,
+        bucket_hours,
+        state.local_offset,
+    );
     render_day_list(frame, vert[1], list_lines, state.scroll);
     render_footer_chips(frame, vert[2], hits);
 }
@@ -270,49 +301,69 @@ fn footer_line(days: &[DaySessions]) -> Line<'static> {
 // Chart novo (topo) — column_chart (T8)
 // ---------------------------------------------------------------------------
 
-/// Reserva de colunas do eixo Y do `column_chart` (espelha
-/// `column_chart::Y_AXIS_W` — `"999M ┤"` = 6 — que não é `pub`, então não dá
-/// pra importar direto). Usada só pro clamp de `hours` abaixo; se
-/// `column_chart.rs` mudar essa largura, este valor precisa acompanhar.
-const CHART_Y_AXIS_RESERVE: usize = 6;
+/// Escolhe o fator de agregação horária (`bucket_hours`) do range Week: o
+/// menor N em `{1,2,3,4,6,8,12,24}` cujas `ceil(168/N)` colunas cabem em
+/// `avail` (largura do chart já sem a reserva do eixo Y,
+/// `column_chart::Y_AXIS_W` — calculada por quem chama). `None` = nem N=24
+/// (7 colunas de 24h) cabe — terminal absurdamente estreito; quem chama cai
+/// no último recurso (clamp horário antigo + título honesto, ver
+/// `render_history`).
+fn week_chart_plan(avail: usize) -> Option<usize> {
+    const CANDIDATES: [usize; 8] = [1, 2, 3, 4, 6, 8, 12, 24];
+    CANDIDATES
+        .into_iter()
+        .find(|&n| (24 * 7usize).div_ceil(n) <= avail)
+}
 
-/// Chart do topo da aba History: `column_chart_lines` (T8) com séries
-/// tokens/hora concatenadas de TODOS os providers presentes em `records`
-/// (não uma lista fixa como `CHART_PROVIDERS` — generaliza pra qualquer
-/// provider que gere `UsageRecord` no futuro). Estado vazio (nenhum
-/// provider com dado) é resolvido pelo próprio `column_chart_lines`.
+/// Chart do topo da aba History: `column_chart_lines_bucketed` (T8 + fix de
+/// downsampling da semana) com séries tokens/hora concatenadas de TODOS os
+/// providers presentes em `records` (não uma lista fixa como
+/// `CHART_PROVIDERS` — generaliza pra qualquer provider que gere
+/// `UsageRecord` no futuro). Estado vazio (nenhum provider com dado) é
+/// resolvido pelo próprio `column_chart_lines_bucketed`.
 ///
-/// `column_chart_lines` não faz downsampling horizontal: 1 bucket sempre
-/// vira ≥1 coluna. Com mais buckets do que colunas disponíveis (168h do
-/// range Week estoura qualquer terminal com menos de ~174 colunas), o
-/// `Paragraph` TRUNCA a linha à direita — cortando exatamente os dados mais
-/// RECENTES (buckets vêm ordenados do mais antigo pro mais novo). Como a
-/// janela de `bucket_by_model_hour` sempre TERMINA em `now`, encurtar
-/// `hours` aqui só encurta o INÍCIO (passado mais distante) — "agora" nunca
-/// é cortado; o quanto o chart mostra pra trás só degrada graciosamente em
-/// terminais estreitos, em vez de sumir com a atividade recente inteira.
+/// `hours`/`bucket_hours` já vêm decididos por `render_history`
+/// (`week_chart_plan` pro range Week; Day sempre `(24, 1)`) — aqui só
+/// reclampa em resolução horária (`bucket_hours == 1`, tanto Day quanto o
+/// último recurso do Week): sem downsampling, 1 hora sempre vira ≥1 coluna,
+/// e pedir mais horas do que colunas disponíveis faria o `Paragraph`
+/// truncar a linha à direita, cortando os dados mais RECENTES (as séries
+/// vêm ordenadas do mais antigo pro mais novo). Com `bucket_hours > 1`, quem
+/// chamou já garantiu que as colunas agregadas cabem — não reclampa de novo.
 fn render_top_chart(
     frame: &mut Frame,
     area: Rect,
     records: &[UsageRecord],
     now: time::OffsetDateTime,
     hours: usize,
+    bucket_hours: usize,
     local_offset: time::UtcOffset,
 ) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    let max_hours = (area.width as usize)
-        .saturating_sub(CHART_Y_AXIS_RESERVE)
-        .max(1);
-    let hours = hours.min(max_hours);
+    let hours = if bucket_hours <= 1 {
+        let max_hours = (area.width as usize)
+            .saturating_sub(column_chart::Y_AXIS_W)
+            .max(1);
+        hours.min(max_hours)
+    } else {
+        hours
+    };
 
     let providers: BTreeSet<&str> = records.iter().map(|r| r.provider.as_str()).collect();
     let mut series: Vec<ModelHourSeries> = Vec::new();
     for provider in providers {
         series.extend(bucket_by_model_hour(records, provider, now, hours));
     }
-    let lines = column_chart_lines(&series, area.width, area.height, now, local_offset);
+    let lines = column_chart_lines_bucketed(
+        &series,
+        area.width,
+        area.height,
+        now,
+        local_offset,
+        bucket_hours,
+    );
     frame.render_widget(Paragraph::new(lines), area);
 }
 
