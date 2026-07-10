@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::providers::types::ProviderQuota;
 use crate::settings::{GlyphMode, Settings};
 use crate::usage::{UsageRecord, UsageSummary};
@@ -190,6 +192,15 @@ pub struct AppState {
     /// Janela temporal exibida no chart da aba History (T13). Default Week;
     /// alterna com Day via tecla `t`.
     pub history_range: HistoryRange,
+    /// Índice do dia selecionado na lista de dias expansível da aba History
+    /// (T20) — indexa `sessions_by_day(state.history, state.local_offset)`,
+    /// desc (0 = dia mais recente). Navegado via `HistoryUp`/`HistoryDown`
+    /// (j/k/setas, escopado à tela History).
+    pub history_selected: usize,
+    /// Dias expandidos (mostrando as sessões individuais) na lista de dias
+    /// da aba History (T20). Chave = `DaySessions.date` (data LOCAL, mesmo
+    /// fuso de `sessions_by_day`). Toggle via `HistoryToggleDay` (Enter).
+    pub history_expanded: BTreeSet<time::Date>,
     /// Overlay de ajuda visivel (toggle via `?`, fecha com Esc ou `?`).
     pub show_help: bool,
     /// Ids de provider com fetch em voo (Task 5). Populado por `FetchStarted`,
@@ -255,6 +266,8 @@ impl AppState {
             login_status: None,
             history: None,
             history_range: HistoryRange::Week,
+            history_selected: 0,
+            history_expanded: BTreeSet::new(),
             show_help: false,
             fetch_pending: Vec::new(),
             pending_login: None,

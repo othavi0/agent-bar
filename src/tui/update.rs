@@ -79,12 +79,25 @@ fn key_to_action_with_state(key: KeyEvent, state: &AppState) -> Option<Action> {
         };
     }
 
-    // Tela History: 't' alterna o range do chart (24h/7d). Escopado à tela
-    // (não junto do match genérico abaixo) — 't' ainda não tem significado
-    // em Overview/Detail, então fica reservado em vez de virar global cedo
-    // demais (mesmo racional do `in_config_edit` acima).
-    if state.screen == Screen::History && key.code == KeyCode::Char('t') {
-        return Some(Action::ToggleHistoryRange);
+    // Tela History: navega a lista de dias (j/k/Enter) + alterna o range do
+    // chart (t) — mesmo racional da tela Login acima (h/g/w saltam direto
+    // pra outra tela; j/k/Enter aqui SUBSTITUEM a navegação genérica de
+    // sidebar/Detail, exatamente como LoginUp/LoginDown/LoginRequested
+    // substituem Down/Up/OpenDetail na tela Login).
+    if state.screen == Screen::History {
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(Action::HistoryDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(Action::HistoryUp),
+            KeyCode::Enter => Some(Action::HistoryToggleDay),
+            KeyCode::Char('t') => Some(Action::ToggleHistoryRange),
+            KeyCode::Char('r') => Some(Action::Refresh),
+            KeyCode::Esc => Some(Action::Back),
+            KeyCode::Char('h') => Some(Action::Activate(SidebarItem::History)),
+            KeyCode::Char('g') => Some(Action::Activate(SidebarItem::Login)),
+            KeyCode::Char('w') => Some(Action::Activate(SidebarItem::Waybar)),
+            KeyCode::Char('q') => Some(Action::Quit),
+            _ => None,
+        };
     }
 
     match key.code {
@@ -636,6 +649,39 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             vec![]
         }
 
+        Action::HistoryDown => {
+            // `sessions_by_day` é barato o bastante pra recomputar por tecla
+            // (7 dias de records — YAGNI cachear no state por ora). Clamp
+            // aqui, não no render: `history_selected` nunca aponta pra fora
+            // da lista real.
+            let n_days = state
+                .history
+                .as_deref()
+                .map(|r| crate::usage::buckets::sessions_by_day(r, state.local_offset).len())
+                .unwrap_or(0);
+            if n_days > 0 {
+                state.history_selected = (state.history_selected + 1).min(n_days - 1);
+            }
+            vec![]
+        }
+
+        Action::HistoryUp => {
+            state.history_selected = state.history_selected.saturating_sub(1);
+            vec![]
+        }
+
+        Action::HistoryToggleDay => {
+            if let Some(records) = state.history.as_deref() {
+                let days = crate::usage::buckets::sessions_by_day(records, state.local_offset);
+                if let Some(day) = days.get(state.history_selected) {
+                    if !state.history_expanded.remove(&day.date) {
+                        state.history_expanded.insert(day.date);
+                    }
+                }
+            }
+            vec![]
+        }
+
         Action::ToggleHelp => {
             state.show_help = !state.show_help;
             vec![]
@@ -721,6 +767,7 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
                 update(state, Action::Activate(SidebarItem::History))
             }
             MouseTarget::Chip(ChipKind::ToggleRange) => update(state, Action::ToggleHistoryRange),
+            MouseTarget::Chip(ChipKind::ExpandDay) => update(state, Action::HistoryToggleDay),
             // Chip "iniciar login" da tela Login: dispara a MESMA action que
             // o Enter dispara lá (Action::LoginRequested pro provider
             // selecionado) — nunca Activate(Login), que seria no-op (a
@@ -1751,6 +1798,149 @@ mod tests {
             HistoryRange::Week,
             "'t' fora da tela History nao deve alternar o range"
         );
+    }
+
+    // ---- Aba History: lista de dias expansível (Task 20) ----
+
+    /// `UsageRecord` com `session_id` — helper local (mirror de
+    /// `usage::buckets::tests::mrec`, mas com session_id, que os testes de
+    /// `update.rs` precisam pra exercitar `sessions_by_day` de verdade).
+    fn test_record(
+        provider: &str,
+        model: &str,
+        session_id: &str,
+        ts: &str,
+        tokens: u64,
+    ) -> crate::usage::UsageRecord {
+        let parsed =
+            time::OffsetDateTime::parse(ts, &time::format_description::well_known::Rfc3339)
+                .expect("timestamp de teste invalido");
+        crate::usage::UsageRecord {
+            provider: provider.to_string(),
+            model: Some(model.to_string()),
+            input: tokens,
+            output: 0,
+            cache_read: 0,
+            cache_write: 0,
+            ts: parsed,
+            session_id: Some(session_id.to_string()),
+            project: None,
+        }
+    }
+
+    #[test]
+    fn history_keys_select_and_toggle_days() {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.history = Some(vec![
+            test_record("claude", "claude-fable-5", "s1", "2026-07-10T10:00:00Z", 10),
+            test_record("claude", "claude-fable-5", "s2", "2026-07-09T10:00:00Z", 10),
+        ]);
+
+        // j/Down -> HistoryDown: avança do dia mais recente (índice 0) pro
+        // segundo (índice 1).
+        update(&mut state, Action::Key(key_event(KeyCode::Char('j'))));
+        assert_eq!(
+            state.history_selected, 1,
+            "'j' deve mapear para HistoryDown"
+        );
+
+        // k/Up -> HistoryUp: volta pro índice 0.
+        update(&mut state, Action::Key(key_event(KeyCode::Char('k'))));
+        assert_eq!(state.history_selected, 0, "'k' deve mapear para HistoryUp");
+
+        // Enter -> HistoryToggleDay: expande o dia selecionado.
+        update(&mut state, Action::Key(key_event(KeyCode::Enter)));
+        assert_eq!(
+            state.history_expanded.len(),
+            1,
+            "Enter deve mapear para HistoryToggleDay"
+        );
+    }
+
+    #[test]
+    fn history_toggle_day_flips_expanded_set() {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        // 2 dias de records → sessions_by_day produz 2 dias.
+        state.history = Some(vec![
+            test_record("claude", "claude-fable-5", "s1", "2026-07-10T10:00:00Z", 10),
+            test_record("claude", "claude-fable-5", "s2", "2026-07-09T10:00:00Z", 10),
+        ]);
+        state.history_selected = 0;
+        update(&mut state, Action::HistoryToggleDay);
+        assert_eq!(state.history_expanded.len(), 1);
+        update(&mut state, Action::HistoryToggleDay);
+        assert!(state.history_expanded.is_empty());
+    }
+
+    #[test]
+    fn history_down_clamps_at_last_day() {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.history = Some(vec![test_record(
+            "claude",
+            "claude-fable-5",
+            "s1",
+            "2026-07-10T10:00:00Z",
+            10,
+        )]);
+        // Só 1 dia: HistoryDown não pode avançar além do índice 0.
+        update(&mut state, Action::HistoryDown);
+        assert_eq!(state.history_selected, 0);
+    }
+
+    #[test]
+    fn history_up_saturates_at_zero() {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.history_selected = 0;
+        update(&mut state, Action::HistoryUp);
+        assert_eq!(state.history_selected, 0);
+    }
+
+    #[test]
+    fn click_expand_day_chip_fires_toggle() {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        state.history = Some(vec![test_record(
+            "claude",
+            "claude-fable-5",
+            "s1",
+            "2026-07-10T10:00:00Z",
+            10,
+        )]);
+        update(
+            &mut state,
+            Action::Click(MouseTarget::Chip(ChipKind::ExpandDay)),
+        );
+        assert_eq!(state.history_expanded.len(), 1);
+    }
+
+    #[test]
+    fn history_screen_keeps_other_key_bindings() {
+        // Regressão: a tela History ganhou um braço de match dedicado (j/k/
+        // Enter) — as demais teclas (t/r/Esc/h/g/w/q) não podem se perder
+        // no meio da reescrita (contrato do brief: "mantém t/r/Esc/h/g/w/q/?").
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+
+        let fu = update(&mut state, Action::Key(key_event(KeyCode::Char('r'))));
+        assert!(
+            matches!(fu.as_slice(), [Action::Refresh]),
+            "'r' deve continuar disparando Refresh"
+        );
+
+        update(&mut state, Action::Key(key_event(KeyCode::Esc)));
+        assert_eq!(
+            state.screen,
+            Screen::Overview,
+            "Esc deve continuar voltando pro Overview"
+        );
+
+        state.screen = Screen::History;
+        update(&mut state, Action::Key(key_event(KeyCode::Char('q'))));
+        assert!(state.should_quit, "'q' deve continuar saindo");
     }
 
     #[test]

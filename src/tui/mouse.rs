@@ -14,6 +14,9 @@ pub enum ChipKind {
     History,
     /// Alterna o range do chart da aba History (24h/7d) — tecla `t` (T13).
     ToggleRange,
+    /// Expande/colapsa o dia selecionado na lista de dias da aba History —
+    /// tecla Enter (T20).
+    ExpandDay,
     /// Inicia o login do provider SELECIONADO na tela Login — tecla Enter
     /// (T14). Distinto de `ChipKind::Login` (que navega PARA a tela Login
     /// a partir de outra tela, ex. chip do Detail): reusar `Login` aqui

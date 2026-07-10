@@ -64,6 +64,16 @@ pub enum Action {
     HistoryLoaded(Vec<UsageRecord>),
     /// Alterna o range do chart (24h/7d) — tecla `t` na tela History.
     ToggleHistoryRange,
+    /// Move a seleção pra baixo na lista de dias da aba History (tecla
+    /// `j`/`Down`, escopada à tela). Clamp em `update` (não mutar `state`
+    /// direto no dispatcher).
+    HistoryDown,
+    /// Move a seleção pra cima na lista de dias da aba History (tecla
+    /// `k`/`Up`).
+    HistoryUp,
+    /// Expande/colapsa o dia selecionado na lista de dias da aba History
+    /// (tecla Enter) — toggle em `AppState.history_expanded`.
+    HistoryToggleDay,
     // --- Aba Login ---
     /// Navega para cima na lista de providers da aba Login.
     LoginUp,
