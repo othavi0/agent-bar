@@ -34,6 +34,12 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
             None => continue,
         };
         let u = |k: &str| usage.get(k).and_then(Value::as_u64).unwrap_or(0);
+        let project = v
+            .get("cwd")
+            .and_then(Value::as_str)
+            .and_then(|c| std::path::Path::new(c).file_name())
+            .and_then(|b| b.to_str())
+            .map(str::to_string);
         out.push(UsageRecord {
             provider: "claude".to_string(),
             model: msg
@@ -45,6 +51,8 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
             cache_read: u("cache_read_input_tokens"),
             cache_write: u("cache_creation_input_tokens"),
             ts,
+            session_id: None,
+            project,
         });
     }
     out
@@ -88,5 +96,18 @@ mod tests {
         let recs = parse_claude_lines([line].into_iter());
         assert_eq!(recs[0].cache_read, 0);
         assert_eq!(recs[0].cache_write, 0);
+    }
+
+    #[test]
+    fn extracts_project_from_cwd() {
+        let line = r#"{"type":"assistant","timestamp":"2026-07-10T10:00:00Z","cwd":"/home/o/Projects/agent-bar","message":{"model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":1}}}"#;
+        let recs = parse_claude_lines([line].into_iter());
+        assert_eq!(recs[0].project.as_deref(), Some("agent-bar"));
+    }
+
+    #[test]
+    fn missing_cwd_yields_none_project() {
+        let recs = parse_claude_lines([LINE].into_iter());
+        assert_eq!(recs[0].project, None);
     }
 }

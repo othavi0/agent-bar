@@ -52,6 +52,8 @@ pub fn parse_codex_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<UsageR
                     cache_read: u("cached_input_tokens"),
                     cache_write: 0,
                     ts,
+                    session_id: None,
+                    project: None,
                 });
             }
             _ => {}

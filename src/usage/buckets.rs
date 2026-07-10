@@ -184,6 +184,8 @@ mod tests {
             cache_read: 0,
             cache_write: 0,
             ts,
+            session_id: None,
+            project: None,
         }
     }
 
@@ -252,6 +254,8 @@ mod day_bucket_tests {
             cache_read: 0,
             cache_write: 0,
             ts,
+            session_id: None,
+            project: None,
         }
     }
 

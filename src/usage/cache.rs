@@ -85,6 +85,8 @@ mod tests {
             cache_read: 0,
             cache_write: 0,
             ts: datetime!(2026-06-19 12:00 UTC),
+            session_id: None,
+            project: None,
         }
     }
 

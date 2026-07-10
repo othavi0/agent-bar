@@ -163,6 +163,8 @@ mod tests {
             cache_read: cr,
             cache_write: cw,
             ts: datetime!(2026-06-19 12:00 UTC),
+            session_id: None,
+            project: None,
         }
     }
 
