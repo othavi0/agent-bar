@@ -1463,6 +1463,15 @@ mod tests {
         }
     }
 
+    /// Indice de `ConfigField::FxRate` em `ConfigField::ALL` — busca por
+    /// variante, nao por posicao fixa (Task 14 moveu FxRate pro fim).
+    fn fx_rate_index() -> usize {
+        ConfigField::ALL
+            .iter()
+            .position(|f| *f == ConfigField::FxRate)
+            .expect("FxRate deve estar em ConfigField::ALL")
+    }
+
     #[test]
     fn init_config_creates_config_state() {
         let mut state = AppState::new();
@@ -1517,8 +1526,9 @@ mod tests {
         let mut state = AppState::new();
         update(&mut state, Action::InitConfig(fake_settings()));
 
-        // Seleciona o campo FxRate (index 4)
-        state.config_state.as_mut().unwrap().selected_field = 4;
+        // Seleciona o campo FxRate (por variante, nao por posicao — a ordem
+        // de ConfigField::ALL mudou na Task 14).
+        state.config_state.as_mut().unwrap().selected_field = fx_rate_index();
         update(&mut state, Action::ConfigEnterEdit);
 
         let cs = state.config_state.as_ref().unwrap();
@@ -1530,7 +1540,7 @@ mod tests {
     fn config_confirm_edit_updates_fx_rate() {
         let mut state = AppState::new();
         update(&mut state, Action::InitConfig(fake_settings()));
-        state.config_state.as_mut().unwrap().selected_field = 4; // FxRate
+        state.config_state.as_mut().unwrap().selected_field = fx_rate_index(); // FxRate
         update(&mut state, Action::ConfigEnterEdit);
 
         // Simula o usuario digitando "6.25" no buffer
@@ -1551,7 +1561,7 @@ mod tests {
     fn config_confirm_edit_invalid_fx_rate_keeps_editing() {
         let mut state = AppState::new();
         update(&mut state, Action::InitConfig(fake_settings()));
-        state.config_state.as_mut().unwrap().selected_field = 4; // FxRate
+        state.config_state.as_mut().unwrap().selected_field = fx_rate_index(); // FxRate
         update(&mut state, Action::ConfigEnterEdit);
         state.config_state.as_mut().unwrap().input = tui_input::Input::new("negativo".to_string());
         update(&mut state, Action::ConfigConfirmEdit);
@@ -1574,7 +1584,7 @@ mod tests {
     fn config_cancel_edit_clears_editing() {
         let mut state = AppState::new();
         update(&mut state, Action::InitConfig(fake_settings()));
-        state.config_state.as_mut().unwrap().selected_field = 4; // FxRate
+        state.config_state.as_mut().unwrap().selected_field = fx_rate_index(); // FxRate
         update(&mut state, Action::ConfigEnterEdit);
         assert!(state.config_state.as_ref().unwrap().editing);
 

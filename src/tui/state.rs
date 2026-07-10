@@ -76,15 +76,19 @@ pub fn sidebar_items(n_providers: usize) -> Vec<SidebarItem> {
 }
 
 /// Campo da aba Waybar config (ordem de exibicao = ordem dos enum variants).
+/// FxRate fica por ultimo (Task 14): as secoes WAYBAR (Providers..Interval)
+/// e TUI (FxRate — afeta so este menu, nao o Waybar) ficam contiguas no
+/// render. So ordem de display/navegacao (j/k); nenhuma persistencia
+/// depende dela.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigField {
     Providers,
     ProviderOrder,
     Separators,
     DisplayMode,
-    FxRate,
     Signal,
     Interval,
+    FxRate,
 }
 
 impl ConfigField {
@@ -93,9 +97,9 @@ impl ConfigField {
         ConfigField::ProviderOrder,
         ConfigField::Separators,
         ConfigField::DisplayMode,
-        ConfigField::FxRate,
         ConfigField::Signal,
         ConfigField::Interval,
+        ConfigField::FxRate,
     ];
 
     pub fn label(self) -> &'static str {

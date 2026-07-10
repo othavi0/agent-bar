@@ -60,7 +60,7 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
         }
         SidebarItem::History => Line::from("   Histórico".to_string()),
         SidebarItem::Login => Line::from("   Login".to_string()),
-        SidebarItem::Waybar => Line::from("   Waybar".to_string()),
+        SidebarItem::Waybar => Line::from("   Config".to_string()),
     }
 }
 

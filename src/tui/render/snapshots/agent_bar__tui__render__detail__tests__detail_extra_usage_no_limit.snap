@@ -1,6 +1,6 @@
 ---
 source: src/tui/render/detail.rs
-assertion_line: 1424
+assertion_line: 1425
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
@@ -11,7 +11,7 @@ expression: terminal.backend()
 "│ MAIS            ┃ Fable        ████████████████████████████████████████████████▌░   97%  → 22:59┃│"
 "│   Histórico     ┃ TOKENS/HORA · 24H                                                    escala √ ┃│"
 "│   Login         ┃ coletando histórico…                                                          ┃│"
-"│   Waybar        ┃                                                                               ┃│"
+"│   Config        ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"

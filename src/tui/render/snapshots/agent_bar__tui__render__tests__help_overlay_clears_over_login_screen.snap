@@ -8,7 +8,7 @@ expression: terminal.backend()
 "│ MAIS            ┃ > ◆ Claude ✗ deslogado     ┃┃ Claude                                          ┃│"
 "│   Histórico     ┃   ● Codex  ✗ deslogado     ┃┃                                                 ┃│"
 "│   Login         ┃   ● Amp    ✗ deslogado     ┃┃ Abre a REPL do Claude. Digite /login e siga as i┃│"
-"│   Waybar        ┃                            ┃┃                                                 ┃│"
+"│   Config        ┃                            ┃┃                                                 ┃│"
 "│                 ┃                            ┃┃                                                 ┃│"
 "│                 ┃                            ┃┃                                                 ┃│"
 "│                 ┃                            ┃┃                                                 ┃│"

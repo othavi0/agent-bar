@@ -4,12 +4,12 @@ assertion_line: 453
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
-"│                 ╭ Config do Waybar ╮╭ providers  ───────────────────────────────────────────────╮│"
-"│ MAIS            │ > providers      ││ claude, codex                                             ││"
-"│   Histórico     │   providerOrder  │╰───────────────────────────────────────────────────────────╯│"
-"│   Login         │   separators     │╭───────────────────────────────────────────────────────────╮│"
-"│   Waybar        │   displayMode    ││ IDs separados por vírgula. Ex: claude, codex, amp         ││"
-"│                 │   fxRate         ││                                                           ││"
+"│                 ╭ Config ──────────╮╭ providers  ───────────────────────────────────────────────╮│"
+"│ MAIS            │ WAYBAR           ││ claude, codex                                             ││"
+"│   Histórico     │ > providers      │╰───────────────────────────────────────────────────────────╯│"
+"│   Login         │   providerOrder  │╭───────────────────────────────────────────────────────────╮│"
+"│   Config        │   separators     ││ IDs separados por vírgula. Ex: claude, codex, amp         ││"
+"│                 │   displayMode    ││                                                           ││"
 "│                 │   signal         ││                                                           ││"
 "│                 │   interval       ││                                                           ││"
 "│                 ╭ agent-bar — atalhos ────────────────────────────────────────╮                 ││"

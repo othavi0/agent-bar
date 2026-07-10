@@ -53,29 +53,48 @@ fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
 
     let normal_style = Style::default().fg(to_ratatui(ColorToken::Text));
 
-    let items: Vec<ListItem<'_>> = ConfigField::ALL
-        .iter()
-        .enumerate()
-        .map(|(i, field)| {
-            let style = if i == cs.selected_field {
-                selected_style
-            } else {
-                normal_style
-            };
-            let prefix = if i == cs.selected_field { " > " } else { "   " };
-            ListItem::new(Line::from(vec![Span::styled(
-                format!("{}{}", prefix, field.label()),
-                style,
-            )]))
-        })
-        .collect();
+    let section_style = Style::default()
+        .fg(to_ratatui(ColorToken::Comment))
+        .add_modifier(Modifier::BOLD);
+
+    // Cabecalhos de secao (T14): WAYBAR agrupa os campos que o Waybar le
+    // (Providers..Interval); TUI agrupa o que so afeta este menu (FxRate,
+    // por ora). Sao linhas de lista sem indice em ConfigField::ALL — o
+    // highlight de selecao compara `i` (indice do campo) com
+    // `cs.selected_field`, nunca a posicao visual na lista.
+    let mut items: Vec<ListItem<'_>> = Vec::new();
+    for (i, field) in ConfigField::ALL.iter().enumerate() {
+        if i == 0 {
+            items.push(ListItem::new(Line::from(Span::styled(
+                " WAYBAR",
+                section_style,
+            ))));
+        }
+        if *field == ConfigField::FxRate {
+            items.push(ListItem::new(Line::from(Span::styled(
+                " TUI · afeta só este menu",
+                section_style,
+            ))));
+        }
+
+        let style = if i == cs.selected_field {
+            selected_style
+        } else {
+            normal_style
+        };
+        let prefix = if i == cs.selected_field { " > " } else { "   " };
+        items.push(ListItem::new(Line::from(vec![Span::styled(
+            format!("{}{}", prefix, field.label()),
+            style,
+        )])));
+    }
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
         .title(Span::styled(
-            " Config do Waybar ",
+            " Config ",
             Style::default()
                 .fg(to_ratatui(ColorToken::TextBright))
                 .add_modifier(Modifier::BOLD),
@@ -226,7 +245,10 @@ fn field_hint(field: ConfigField) -> Option<&'static str> {
         ConfigField::Separators => Some("Estilo: pill / gap / bare / glass / shadow / none"),
         ConfigField::DisplayMode => Some("Modo: remaining (restante) / used (usado)"),
         ConfigField::FxRate => Some("Taxa US$/BRL para custo em R$. Ex: 5.75"),
-        ConfigField::Signal => Some("Sinal RTsigmin 1-30 para refresh (ou none)"),
+        ConfigField::Signal => Some(
+            "sinal para refresh externo (pkill -SIGRTMIN+<n> waybar); \
+             o agent-bar não o dispara sozinho",
+        ),
         ConfigField::Interval => Some("Intervalo de poll em segundos. Ex: 60"),
     }
 }
@@ -308,7 +330,12 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = state_on_waybar();
         if let Some(cs) = state.config_state.as_mut() {
-            cs.selected_field = 4; // FxRate
+            // Busca por variante, nao por posicao fixa (Task 14 moveu FxRate
+            // pro fim de ConfigField::ALL).
+            cs.selected_field = ConfigField::ALL
+                .iter()
+                .position(|f| *f == ConfigField::FxRate)
+                .expect("FxRate deve estar em ConfigField::ALL");
             cs.editing = true;
             cs.input = tui_input::Input::new("6.25".to_string());
         }
@@ -330,5 +357,53 @@ mod tests {
             .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// Achata um `Buffer` renderizado em texto puro, uma linha por row
+    /// (trailing spaces cortados) — usado pra checar conteúdo textual sem
+    /// depender do snapshot Pango-sensível.
+    fn buffer_to_string(buf: &ratatui::buffer::Buffer) -> String {
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| {
+                        buf.cell((x, y))
+                            .map(|c| c.symbol())
+                            .unwrap_or(" ")
+                            .to_string()
+                    })
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn config_renders_waybar_and_tui_sections() {
+        // Largura generosa pra o hint do signal caber inteiro na coluna de
+        // detalhe (a lista de campos fica em Length(20) fixo).
+        let backend = ratatui::backend::TestBackend::new(140, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = state_on_waybar();
+        if let Some(cs) = state.config_state.as_mut() {
+            // Seleciona o campo Signal pra expor o hint na área de ajuda.
+            cs.selected_field = ConfigField::ALL
+                .iter()
+                .position(|f| *f == ConfigField::Signal)
+                .expect("Signal deve estar em ConfigField::ALL");
+        }
+        terminal
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        let text = buffer_to_string(terminal.backend().buffer());
+
+        assert!(text.contains("WAYBAR"), "seção WAYBAR ausente:\n{text}");
+        assert!(text.contains("TUI"), "seção TUI ausente:\n{text}");
+        assert!(
+            text.contains("refresh externo") && text.contains("agent-bar não"),
+            "hint do signal ausente:\n{text}"
+        );
     }
 }

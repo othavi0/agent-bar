@@ -1,18 +1,18 @@
 ---
 source: src/tui/render/config.rs
-assertion_line: 332
+assertion_line: 359
 expression: terminal.backend()
 ---
-"╭ Config do Waybar ╮╭ providers  ──────────────────────────────╮"
-"│ > providers      ││ claude, codex                            │"
-"│   providerOrder  │╰──────────────────────────────────────────╯"
-"│   separators     │╭──────────────────────────────────────────╮"
-"│   displayMode    ││ IDs separados por vírgula. Ex: claude, co│"
-"│   fxRate         ││                                          │"
+"╭ Config ──────────╮╭ providers  ──────────────────────────────╮"
+"│ WAYBAR           ││ claude, codex                            │"
+"│ > providers      │╰──────────────────────────────────────────╯"
+"│   providerOrder  │╭──────────────────────────────────────────╮"
+"│   separators     ││ IDs separados por vírgula. Ex: claude, co│"
+"│   displayMode    ││                                          │"
 "│   signal         ││ Configuração salva e Waybar recarregado. │"
 "│   interval       ││                                          │"
-"│                  ││                                          │"
-"│                  ││                                          │"
+"│ TUI · afeta só es││                                          │"
+"│   fxRate         ││                                          │"
 "│                  ││                                          │"
 "│                  ││                                          │"
 "│                  ││                                          │"
