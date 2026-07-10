@@ -579,15 +579,18 @@ async fn main() {
         std::process::exit(0);
     }
 
-    // 6b. ActionRight.
+    // 6b. ActionRight → resolve foco e abre a TUI focada.
     if matches!(opts.command, Command::ActionRight) {
-        agent_bar::action_right::handle_action_right(
-            opts.provider.as_deref().unwrap_or(""),
-            &ctx,
-            &clock,
-            no_color,
-        )
-        .await;
+        let provider = opts.provider.as_deref().unwrap_or("");
+        match agent_bar::action_right::action_right_focus(provider, &ctx).await {
+            Some(focus) => {
+                if let Err(e) = tui::run_tui(&ctx, Some(focus)).await {
+                    log::error!("TUI encerrou com erro: {e}");
+                    std::process::exit(1);
+                }
+            }
+            None => std::process::exit(1),
+        }
         std::process::exit(0);
     }
 

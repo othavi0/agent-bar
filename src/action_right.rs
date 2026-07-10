@@ -1,22 +1,17 @@
 //! Handler do right-click do Waybar (`agent-bar action-right <provider>`).
-//! Port fiel de `src/action-right.ts:28-90`.
 //!
-//! Roteamento:
-//! - Provider indisponível ou desconectado → **login stub** (TUI não portado no Plano 5).
-//! - Conectado → invalida cache, busca quota fresca e imprime view terminal.
+//! Roteamento (Task 12): resolve o foco inicial da TUI a partir do estado do
+//! provider e devolve pro caller abrir `tui::run_tui` já focada — sem login
+//! stub nem view terminal (essa era a UX pré-TUI do Plano 5).
 //!
 //! `looks_disconnected` espelha as 2 regexes de action-right.ts:52-56 (case-insensitive).
 
-use std::io::BufRead as _;
 use std::sync::OnceLock;
 
 use regex::Regex;
 
 use crate::app_identity::APP_NAME;
-use crate::formatters::clock::Clock;
-use crate::formatters::terminal::format_for_terminal;
-use crate::providers::types::AllQuotas;
-use crate::providers::{get_provider, get_quota_for, iso_from_ms, Ctx};
+use crate::providers::{get_provider, Ctx};
 
 // ---- Detecção de desconexão ----------------------------------------
 
@@ -60,93 +55,45 @@ pub fn looks_disconnected(provider_id: &str, error: Option<&str>) -> bool {
     base_match || codex_match
 }
 
-// ---- Utilitários -------------------------------------------------------
+// ---- Roteamento de foco -------------------------------------------------
 
-/// Lê uma linha de stdin (bloqueante). Mantém o popup do Waybar aberto até
-/// o usuário pressionar Enter — espelha `waitEnter` do TS.
-fn wait_enter() {
-    let stdin = std::io::stdin();
-    let mut line = String::new();
-    let _ = stdin.lock().read_line(&mut line);
-}
-
-/// Lanca o login interativo para o provider, sem TUI ativa (contexto right-click).
-/// Usa `launch_login_no_tui` de `tui::login_spawn` para executar o CLI com
-/// stdio herdado. Em caso de erro, loga e aguarda Enter.
-fn login_stub(provider_id: &str) {
-    if let Err(e) = crate::tui::login_spawn::launch_login_no_tui(provider_id) {
-        log::error!("Falha no login de '{}': {}", provider_id, e);
+/// Decisão pura de foco a partir do estado do provider (testável sem IO).
+pub fn focus_for(
+    provider_id: &str,
+    available: bool,
+    quota_error: Option<&str>,
+) -> crate::tui::InitialFocus {
+    if !available || looks_disconnected(provider_id, quota_error) {
+        crate::tui::InitialFocus::Login(provider_id.to_string())
+    } else {
+        crate::tui::InitialFocus::Provider(provider_id.to_string())
     }
-    wait_enter();
 }
 
-// ---- Handler principal -------------------------------------------------
-
-/// Handler do right-click do Waybar. Espelha `handleActionRight` do TS.
-///
-/// Fluxo:
-/// 1. `provider_id` vazio → erro + exit(1).
-/// 2. Provider desconhecido → erro + wait_enter + return.
-/// 3. Provider indisponível → login stub + return.
-/// 4. Quota indica desconexão → login stub + return.
-/// 5. Conectado → refresh + imprime view terminal + wait_enter.
-pub async fn handle_action_right(provider_id: &str, ctx: &Ctx<'_>, clock: &Clock, no_color: bool) {
-    // 1. Argumento vazio.
+/// Resolve o foco inicial da TUI pro right-click. `None` = provider inválido
+/// (argumento vazio ou desconhecido; erro já logado).
+pub async fn action_right_focus(
+    provider_id: &str,
+    ctx: &Ctx<'_>,
+) -> Option<crate::tui::InitialFocus> {
     if provider_id.is_empty() {
         log::error!("Usage: {APP_NAME} action-right <provider>");
-        std::process::exit(1);
+        return None;
     }
-
-    // 2. Provider desconhecido.
     let provider = match get_provider(provider_id) {
         Some(p) => p,
         None => {
             log::error!("Unknown provider: {provider_id}");
-            wait_enter();
-            return;
+            return None;
         }
     };
-
-    // 3. Provider indisponível (sem credenciais ou binário ausente).
     let available = provider.is_available(ctx).await;
-    if !available {
-        login_stub(provider_id);
-        return;
-    }
-
-    // 4. Quota indica desconexão (token expirado, sessão inválida, etc.).
-    let quota = provider.get_quota(ctx).await;
-    if looks_disconnected(provider_id, quota.error.as_deref()) {
-        login_stub(provider_id);
-        return;
-    }
-
-    // 5. Conectado: força refresh ignorando TTL e imprime view terminal.
-    crate::cache::invalidate(&ctx.paths.cache_dir, provider.cache_key());
-
-    match get_quota_for(provider_id, ctx).await {
-        Some(fresh) => {
-            let quotas = AllQuotas {
-                providers: vec![fresh],
-                fetched_at: iso_from_ms(ctx.now_ms),
-            };
-            println!(
-                "{}",
-                format_for_terminal(
-                    clock,
-                    &quotas,
-                    ctx.settings,
-                    ctx.settings.waybar.display_mode,
-                    no_color,
-                )
-            );
-        }
-        None => {
-            log::error!("Failed to fetch {} quota", provider.name());
-        }
-    }
-
-    wait_enter();
+    let error = if available {
+        provider.get_quota(ctx).await.error
+    } else {
+        None
+    };
+    Some(focus_for(provider_id, available, error.as_deref()))
 }
 
 // ---- Testes -----------------------------------------------------------
@@ -198,5 +145,31 @@ mod tests {
     fn empty_error_is_not_disconnected() {
         // string vazia é falsy no TS (!!quota.error === false).
         assert!(!looks_disconnected("claude", Some("")));
+    }
+
+    // --- focus_for ---
+
+    #[test]
+    fn focus_routes_disconnected_to_login() {
+        match focus_for("claude", true, Some("Token expired")) {
+            crate::tui::InitialFocus::Login(id) => assert_eq!(id, "claude"),
+            other => panic!("esperava Login, veio {other:?}"),
+        }
+    }
+
+    #[test]
+    fn focus_routes_connected_to_provider_detail() {
+        match focus_for("claude", true, None) {
+            crate::tui::InitialFocus::Provider(id) => assert_eq!(id, "claude"),
+            other => panic!("esperava Provider, veio {other:?}"),
+        }
+    }
+
+    #[test]
+    fn focus_routes_unavailable_to_login() {
+        assert!(matches!(
+            focus_for("amp", false, None),
+            crate::tui::InitialFocus::Login(_)
+        ));
     }
 }
