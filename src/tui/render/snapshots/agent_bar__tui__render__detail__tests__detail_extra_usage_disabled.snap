@@ -1,5 +1,6 @@
 ---
 source: src/tui/render/detail.rs
+assertion_line: 1258
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
@@ -8,11 +9,11 @@ expression: terminal.backend()
 "│                 ┃ semana       ████████████████████████████████████████████████▌░   97%  → 22:59┃│"
 "│ PROVIDERS       ┃ Opus         ██████████████████████████████░░░░░░░░░░░░░░░░░░░░   60%  → -    ┃│"
 "│ ◆ Claude  89%   ┃ Fable        ████████████████████████████████████████████████▌░   97%  → 22:59┃│"
-"│                 ┃                                                                               ┃│"
-"│ MAIS            ┃ tokens/h  coletando histórico…                                                ┃│"
-"│   Histórico     ┃ extra usage  desativado                                                       ┃│"
+"│                 ┃ TOKENS/HORA · 24H                                                    escala √ ┃│"
+"│ MAIS            ┃ coletando histórico…                                                          ┃│"
+"│   Histórico     ┃                                                                               ┃│"
 "│   Login         ┃                                                                               ┃│"
-"│   Waybar        ┃ hoje coletando…    7 dias coletando…                                          ┃│"
+"│   Waybar        ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
@@ -29,8 +30,8 @@ expression: terminal.backend()
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
-"│                 ┃                                                                               ┃│"
-"│                 ┃                                                                               ┃│"
+"│                 ┃ extra usage  desativado                                                       ┃│"
+"│                 ┃ hoje coletando…    7 dias coletando…                                          ┃│"
 "│                 ┃            esc voltar     r atualizar     g login     h histórico             ┃│"
 "│                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│"
 "╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"

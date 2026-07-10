@@ -1,5 +1,6 @@
 ---
 source: src/tui/render/detail.rs
+assertion_line: 1181
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────$2.10 · 02:00 ╮"
@@ -7,10 +8,10 @@ expression: terminal.backend()
 "│ ▸ Geral         ┃ sessão       ███████████████████████████████████░░░░░░░░░░░░░░░   70%  → -    ┃│"
 "│                 ┃ Free Tier    ███████████████████████████████████░░░░░░░░░░░░░░░   70%  → -    ┃│"
 "│ PROVIDERS       ┃ Credits      ██████████████████████████████████████████████████  100%  → -    ┃│"
-"│ ● Amp     70%   ┃                                                                               ┃│"
-"│                 ┃ tokens/h  sem uso nas últimas 24h                                             ┃│"
+"│ ● Amp     70%   ┃ TOKENS/HORA · 24H                                                    escala √ ┃│"
+"│                 ┃ sem uso de tokens no período                                                  ┃│"
 "│ MAIS            ┃                                                                               ┃│"
-"│   Histórico     ┃ hoje 0 tok · cr $4.19    7 dias 0 tok · -                                     ┃│"
+"│   Histórico     ┃                                                                               ┃│"
 "│   Login         ┃                                                                               ┃│"
 "│   Waybar        ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
@@ -30,7 +31,7 @@ expression: terminal.backend()
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
-"│                 ┃                                                                               ┃│"
+"│                 ┃ hoje 0 tok · cr $4.19    7 dias 0 tok · -                                     ┃│"
 "│                 ┃            esc voltar     r atualizar     g login     h histórico             ┃│"
 "│                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│"
 "╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
