@@ -72,6 +72,11 @@ pub fn focus_for(
 
 /// Resolve o foco inicial da TUI pro right-click. `None` = provider inválido
 /// (argumento vazio ou desconhecido; erro já logado).
+///
+/// Contrato: invalida o cache do provider ANTES de consultar
+/// `is_available`/`get_quota` (ver comentário no corpo) — a rota
+/// Login-vs-Detail sempre decide sobre dado fresco. Coberto por
+/// `tests::action_right_focus_invalidates_cache_before_routing`.
 pub async fn action_right_focus(
     provider_id: &str,
     ctx: &Ctx<'_>,
@@ -87,6 +92,11 @@ pub async fn action_right_focus(
             return None;
         }
     };
+    // Invalida o cache ANTES de decidir a rota: a decisão Login-vs-Detail
+    // não pode se basear em quota servida do cache (TTL de até 5min pro
+    // Claude) — um usuário que deslogou há pouco cairia em Detail com dado
+    // "conectado" obsoleto. Contrato do right-click (pré-v8 fazia o mesmo).
+    crate::cache::invalidate(&ctx.paths.cache_dir, provider.cache_key());
     let available = provider.is_available(ctx).await;
     let error = if available {
         provider.get_quota(ctx).await.error
@@ -101,6 +111,8 @@ pub async fn action_right_focus(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::test_support::{ctx_for, settings};
+    use tempfile::tempdir;
 
     // --- looks_disconnected ---
 
@@ -171,5 +183,38 @@ mod tests {
             focus_for("amp", false, None),
             crate::tui::InitialFocus::Login(_)
         ));
+    }
+
+    // --- action_right_focus (invalidate contract) ---
+
+    /// `action_right_focus` invalida o cache do provider ANTES de rotear —
+    /// mesmo que o resultado da rota nao mude, a entrada de cache preexistente
+    /// (potencialmente obsoleta) nunca deve sobreviver a chamada.
+    #[tokio::test]
+    async fn action_right_focus_invalidates_cache_before_routing() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+
+        // Semeia uma entrada de cache "conectado" como se fosse o estado
+        // anterior ao logout do usuario.
+        crate::cache::set(
+            &ctx.paths.cache_dir,
+            "claude-usage",
+            &serde_json::json!({"stale": true}),
+            300_000,
+            0,
+        )
+        .unwrap();
+        let cache_file = crate::cache::cache_path(&ctx.paths.cache_dir, "claude-usage").unwrap();
+        assert!(cache_file.exists(), "setup: cache deveria existir");
+
+        let _ = action_right_focus("claude", &ctx).await;
+
+        assert!(
+            !cache_file.exists(),
+            "action_right_focus deveria invalidar o cache antes de rotear"
+        );
     }
 }

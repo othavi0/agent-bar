@@ -244,12 +244,12 @@ fn field_hint(field: ConfigField) -> Option<&'static str> {
         ConfigField::ProviderOrder => Some("Ordem de exibição no Waybar. Ex: claude, codex"),
         ConfigField::Separators => Some("Estilo: pill / gap / bare / glass / shadow / none"),
         ConfigField::DisplayMode => Some("Modo: remaining (restante) / used (usado)"),
-        ConfigField::FxRate => Some("Taxa US$/BRL para custo em R$. Ex: 5.75"),
         ConfigField::Signal => Some(
             "sinal para refresh externo (pkill -SIGRTMIN+<n> waybar); \
              o agent-bar não o dispara sozinho",
         ),
         ConfigField::Interval => Some("Intervalo de poll em segundos. Ex: 60"),
+        ConfigField::FxRate => Some("Taxa US$/BRL para custo em R$. Ex: 5.75"),
     }
 }
 

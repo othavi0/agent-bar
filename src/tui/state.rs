@@ -108,9 +108,9 @@ impl ConfigField {
             ConfigField::ProviderOrder => "providerOrder",
             ConfigField::Separators => "separators",
             ConfigField::DisplayMode => "displayMode",
-            ConfigField::FxRate => "fxRate",
             ConfigField::Signal => "signal",
             ConfigField::Interval => "interval",
+            ConfigField::FxRate => "fxRate",
         }
     }
 }
