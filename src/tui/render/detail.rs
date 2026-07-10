@@ -23,11 +23,10 @@ use crate::settings::GlyphMode;
 use crate::theme::ColorToken;
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap};
-use crate::tui::render::shared::abbrev_tokens;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
-use crate::tui::widgets::column_chart::column_chart_lines;
+use crate::tui::widgets::column_chart::{column_chart_lines, fmt_tokens_short};
 use crate::tui::widgets::icons::{glyph, Icon};
 use crate::tui::widgets::quota_gauge::gauge_spans;
 use crate::tui::widgets::severity::{severity_color as sev_color, severity_color_api};
@@ -229,7 +228,7 @@ fn window_lines(
 // Seção 2: Modelos hoje (tokens + custo, de provider_usage.by_model)
 // ---------------------------------------------------------------------------
 
-/// Uma linha de "Modelos hoje": label(12, nome TRATADO — `display_model_name`,
+/// Uma linha de "MODELOS HOJE": label(12, nome TRATADO — `display_model_name`,
 /// Task 9) + barra PROPORCIONAL a tokens (não a 100% — normalizada pelo
 /// modelo de maior consumo, MESMA largura das janelas via `derive_bar_width`)
 /// + tokens abreviados + custo, ambos right-aligned.
@@ -261,7 +260,7 @@ fn model_usage_line(
         brand,
     ));
     spans.push(Span::styled(
-        format!(" {:>8}", abbrev_tokens(tokens)),
+        format!(" {:>8}", fmt_tokens_short(tokens)),
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     ));
     spans.push(Span::styled(
@@ -289,7 +288,7 @@ fn model_lines(
     let mut full = vec![
         Line::from(""),
         Line::from(Span::styled(
-            " Modelos hoje",
+            " MODELOS HOJE",
             Style::default()
                 .fg(to_ratatui(ColorToken::TextBright))
                 .add_modifier(Modifier::BOLD),
@@ -402,7 +401,7 @@ fn render_chart_section(state: &AppState, frame: &mut Frame, area: Rect, q: &Pro
 // Seção 3: extra usage (só Claude — spend novo, Task 1)
 // ---------------------------------------------------------------------------
 
-/// Linha "extra usage": `enabled=false` → texto fixo "desativado";
+/// Linha "EXTRA USAGE": `enabled=false` → texto fixo "desativado";
 /// `enabled=true && limit<=0.0` → sentinel de "sem limite configurado"
 /// (`extra_usage_from_spend` em `claude.rs`) → só o valor gasto, SEM gauge
 /// (não há teto p/ dar proporção — gauge 100%+"de $0.00" era
@@ -413,7 +412,7 @@ fn render_chart_section(state: &AppState, frame: &mut Frame, area: Rect, q: &Pro
 /// omitem a linha inteira (`extra_lines` devolve vazio).
 fn extra_usage_line(eu: &ExtraUsage, content_width: u16) -> Line<'static> {
     let label = Span::styled(
-        format!(" {:<LABEL_W$} ", "extra usage"),
+        format!(" {:<LABEL_W$} ", "EXTRA USAGE"),
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     );
     if !eu.enabled {
@@ -489,7 +488,11 @@ fn totals_line(
             Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
             None => (0, "-".to_string()),
         };
-        format!("{} tok \u{b7} {}", abbrev_tokens(today_tokens), today_cost)
+        format!(
+            "{} tok \u{b7} {}",
+            fmt_tokens_short(today_tokens),
+            today_cost
+        )
     };
 
     if state.history.is_none() {
@@ -524,7 +527,7 @@ fn totals_line(
         format!(
             " hoje {}    7 dias {} tok \u{b7} {}",
             today_str,
-            abbrev_tokens(week_tokens),
+            fmt_tokens_short(week_tokens),
             week_cost_str
         ),
         Style::default().fg(to_ratatui(ColorToken::TextBright)),
@@ -856,7 +859,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // Unit tests: truncate_name (abbrev_tokens moveu para render/shared.rs, T13)
+    // Unit tests: truncate_name
     // -----------------------------------------------------------------
 
     #[test]
@@ -1270,11 +1273,11 @@ mod tests {
         let buf = terminal.backend().buffer().clone();
         let text = buffer_to_string(&buf);
         assert!(
-            !text.contains("extra usage"),
+            !text.contains("EXTRA USAGE"),
             "extra usage deveria colapsar (sumir) no terminal curto:\n{text}"
         );
         assert!(
-            !text.contains(" Modelos hoje"),
+            !text.contains(" MODELOS HOJE"),
             "t\u{ed}tulo completo de modelos hoje n\u{e3}o deveria aparecer colapsado:\n{text}"
         );
         assert!(

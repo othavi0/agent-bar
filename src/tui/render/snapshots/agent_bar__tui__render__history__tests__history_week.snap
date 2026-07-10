@@ -1,6 +1,5 @@
 ---
 source: src/tui/render/history.rs
-assertion_line: 884
 expression: terminal.backend()
 ---
 "┏ Histórico (7 dias) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
@@ -25,13 +24,13 @@ expression: terminal.backend()
 "┃    0┴────────────────────────────────────────────────────────────────────────────────────        ┃"
 "┃           sex         sáb         dom         seg         ter         qua         qui            ┃"
 "┃  ● Opus 4.8 2,8M  ● GPT-5.5 2,6M                                                                 ┃"
-"┃▸ 07/02 · hoje · 660k · $3.30 · 1 sessões                                                         ┃"
-"┃▸ 07/01 · qua · 1,2M · $6.14 · 1 sessões                                                          ┃"
-"┃▸ 06/30 · ter · 319k · $1.59 · 1 sessões                                                          ┃"
-"┃▸ 06/29 · seg · 683k · $3.41 · 1 sessões                                                          ┃"
-"┃▸ 06/28 · dom · 1,3M · $6.44 · 1 sessões                                                          ┃"
-"┃▸ 06/27 · sáb · 420k · $2.10 · 1 sessões                                                          ┃"
-"┃▸ 06/26 · sex · 537k · $2.69 · 1 sessões                                                          ┃"
-"┃▸ 06/25 · qui · 238k · $1.19 · 1 sessões                                                          ┃"
+"┃▸ 02/07 · hoje · 660k · $3.30 · 1 sessões                                                         ┃"
+"┃▸ 01/07 · qua · 1,2M · $6.14 · 1 sessões                                                          ┃"
+"┃▸ 30/06 · ter · 319k · $1.59 · 1 sessões                                                          ┃"
+"┃▸ 29/06 · seg · 683k · $3.41 · 1 sessões                                                          ┃"
+"┃▸ 28/06 · dom · 1,3M · $6.44 · 1 sessões                                                          ┃"
+"┃▸ 27/06 · sáb · 420k · $2.10 · 1 sessões                                                          ┃"
+"┃▸ 26/06 · sex · 537k · $2.69 · 1 sessões                                                          ┃"
+"┃▸ 25/06 · qui · 238k · $1.19 · 1 sessões                                                          ┃"
 "┃                      ↵ expandir     t 24h/7d     r atualizar     esc voltar                      ┃"
 "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7 DIAS $26.86 · 5,4M tok · 8 sessões ┛"

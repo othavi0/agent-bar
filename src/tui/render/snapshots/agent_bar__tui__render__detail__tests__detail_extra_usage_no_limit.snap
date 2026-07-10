@@ -1,6 +1,5 @@
 ---
 source: src/tui/render/detail.rs
-assertion_line: 1425
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
@@ -30,7 +29,7 @@ expression: terminal.backend()
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
-"│                 ┃ extra usage  $12.34 usado · sem limite                                        ┃│"
+"│                 ┃ EXTRA USAGE  $12.34 usado · sem limite                                        ┃│"
 "│                 ┃ hoje coletando…    7 dias coletando…                                          ┃│"
 "│                 ┃            esc voltar     r atualizar     g login     h histórico             ┃│"
 "│                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│"

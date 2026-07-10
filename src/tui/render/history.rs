@@ -346,8 +346,8 @@ fn day_list_lines(
             Span::styled(
                 format!(
                     "{:02}/{:02} \u{b7} {label} \u{b7} {tokens} \u{b7} {cost} \u{b7} {} sess\u{f5}es",
-                    day.date.month() as u8,
                     day.date.day(),
+                    day.date.month() as u8,
                     day.sessions.len(),
                 ),
                 text_style,
@@ -591,6 +591,38 @@ mod tests {
         assert_eq!(weekday_abbrev(time::Weekday::Monday), "seg");
         assert_eq!(weekday_abbrev(time::Weekday::Wednesday), "qua");
         assert_eq!(weekday_abbrev(time::Weekday::Sunday), "dom");
+    }
+
+    // -----------------------------------------------------------------
+    // Unit tests: day_list_lines (formato de data dd/mm, day-first)
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn day_list_lines_uses_day_first_date_format() {
+        // 10 de julho (mês != dia, pra pinar a ordem — não pega falso-positivo
+        // em datas simétricas tipo 07/07).
+        let date = time::macros::date!(2026 - 07 - 10);
+        let today = time::macros::date!(2026 - 07 - 09); // != date → label = weekday, não "hoje"
+        let day = DaySessions {
+            date,
+            tokens: 1_000,
+            cost_usd: Some(1.23),
+            sessions: vec![],
+        };
+        let lines = day_list_lines(&[day], 0, &BTreeSet::new(), today, time::UtcOffset::UTC);
+        let text = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect::<String>();
+        assert!(
+            text.contains("10/07"),
+            "esperava dd/mm (10/07), texto: {text}"
+        );
+        assert!(
+            !text.contains("07/10"),
+            "não pode sobrar formato MM/DD (07/10): {text}"
+        );
     }
 
     // -----------------------------------------------------------------
@@ -905,7 +937,7 @@ mod tests {
         // estar visível na última página, senão o clamp cortou demais e
         // escondeu dado alcançável.
         let oldest = now - time::Duration::days(9);
-        let oldest_str = format!("{:02}/{:02}", oldest.month() as u8, oldest.day());
+        let oldest_str = format!("{:02}/{:02}", oldest.day(), oldest.month() as u8);
         assert!(
             text.contains(&oldest_str),
             "esperava a linha do dia mais antigo ({oldest_str}) visível:\n{text}"

@@ -34,6 +34,15 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
             None => continue,
         };
         let u = |k: &str| usage.get(k).and_then(Value::as_u64).unwrap_or(0);
+        let input = u("input_tokens");
+        let output = u("output_tokens");
+        let cache_read = u("cache_read_input_tokens");
+        let cache_write = u("cache_creation_input_tokens");
+        // Registros com os quatro campos de token zerados não carregam informação
+        // (ex: linhas `model: "<synthetic>"`) — pular independente do model.
+        if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 {
+            continue;
+        }
         let project = v
             .get("cwd")
             .and_then(Value::as_str)
@@ -46,10 +55,10 @@ pub fn parse_claude_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Usage
                 .get("model")
                 .and_then(Value::as_str)
                 .map(|s| s.to_string()),
-            input: u("input_tokens"),
-            output: u("output_tokens"),
-            cache_read: u("cache_read_input_tokens"),
-            cache_write: u("cache_creation_input_tokens"),
+            input,
+            output,
+            cache_read,
+            cache_write,
             ts,
             session_id: None,
             project,
@@ -109,5 +118,26 @@ mod tests {
     fn missing_cwd_yields_none_project() {
         let recs = parse_claude_lines([LINE].into_iter());
         assert_eq!(recs[0].project, None);
+    }
+
+    #[test]
+    fn skips_synthetic_model_with_all_zero_usage() {
+        let line = r#"{"type":"assistant","timestamp":"2026-07-10T10:00:00Z","message":{"model":"<synthetic>","usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}"#;
+        let recs = parse_claude_lines([line].into_iter());
+        assert_eq!(recs.len(), 0);
+    }
+
+    #[test]
+    fn skips_all_zero_usage_with_real_model() {
+        let line = r#"{"type":"assistant","timestamp":"2026-07-10T10:00:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}"#;
+        let recs = parse_claude_lines([line].into_iter());
+        assert_eq!(recs.len(), 0);
+    }
+
+    #[test]
+    fn normal_line_still_parsed() {
+        let recs = parse_claude_lines([LINE].into_iter());
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].model.as_deref(), Some("claude-opus-4-8"));
     }
 }
