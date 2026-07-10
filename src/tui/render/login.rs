@@ -44,7 +44,7 @@ pub fn render_login(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut 
 /// efeito de LoginUp/LoginDown); a ativação do login continua exclusiva do
 /// Enter/chip (braço dedicado em `update.rs`, T14).
 fn render_provider_list(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
-    let selected_bg = ratatui::style::Color::Rgb(45, 53, 65);
+    let selected_bg = to_ratatui(ColorToken::SelBg);
 
     let block = Block::default()
         .borders(Borders::ALL)

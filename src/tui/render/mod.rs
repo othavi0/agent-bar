@@ -161,7 +161,7 @@ fn render_help_overlay(frame: &mut Frame) {
     );
     frame.render_widget(Clear, popup_area);
 
-    let bg = ratatui::style::Color::Rgb(0x28, 0x2c, 0x34); // One Dark
+    let bg = to_ratatui(ColorToken::Bg);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)

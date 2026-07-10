@@ -49,7 +49,7 @@ fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
     let selected_style = Style::default()
         .fg(to_ratatui(ColorToken::TextBright))
         .add_modifier(Modifier::BOLD)
-        .bg(ratatui::style::Color::Rgb(45, 53, 65));
+        .bg(to_ratatui(ColorToken::SelBg));
 
     let normal_style = Style::default().fg(to_ratatui(ColorToken::Text));
 
