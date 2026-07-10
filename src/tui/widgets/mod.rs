@@ -10,4 +10,3 @@ pub mod column_chart;
 pub mod icons;
 pub mod quota_gauge;
 pub mod severity;
-pub mod sparkline;

@@ -99,12 +99,6 @@ pub fn bucket_by_provider_day(records: &[UsageRecord]) -> BTreeMap<String, Vec<D
 // Hour bucketing
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct HourBucket {
-    pub hour_start: OffsetDateTime,
-    pub tokens: u64,
-}
-
 fn floor_to_hour(t: OffsetDateTime) -> OffsetDateTime {
     t.replace_minute(0)
         .and_then(|t| t.replace_second(0))
@@ -114,38 +108,6 @@ fn floor_to_hour(t: OffsetDateTime) -> OffsetDateTime {
 
 fn record_tokens(r: &UsageRecord) -> u64 {
     r.input + r.output + r.cache_read + r.cache_write
-}
-
-/// Agrupa records em `hours` buckets horarios terminando na hora de `now`
-/// (janela [now - hours + 1h, now], truncada em horas cheias).
-/// Sempre devolve exatamente `hours` buckets, do mais antigo ao mais novo,
-/// com zeros preenchidos onde nao ha records.
-pub fn bucket_by_hour(
-    records: &[UsageRecord],
-    now: OffsetDateTime,
-    hours: usize,
-) -> Vec<HourBucket> {
-    let end_hour = floor_to_hour(now);
-    let mut buckets: Vec<HourBucket> = (0..hours)
-        .map(|i| HourBucket {
-            hour_start: end_hour - time::Duration::hours((hours - 1 - i) as i64),
-            tokens: 0,
-        })
-        .collect();
-    let start = match buckets.first() {
-        Some(b) => b.hour_start,
-        None => return buckets,
-    };
-    for r in records {
-        if r.ts < start || r.ts >= end_hour + time::Duration::hours(1) {
-            continue;
-        }
-        let idx = (floor_to_hour(r.ts) - start).whole_hours() as usize;
-        if let Some(b) = buckets.get_mut(idx) {
-            b.tokens += record_tokens(r);
-        }
-    }
-    buckets
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -332,33 +294,6 @@ mod tests {
             session_id: None,
             project: None,
         }
-    }
-
-    #[test]
-    fn bucket_by_hour_fills_gaps_with_zero() {
-        let now = datetime!(2026-07-01 18:30:00 UTC);
-        let records = vec![
-            rec("claude", datetime!(2026-07-01 18:10:00 UTC), 100), // hora atual
-            rec("claude", datetime!(2026-07-01 16:59:00 UTC), 40),  // 2h atras
-            rec("claude", datetime!(2026-06-30 18:45:00 UTC), 7),   // fora da janela de 3h
-        ];
-        let buckets = bucket_by_hour(&records, now, 3);
-        assert_eq!(buckets.len(), 3);
-        assert_eq!(buckets[0].hour_start, datetime!(2026-07-01 16:00:00 UTC));
-        assert_eq!(buckets[0].tokens, 40);
-        assert_eq!(buckets[1].tokens, 0); // 17h vazia
-        assert_eq!(buckets[2].tokens, 100);
-    }
-
-    #[test]
-    fn bucket_by_hour_sums_all_token_kinds() {
-        let now = datetime!(2026-07-01 10:30:00 UTC);
-        let mut r = rec("claude", datetime!(2026-07-01 10:05:00 UTC), 1);
-        r.output = 2;
-        r.cache_read = 3;
-        r.cache_write = 4;
-        let buckets = bucket_by_hour(&[r], now, 1);
-        assert_eq!(buckets[0].tokens, 10);
     }
 
     fn mrec(provider: &str, model: &str, ts: time::OffsetDateTime, tokens: u64) -> UsageRecord {
