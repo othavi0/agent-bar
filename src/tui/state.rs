@@ -225,13 +225,14 @@ pub struct AppState {
     /// partir de zero no primeiro paint.
     pub display_cost: f64,
     /// Gate de animações (`settings.menu.animations`, Task 15/16): controla
-    /// o count-up de `display_cost` e o pulse crítico dos gauges
-    /// (`widgets::quota_gauge::pulse_color`). Default `true` (paridade com
-    /// `MenuSettings::animations`); `event_loop::run` sobrescreve com
-    /// `octx.settings.menu.animations` no boot real — mesmo padrão de
-    /// `glyph_mode`/`local_offset`. NÃO gate os efeitos tachyonfx (esses
-    /// são gate por `Effects::new(enabled)`, construído direto do
-    /// settings no event_loop).
+    /// o count-up de `display_cost` (o pulse crítico dos gauges morreu em
+    /// v8 — spec §6; gauge agora é sólido, sem modulação de brilho).
+    /// Default `true` (paridade com `MenuSettings::animations`);
+    /// `event_loop::run` sobrescreve com `octx.settings.menu.animations`
+    /// no boot real — mesmo padrão de `glyph_mode`/`local_offset`. NÃO
+    /// gate os efeitos tachyonfx (esses são gate por
+    /// `Effects::new(enabled)`, construído direto do settings no
+    /// event_loop).
     pub animations: bool,
 }
 

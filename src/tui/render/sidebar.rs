@@ -161,12 +161,11 @@ fn item_color(state: &AppState, item: SidebarItem) -> ratatui::style::Color {
                     // Animação D: blink crítico da MARCA da sidebar. Migrado
                     // de widgets/provider_list.rs (órfão desta task,
                     // apagado): mesma cadência de ~450ms (ticks de 30ms →
-                    // 15 ticks por fase). Task 16 acrescenta um pulso
-                    // (`widgets::quota_gauge::pulse_color`) nos GAUGES do
-                    // card/detalhe — os dois coexistem (alvo/cadência
-                    // diferentes), este blink NÃO foi substituído.
-                    // spec §8: `animations=false` desativa TUDO — mesmo
-                    // gate do pulso dos gauges (dashboard.rs/detail.rs).
+                    // 15 ticks por fase). O pulso dos GAUGES do card/detalhe
+                    // (Task 16, `widgets::quota_gauge::pulse_color`) morreu
+                    // em v8 (spec §6, gauge sólido) — este blink da sidebar
+                    // não foi substituído e continua intacto.
+                    // spec §8: `animations=false` desativa TUDO.
                     // Com animações off, cor estática Red (não Muted: o
                     // crítico não pode "sumir" só porque não pisca).
                     if !state.animations {

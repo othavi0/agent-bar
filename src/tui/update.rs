@@ -649,9 +649,9 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Action> {
             // Animação C (throbber): avança o frame do spinner braille.
             state.throbber.advance();
             // Animação D (pulse): contador de frames para blink do ● crítico
-            // da sidebar (Task 10) E para o pulse dos gauges críticos do
-            // card/detalhe (Task 16, `widgets::quota_gauge::pulse_color`) —
-            // os dois efeitos coexistem, um não substitui o outro.
+            // da sidebar (Task 10). O pulse dos gauges críticos do
+            // card/detalhe morreu em v8 (spec §6, `pulse_color` removido) —
+            // gauge agora é sólido, sem modulação de brilho.
             state.anim_frame = state.anim_frame.wrapping_add(1);
             // Count-up do custo do header (T16): ease exponencial (~800ms
             // em ticks de 30ms, fator 0.12). animations=false → snapa

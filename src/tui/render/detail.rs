@@ -22,7 +22,7 @@ use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
 use crate::tui::widgets::icons::{glyph, Icon};
-use crate::tui::widgets::quota_gauge::{gauge_spans, pulse_color};
+use crate::tui::widgets::quota_gauge::gauge_spans;
 use crate::tui::widgets::severity::{severity_color as sev_color, severity_color_api};
 use crate::tui::widgets::sparkline::sparkline_str_wide;
 use crate::usage::buckets::provider_series_24h;
@@ -125,20 +125,10 @@ fn fmt_cost_generic(pu: &ProviderUsage) -> String {
 
 /// Uma linha de janela (sessão/semana/modelo): label(12) + gauge + pct(4) +
 /// reset. Cor vem da severidade da API quando presente (spec §4.1),
-/// fallback pro threshold local. `anim_frame`/`animations` (Task 16): pulso
-/// crítico quando `remaining < 10.0` — coexiste com o blink da sidebar
-/// (Task 10), não o substitui.
-fn window_line(
-    label: &str,
-    w: &QuotaWindow,
-    gauge_w: usize,
-    anim_frame: u64,
-    animations: bool,
-) -> Line<'static> {
-    let mut color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
-    if animations && w.remaining < 10.0 {
-        color = pulse_color(color, anim_frame);
-    }
+/// fallback pro threshold local — sem modulação de brilho (v8: gauge sólido,
+/// pulso removido de propósito, spec §6).
+fn window_line(label: &str, w: &QuotaWindow, gauge_w: usize) -> Line<'static> {
+    let color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
     let reset_str = fmt_reset(w.resets_at.as_deref());
     let name = truncate_name(label, LABEL_W);
     let mut spans = vec![Span::styled(
@@ -169,10 +159,8 @@ fn model_window_line(
     gauge_w: usize,
     content_width: u16,
     provider_usage: Option<&ProviderUsage>,
-    anim_frame: u64,
-    animations: bool,
 ) -> Line<'static> {
-    let mut line = window_line(name, w, gauge_w, anim_frame, animations);
+    let mut line = window_line(name, w, gauge_w);
     if let Some(cost) = provider_usage
         .and_then(|pu| find_model_usage(&pu.by_model, name))
         .and_then(|mu| mu.cost.as_ref())
@@ -483,22 +471,10 @@ fn render_full(
     // MESMO bar_width em todas — a coluna de gauge tem que alinhar entre
     // sessão/semana/modelos (contrato do brief).
     if let Some(primary) = &q.primary {
-        lines.push(window_line(
-            "sessão",
-            primary,
-            bar_width,
-            state.anim_frame,
-            state.animations,
-        ));
+        lines.push(window_line("sessão", primary, bar_width));
     }
     if let Some(secondary) = &q.secondary {
-        lines.push(window_line(
-            "semana",
-            secondary,
-            bar_width,
-            state.anim_frame,
-            state.animations,
-        ));
+        lines.push(window_line("semana", secondary, bar_width));
     }
     if let Some(models) = &q.models {
         for (name, w) in models {
@@ -508,8 +484,6 @@ fn render_full(
                 bar_width,
                 area.width,
                 provider_usage,
-                state.anim_frame,
-                state.animations,
             ));
         }
     }
@@ -654,7 +628,7 @@ mod tests {
     use crate::usage::amp::AmpDollars;
     use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageRecord, UsageSummary};
 
-    use super::{render_detail, truncate_name};
+    use super::truncate_name;
 
     fn window(remaining: f64, resets_at: Option<&str>, severity: Option<&str>) -> QuotaWindow {
         QuotaWindow {
@@ -1140,93 +1114,7 @@ mod tests {
         insta::assert_snapshot!(terminal.backend());
     }
 
-    // ---- Motion: pulse crítico na janela de sessão (Task 16) ----
-
-    /// Janela `sessão` crítica (`remaining` < 10.0) dispara `pulse_color`
-    /// via `window_line`. Confirma o CALL SITE real (não só `pulse_color`
-    /// isolado, já coberto em `widgets::quota_gauge::tests`) — o buffer
-    /// inteiro deve diferir entre dois `anim_frame` quando `animations=true`.
-    /// Chama `render_detail` direto (não `render()` completo): o mesmo
-    /// provider crítico também dispara o blink da MARCA da sidebar (Task
-    /// 10), que não é gated por `animations` (gap pré-existente, fora do
-    /// escopo desta task) — misturaria os dois efeitos no mesmo buffer.
-    #[test]
-    fn critical_window_gauge_pulses_across_anim_frames_when_animations_on() {
-        let mut pv = make_claude_full();
-        pv.quota.primary = Some(window(5.0, Some("2026-07-02T02:39:59Z"), Some("critical")));
-
-        let backend = ratatui::backend::TestBackend::new(100, 32);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let mut state = AppState::new();
-        state.providers = vec![pv];
-        state.selected = 0;
-        state.screen = Screen::Detail;
-        state.status = FetchStatus::Loaded;
-        state.animations = true;
-
-        state.anim_frame = 0;
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame0 = terminal.backend().buffer().clone();
-
-        state.anim_frame = 18; // ~metade do ciclo de 37 ticks do pulso
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame18 = terminal.backend().buffer().clone();
-
-        assert_ne!(
-            buf_frame0, buf_frame18,
-            "janela de sessão crítica deveria pulsar (cor diferente) entre anim_frame 0 e 18"
-        );
-    }
-
-    /// Self-review do brief: animations=false → zero lerp visual — o pulso
-    /// não deve alterar UM ÚNICO byte do buffer entre `anim_frame`s
-    /// distintos (mesmo provider crítico do teste acima). `render_detail`
-    /// direto pelo mesmo motivo do teste acima (isola do blink da sidebar).
-    #[test]
-    fn critical_window_gauge_stays_static_when_animations_off() {
-        let mut pv = make_claude_full();
-        pv.quota.primary = Some(window(5.0, Some("2026-07-02T02:39:59Z"), Some("critical")));
-
-        let backend = ratatui::backend::TestBackend::new(100, 32);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let mut state = AppState::new();
-        state.providers = vec![pv];
-        state.selected = 0;
-        state.screen = Screen::Detail;
-        state.status = FetchStatus::Loaded;
-        state.animations = false;
-
-        state.anim_frame = 0;
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame0 = terminal.backend().buffer().clone();
-
-        state.anim_frame = 18;
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame18 = terminal.backend().buffer().clone();
-
-        assert_eq!(
-            buf_frame0, buf_frame18,
-            "com animations=false, o pulso não deve alterar nada entre anim_frames"
-        );
-    }
+    // Pulso crítico (Task 16) removido em v8 (spec §6): `window_line` usa a
+    // cor de severidade direto, sem modulação de brilho — os testes que
+    // confirmavam o pulso saíram junto.
 }

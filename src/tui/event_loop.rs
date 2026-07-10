@@ -173,7 +173,8 @@ pub async fn run(octx: OwnedCtx, terminal: &mut DefaultTerminal) -> anyhow::Resu
     state.glyph_mode = octx.settings.glyph_mode;
     // Gate de animações real (Task 16): sem isto, `animations` fica no
     // default `true` do AppState::new() mesmo com "animations":false
-    // configurado — o count-up e o pulse crítico nunca desligariam.
+    // configurado — o count-up de display_cost nunca desligaria (o pulse
+    // crítico dos gauges morreu em v8, spec §6).
     state.animations = octx.settings.menu.animations;
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).

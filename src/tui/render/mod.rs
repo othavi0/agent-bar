@@ -480,8 +480,8 @@ mod tests {
         ); // all filled
         assert_eq!(
             bar_0,
-            "\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}"
-        ); // all empty (trilho ▒)
+            "\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}"
+        ); // all empty (trilho ░)
     }
 
     #[test]
