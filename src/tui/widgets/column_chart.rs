@@ -23,11 +23,18 @@ pub fn column_chart_lines(
     let width = width as usize;
     let height = height as usize;
     if series.is_empty() {
-        let mut out = vec![Line::from(Span::styled(
+        let height = height.max(1);
+        let msg = Line::from(Span::styled(
             " sem uso de tokens no período".to_string(),
             Style::default().fg(to_ratatui(ColorToken::Comment)),
-        ))];
-        out.resize(height.max(1), Line::default());
+        ));
+        // Centraliza verticalmente: preenche até a metade com linhas em
+        // branco, emite a mensagem, e completa até `height` — em vez de
+        // jogar a mensagem no topo e deixar um bloco em branco embaixo.
+        let top_pad = height.saturating_sub(1) / 2;
+        let mut out = vec![Line::default(); top_pad];
+        out.push(msg);
+        out.resize(height, Line::default());
         return out;
     }
 
@@ -268,6 +275,9 @@ pub fn column_chart_lines(
             // `cell_grid`): nenhuma linha de overlap real ficou livre — rouba
             // uma linha de quem ainda tem folga (visible_count > 1),
             // preferindo quem tem MAIS folga pra ceder.
+            // A cor resgatada aqui não tem fidelidade posicional — pode
+            // aparecer fora da ordem real da stack (raro, só em colisões
+            // com 3+ séries).
             if !assigned {
                 let steal_from = (0..plot_rows)
                     .filter_map(|row| {
@@ -501,15 +511,29 @@ mod tests {
 
     #[test]
     fn chart_empty_series_shows_empty_state() {
+        let height = 8u16;
         let lines = column_chart_lines(
             &[],
             40,
-            8,
+            height,
             datetime!(2026-07-10 12:00:00 UTC),
             time::UtcOffset::UTC,
         );
-        let text = plain(&lines).join("\n");
-        assert!(text.contains("sem uso"), "estado vazio desenhado: {text}");
+        assert_eq!(lines.len(), height as usize);
+        let text = plain(&lines);
+        let msg_row = text
+            .iter()
+            .position(|l| l.contains("sem uso"))
+            .expect("estado vazio desenhado");
+        // Centralizado verticalmente: não pode ficar na primeira linha (era o
+        // bug — mensagem no topo + bloco em branco embaixo) e deve ficar
+        // perto do meio da altura.
+        assert_ne!(msg_row, 0, "mensagem não pode ficar na primeira linha");
+        let mid = height as usize / 2;
+        assert!(
+            msg_row.abs_diff(mid) <= 1,
+            "mensagem deveria estar perto do meio (linha {mid}), ficou na linha {msg_row}"
+        );
     }
 
     #[test]

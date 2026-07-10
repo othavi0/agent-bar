@@ -1,6 +1,6 @@
 ---
 source: src/tui/render/detail.rs
-assertion_line: 1181
+assertion_line: 1234
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────$2.10 · 02:00 ╮"
@@ -9,7 +9,7 @@ expression: terminal.backend()
 "│                 ┃ Free Tier    ███████████████████████████████████░░░░░░░░░░░░░░░   70%  → -    ┃│"
 "│ PROVIDERS       ┃ Credits      ██████████████████████████████████████████████████  100%  → -    ┃│"
 "│ ● Amp     70%   ┃ TOKENS/HORA · 24H                                                    escala √ ┃│"
-"│                 ┃ sem uso de tokens no período                                                  ┃│"
+"│                 ┃                                                                               ┃│"
 "│ MAIS            ┃                                                                               ┃│"
 "│   Histórico     ┃                                                                               ┃│"
 "│   Login         ┃                                                                               ┃│"
@@ -19,7 +19,7 @@ expression: terminal.backend()
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
-"│                 ┃                                                                               ┃│"
+"│                 ┃ sem uso de tokens no período                                                  ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"

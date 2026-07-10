@@ -192,7 +192,11 @@ fn model_window_line(
 /// real da API). MESMO `bar_width` em todas — a coluna de gauge tem que
 /// alinhar entre sessão/semana/modelos (contrato do brief) — e a mesma
 /// `derive_bar_width` alimenta as seções 2 e 4 (Task 9), então o gauge
-/// também alinha ENTRE seções, não só dentro desta.
+/// COMEÇA na mesma coluna em toda seção. A LARGURA (e portanto a coluna
+/// onde termina) varia entre seções, porque cada uma tem seu próprio
+/// `suffix_w` (`WINDOW_SUFFIX_W` vs `MODEL_SUFFIX_W` vs `EXTRA_SUFFIX_W`) —
+/// isso é deliberado, não um bug de alinhamento (ver comentário acima de
+/// `WINDOW_SUFFIX_W`).
 fn window_lines(
     q: &ProviderQuota,
     provider_usage: Option<&ProviderUsage>,
@@ -1160,6 +1164,42 @@ mod tests {
         let text = buffer_to_string(term.backend().buffer());
         assert!(text.contains("Opus 4.8"), "nome tratado ausente:\n{text}");
         assert!(!text.contains("claude-opus"), "id raw vazou:\n{text}");
+    }
+
+    #[test]
+    fn detail_collapse_short_terminal() {
+        // 100x20: overhead do outer block de `render()` (2) + block do
+        // Detail (2) + linha de chips (1) = 5 linhas, então `content_area`
+        // fica com 15 — abaixo de `without_extra` (18, ver `render_full`) —
+        // colapso completo: EXTRA USAGE some e MODELOS HOJE vira 1
+        // linha-resumo. Altura escolhida pra deixar o chart EXATAMENTE no
+        // `CHART_MIN` (9), provando que o colapso protege o mínimo do
+        // chart mesmo no pior caso.
+        let backend = ratatui::backend::TestBackend::new(100, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let state = fixture_claude_full();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+        let buf = terminal.backend().buffer().clone();
+        let text = buffer_to_string(&buf);
+        assert!(
+            !text.contains("extra usage"),
+            "extra usage deveria colapsar (sumir) no terminal curto:\n{text}"
+        );
+        assert!(
+            !text.contains(" Modelos hoje"),
+            "t\u{ed}tulo completo de modelos hoje n\u{e3}o deveria aparecer colapsado:\n{text}"
+        );
+        assert!(
+            text.contains("modelos hoje \u{b7}"),
+            "linha-resumo de modelos hoje ausente:\n{text}"
+        );
+        assert!(
+            text.contains("TOKENS/HORA"),
+            "chart deveria continuar vis\u{ed}vel mesmo colapsado:\n{text}"
+        );
+        insta::assert_snapshot!(text);
     }
 
     #[test]
