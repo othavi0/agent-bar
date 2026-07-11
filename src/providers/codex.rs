@@ -465,6 +465,8 @@ struct AppServerResponse {
     id: Option<i64>,
     #[serde(default)]
     result: Option<serde_json::Value>,
+    #[serde(default)]
+    error: Option<serde_json::Value>,
 }
 
 async fn write_json<W: AsyncWrite + Unpin>(
@@ -580,6 +582,14 @@ where
                         }
                     }
                     Some(2) => {
+                        if let Some(err) = msg.error.as_ref() {
+                            // app-server respondeu com erro pro rate-limits (ex.: token
+                            // expirado/revogado → 401 no backend). Não virá outra
+                            // resposta pro id=2; sair já em vez de esperar o hard
+                            // timeout ocioso.
+                            log::debug!("Codex app-server rateLimits/read error: {err}");
+                            return None;
+                        }
                         let parsed = msg.result.as_ref().and_then(|v| {
                             serde_json::from_value::<CodexAppServerRateLimitsReadResult>(
                                 v.clone(),
@@ -1908,6 +1918,58 @@ mod tests {
         drop(server);
         let out = run_appserver_protocol(cr, cw, "test", std::time::Duration::from_secs(4)).await;
         assert!(out.is_none());
+    }
+
+    #[tokio::test]
+    async fn appserver_rate_limits_error_returns_none_without_waiting_hard_timeout() {
+        // Reproduz o caso real: token de auth expirado/revogado → app-server
+        // responde `account/rateLimits/read` (id=2) com um erro JSON-RPC em vez
+        // de `result`. Antes do fix, isso ficava sem tratamento e o loop
+        // esperava o hard timeout inteiro (aqui, 4s) antes de retornar None.
+        // O fix deve retornar None assim que o erro chega, bem antes do timeout.
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let (client, server) = tokio::io::duplex(8192);
+        let (cr, cw) = tokio::io::split(client);
+        tokio::spawn(async move {
+            let (sr, mut sw) = tokio::io::split(server);
+            let mut lines = BufReader::new(sr).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let v: serde_json::Value = match serde_json::from_str(&line) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                match v.get("id").and_then(|i| i.as_i64()) {
+                    Some(0) => {
+                        let _ = sw
+                            .write_all(b"{\"id\":0,\"result\":{\"capabilities\":{}}}\n")
+                            .await;
+                    }
+                    Some(1) => {
+                        let _ = sw
+                            .write_all(
+                                b"{\"id\":1,\"result\":{\"account\":{\"planType\":\"plus\"}}}\n",
+                            )
+                            .await;
+                    }
+                    Some(2) => {
+                        let _ = sw
+                            .write_all(
+                                b"{\"id\":2,\"error\":{\"code\":-32603,\"message\":\"failed to fetch codex rate limits: GET https://chatgpt.com/backend-api/wham/usage failed: 401 Unauthorized; token_expired\"}}\n",
+                            )
+                            .await;
+                    }
+                    _ => {}
+                }
+            }
+        });
+        let start = std::time::Instant::now();
+        let out = run_appserver_protocol(cr, cw, "test", std::time::Duration::from_secs(4)).await;
+        let elapsed = start.elapsed();
+        assert!(out.is_none());
+        assert!(
+            elapsed < std::time::Duration::from_secs(2),
+            "esperou {elapsed:?}; deveria retornar assim que o erro de id=2 chega, não aguardar o hard timeout de 4s"
+        );
     }
 
     #[tokio::test]
