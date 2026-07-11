@@ -1,27 +1,91 @@
-//! Cache incremental de `UsageRecord` por arquivo: re-parseia apenas quando
-//! size ou mtime mudaram. Índice em memória por chamada de `aggregate`.
+//! Cache persistente de `UsageRecord` por arquivo (redb + postcard).
+//! Chave: path do arquivo (string); valor: postcard de (size, mtime,
+//! Vec<UsageRecord>). O cache é DERIVADO: qualquer erro (corrupção, versão
+//! velha, IO) degrada pra re-parse — nunca panica, nunca é fonte de verdade.
 //!
-//! TODO (polish): persistir o índice em `cache_dir/usage-index.json` entre
-//! chamadas (serialização com serde_json, escrita atômica via tempfile).
-//! O ganho de não re-parsear sessões antigas já vem do índice em memória.
+//! Duas camadas: L1 em memória (por processo, evita round-trip no redb
+//! dentro da mesma chamada de `records()`) e L2 persistente (sobrevive entre
+//! execuções — é o ganho real de performance).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+use redb::ReadableTableMetadata;
+use redb::{Database, ReadableTable, TableDefinition};
+
 use super::UsageRecord;
+
+const FILES: TableDefinition<&str, &[u8]> = TableDefinition::new("files");
+const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
+
+/// Bump SEMPRE que `UsageRecord` ou a semântica do parse mudar (dedup, campos
+/// novos) — força re-parse geral e corrige o histórico inteiro.
+pub const CACHE_VERSION: u64 = 2;
 
 /// Chave de cache por arquivo: (tamanho em bytes, mtime Unix segundos).
 type FileKey = (u64, i64);
 
-/// Índice em memória: `path → (key, records)`.
-#[derive(Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Entry {
+    size: u64,
+    mtime: i64,
+    records: Vec<UsageRecord>,
+}
+
+/// Cache incremental (L1 memória) + persistente (L2 redb) de `UsageRecord`
+/// por arquivo. Ver doc do módulo pra invariantes de degradação.
 pub struct UsageCache {
-    index: HashMap<PathBuf, (FileKey, Vec<UsageRecord>)>,
+    memory: HashMap<PathBuf, (FileKey, Vec<UsageRecord>)>,
+    db: Option<Database>,
 }
 
 impl UsageCache {
-    pub fn new() -> Self {
-        Self::default()
+    /// Abre (ou cria) o cache persistente em `db_path`. `None` = só memória
+    /// (comportamento do cache anterior) — usado pelos testes que não
+    /// precisam de persistência entre processos.
+    pub fn open(db_path: Option<&Path>) -> Self {
+        Self::open_with_version(db_path, CACHE_VERSION)
+    }
+
+    /// Como [`open`], mas com uma versão de cache explícita — usado em teste
+    /// pra simular um bump de `CACHE_VERSION` sem recompilar.
+    pub fn open_with_version(db_path: Option<&Path>, version: u64) -> Self {
+        let db = db_path.and_then(open_db);
+        let mut cache = Self {
+            memory: HashMap::new(),
+            db,
+        };
+        cache.enforce_version(version);
+        cache
+    }
+
+    /// Compara a versão gravada em `META` com `expected`; se diferente (ou
+    /// ausente, DB novo), dropa `FILES` inteira e grava a versão nova.
+    fn enforce_version(&mut self, expected: u64) {
+        let Some(db) = self.db.as_ref() else {
+            return;
+        };
+
+        if read_meta_version(db) == Some(expected) {
+            return;
+        }
+
+        let result = (|| -> anyhow::Result<()> {
+            let txn = db.begin_write()?;
+            {
+                txn.delete_table(FILES)?;
+                let mut meta = txn.open_table(META)?;
+                meta.insert("version", expected)?;
+            }
+            txn.commit()?;
+            Ok(())
+        })();
+
+        if let Err(e) = result {
+            log::warn!("usage cache: falha ao aplicar versão nova ({e}); rodando só em memória");
+            self.db = None;
+        }
     }
 
     /// Devolve os `UsageRecord` do `path`, re-parseando somente se size ou
@@ -36,10 +100,16 @@ impl UsageCache {
             None => return vec![],
         };
 
-        if let Some((cached_key, records)) = self.index.get(path) {
+        if let Some((cached_key, records)) = self.memory.get(path) {
             if *cached_key == key {
                 return records.clone();
             }
+        }
+
+        if let Some(records) = self.read_persisted(path, key) {
+            self.memory
+                .insert(path.to_path_buf(), (key, records.clone()));
+            return records;
         }
 
         let content = match std::fs::read_to_string(path) {
@@ -47,10 +117,213 @@ impl UsageCache {
             Err(_) => return vec![],
         };
         let records = parse(&content);
-        self.index
+        self.persist(path, key, &records);
+        self.memory
             .insert(path.to_path_buf(), (key, records.clone()));
         records
     }
+
+    /// Lê o cache persistente para `path`. `None` = miss (chave ausente,
+    /// (size, mtime) não bate, decode falhou, ou qualquer erro de redb —
+    /// tudo degrada pra "reparseie", nunca panica).
+    fn read_persisted(&self, path: &Path, key: FileKey) -> Option<Vec<UsageRecord>> {
+        let db = self.db.as_ref()?;
+        let map_key = path.to_string_lossy();
+
+        let result = (|| -> anyhow::Result<Option<Vec<UsageRecord>>> {
+            let txn = db.begin_read()?;
+            let table = match txn.open_table(FILES) {
+                Ok(t) => t,
+                Err(redb::TableError::TableDoesNotExist(_)) => return Ok(None),
+                Err(e) => return Err(e.into()),
+            };
+            let Some(guard) = table.get(map_key.as_ref())? else {
+                return Ok(None);
+            };
+            let bytes = guard.value();
+            let entry: Entry = match postcard::from_bytes(bytes) {
+                Ok(e) => e,
+                Err(_) => return Ok(None), // decode falho = miss silencioso
+            };
+            if entry.size == key.0 && entry.mtime == key.1 {
+                Ok(Some(entry.records))
+            } else {
+                Ok(None)
+            }
+        })();
+
+        match result {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("usage cache: leitura de {path:?} falhou ({e}); reparseando");
+                None
+            }
+        }
+    }
+
+    /// Grava `records` no cache persistente sob `path`. Falha (encode ou
+    /// redb) só loga — o cache é derivado, nunca é a fonte de verdade.
+    fn persist(&self, path: &Path, key: FileKey, records: &[UsageRecord]) {
+        let Some(db) = self.db.as_ref() else {
+            return;
+        };
+
+        let entry = Entry {
+            size: key.0,
+            mtime: key.1,
+            records: records.to_vec(),
+        };
+        let bytes = match postcard::to_allocvec(&entry) {
+            Ok(b) => b,
+            Err(e) => {
+                log::warn!("usage cache: encode de {path:?} falhou ({e}); não persistido");
+                return;
+            }
+        };
+
+        let map_key = path.to_string_lossy();
+        let result = (|| -> anyhow::Result<()> {
+            let txn = db.begin_write()?;
+            {
+                let mut table = txn.open_table(FILES)?;
+                table.insert(map_key.as_ref(), bytes.as_slice())?;
+            }
+            txn.commit()?;
+            Ok(())
+        })();
+
+        if let Err(e) = result {
+            log::warn!("usage cache: escrita de {path:?} falhou ({e}); não persistido");
+        }
+    }
+
+    /// Remove do cache (memória + redb) todo path que não esteja em `live`.
+    /// Chamado ao final de `records()` (`usage/mod.rs`) pra não acumular
+    /// entradas de arquivos deletados/rotacionados indefinidamente.
+    pub fn gc(&mut self, live: &HashSet<PathBuf>) {
+        self.memory.retain(|p, _| live.contains(p));
+
+        let Some(db) = self.db.as_ref() else {
+            return;
+        };
+
+        // Primeiro descobre quem morreu com uma READ txn; se ninguém morreu,
+        // não abre write txn (evita lock exclusivo desnecessário a cada
+        // chamada de `records()`, que roda em todo poll do Waybar).
+        let dead = (|| -> anyhow::Result<Vec<String>> {
+            let txn = db.begin_read()?;
+            let table = match txn.open_table(FILES) {
+                Ok(t) => t,
+                Err(redb::TableError::TableDoesNotExist(_)) => return Ok(vec![]),
+                Err(e) => return Err(e.into()),
+            };
+            Ok(table
+                .iter()?
+                .filter_map(|entry| entry.ok())
+                .map(|(k, _v)| k.value().to_string())
+                .filter(|k| !live.contains(Path::new(k.as_str())))
+                .collect())
+        })();
+
+        let dead = match dead {
+            Ok(d) => d,
+            Err(e) => {
+                log::warn!("usage cache: gc (leitura) falhou ({e})");
+                return;
+            }
+        };
+
+        if dead.is_empty() {
+            return;
+        }
+
+        let result = (|| -> anyhow::Result<()> {
+            let txn = db.begin_write()?;
+            {
+                let mut table = txn.open_table(FILES)?;
+                for k in &dead {
+                    table.remove(k.as_str())?;
+                }
+            }
+            txn.commit()?;
+            Ok(())
+        })();
+
+        if let Err(e) = result {
+            log::warn!("usage cache: gc falhou ({e})");
+        }
+    }
+
+    /// Conta as chaves persistidas em `FILES`. Só pra teste.
+    #[cfg(test)]
+    pub fn persisted_len(&self) -> usize {
+        let Some(db) = self.db.as_ref() else {
+            return 0;
+        };
+
+        let result = (|| -> anyhow::Result<usize> {
+            let txn = db.begin_read()?;
+            let table = match txn.open_table(FILES) {
+                Ok(t) => t,
+                Err(redb::TableError::TableDoesNotExist(_)) => return Ok(0),
+                Err(e) => return Err(e.into()),
+            };
+            Ok(table.len()? as usize)
+        })();
+
+        result.unwrap_or(0)
+    }
+}
+
+/// Abre (ou cria) o redb em `path`. `DatabaseAlreadyOpen` é lock exclusivo de
+/// OUTRO processo/handle no mesmo path (flock por open-file-description) —
+/// NÃO é corrupção, e apagar o arquivo apagaria o db saudável do dono atual
+/// do lock (unlink deixa ele escrevendo num inode órfão). Só degrada pra
+/// memória nesse caso. Demais erros = corrupção/storage real: apaga e tenta
+/// uma vez mais; falha de novo → `None` (cache degrada pra memória).
+/// Nunca panica.
+fn open_db(path: &Path) -> Option<Database> {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    match Database::create(path) {
+        Ok(db) => Some(db),
+        Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
+            log::warn!("usage cache: {path:?} em uso por outro processo; degradando pra memória");
+            None
+        }
+        Err(e) => {
+            log::warn!("usage cache: abrir {path:?} falhou ({e}); tentando recriar");
+            let _ = std::fs::remove_file(path);
+            match Database::create(path) {
+                Ok(db) => Some(db),
+                Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
+                    log::warn!(
+                        "usage cache: {path:?} em uso por outro processo após recriar; degradando pra memória"
+                    );
+                    None
+                }
+                Err(e2) => {
+                    log::warn!(
+                        "usage cache: recriação de {path:?} falhou ({e2}); rodando só em memória"
+                    );
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// Lê a versão gravada em `META["version"]`. `None` = tabela ainda não
+/// existe (DB novo) ou qualquer erro de leitura (degrada pra "versão nova").
+fn read_meta_version(db: &Database) -> Option<u64> {
+    let txn = db.begin_read().ok()?;
+    let table = match txn.open_table(META) {
+        Ok(t) => t,
+        Err(_) => return None,
+    };
+    table.get("version").ok()?.map(|g| g.value())
 }
 
 /// Lê `(size, mtime_unix_secs)` do arquivo via `std::fs::metadata`.
@@ -84,6 +357,9 @@ mod tests {
             output: 1,
             cache_read: 0,
             cache_write: 0,
+            cache_write_1h: 0,
+            fast: false,
+            geo_us: false,
             ts: datetime!(2026-06-19 12:00 UTC),
             session_id: None,
             project: None,
@@ -99,30 +375,26 @@ mod tests {
     }
 
     #[test]
-    fn cache_hit_does_not_reparse() {
+    fn memory_only_cache_hit_does_not_reparse() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("test.jsonl");
         std::fs::write(&path, "some content").unwrap();
 
-        let mut cache = UsageCache::new();
-
-        // Primeira chamada: parseia (retorna 1 record).
+        let mut cache = UsageCache::open(None);
         let r1 = cache.cached_or_parse(&path, parse_once);
         assert_eq!(r1.len(), 1);
-
-        // Segunda chamada com mesmo arquivo: deve devolver do cache sem chamar o parser.
         let _ = cache.cached_or_parse(&path, |_| {
             panic!("não deveria reparsear");
         });
     }
 
     #[test]
-    fn cache_miss_on_changed_content() {
+    fn memory_only_cache_miss_on_changed_content() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("test.jsonl");
         std::fs::write(&path, "v1").unwrap();
 
-        let mut cache = UsageCache::new();
+        let mut cache = UsageCache::open(None);
         let r1 = cache.cached_or_parse(&path, parse_once);
         assert_eq!(r1.len(), 1);
 
@@ -134,8 +406,95 @@ mod tests {
 
     #[test]
     fn nonexistent_file_returns_empty() {
-        let mut cache = UsageCache::new();
+        let mut cache = UsageCache::open(None);
         let r = cache.cached_or_parse(Path::new("/nonexistent/path/file.jsonl"), parse_once);
         assert!(r.is_empty());
+    }
+
+    #[test]
+    fn persistent_cache_survives_reopen() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("usage.redb");
+        let f = dir.path().join("s.jsonl");
+        std::fs::write(&f, "conteudo").unwrap();
+
+        let mut c1 = UsageCache::open(Some(&db));
+        let r1 = c1.cached_or_parse(&f, |_| vec![dummy_record()]);
+        assert_eq!(r1.len(), 1);
+        drop(c1);
+
+        // Reabrir: mesmo (size, mtime) → NÃO re-parseia.
+        let mut c2 = UsageCache::open(Some(&db));
+        let r2 = c2.cached_or_parse(&f, |_| panic!("não deveria reparsear"));
+        assert_eq!(r2, r1);
+    }
+
+    #[test]
+    fn changed_file_reparses_and_version_bump_drops_everything() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("usage.redb");
+        let f = dir.path().join("s.jsonl");
+        std::fs::write(&f, "v1").unwrap();
+        let mut c = UsageCache::open(Some(&db));
+        let _ = c.cached_or_parse(&f, |_| vec![dummy_record()]);
+        std::fs::write(&f, "v2 maior").unwrap(); // size muda → key muda
+        let r = c.cached_or_parse(&f, |_| vec![]);
+        assert!(r.is_empty(), "arquivo mudado re-parseia");
+        drop(c);
+        // Simular bump de versão: gravar meta antiga e reabrir.
+        let mut c = UsageCache::open_with_version(Some(&db), CACHE_VERSION + 1);
+        let r = c.cached_or_parse(&f, |_| vec![dummy_record(), dummy_record()]);
+        assert_eq!(r.len(), 2, "versão nova invalida tudo");
+    }
+
+    #[test]
+    fn corrupted_db_is_rebuilt_not_fatal() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("usage.redb");
+        std::fs::write(&db, b"isto nao e um redb").unwrap();
+        let mut c = UsageCache::open(Some(&db)); // não pode panicar
+        let f = dir.path().join("s.jsonl");
+        std::fs::write(&f, "x").unwrap();
+        assert_eq!(c.cached_or_parse(&f, |_| vec![dummy_record()]).len(), 1);
+    }
+
+    #[test]
+    fn second_open_while_locked_degrades_to_memory_without_deleting() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("usage.redb");
+        let f = dir.path().join("s.jsonl");
+        std::fs::write(&f, "x").unwrap();
+
+        let mut c1 = UsageCache::open(Some(&db));
+        let _ = c1.cached_or_parse(&f, |_| vec![dummy_record()]);
+        assert_eq!(c1.persisted_len(), 1);
+
+        // 2º open com o 1º ainda vivo (lock ativo): não pode apagar o db.
+        let mut c2 = UsageCache::open(Some(&db));
+        let r = c2.cached_or_parse(&f, |_| vec![dummy_record()]); // funciona em memória
+        assert_eq!(r.len(), 1);
+
+        drop(c1);
+        drop(c2);
+
+        // O arquivo NÃO foi deletado e o dado do 1º sobreviveu.
+        let c3 = UsageCache::open(Some(&db));
+        assert_eq!(
+            c3.persisted_len(),
+            1,
+            "db saudável não pode ter sido apagado pelo 2º open"
+        );
+    }
+
+    #[test]
+    fn gc_removes_dead_paths() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("usage.redb");
+        let f = dir.path().join("s.jsonl");
+        std::fs::write(&f, "x").unwrap();
+        let mut c = UsageCache::open(Some(&db));
+        let _ = c.cached_or_parse(&f, |_| vec![dummy_record()]);
+        c.gc(&std::collections::HashSet::new()); // nenhum path vivo
+        assert_eq!(c.persisted_len(), 0);
     }
 }
