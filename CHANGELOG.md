@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-07-11
+
+Redesign completo da TUI (v8) + números confiáveis no usage.
+
+> **Os números históricos exibidos MUDAM neste update**: o dedup de
+> streaming corrige a contagem de tokens do Claude (a mesma request era
+> somada N vezes — queda esperada de ~1/3 nos totais) e o pricing novo
+> corrige o custo. É correção, não perda de dado.
+
+### Added
+- **Chart de colunas por modelo** no Detail e no Histórico (escala √,
+  série mínima sempre visível, cores One Dark Turbo validadas CVD).
+- **Histórico com dias expandíveis e sessões**: cada dia abre a lista de
+  sessões (hora, projeto, modelo, tokens, custo), derivadas dos session
+  logs.
+- **Cache persistente de parse** (`usage.redb`): warm-start do histórico
+  cai de ~8s para ~150ms; versão de cache invalida tudo quando a
+  semântica do parse muda; degradação segura em corrupção/lock.
+- **Right-click no módulo Waybar abre a TUI** focada no provider, com
+  cache invalidado antes de rotear.
+- Config da TUI com seções waybar/tui e hint do signal de reload.
+- Preços 2026-07: Fable/Mythos, Sonnet 5 com virada automática do preço
+  introdutório em 2026-09-01, Opus legado (≤4.1) separado do 4.5+, tiers
+  de cache 5m/1h, fast mode (Opus 4.7/4.8) e `inference_geo`.
+- Nomes de modelo humanizados nas telas ("Fable 5", "Opus 4.8"…).
+
+### Changed
+- **Overview removida — a TUI boota direto no provider** (navegação pela
+  sidebar; sem abas).
+- **`waybar.interval` das settings agora chega ao config do Waybar**;
+  default efetivo 60s — quem nunca configurou o valor verá o intervalo
+  mudar de 120s para 60s.
+- Paleta One Dark Turbo em toda a TUI; gauge sólido com precisão de
+  oitavos.
+- README reescrito em pt-BR; URLs migradas para `othavi0/agent-bar`.
+
+### Fixed
+- **Dedup de streaming no parser do Claude**: 1 record por request
+  (a última entrada vence) — antes cada entrada parcial do streaming
+  contava de novo.
+- **Codex logado com token expirado**: resposta de erro JSON-RPC do
+  app-server agora falha rápido em vez de girar até o timeout de 4s.
+- Semana downsampled do chart cobre os 7 dias; empty-state do chart
+  centralizado; colapso limpo em terminal baixo.
+- Flake raro de testes que tocam PATH (serializados via lock comum).
+
 ## [7.1.0] - 2026-07-02
 
 Leva de ajustes visuais da TUI pós-teste real do redesign.

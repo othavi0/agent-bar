@@ -1,6 +1,6 @@
 # Maintainer: Othavio <obsidianlab3d@gmail.com>
 pkgname=agent-bar-bin
-pkgver=7.1.0
+pkgver=8.0.0
 pkgrel=1
 pkgdesc="LLM quota monitor for Waybar (Claude, Codex, Amp) — standalone binary"
 arch=('x86_64')
@@ -15,7 +15,7 @@ optdepends=('waybar: status bar integration'
 install="${pkgname}.install"
 source=("agent-bar-${pkgver}-x86_64.tar.gz::${url}/releases/download/v${pkgver}/agent-bar-${pkgver}-x86_64.tar.gz")
 # Preenchido por release a partir do .sha256 produzido pelo CI. Nunca 'SKIP'.
-sha256sums=('3bbba6abbb3ce6a32043ff2511fe60fde87b5edc5973c4595053bb41e61f4f83')
+sha256sums=('0000000000000000000000000000000000000000000000000000000000000000')
 
 package() {
   install -Dm755 "${srcdir}/agent-bar" "${pkgdir}/usr/bin/agent-bar"
