@@ -143,6 +143,7 @@ async fn main() {
                 &term_str,
                 settings.waybar.signal,
                 &settings.waybar.provider_order,
+                settings.waybar.interval,
             );
             println!(
                 "{}",
@@ -572,22 +573,25 @@ async fn main() {
 
     // 6. Menu → abre a TUI.
     if matches!(opts.command, Command::Menu) {
-        if let Err(e) = tui::run_tui(&ctx).await {
+        if let Err(e) = tui::run_tui(&ctx, None).await {
             log::error!("TUI encerrou com erro: {e}");
             std::process::exit(1);
         }
         std::process::exit(0);
     }
 
-    // 6b. ActionRight.
+    // 6b. ActionRight → resolve foco e abre a TUI focada.
     if matches!(opts.command, Command::ActionRight) {
-        agent_bar::action_right::handle_action_right(
-            opts.provider.as_deref().unwrap_or(""),
-            &ctx,
-            &clock,
-            no_color,
-        )
-        .await;
+        let provider = opts.provider.as_deref().unwrap_or("");
+        match agent_bar::action_right::action_right_focus(provider, &ctx).await {
+            Some(focus) => {
+                if let Err(e) = tui::run_tui(&ctx, Some(focus)).await {
+                    log::error!("TUI encerrou com erro: {e}");
+                    std::process::exit(1);
+                }
+            }
+            None => std::process::exit(1),
+        }
         std::process::exit(0);
     }
 
@@ -675,7 +679,7 @@ async fn main() {
             // Waybar (default) — ou interativo sem args → TUI.
             let stdout_tty = std::io::stdout().is_terminal();
             if stdout_tty && raw.is_empty() {
-                if let Err(e) = tui::run_tui(&ctx).await {
+                if let Err(e) = tui::run_tui(&ctx, None).await {
                     log::error!("TUI encerrou com erro: {e}");
                     std::process::exit(1);
                 }

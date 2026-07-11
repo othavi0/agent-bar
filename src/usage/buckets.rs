@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use time::{Date, OffsetDateTime};
 
+use crate::usage::model_names::{display_model_name, series_slot_for_model};
 use crate::usage::pricing::cost_usd_of;
 use crate::usage::UsageRecord;
 
@@ -98,12 +99,6 @@ pub fn bucket_by_provider_day(records: &[UsageRecord]) -> BTreeMap<String, Vec<D
 // Hour bucketing
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct HourBucket {
-    pub hour_start: OffsetDateTime,
-    pub tokens: u64,
-}
-
 fn floor_to_hour(t: OffsetDateTime) -> OffsetDateTime {
     t.replace_minute(0)
         .and_then(|t| t.replace_second(0))
@@ -115,54 +110,164 @@ fn record_tokens(r: &UsageRecord) -> u64 {
     r.input + r.output + r.cache_read + r.cache_write
 }
 
-/// Agrupa records em `hours` buckets horarios terminando na hora de `now`
-/// (janela [now - hours + 1h, now], truncada em horas cheias).
-/// Sempre devolve exatamente `hours` buckets, do mais antigo ao mais novo,
-/// com zeros preenchidos onde nao ha records.
-pub fn bucket_by_hour(
-    records: &[UsageRecord],
-    now: OffsetDateTime,
-    hours: usize,
-) -> Vec<HourBucket> {
-    let end_hour = floor_to_hour(now);
-    let mut buckets: Vec<HourBucket> = (0..hours)
-        .map(|i| HourBucket {
-            hour_start: end_hour - time::Duration::hours((hours - 1 - i) as i64),
-            tokens: 0,
-        })
-        .collect();
-    let start = match buckets.first() {
-        Some(b) => b.hour_start,
-        None => return buckets,
-    };
-    for r in records {
-        if r.ts < start || r.ts >= end_hour + time::Duration::hours(1) {
-            continue;
-        }
-        let idx = (floor_to_hour(r.ts) - start).whole_hours() as usize;
-        if let Some(b) = buckets.get_mut(idx) {
-            b.tokens += record_tokens(r);
-        }
-    }
-    buckets
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModelHourSeries {
+    /// Nome já tratado pra display (ex. "Fable 5").
+    pub label: String,
+    /// Slot de cor 0..=5 (theme::ColorToken::Series1..6).
+    pub slot: u8,
+    /// Exatamente `hours` pontos, mais antigo → mais novo.
+    pub tokens: Vec<u64>,
+    pub total: u64,
 }
 
-/// Serie de 24 pontos horarios (tokens) para um provider especifico, ate `now`.
-/// Usada pelo sparkline "tokens/h 24h" da aba de resumo.
-pub fn provider_series_24h(
+/// Séries tokens/h por modelo (display name) de um provider, `hours` buckets
+/// terminando na hora de `now`. Ordenadas por slot asc, total desc.
+pub fn bucket_by_model_hour(
     records: &[UsageRecord],
     provider: &str,
     now: OffsetDateTime,
-) -> Vec<u64> {
-    let filtered: Vec<UsageRecord> = records
-        .iter()
-        .filter(|r| r.provider == provider)
-        .cloned()
-        .collect();
-    bucket_by_hour(&filtered, now, 24)
+    hours: usize,
+) -> Vec<ModelHourSeries> {
+    let end_hour = floor_to_hour(now);
+    let start = end_hour - time::Duration::hours(hours.saturating_sub(1) as i64);
+
+    // label → (slot, tokens por bucket)
+    let mut map: BTreeMap<String, (u8, Vec<u64>)> = BTreeMap::new();
+    for r in records {
+        if r.provider != provider || r.ts < start || r.ts >= end_hour + time::Duration::hours(1) {
+            continue;
+        }
+        let raw = r.model.as_deref();
+        let (label, slot) = match raw {
+            Some(m) => (display_model_name(m), series_slot_for_model(m)),
+            None => ("—".to_string(), 5),
+        };
+        let idx = (floor_to_hour(r.ts) - start).whole_hours() as usize;
+        let entry = map.entry(label).or_insert_with(|| (slot, vec![0; hours]));
+        if let Some(b) = entry.1.get_mut(idx) {
+            *b += record_tokens(r);
+        }
+    }
+
+    let mut out: Vec<ModelHourSeries> = map
         .into_iter()
-        .map(|b| b.tokens)
-        .collect()
+        .map(|(label, (slot, tokens))| {
+            let total = tokens.iter().sum();
+            ModelHourSeries {
+                label,
+                slot,
+                tokens,
+                total,
+            }
+        })
+        .filter(|s| s.total > 0)
+        .collect();
+    out.sort_by(|a, b| a.slot.cmp(&b.slot).then(b.total.cmp(&a.total)));
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Session bucketing
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionAgg {
+    pub session_id: String,
+    pub start: OffsetDateTime,
+    pub project: Option<String>,
+    /// Display name do modelo com mais tokens na sessão (ex. "Fable 5").
+    pub dominant_model: Option<String>,
+    pub tokens: u64,
+    pub cost_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DaySessions {
+    pub date: Date,
+    pub tokens: u64,
+    pub cost_usd: Option<f64>,
+    pub sessions: Vec<SessionAgg>,
+}
+
+/// Sessões agrupadas por dia LOCAL (desc). Sessão = session_id do record;
+/// records sem session_id agrupam em "—".
+pub fn sessions_by_day(records: &[UsageRecord], offset: time::UtcOffset) -> Vec<DaySessions> {
+    struct SessAcc {
+        start: OffsetDateTime,
+        project: Option<String>,
+        by_model: BTreeMap<String, u64>,
+        tokens: u64,
+        cost_usd: Option<f64>,
+    }
+    // (date, session_id) → acumulador
+    let mut map: BTreeMap<(Date, String), SessAcc> = BTreeMap::new();
+
+    for r in records {
+        let local = r.ts.to_offset(offset);
+        let key = (
+            local.date(),
+            r.session_id.clone().unwrap_or_else(|| "—".into()),
+        );
+        let acc = map.entry(key).or_insert(SessAcc {
+            start: r.ts,
+            project: None,
+            by_model: BTreeMap::new(),
+            tokens: 0,
+            cost_usd: None,
+        });
+        acc.start = acc.start.min(r.ts);
+        if acc.project.is_none() {
+            acc.project = r.project.clone();
+        }
+        let t = record_tokens(r);
+        acc.tokens += t;
+        if let Some(m) = &r.model {
+            *acc.by_model.entry(m.clone()).or_insert(0) += t;
+        }
+        match (cost_usd_of(r), acc.cost_usd.as_mut()) {
+            (Some(c), Some(sum)) => *sum += c,
+            (Some(c), None) => acc.cost_usd = Some(c),
+            (None, _) => {}
+        }
+    }
+
+    let mut by_day: BTreeMap<Date, Vec<SessionAgg>> = BTreeMap::new();
+    for ((date, session_id), acc) in map {
+        let dominant_model = acc
+            .by_model
+            .iter()
+            .max_by_key(|(_, t)| **t)
+            .map(|(m, _)| display_model_name(m));
+        by_day.entry(date).or_default().push(SessionAgg {
+            session_id,
+            start: acc.start,
+            project: acc.project,
+            dominant_model,
+            tokens: acc.tokens,
+            cost_usd: acc.cost_usd,
+        });
+    }
+
+    let mut out: Vec<DaySessions> = by_day
+        .into_iter()
+        .map(|(date, mut sessions)| {
+            sessions.sort_by_key(|s| std::cmp::Reverse(s.start));
+            let tokens = sessions.iter().map(|s| s.tokens).sum();
+            let cost_usd = sessions
+                .iter()
+                .filter_map(|s| s.cost_usd)
+                .fold(None, |acc, c| Some(acc.unwrap_or(0.0) + c));
+            DaySessions {
+                date,
+                tokens,
+                cost_usd,
+                sessions,
+            }
+        })
+        .collect();
+    out.reverse(); // BTreeMap é asc; queremos desc por data
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -184,47 +289,156 @@ mod tests {
             cache_read: 0,
             cache_write: 0,
             ts,
+            session_id: None,
+            project: None,
         }
     }
 
-    #[test]
-    fn bucket_by_hour_fills_gaps_with_zero() {
-        let now = datetime!(2026-07-01 18:30:00 UTC);
-        let records = vec![
-            rec("claude", datetime!(2026-07-01 18:10:00 UTC), 100), // hora atual
-            rec("claude", datetime!(2026-07-01 16:59:00 UTC), 40),  // 2h atras
-            rec("claude", datetime!(2026-06-30 18:45:00 UTC), 7),   // fora da janela de 3h
-        ];
-        let buckets = bucket_by_hour(&records, now, 3);
-        assert_eq!(buckets.len(), 3);
-        assert_eq!(buckets[0].hour_start, datetime!(2026-07-01 16:00:00 UTC));
-        assert_eq!(buckets[0].tokens, 40);
-        assert_eq!(buckets[1].tokens, 0); // 17h vazia
-        assert_eq!(buckets[2].tokens, 100);
+    fn mrec(provider: &str, model: &str, ts: time::OffsetDateTime, tokens: u64) -> UsageRecord {
+        let mut r = rec(provider, ts, tokens);
+        r.model = Some(model.into());
+        r
     }
 
     #[test]
-    fn provider_series_24h_has_24_points_and_filters_provider() {
-        let now = datetime!(2026-07-01 18:30:00 UTC);
+    fn model_hour_series_split_by_model_and_slot_order() {
+        let now = datetime!(2026-07-10 12:30:00 UTC);
         let records = vec![
-            rec("claude", datetime!(2026-07-01 18:00:01 UTC), 5),
-            rec("codex", datetime!(2026-07-01 18:00:01 UTC), 999),
+            mrec(
+                "claude",
+                "claude-opus-4-8",
+                datetime!(2026-07-10 12:05:00 UTC),
+                50,
+            ),
+            mrec(
+                "claude",
+                "claude-fable-5",
+                datetime!(2026-07-10 12:10:00 UTC),
+                100,
+            ),
+            mrec(
+                "claude",
+                "claude-fable-5",
+                datetime!(2026-07-10 11:10:00 UTC),
+                30,
+            ),
+            mrec("codex", "gpt-5.5", datetime!(2026-07-10 12:00:00 UTC), 999), // outro provider: fora
         ];
-        let series = provider_series_24h(&records, "claude", now);
-        assert_eq!(series.len(), 24);
-        assert_eq!(series[23], 5);
-        assert!(series[..23].iter().all(|&t| t == 0));
+        let series = bucket_by_model_hour(&records, "claude", now, 3);
+        assert_eq!(series.len(), 2);
+        // Slot 0 (fable) vem antes do slot 1 (opus).
+        assert_eq!(series[0].label, "Fable 5");
+        assert_eq!(series[0].slot, 0);
+        assert_eq!(series[0].tokens, vec![0, 30, 100]);
+        assert_eq!(series[0].total, 130);
+        assert_eq!(series[1].label, "Opus 4.8");
+        assert_eq!(series[1].tokens, vec![0, 0, 50]);
     }
 
     #[test]
-    fn bucket_by_hour_sums_all_token_kinds() {
-        let now = datetime!(2026-07-01 10:30:00 UTC);
-        let mut r = rec("claude", datetime!(2026-07-01 10:05:00 UTC), 1);
-        r.output = 2;
-        r.cache_read = 3;
-        r.cache_write = 4;
-        let buckets = bucket_by_hour(&[r], now, 1);
-        assert_eq!(buckets[0].tokens, 10);
+    fn model_hour_series_merges_same_display_name_and_skips_empty() {
+        let now = datetime!(2026-07-10 12:30:00 UTC);
+        let records = vec![
+            mrec(
+                "claude",
+                "claude-opus-4-8",
+                datetime!(2026-07-10 12:05:00 UTC),
+                10,
+            ),
+            mrec(
+                "claude",
+                "claude-opus-4-8-20260101",
+                datetime!(2026-07-10 12:06:00 UTC),
+                5,
+            ),
+            mrec(
+                "claude",
+                "claude-haiku-4-5",
+                datetime!(2026-07-01 12:00:00 UTC),
+                7,
+            ), // fora da janela
+        ];
+        let series = bucket_by_model_hour(&records, "claude", now, 2);
+        assert_eq!(series.len(), 1); // haiku fora da janela → total 0 → omitido
+        assert_eq!(series[0].label, "Opus 4.8");
+        assert_eq!(series[0].total, 15);
+    }
+
+    #[test]
+    fn sessions_by_day_groups_and_orders_desc() {
+        use time::UtcOffset;
+        let mut a = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-10 10:00:00 UTC),
+            100,
+        );
+        a.session_id = Some("s1".into());
+        a.project = Some("crm".into());
+        let mut b = mrec(
+            "claude",
+            "claude-opus-4-8",
+            datetime!(2026-07-10 11:00:00 UTC),
+            40,
+        );
+        b.session_id = Some("s2".into());
+        let mut c = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-09 09:00:00 UTC),
+            7,
+        );
+        c.session_id = Some("s3".into());
+
+        let days = sessions_by_day(&[a, b, c], UtcOffset::UTC);
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].date, time::macros::date!(2026 - 07 - 10)); // desc
+        assert_eq!(days[0].sessions.len(), 2);
+        // sessões desc por start: s2 (11:00) antes de s1 (10:00)
+        assert_eq!(days[0].sessions[0].session_id, "s2");
+        assert_eq!(days[0].sessions[1].project.as_deref(), Some("crm"));
+        assert_eq!(days[0].tokens, 140);
+        assert!(days[0].cost_usd.is_some());
+    }
+
+    #[test]
+    fn session_dominant_model_is_treated_name_of_biggest() {
+        use time::UtcOffset;
+        let mut a = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-10 10:00:00 UTC),
+            100,
+        );
+        a.session_id = Some("s1".into());
+        let mut b = mrec(
+            "claude",
+            "claude-opus-4-8",
+            datetime!(2026-07-10 10:05:00 UTC),
+            30,
+        );
+        b.session_id = Some("s1".into());
+        let days = sessions_by_day(&[a, b], UtcOffset::UTC);
+        assert_eq!(
+            days[0].sessions[0].dominant_model.as_deref(),
+            Some("Fable 5")
+        );
+        assert_eq!(days[0].sessions[0].tokens, 130);
+    }
+
+    #[test]
+    fn sessions_by_day_uses_local_offset_for_date() {
+        // 2026-07-10 01:00 UTC = 2026-07-09 22:00 em UTC-3.
+        let offset = time::UtcOffset::from_hms(-3, 0, 0).unwrap();
+        let mut a = mrec(
+            "claude",
+            "claude-fable-5",
+            datetime!(2026-07-10 01:00:00 UTC),
+            10,
+        );
+        a.session_id = Some("s1".into());
+        let days = sessions_by_day(&[a], offset);
+        assert_eq!(days[0].date, time::macros::date!(2026 - 07 - 09));
     }
 }
 
@@ -252,6 +466,8 @@ mod day_bucket_tests {
             cache_read: 0,
             cache_write: 0,
             ts,
+            session_id: None,
+            project: None,
         }
     }
 

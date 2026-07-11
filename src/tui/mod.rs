@@ -15,8 +15,20 @@ use anyhow::Context as _;
 
 use crate::providers::{Ctx, OwnedCtx};
 
+/// Alvo de foco inicial da TUI (Task 11). `None` = boot default do menu
+/// (foco no 1º provider habilitado nas settings, resolvido lazy no
+/// `event_loop::run`). `Provider(id)` = action-right/chip de um provider
+/// específico. `Login(id)` = boot direto na tela Login com aquele provider
+/// pré-selecionado (ex. chip "fazer login"). Nunca índice fixo — sempre por
+/// ID (T12 consome este enum ao construir o foco a partir do `action_right`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InitialFocus {
+    Provider(String),
+    Login(String),
+}
+
 /// Abre o terminal alternado, inicializa o AppState, e executa o event loop.
-pub async fn run_tui(ctx: &Ctx<'_>) -> anyhow::Result<()> {
+pub async fn run_tui(ctx: &Ctx<'_>, focus: Option<InitialFocus>) -> anyhow::Result<()> {
     // Instala panic hook que restaura o terminal antes de imprimir o backtrace.
     // Desabilita a captura de mouse primeiro (Task 9): ratatui::try_restore não
     // sabe sobre ela, e um panic com a captura ainda ativa deixaria o terminal
@@ -53,7 +65,7 @@ pub async fn run_tui(ctx: &Ctx<'_>) -> anyhow::Result<()> {
     }
 
     let octx = OwnedCtx::from_ctx(ctx);
-    let result = event_loop::run(octx, &mut terminal).await;
+    let result = event_loop::run(octx, &mut terminal, focus).await;
 
     let _ = ratatui::crossterm::execute!(
         std::io::stdout(),

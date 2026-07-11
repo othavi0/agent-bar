@@ -124,16 +124,6 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
     }
 }
 
-/// Funcao compartilhada usada pelo `action_right::login_stub` para lancar o
-/// login a partir do right-click do Waybar (contexto sem TUI ativa).
-///
-/// Diferente de `RealLogin::launch`, esta funcao NAO tenta restaurar ratatui
-/// (o terminal ja esta em modo normal no contexto do right-click). Ela apenas
-/// executa o CLI com stdio herdado e aguarda.
-pub fn launch_login_no_tui(provider_id: &str) -> anyhow::Result<()> {
-    run_login_cli(provider_id)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

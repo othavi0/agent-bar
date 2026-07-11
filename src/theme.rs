@@ -17,6 +17,8 @@ pub enum ColorToken {
     Muted,
     Magenta,
     Cyan,
+    /// Acento de UI (#61afef) — não confundir com as séries de gráfico
+    /// (Series1..6), que têm paleta própria.
     Blue,
     BrightBlue,
     Surface,
@@ -24,6 +26,15 @@ pub enum ColorToken {
     ChipBg,
     EmptyTrack,
     GreenHi,
+    // séries de gráfico por modelo (One Dark Turbo, validadas p/ CVD/contraste)
+    Series1, // fable/mythos
+    Series2, // opus
+    Series3, // sonnet
+    Series4, // haiku
+    Series5, // codex/gpt
+    Series6, // outros
+    /// Fundo geral da TUI (#282c34 — antes literal em render/mod.rs).
+    Bg,
 }
 
 impl ColorToken {
@@ -46,6 +57,13 @@ impl ColorToken {
             ColorToken::ChipBg => "#262d3a",
             ColorToken::EmptyTrack => "#343b49",
             ColorToken::GreenHi => "#b5e890",
+            ColorToken::Series1 => "#3f8fd6",
+            ColorToken::Series2 => "#cb7e30",
+            ColorToken::Series3 => "#b562d6",
+            ColorToken::Series4 => "#55a34a",
+            ColorToken::Series5 => "#2ba3b4",
+            ColorToken::Series6 => "#af8f2c",
+            ColorToken::Bg => "#282c34",
         }
     }
 
@@ -75,6 +93,18 @@ pub fn provider_hex(id: &str) -> &'static str {
         "codex" => ColorToken::Green.hex(),
         "amp" => ColorToken::Magenta.hex(),
         _ => ColorToken::Text.hex(),
+    }
+}
+
+/// Token de série de gráfico pelo slot de família (usage::model_names).
+pub fn series_token(slot: u8) -> ColorToken {
+    match slot {
+        0 => ColorToken::Series1,
+        1 => ColorToken::Series2,
+        2 => ColorToken::Series3,
+        3 => ColorToken::Series4,
+        4 => ColorToken::Series5,
+        _ => ColorToken::Series6,
     }
 }
 
@@ -145,5 +175,23 @@ mod tests {
         assert_eq!(ColorToken::ChipBg.hex(), "#262d3a");
         assert_eq!(ColorToken::EmptyTrack.hex(), "#343b49");
         assert_eq!(ColorToken::GreenHi.hex(), "#b5e890");
+    }
+
+    #[test]
+    fn series_tokens_hex() {
+        assert_eq!(ColorToken::Series1.hex(), "#3f8fd6");
+        assert_eq!(ColorToken::Series2.hex(), "#cb7e30");
+        assert_eq!(ColorToken::Series3.hex(), "#b562d6");
+        assert_eq!(ColorToken::Series4.hex(), "#55a34a");
+        assert_eq!(ColorToken::Series5.hex(), "#2ba3b4");
+        assert_eq!(ColorToken::Series6.hex(), "#af8f2c");
+        assert_eq!(ColorToken::Bg.hex(), "#282c34");
+    }
+
+    #[test]
+    fn series_token_maps_slots() {
+        assert_eq!(series_token(0), ColorToken::Series1);
+        assert_eq!(series_token(5), ColorToken::Series6);
+        assert_eq!(series_token(99), ColorToken::Series6); // clamp
     }
 }

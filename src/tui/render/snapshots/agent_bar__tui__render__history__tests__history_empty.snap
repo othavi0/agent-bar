@@ -1,10 +1,8 @@
 ---
 source: src/tui/render/history.rs
-assertion_line: 777
 expression: terminal.backend()
 ---
 "┏ Histórico (7 dias) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-"┃ sem uso de tokens no período selecionado                                                         ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
@@ -19,6 +17,7 @@ expression: terminal.backend()
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
+"┃ sem uso de tokens no período                                                                     ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
@@ -31,7 +30,7 @@ expression: terminal.backend()
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
 "┃                                                                                                  ┃"
-"┃dia    provider  tokens   custo                                                                   ┃"
 "┃                                                                                                  ┃"
-"┃                             t 24h/7d     r atualizar     esc voltar                              ┃"
+"┃                                                                                                  ┃"
+"┃                      ↵ expandir     t 24h/7d     r atualizar     esc voltar                      ┃"
 "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"

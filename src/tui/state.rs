@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::providers::types::ProviderQuota;
 use crate::settings::{GlyphMode, Settings};
 use crate::usage::{UsageRecord, UsageSummary};
@@ -31,10 +33,11 @@ pub enum HistoryRange {
 }
 
 /// Tela atual da TUI. Substitui `Tab` + `Mode`: cada tela e um estado
-/// distinto navegado via sidebar (sem abas).
+/// distinto navegado via sidebar (sem abas). `Overview` morreu na Task 11 —
+/// `Detail` agora é a tela default do boot (foco resolvido por ID, ver
+/// `AppState::pending_focus` e `update.rs::Action::ProviderFetched`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
-    Overview,
     Detail,
     History,
     Login,
@@ -53,18 +56,17 @@ pub enum FxEvent {
 /// Item da sidebar unica. `Provider(i)` indexa `AppState.providers`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarItem {
-    Overview,
     Provider(usize),
     History,
     Login,
     Waybar,
 }
 
-/// Constroi a lista de itens da sidebar na ordem de exibicao:
-/// Overview, 1 entrada por provider, History, Login, Waybar.
+/// Constroi a lista de itens da sidebar na ordem de exibicao: 1 entrada por
+/// provider, History, Login, Waybar. `Overview` morreu na Task 11 — não há
+/// mais item de lista/resumo antes dos providers.
 pub fn sidebar_items(n_providers: usize) -> Vec<SidebarItem> {
-    let mut v = vec![SidebarItem::Overview];
-    v.extend((0..n_providers).map(SidebarItem::Provider));
+    let mut v: Vec<SidebarItem> = (0..n_providers).map(SidebarItem::Provider).collect();
     v.extend([
         SidebarItem::History,
         SidebarItem::Login,
@@ -74,15 +76,19 @@ pub fn sidebar_items(n_providers: usize) -> Vec<SidebarItem> {
 }
 
 /// Campo da aba Waybar config (ordem de exibicao = ordem dos enum variants).
+/// FxRate fica por ultimo (Task 14): as secoes WAYBAR (Providers..Interval)
+/// e TUI (FxRate — afeta so este menu, nao o Waybar) ficam contiguas no
+/// render. So ordem de display/navegacao (j/k); nenhuma persistencia
+/// depende dela.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigField {
     Providers,
     ProviderOrder,
     Separators,
     DisplayMode,
-    FxRate,
     Signal,
     Interval,
+    FxRate,
 }
 
 impl ConfigField {
@@ -91,9 +97,9 @@ impl ConfigField {
         ConfigField::ProviderOrder,
         ConfigField::Separators,
         ConfigField::DisplayMode,
-        ConfigField::FxRate,
         ConfigField::Signal,
         ConfigField::Interval,
+        ConfigField::FxRate,
     ];
 
     pub fn label(self) -> &'static str {
@@ -102,9 +108,9 @@ impl ConfigField {
             ConfigField::ProviderOrder => "providerOrder",
             ConfigField::Separators => "separators",
             ConfigField::DisplayMode => "displayMode",
-            ConfigField::FxRate => "fxRate",
             ConfigField::Signal => "signal",
             ConfigField::Interval => "interval",
+            ConfigField::FxRate => "fxRate",
         }
     }
 }
@@ -190,11 +196,28 @@ pub struct AppState {
     /// Janela temporal exibida no chart da aba History (T13). Default Week;
     /// alterna com Day via tecla `t`.
     pub history_range: HistoryRange,
+    /// Índice do dia selecionado na lista de dias expansível da aba History
+    /// (T20) — indexa `sessions_by_day(state.history, state.local_offset)`,
+    /// desc (0 = dia mais recente). Navegado via `HistoryUp`/`HistoryDown`
+    /// (j/k/setas, escopado à tela History).
+    pub history_selected: usize,
+    /// Dias expandidos (mostrando as sessões individuais) na lista de dias
+    /// da aba History (T20). Chave = `DaySessions.date` (data LOCAL, mesmo
+    /// fuso de `sessions_by_day`). Toggle via `HistoryToggleDay` (Enter).
+    pub history_expanded: BTreeSet<time::Date>,
     /// Overlay de ajuda visivel (toggle via `?`, fecha com Esc ou `?`).
     pub show_help: bool,
     /// Ids de provider com fetch em voo (Task 5). Populado por `FetchStarted`,
     /// esvaziado incrementalmente por `ProviderFetched`/`FetchCompleted`.
     pub fetch_pending: Vec<String>,
+    /// Provider id aguardando foco (Task 11): setado no boot (menu default =
+    /// 1º provider habilitado nas settings; action-right = provider
+    /// específico via `InitialFocus::Provider`) e resolvido LAZY em
+    /// `Action::ProviderFetched` — por ID, nunca por índice fixo (o fetch de
+    /// OUTRO provider não pode roubar o foco). `None` quando não há foco
+    /// pendente (já resolvido, ou boot direto numa tela sem provider, ex.
+    /// `InitialFocus::Login`).
+    pub pending_focus: Option<String>,
     /// Login pendente: o event_loop desenha 1 frame com o status e entao
     /// suspende o terminal para o CLI de login.
     pub pending_login: Option<String>,
@@ -225,20 +248,21 @@ pub struct AppState {
     /// partir de zero no primeiro paint.
     pub display_cost: f64,
     /// Gate de animações (`settings.menu.animations`, Task 15/16): controla
-    /// o count-up de `display_cost` e o pulse crítico dos gauges
-    /// (`widgets::quota_gauge::pulse_color`). Default `true` (paridade com
-    /// `MenuSettings::animations`); `event_loop::run` sobrescreve com
-    /// `octx.settings.menu.animations` no boot real — mesmo padrão de
-    /// `glyph_mode`/`local_offset`. NÃO gate os efeitos tachyonfx (esses
-    /// são gate por `Effects::new(enabled)`, construído direto do
-    /// settings no event_loop).
+    /// o count-up de `display_cost` (o pulse crítico dos gauges morreu em
+    /// v8 — spec §6; gauge agora é sólido, sem modulação de brilho).
+    /// Default `true` (paridade com `MenuSettings::animations`);
+    /// `event_loop::run` sobrescreve com `octx.settings.menu.animations`
+    /// no boot real — mesmo padrão de `glyph_mode`/`local_offset`. NÃO
+    /// gate os efeitos tachyonfx (esses são gate por
+    /// `Effects::new(enabled)`, construído direto do settings no
+    /// event_loop).
     pub animations: bool,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
-            screen: Screen::Overview,
+            screen: Screen::Detail,
             providers: Vec::new(),
             selected: 0,
             sidebar_selected: 0,
@@ -254,8 +278,11 @@ impl AppState {
             login_status: None,
             history: None,
             history_range: HistoryRange::Week,
+            history_selected: 0,
+            history_expanded: BTreeSet::new(),
             show_help: false,
             fetch_pending: Vec::new(),
+            pending_focus: None,
             pending_login: None,
             pending_save: false,
             hover: None,

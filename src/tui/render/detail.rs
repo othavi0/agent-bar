@@ -1,15 +1,21 @@
-//! Tela Detalhe: dados reais por provider (Task 12). Substitui o antigo
-//! placeholder hardcoded `tokens/h ▁▂▃▅▇▆▄▂▁` (idêntico entre providers,
-//! nunca refletia dado real) por 6 seções alinhadas na mesma coluna de
-//! gauge: janelas (sessão/semana/modelos), modelos hoje (tokens+custo),
-//! sparkline real de 24h, extra usage (spend novo do Claude), totais
-//! (hoje/7 dias) e chips de ação.
+//! Tela Detalhe: dados reais por provider (Task 12, redesenhada na Task 9
+//! do plano v8). `render_full` orquestra 5 seções empilhadas por
+//! `Layout::vertical`, todas alinhadas na mesma coluna de gauge: janelas
+//! (sessão/semana/modelos), chart de tokens/hora por modelo (`Min(9)` —
+//! absorve a altura extra, substitui a antiga sparkline de 1 linha que
+//! deixava ~20 linhas em branco), modelos hoje (tokens+custo), extra usage
+//! (spend novo do Claude) e totais (hoje/7 dias). Chips de ação ficam fora
+//! de `render_full` (`render_detail` já reserva a última linha antes de
+//! chamá-la). Quando a área é curta demais pro conteúdo + chart mínimo, o
+//! colapso é progressivo: EXTRA USAGE some primeiro, depois MODELOS HOJE
+//! vira 1 linha-resumo.
 
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 use ratatui::Frame;
+use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 
 use crate::providers::extras::get_claude_extra;
 use crate::providers::types::{ExtraUsage, ProviderQuota, QuotaWindow};
@@ -17,15 +23,15 @@ use crate::settings::GlyphMode;
 use crate::theme::ColorToken;
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap};
-use crate::tui::render::shared::{abbrev_tokens, series_now};
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
+use crate::tui::widgets::column_chart::{column_chart_lines, fmt_tokens_short};
 use crate::tui::widgets::icons::{glyph, Icon};
-use crate::tui::widgets::quota_gauge::{gauge_spans, pulse_color};
+use crate::tui::widgets::quota_gauge::gauge_spans;
 use crate::tui::widgets::severity::{severity_color as sev_color, severity_color_api};
-use crate::tui::widgets::sparkline::sparkline_str_wide;
-use crate::usage::buckets::provider_series_24h;
+use crate::usage::buckets::bucket_by_model_hour;
+use crate::usage::model_names::display_model_name;
 use crate::usage::pricing::cost_usd_of;
 use crate::usage::{ModelUsage, ProviderUsage, UsageRecord};
 
@@ -35,20 +41,25 @@ use crate::usage::{ModelUsage, ProviderUsage, UsageRecord};
 /// coluna do gauge.
 const LABEL_W: usize = 12;
 
-/// Largura fixa dos gauges de "Modelos hoje" e "extra usage" (contrato do
-/// brief — ao contrário da janela de sessão/semana, não deriva da área).
-const FIXED_GAUGE_W: usize = 20;
+/// Sufixo reservado após o gauge — cada seção tem o seu (pct+reset pras
+/// janelas, tokens+custo pros modelos, "$usado de $limite" pro extra
+/// usage), então NÃO dá pra derivar com um valor único (era o bug do
+/// primeiro draft da Task 9: reusar o sufixo das janelas pros modelos
+/// estourava a borda, cortando o custo no meio — "$1.4" em vez de "$1.40").
+const WINDOW_SUFFIX_W: usize = 1 + 4 + 1 + 2 + 1 + 1 + 5; // pct(" NNN%"=6) + reset("  → "+HH:MM=9)
+const MODEL_SUFFIX_W: usize = 1 + 8 + 1 + 9; // tokens(" "+8=9) + custo(" "+9=10, larguras fixas do format!)
+const EXTRA_SUFFIX_W: usize = 22; // "  $9999.99 de $9999.99" (generoso; custo real bem menor)
 
-/// Deriva a largura do gauge de janelas a partir da área real do conteúdo.
-/// Prefixo fixo: label(" "+12+" "=14) + pct(" "+4+"%"=6) + reset("  → "+HH:MM=9) = 29.
-/// Contrato: NUNCA estourar a borda (era o off-by-1 do primeiro draft, que
-/// cortava o reset no meio: "→ 02:3" em vez de "→ 02:39").
-fn derive_bar_width(content_width: u16) -> usize {
+/// Deriva a largura do gauge a partir da área real do conteúdo e do
+/// `suffix_w` de quem chama — MESMA função usada por janelas, modelos hoje
+/// e extra usage (Task 9: antes só as janelas deriviam, "Modelos
+/// hoje"/"extra usage" tinham `FIXED_GAUGE_W` fixo). Prefixo fixo: label("
+/// "+12+" "=14). Contrato: NUNCA estourar a borda (era o off-by-1 do
+/// primeiro draft, que cortava o sufixo no meio).
+fn derive_bar_width(content_width: u16, suffix_w: usize) -> usize {
     let label_w = 1 + LABEL_W + 1;
-    let pct_w = 1 + 4 + 1;
-    let reset_w = 2 + 1 + 1 + 5;
     (content_width as usize)
-        .saturating_sub(label_w + pct_w + reset_w)
+        .saturating_sub(label_w + suffix_w)
         .max(10)
 }
 
@@ -65,8 +76,8 @@ fn truncate_name(name: &str, max: usize) -> String {
 }
 
 /// Tokens totais de um `ModelUsage` (todas as 4 categorias — mesma
-/// convenção do bucket horário em `usage::buckets::bucket_by_hour`, que
-/// alimenta o sparkline da seção 3; mantém as duas seções coerentes entre
+/// convenção do bucket horário em `usage::buckets::bucket_by_model_hour`,
+/// que alimenta o chart da seção 2; mantém as duas seções coerentes entre
 /// si mesmo divergindo do bucket diário de `render/history.rs`, que soma
 /// só input+output).
 fn model_tokens(mu: &ModelUsage) -> u64 {
@@ -125,20 +136,10 @@ fn fmt_cost_generic(pu: &ProviderUsage) -> String {
 
 /// Uma linha de janela (sessão/semana/modelo): label(12) + gauge + pct(4) +
 /// reset. Cor vem da severidade da API quando presente (spec §4.1),
-/// fallback pro threshold local. `anim_frame`/`animations` (Task 16): pulso
-/// crítico quando `remaining < 10.0` — coexiste com o blink da sidebar
-/// (Task 10), não o substitui.
-fn window_line(
-    label: &str,
-    w: &QuotaWindow,
-    gauge_w: usize,
-    anim_frame: u64,
-    animations: bool,
-) -> Line<'static> {
-    let mut color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
-    if animations && w.remaining < 10.0 {
-        color = pulse_color(color, anim_frame);
-    }
+/// fallback pro threshold local — sem modulação de brilho (v8: gauge sólido,
+/// pulso removido de propósito, spec §6).
+fn window_line(label: &str, w: &QuotaWindow, gauge_w: usize) -> Line<'static> {
+    let color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
     let reset_str = fmt_reset(w.resets_at.as_deref());
     let name = truncate_name(label, LABEL_W);
     let mut spans = vec![Span::styled(
@@ -169,10 +170,8 @@ fn model_window_line(
     gauge_w: usize,
     content_width: u16,
     provider_usage: Option<&ProviderUsage>,
-    anim_frame: u64,
-    animations: bool,
 ) -> Line<'static> {
-    let mut line = window_line(name, w, gauge_w, anim_frame, animations);
+    let mut line = window_line(name, w, gauge_w);
     if let Some(cost) = provider_usage
         .and_then(|pu| find_model_usage(&pu.by_model, name))
         .and_then(|mu| mu.cost.as_ref())
@@ -189,32 +188,79 @@ fn model_window_line(
     line
 }
 
+/// Seção JANELAS completa: sessão + semana + 1 linha por `q.models` (nome
+/// real da API). MESMO `bar_width` em todas — a coluna de gauge tem que
+/// alinhar entre sessão/semana/modelos (contrato do brief) — e a mesma
+/// `derive_bar_width` alimenta as seções 2 e 4 (Task 9), então o gauge
+/// COMEÇA na mesma coluna em toda seção. A LARGURA (e portanto a coluna
+/// onde termina) varia entre seções, porque cada uma tem seu próprio
+/// `suffix_w` (`WINDOW_SUFFIX_W` vs `MODEL_SUFFIX_W` vs `EXTRA_SUFFIX_W`) —
+/// isso é deliberado, não um bug de alinhamento (ver comentário acima de
+/// `WINDOW_SUFFIX_W`).
+fn window_lines(
+    q: &ProviderQuota,
+    provider_usage: Option<&ProviderUsage>,
+    content_width: u16,
+) -> Vec<Line<'static>> {
+    let bar_width = derive_bar_width(content_width, WINDOW_SUFFIX_W);
+    let mut lines = Vec::new();
+    if let Some(primary) = &q.primary {
+        lines.push(window_line("sessão", primary, bar_width));
+    }
+    if let Some(secondary) = &q.secondary {
+        lines.push(window_line("semana", secondary, bar_width));
+    }
+    if let Some(models) = &q.models {
+        for (name, w) in models {
+            lines.push(model_window_line(
+                name,
+                w,
+                bar_width,
+                content_width,
+                provider_usage,
+            ));
+        }
+    }
+    lines
+}
+
 // ---------------------------------------------------------------------------
 // Seção 2: Modelos hoje (tokens + custo, de provider_usage.by_model)
 // ---------------------------------------------------------------------------
 
-/// Uma linha de "Modelos hoje": label(12) + barra PROPORCIONAL a tokens
-/// (não a 100% — normalizada pelo modelo de maior consumo) + tokens
-/// abreviados + custo, ambos right-aligned.
-fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'static> {
+/// Uma linha de "MODELOS HOJE": label(12, nome TRATADO — `display_model_name`,
+/// Task 9) + barra PROPORCIONAL a tokens (não a 100% — normalizada pelo
+/// modelo de maior consumo, MESMA largura das janelas via `derive_bar_width`)
+/// + tokens abreviados + custo, ambos right-aligned.
+fn model_usage_line(
+    mu: &ModelUsage,
+    max_tokens: u64,
+    brand: Color,
+    content_width: u16,
+) -> Line<'static> {
     let tokens = model_tokens(mu);
     let pct = if max_tokens > 0 {
         (tokens as f64 / max_tokens as f64 * 100.0).clamp(0.0, 100.0)
     } else {
         0.0
     };
-    let name = truncate_name(&mu.model, LABEL_W);
+    let display_name = display_model_name(&mu.model);
+    let name = truncate_name(&display_name, LABEL_W);
     let cost_str = match &mu.cost {
         Some(c) => format!("${:.2}", c.usd),
-        None => "-".to_string(),
+        None => "\u{2014}".to_string(),
     };
     let mut spans = vec![Span::styled(
         format!(" {name:<LABEL_W$} "),
         Style::default().fg(to_ratatui(ColorToken::Text)),
     )];
-    spans.extend(gauge_spans(pct, FIXED_GAUGE_W, brand));
+    spans.extend(gauge_spans(
+        pct,
+        derive_bar_width(content_width, MODEL_SUFFIX_W),
+        brand,
+    ));
     spans.push(Span::styled(
-        format!(" {:>8}", abbrev_tokens(tokens)),
+        format!(" {:>8}", fmt_tokens_short(tokens)),
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     ));
     spans.push(Span::styled(
@@ -224,88 +270,149 @@ fn model_usage_line(mu: &ModelUsage, max_tokens: u64, brand: Color) -> Line<'sta
     Line::from(spans)
 }
 
-// ---------------------------------------------------------------------------
-// Seção 3: tokens/h 24h (sparkline real — mata o placeholder hardcoded)
-// ---------------------------------------------------------------------------
-
-/// Linha "tokens/h 24h": sparkline real (`provider_series_24h`) + hora de
-/// pico (índice do máximo → hora LOCAL). `now` (de `series_now`) carrega
-/// qualquer offset que sua fonte tiver (ex. `state.history[].ts`, tipicamente
-/// UTC) — `now.hour()` sozinho mentiria "local" enquanto devolve UTC. Fix:
-/// converte pro offset do relógio local (`state.local_offset`, T12) ANTES de
-/// extrair a hora; a subtração de `hours_back` é invariante a essa conversão
-/// (mesmo instante, offset fixo, sem DST neste app). `now` NUNCA é
-/// `OffsetDateTime::now_utc()` — vem de `series_now` (mesma âncora do
-/// Overview, Task 11), garantindo render puro/determinístico p/ snapshot.
-/// Sem âncora OU sem uso na janela → placeholder textual (nunca inventa
-/// pico sobre dado inexistente).
-fn spark_line(state: &AppState, provider: &str, content_width: u16) -> Line<'static> {
-    // `history=None` = parse dos session logs em voo — dizer "sem uso"
-    // aqui seria afirmar zero sobre dado que só não chegou (regressão
-    // "hoje 0 tok" da máquina real).
-    if state.history.is_none() {
-        return Line::from(Span::styled(
-            " tokens/h  coletando hist\u{f3}rico\u{2026}",
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        ));
-    }
-    let now = series_now(state);
-    let series: Vec<u64> = match now {
-        Some(n) => state
-            .history
-            .as_deref()
-            .map(|r| provider_series_24h(r, provider, n))
-            .unwrap_or_default(),
-        None => Vec::new(),
+/// Seção MODELOS HOJE completa (título + 1 linha por `pu.by_model`) e a
+/// versão colapsada (1 linha-resumo, Task 9 §2 — usada quando a área não
+/// cabe tudo + chart mínimo). Vazio (sem `provider_usage` ou sem modelos
+/// hoje) → ambas vazias, a seção inteira desaparece do layout.
+fn model_lines(
+    provider_usage: Option<&ProviderUsage>,
+    brand: Color,
+    content_width: u16,
+) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
+    let Some(pu) = provider_usage else {
+        return (Vec::new(), Vec::new());
     };
-
-    let has_data = series.iter().any(|&v| v > 0);
-    if let Some(now) = now {
-        if has_data {
-            if let Some((idx, &peak)) = series.iter().enumerate().max_by_key(|&(_, &v)| v) {
-                let hours_back = (series.len() - 1 - idx) as i64;
-                let local_now = now.to_offset(state.local_offset);
-                let peak_hour = (local_now.hour() as i64 - hours_back).rem_euclid(24);
-                let prefix = " tokens/h  ";
-                let suffix = format!("  pico {peak_hour:02}h: {}", abbrev_tokens(peak));
-                // Largura derivada do prefixo/sufixo REAIS (não uma constante
-                // mágica) — um valor de pico maior (ex. "999.9M") nunca pode
-                // estourar a borda, contrato geral desta tela (T12).
-                let reserved = prefix.chars().count() + suffix.chars().count();
-                let spark_width = (content_width as usize).saturating_sub(reserved).max(1);
-                return Line::from(vec![
-                    Span::styled(prefix, Style::default().fg(to_ratatui(ColorToken::Muted))),
-                    Span::styled(
-                        sparkline_str_wide(&series, spark_width),
-                        Style::default().fg(to_ratatui(ColorToken::Comment)),
-                    ),
-                    Span::styled(suffix, Style::default().fg(to_ratatui(ColorToken::Muted))),
-                ]);
-            }
-        }
+    if pu.by_model.is_empty() {
+        return (Vec::new(), Vec::new());
     }
-    Line::from(Span::styled(
-        " tokens/h  sem uso nas \u{fa}ltimas 24h",
-        Style::default().fg(to_ratatui(ColorToken::Muted)),
-    ))
+    let mut full = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            " MODELOS HOJE",
+            Style::default()
+                .fg(to_ratatui(ColorToken::TextBright))
+                .add_modifier(Modifier::BOLD),
+        )),
+    ];
+    let max_tokens = pu
+        .by_model
+        .iter()
+        .map(model_tokens)
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    for mu in &pu.by_model {
+        full.push(model_usage_line(mu, max_tokens, brand, content_width));
+    }
+
+    let total_cost: Option<f64> = pu.by_model.iter().fold(None, |acc, mu| match &mu.cost {
+        Some(c) => Some(acc.unwrap_or(0.0) + c.usd),
+        None => acc,
+    });
+    let cost_str = total_cost
+        .map(|c| format!("${c:.2}"))
+        .unwrap_or_else(|| "\u{2014}".to_string());
+    let collapsed = vec![Line::from(Span::styled(
+        format!(
+            " {} modelos hoje \u{b7} {}  \u{2026}",
+            pu.by_model.len(),
+            cost_str
+        ),
+        Style::default().fg(to_ratatui(ColorToken::Comment)),
+    ))];
+    (full, collapsed)
 }
 
 // ---------------------------------------------------------------------------
-// Seção 4: extra usage (só Claude — spend novo, Task 1)
+// Seção 2b: chart de tokens/hora por modelo (Task 9 — substitui a antiga
+// sparkline de 1 linha, que era o placeholder morto original desta tela)
 // ---------------------------------------------------------------------------
 
-/// Linha "extra usage": `enabled=false` → texto fixo "desativado";
+/// Título de seção: `left` em negrito (Comment) alinhado à esquerda, `right`
+/// alinhado à direita (também Comment) — reaproveitado por qualquer seção
+/// que precise de um cabeçalho (hoje só o chart usa `right`).
+fn section_title(left: &str, right: &str, width: u16) -> Line<'static> {
+    let left_text = format!(" {left}");
+    let left_span = Span::styled(
+        left_text.clone(),
+        Style::default()
+            .fg(to_ratatui(ColorToken::Comment))
+            .add_modifier(Modifier::BOLD),
+    );
+    if right.is_empty() {
+        return Line::from(left_span);
+    }
+    let right_text = format!("{right} ");
+    let pad =
+        (width as usize).saturating_sub(left_text.chars().count() + right_text.chars().count());
+    Line::from(vec![
+        left_span,
+        Span::raw(" ".repeat(pad)),
+        Span::styled(
+            right_text,
+            Style::default().fg(to_ratatui(ColorToken::Comment)),
+        ),
+    ])
+}
+
+/// Seção do chart: título + `column_chart_lines` (largura/altura ganhas do
+/// `Min(9)` do orquestrador — Task 9 §2). `now` vem de `state.last_update`
+/// (NUNCA `OffsetDateTime::now_utc()` — render precisa ser puro/
+/// determinístico p/ snapshot); `None` (boot, sem fetch ainda) → registros
+/// vazios, o chart desenha o próprio estado vazio (`column_chart_lines` já
+/// cobre isso) em vez de inventar uma âncora temporal fake.
+fn render_chart_section(state: &AppState, frame: &mut Frame, area: Rect, q: &ProviderQuota) {
+    let mut lines = vec![section_title(
+        "TOKENS/HORA \u{b7} 24H",
+        "escala \u{221a}",
+        area.width,
+    )];
+    // `history=None` = parse dos session logs em voo — desenhar o estado
+    // vazio do chart aqui seria afirmar zero sobre dado que só não chegou
+    // ainda (regressão "hoje 0 tok"; mesma guarda que a extinta
+    // `spark_line` já fazia). `last_update=None` (boot, sem fetch algum) É
+    // o caso coberto pela regra do brief — aí o chart recebe série vazia
+    // (via `now` sentinel abaixo) e desenha o próprio estado vazio.
+    if state.history.is_none() {
+        lines.push(Line::from(Span::styled(
+            " coletando hist\u{f3}rico\u{2026}",
+            Style::default().fg(to_ratatui(ColorToken::Muted)),
+        )));
+        lines.resize(area.height.max(1) as usize, Line::default());
+        frame.render_widget(Paragraph::new(lines), area);
+        return;
+    }
+    let now = state
+        .last_update
+        .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+    let records = state.history.as_deref().unwrap_or(&[]);
+    let series = bucket_by_model_hour(records, &q.provider, now, 24);
+    lines.extend(column_chart_lines(
+        &series,
+        area.width,
+        area.height.saturating_sub(1),
+        now,
+        state.local_offset,
+    ));
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+// ---------------------------------------------------------------------------
+// Seção 3: extra usage (só Claude — spend novo, Task 1)
+// ---------------------------------------------------------------------------
+
+/// Linha "EXTRA USAGE": `enabled=false` → texto fixo "desativado";
 /// `enabled=true && limit<=0.0` → sentinel de "sem limite configurado"
 /// (`extra_usage_from_spend` em `claude.rs`) → só o valor gasto, SEM gauge
 /// (não há teto p/ dar proporção — gauge 100%+"de $0.00" era
-/// autocontraditório); `enabled=true && limit>0.0` → gauge(20) + "$used de
-/// $limit". Mesma coluna de label das demais seções. Só Claude tem esta
-/// seção (Amp/Codex têm extras próprios, sem overlap com
-/// `ClaudeQuotaExtra.extra_usage`); providers sem extra omitem a linha
-/// inteira (chamador não invoca esta função).
-fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
+/// autocontraditório); `enabled=true && limit>0.0` → gauge + "$used de
+/// $limit" (largura via `derive_bar_width`, Task 9 — MESMA coluna das
+/// demais seções). Só Claude tem esta seção (Amp/Codex têm extras próprios,
+/// sem overlap com `ClaudeQuotaExtra.extra_usage`); providers sem extra
+/// omitem a linha inteira (`extra_lines` devolve vazio).
+fn extra_usage_line(eu: &ExtraUsage, content_width: u16) -> Line<'static> {
     let label = Span::styled(
-        format!(" {:<LABEL_W$} ", "extra usage"),
+        format!(" {:<LABEL_W$} ", "EXTRA USAGE"),
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     );
     if !eu.enabled {
@@ -336,7 +443,11 @@ fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
     let remaining_pct = 100.0 - pct_used;
     let color = sev_color(Some(remaining_pct));
     let mut spans = vec![label];
-    spans.extend(gauge_spans(remaining_pct, FIXED_GAUGE_W, color));
+    spans.extend(gauge_spans(
+        remaining_pct,
+        derive_bar_width(content_width, EXTRA_SUFFIX_W),
+        color,
+    ));
     spans.push(Span::styled(
         format!("  ${:.2} de ${:.2}", eu.used, eu.limit),
         Style::default().fg(to_ratatui(ColorToken::TextBright)),
@@ -344,8 +455,17 @@ fn extra_usage_line(eu: &ExtraUsage) -> Line<'static> {
     Line::from(spans)
 }
 
+/// Seção EXTRA USAGE completa: 0 linhas se o provider não tiver extra usage
+/// (chamador colapsa a seção via `Constraint::Length(0)`), 1 linha se tiver.
+fn extra_lines(q: &ProviderQuota, content_width: u16) -> Vec<Line<'static>> {
+    match get_claude_extra(q).and_then(|c| c.extra_usage.as_ref()) {
+        Some(eu) => vec![extra_usage_line(eu, content_width)],
+        None => Vec::new(),
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Seção 5: Totais (hoje + 7 dias)
+// Seção 4: Totais (hoje + 7 dias)
 // ---------------------------------------------------------------------------
 
 /// Linha de totais: "hoje" vem de `state.usage` (já agregado pelo engine);
@@ -368,7 +488,11 @@ fn totals_line(
             Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
             None => (0, "-".to_string()),
         };
-        format!("{} tok \u{b7} {}", abbrev_tokens(today_tokens), today_cost)
+        format!(
+            "{} tok \u{b7} {}",
+            fmt_tokens_short(today_tokens),
+            today_cost
+        )
     };
 
     if state.history.is_none() {
@@ -403,7 +527,7 @@ fn totals_line(
         format!(
             " hoje {}    7 dias {} tok \u{b7} {}",
             today_str,
-            abbrev_tokens(week_tokens),
+            fmt_tokens_short(week_tokens),
             week_cost_str
         ),
         Style::default().fg(to_ratatui(ColorToken::TextBright)),
@@ -467,7 +591,12 @@ fn render_error(q: &ProviderQuota, mode: GlyphMode, frame: &mut Frame, area: Rec
 // Render principal
 // ---------------------------------------------------------------------------
 
-/// Corpo completo (estado Ok/Checking): as 6 seções do brief, nesta ordem.
+/// Corpo completo (estado Ok/Checking): orquestra as seções em
+/// `Layout::vertical` (Task 9 §2) — JANELAS / GRÁFICO (`Min(9)`, absorve a
+/// altura extra) / MODELOS HOJE / EXTRA USAGE / TOTAIS. Quando a área não
+/// cabe tudo + o chart mínimo, colapsa progressivamente: EXTRA USAGE some
+/// primeiro, depois MODELOS HOJE vira 1 linha-resumo. Chips ficam fora
+/// (`render_detail` já reserva a última linha antes de chamar esta fn).
 fn render_full(
     state: &AppState,
     q: &ProviderQuota,
@@ -476,81 +605,45 @@ fn render_full(
     frame: &mut Frame,
     area: Rect,
 ) {
-    let bar_width = derive_bar_width(area.width);
-    let mut lines: Vec<Line<'_>> = Vec::new();
+    let windows = window_lines(q, provider_usage, area.width);
+    let (models_full, models_collapsed) = model_lines(provider_usage, brand, area.width);
+    let extra_full = extra_lines(q, area.width);
+    let totals = totals_line(state, provider_usage, &q.provider);
 
-    // 1. Janelas: sessão/semana + 1 linha por q.models (nome real da API).
-    // MESMO bar_width em todas — a coluna de gauge tem que alinhar entre
-    // sessão/semana/modelos (contrato do brief).
-    if let Some(primary) = &q.primary {
-        lines.push(window_line(
-            "sessão",
-            primary,
-            bar_width,
-            state.anim_frame,
-            state.animations,
-        ));
+    const CHART_MIN: u16 = 9; // título + chart (≥8 linhas úteis)
+    const TOTALS_LEN: u16 = 1;
+    let windows_len = windows.len() as u16;
+    let models_full_len = models_full.len() as u16;
+    let extra_full_len = extra_full.len() as u16;
+
+    // Colapso progressivo (spec §2): tenta tudo, depois sem EXTRA USAGE,
+    // depois com MODELOS HOJE também colapsado pra 1 linha-resumo.
+    let with_extra = windows_len + models_full_len + extra_full_len + TOTALS_LEN + CHART_MIN;
+    let without_extra = windows_len + models_full_len + TOTALS_LEN + CHART_MIN;
+    let (extra, models) = if area.height >= with_extra {
+        (extra_full, models_full)
+    } else if area.height >= without_extra {
+        (Vec::new(), models_full)
+    } else {
+        (Vec::new(), models_collapsed)
+    };
+
+    let chunks = Layout::vertical([
+        Constraint::Length(windows_len),
+        Constraint::Min(CHART_MIN),
+        Constraint::Length(models.len() as u16),
+        Constraint::Length(extra.len() as u16),
+        Constraint::Length(TOTALS_LEN),
+    ])
+    .split(area);
+
+    frame.render_widget(Paragraph::new(windows), chunks[0]);
+    render_chart_section(state, frame, chunks[1], q);
+    frame.render_widget(Paragraph::new(models), chunks[2]);
+    if !extra.is_empty() {
+        frame.render_widget(Paragraph::new(extra), chunks[3]);
     }
-    if let Some(secondary) = &q.secondary {
-        lines.push(window_line(
-            "semana",
-            secondary,
-            bar_width,
-            state.anim_frame,
-            state.animations,
-        ));
-    }
-    if let Some(models) = &q.models {
-        for (name, w) in models {
-            lines.push(model_window_line(
-                name,
-                w,
-                bar_width,
-                area.width,
-                provider_usage,
-                state.anim_frame,
-                state.animations,
-            ));
-        }
-    }
-
-    // 2. Modelos hoje: barra proporcional a tokens (não a 100%) + custo.
-    if let Some(pu) = provider_usage {
-        if !pu.by_model.is_empty() {
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                " Modelos hoje",
-                Style::default()
-                    .fg(to_ratatui(ColorToken::TextBright))
-                    .add_modifier(Modifier::BOLD),
-            )));
-            let max_tokens = pu
-                .by_model
-                .iter()
-                .map(model_tokens)
-                .max()
-                .unwrap_or(0)
-                .max(1);
-            for mu in &pu.by_model {
-                lines.push(model_usage_line(mu, max_tokens, brand));
-            }
-        }
-    }
-
-    // 3. tokens/h 24h: sparkline real (NUNCA o placeholder morto — T12).
-    lines.push(Line::from(""));
-    lines.push(spark_line(state, &q.provider, area.width));
-
-    // 4. extra usage (só Claude — spend novo da Task 1; demais omitem).
-    if let Some(eu) = get_claude_extra(q).and_then(|c| c.extra_usage.as_ref()) {
-        lines.push(extra_usage_line(eu));
-    }
-
-    // 5. Totais: hoje (state.usage) + 7 dias (state.history somado).
-    lines.push(Line::from(""));
-    lines.push(totals_line(state, provider_usage, &q.provider));
-
-    frame.render_widget(Paragraph::new(lines), area);
+    frame.render_widget(Paragraph::new(vec![totals]), chunks[4]);
 }
 
 /// Chips centrados: `[esc voltar] [r atualizar] [g login] [h histórico]`.
@@ -569,10 +662,20 @@ fn render_footer_chips(frame: &mut Frame, area: Rect, hits: &mut HitMap) {
 }
 
 /// Renders the Detail view for the selected provider (Screen::Detail).
+/// `Detail` é a tela default do boot (Task 11: Overview morreu) — enquanto
+/// `state.providers` está vazio, NUNCA uma tela em branco: fetch em voo
+/// (`fetch_pending`) ou foco pendente (`pending_focus`) → skeleton com
+/// throbber; genuinamente sem providers habilitados → mensagem instrutiva.
 pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let provider = match state.providers.get(state.selected) {
         Some(pv) => pv,
-        None => return render_empty(frame, area),
+        None => {
+            return if state.fetch_pending.is_empty() && state.pending_focus.is_none() {
+                render_empty(frame, area, hits)
+            } else {
+                render_skeleton(state, frame, area, hits)
+            };
+        }
     };
     let q = &provider.quota;
     let p_color = provider_color(&q.provider);
@@ -624,21 +727,96 @@ pub fn render_detail(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut
     render_footer_chips(frame, footer_area, hits);
 }
 
-/// Fallback when no provider is selected (state.providers vazio — nunca
-/// aconteceu fetch algum, distinto de LoginState::LoggedOut).
-fn render_empty(frame: &mut Frame, area: Rect) {
+/// Fallback quando não há NENHUM provider habilitado e nenhum fetch em voo
+/// (`settings.waybar.providers` vazio — caso raro; distinto de
+/// `LoginState::LoggedOut`, que é POR provider). Chips continuam ativos
+/// (ex. `[h]`/`[g]` ainda abrem Histórico/Login) — nunca uma tela sem
+/// nenhuma ação possível.
+fn render_empty(frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let vert = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
 
     let para = Paragraph::new(Span::styled(
-        " Nenhum provider selecionado",
+        " nenhum provider habilitado \u{2014} veja a tela Config",
         Style::default().fg(to_ratatui(ColorToken::Muted)),
-    ))
-    .block(block);
+    ));
+    frame.render_widget(para, vert[0]);
 
-    frame.render_widget(para, area);
+    render_footer_chips(frame, vert[1], hits);
+}
+
+/// Skeleton do boot (Task 11): `state.providers` ainda vazio mas há fetch em
+/// voo (`fetch_pending`) ou foco pendente (`pending_focus`) aguardando
+/// resolução — NUNCA tela vazia enquanto isso. Título usa o nome real do
+/// provider de `pending_focus` quando conhecido (via
+/// `providers::get_provider`), senão "carregando…" genérico. Throbber
+/// (Animação C) no canto — mesmo padrão do antigo skeleton do Overview
+/// (`dashboard::render_skeleton_card`, órfão desta task, apagado).
+fn render_skeleton(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
+    let title = match state
+        .pending_focus
+        .as_deref()
+        .and_then(crate::providers::get_provider)
+    {
+        Some(p) => format!(" {} \u{b7} carregando\u{2026} ", p.name()),
+        None => " carregando\u{2026} ".to_string(),
+    };
+
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)))
+        .title(Span::styled(
+            title,
+            Style::default()
+                .fg(to_ratatui(ColorToken::Muted))
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let throbber_widget = Throbber::default()
+        .throbber_set(BRAILLE_SIX)
+        .throbber_style(Style::default().fg(to_ratatui(ColorToken::Cyan)))
+        .use_type(throbber_widgets_tui::WhichUse::Spin);
+    let mut throbber_state = ThrobberState::default();
+    for _ in 0..state.throbber.index {
+        throbber_state.calc_next();
+    }
+    block =
+        block.title(Line::from(throbber_widget.to_symbol_span(&throbber_state)).right_aligned());
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let vert = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
+    let content_area = vert[0];
+    let footer_area = vert[1];
+
+    let gauge_w = derive_bar_width(content_area.width, WINDOW_SUFFIX_W);
+    let lines = vec![
+        skeleton_gauge_line("sess\u{e3}o", gauge_w),
+        skeleton_gauge_line("semana", gauge_w),
+    ];
+    frame.render_widget(Paragraph::new(lines), content_area);
+
+    render_footer_chips(frame, footer_area, hits);
+}
+
+/// Uma linha de gauge vazio (trilho ░, sem % nem reset — não há dado ainda)
+/// do skeleton do boot. Mesmo `LABEL_W` das demais seções (coluna alinhada).
+fn skeleton_gauge_line(label: &str, gauge_w: usize) -> Line<'static> {
+    let name = truncate_name(label, LABEL_W);
+    let mut spans = vec![Span::styled(
+        format!(" {name:<LABEL_W$} "),
+        Style::default().fg(to_ratatui(ColorToken::Muted)),
+    )];
+    spans.extend(gauge_spans(0.0, gauge_w, to_ratatui(ColorToken::Comment)));
+    Line::from(spans)
 }
 
 #[cfg(test)]
@@ -654,7 +832,7 @@ mod tests {
     use crate::usage::amp::AmpDollars;
     use crate::usage::{Cost, ModelUsage, ProviderUsage, UsageRecord, UsageSummary};
 
-    use super::{render_detail, truncate_name};
+    use super::truncate_name;
 
     fn window(remaining: f64, resets_at: Option<&str>, severity: Option<&str>) -> QuotaWindow {
         QuotaWindow {
@@ -675,11 +853,13 @@ mod tests {
             cache_read: 0,
             cache_write: 0,
             ts,
+            session_id: None,
+            project: None,
         }
     }
 
     // -----------------------------------------------------------------
-    // Unit tests: truncate_name (abbrev_tokens moveu para render/shared.rs, T13)
+    // Unit tests: truncate_name
     // -----------------------------------------------------------------
 
     #[test]
@@ -697,19 +877,37 @@ mod tests {
         assert!(out.ends_with('\u{2026}'));
     }
 
-    // -----------------------------------------------------------------
-    // Unit tests: spark_line usa state.local_offset (review T12) — antes
-    // `now.hour()` devolvia o offset que `now` já carregasse (tipicamente
-    // UTC), rotulado como "hora local" sem nunca converter de fato.
-    // -----------------------------------------------------------------
-
-    fn spark_line_text(state: &AppState) -> String {
-        let line = super::spark_line(state, "claude", 100);
-        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    /// `ProviderQuota` mínima só pra exercitar `render_chart_section`
+    /// isoladamente (sem janelas/modelos/extra — não é o que está sob teste
+    /// aqui).
+    fn minimal_quota(provider: &str) -> ProviderQuota {
+        ProviderQuota {
+            provider: provider.to_string(),
+            display_name: provider.to_string(),
+            available: true,
+            account: None,
+            plan: None,
+            plan_type: None,
+            primary: None,
+            secondary: None,
+            models: None,
+            extra: None,
+            error: None,
+        }
     }
 
+    // -----------------------------------------------------------------
+    // Unit tests: render_chart_section usa state.local_offset (regressão
+    // T12, antes coberta por `spark_line` — morta na Task 9). A conversão
+    // de fuso em si mora em `column_chart_lines` (T8); isto verifica que
+    // `render_chart_section` de fato REPASSA `state.local_offset`, e não um
+    // `UtcOffset::UTC` hardcoded ou similar.
+    // -----------------------------------------------------------------
+
     #[test]
-    fn spark_line_peak_hour_uses_local_offset_not_utc() {
+    fn chart_section_uses_local_offset_for_hour_labels() {
+        let backend = ratatui::backend::TestBackend::new(60, 12);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
         state.last_update = Some(now);
@@ -720,35 +918,24 @@ mod tests {
             now - time::Duration::hours(1),
             900_000,
         )]);
-        let text = spark_line_text(&state);
-        // now (02:00 UTC) em -03:00 é 23h do dia anterior; o pico está 1h
-        // atrás → 22h local (NÃO "01h", que seria o resultado se o offset
-        // local fosse ignorado e a hora UTC crua vazasse pro label).
-        assert!(
-            text.contains("pico 22h:"),
-            "esperava hora local (UTC-3 → 22h) na linha, obtido: {text:?}"
-        );
-    }
-
-    #[test]
-    fn spark_line_peak_hour_default_utc_offset_matches_snapshots() {
-        let mut state = AppState::new();
-        let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
-        state.last_update = Some(now);
-        // local_offset default (UTC, de AppState::new()) — confirma que os
-        // snapshots existentes (todos com offset default) continuam
-        // corretos depois do fix de conversão.
-        state.history = Some(vec![rec(
-            "claude",
-            "claude-opus-4-8",
-            now - time::Duration::hours(1),
-            900_000,
-        )]);
-        let text = spark_line_text(&state);
-        assert!(
-            text.contains("pico 01h:"),
-            "esperava hora UTC (offset default) 01h na linha, obtido: {text:?}"
-        );
+        let q = minimal_quota("claude");
+        terminal
+            .draw(|f| super::render_chart_section(&state, f, f.area(), &q))
+            .unwrap();
+        let text = buffer_to_string(terminal.backend().buffer());
+        // Mesma fórmula de rótulo do eixo X que `column_chart_lines` usa
+        // (T8) — se `render_chart_section` passasse UTC em vez de
+        // `state.local_offset`, os rótulos calculados aqui (com -03:00)
+        // divergiriam dos realmente desenhados.
+        for i in (0..24usize).step_by(3) {
+            let bucket_time = now - time::Duration::hours((24 - 1 - i) as i64);
+            let h = bucket_time.to_offset(state.local_offset).hour();
+            let label = format!("{h:02}h");
+            assert!(
+                text.contains(&label),
+                "r\u{f3}tulo local esperado {label:?} ausente:\n{text}"
+            );
+        }
     }
 
     // -----------------------------------------------------------------
@@ -758,18 +945,24 @@ mod tests {
     // -----------------------------------------------------------------
 
     #[test]
-    fn spark_line_loading_shows_coletando_not_sem_uso() {
+    fn chart_section_history_none_shows_coletando_not_sem_uso() {
+        let backend = ratatui::backend::TestBackend::new(40, 10);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.last_update = Some(time::macros::datetime!(2026-07-02 12:00:00 UTC));
         state.history = None; // HistoryLoaded ainda não chegou
-        let text = spark_line_text(&state);
+        let q = minimal_quota("claude");
+        terminal
+            .draw(|f| super::render_chart_section(&state, f, f.area(), &q))
+            .unwrap();
+        let text = buffer_to_string(terminal.backend().buffer());
         assert!(
             text.contains("coletando"),
-            "history=None deve mostrar loading, obtido: {text:?}"
+            "history=None deve mostrar loading, obtido:\n{text}"
         );
         assert!(
             !text.contains("sem uso"),
-            "history=None não pode afirmar 'sem uso': {text:?}"
+            "history=None não pode afirmar 'sem uso':\n{text}"
         );
     }
 
@@ -924,14 +1117,10 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------
-    // Snapshots (brief Step 2)
-    // -----------------------------------------------------------------
-
-    #[test]
-    fn detail_claude_full() {
-        let backend = ratatui::backend::TestBackend::new(100, 32);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+    /// Fixture completa de `AppState` pro Detail do Claude com 2 modelos
+    /// (Task 9): reaproveitada pelo snapshot pré-existente `detail_claude_full`
+    /// e pelos 2 testes novos de layout (`render_detail` chamado direto).
+    fn fixture_claude_full() -> AppState {
         let mut state = AppState::new();
         let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
         state.providers = vec![make_claude_full()];
@@ -966,10 +1155,140 @@ mod tests {
             ),
             rec("codex", "gpt-5.5", now - time::Duration::hours(2), 700_000),
         ]);
+        state
+    }
+
+    /// Achata um `Buffer` renderizado em texto puro, uma linha por row
+    /// (trailing spaces cortados) — usado pelos asserts de conteúdo e pelo
+    /// snapshot textual dos testes de layout (Task 9).
+    fn buffer_to_string(buf: &ratatui::buffer::Buffer) -> String {
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| {
+                        buf.cell((x, y))
+                            .map(|c| c.symbol())
+                            .unwrap_or(" ")
+                            .to_string()
+                    })
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Maior sequência de linhas "em branco" (só espaço/borda vertical)
+    /// entre o título e os chips — Task 9: antes do chart absorver a
+    /// altura extra, sobravam ~20 linhas assim (bug que este helper
+    /// existe pra pegar). Ignora a 1ª/última linha (bordas horizontais).
+    fn max_blank_run(buf: &ratatui::buffer::Buffer) -> usize {
+        let s = buffer_to_string(buf);
+        let mut max = 0;
+        let mut cur = 0;
+        let lines: Vec<&str> = s.lines().collect();
+        for l in &lines[1..lines.len().saturating_sub(1)] {
+            if l.trim_matches(|c: char| c == ' ' || c == '\u{2503}' || c == '\u{2502}')
+                .is_empty()
+            {
+                cur += 1;
+                max = max.max(cur);
+            } else {
+                cur = 0;
+            }
+        }
+        max
+    }
+
+    // -----------------------------------------------------------------
+    // Snapshots (brief Step 2)
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn detail_claude_full() {
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let state = fixture_claude_full();
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    // -----------------------------------------------------------------
+    // Task 9: layout por seção — chart absorve a altura extra (sem gap em
+    // branco) e "Modelos hoje" mostra nomes TRATADOS (nunca o id raw).
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn detail_chart_absorbs_extra_height_no_blank_gap() {
+        // 100x40: antes do v8 sobravam ~20 linhas em branco. Agora o chart
+        // estica (`Min(9)` no orquestrador) pra absorver o espaço livre.
+        let state = fixture_claude_full();
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 40)).unwrap();
+        term.draw(|f| {
+            let mut hits = HitMap::default();
+            super::render_detail(&state, f, f.area(), &mut hits);
+        })
+        .unwrap();
+        let buf = term.backend().buffer().clone();
+        let blank_run = max_blank_run(&buf);
+        assert!(
+            blank_run < 5,
+            "gap de {blank_run} linhas em branco — chart deveria absorver"
+        );
+        insta::assert_snapshot!(buffer_to_string(&buf));
+    }
+
+    #[test]
+    fn detail_models_today_shows_treated_names_and_cost() {
+        let state = fixture_claude_full();
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 32)).unwrap();
+        term.draw(|f| {
+            let mut hits = HitMap::default();
+            super::render_detail(&state, f, f.area(), &mut hits);
+        })
+        .unwrap();
+        let text = buffer_to_string(term.backend().buffer());
+        assert!(text.contains("Opus 4.8"), "nome tratado ausente:\n{text}");
+        assert!(!text.contains("claude-opus"), "id raw vazou:\n{text}");
+    }
+
+    #[test]
+    fn detail_collapse_short_terminal() {
+        // 100x20: overhead do outer block de `render()` (2) + block do
+        // Detail (2) + linha de chips (1) = 5 linhas, então `content_area`
+        // fica com 15 — abaixo de `without_extra` (18, ver `render_full`) —
+        // colapso completo: EXTRA USAGE some e MODELOS HOJE vira 1
+        // linha-resumo. Altura escolhida pra deixar o chart EXATAMENTE no
+        // `CHART_MIN` (9), provando que o colapso protege o mínimo do
+        // chart mesmo no pior caso.
+        let backend = ratatui::backend::TestBackend::new(100, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let state = fixture_claude_full();
+        terminal
+            .draw(|f| render(&state, f, &mut HitMap::default()))
+            .unwrap();
+        let buf = terminal.backend().buffer().clone();
+        let text = buffer_to_string(&buf);
+        assert!(
+            !text.contains("EXTRA USAGE"),
+            "extra usage deveria colapsar (sumir) no terminal curto:\n{text}"
+        );
+        assert!(
+            !text.contains(" MODELOS HOJE"),
+            "t\u{ed}tulo completo de modelos hoje n\u{e3}o deveria aparecer colapsado:\n{text}"
+        );
+        assert!(
+            text.contains("modelos hoje \u{b7}"),
+            "linha-resumo de modelos hoje ausente:\n{text}"
+        );
+        assert!(
+            text.contains("TOKENS/HORA"),
+            "chart deveria continuar vis\u{ed}vel mesmo colapsado:\n{text}"
+        );
+        insta::assert_snapshot!(text);
     }
 
     #[test]
@@ -1138,93 +1457,7 @@ mod tests {
         insta::assert_snapshot!(terminal.backend());
     }
 
-    // ---- Motion: pulse crítico na janela de sessão (Task 16) ----
-
-    /// Janela `sessão` crítica (`remaining` < 10.0) dispara `pulse_color`
-    /// via `window_line`. Confirma o CALL SITE real (não só `pulse_color`
-    /// isolado, já coberto em `widgets::quota_gauge::tests`) — o buffer
-    /// inteiro deve diferir entre dois `anim_frame` quando `animations=true`.
-    /// Chama `render_detail` direto (não `render()` completo): o mesmo
-    /// provider crítico também dispara o blink da MARCA da sidebar (Task
-    /// 10), que não é gated por `animations` (gap pré-existente, fora do
-    /// escopo desta task) — misturaria os dois efeitos no mesmo buffer.
-    #[test]
-    fn critical_window_gauge_pulses_across_anim_frames_when_animations_on() {
-        let mut pv = make_claude_full();
-        pv.quota.primary = Some(window(5.0, Some("2026-07-02T02:39:59Z"), Some("critical")));
-
-        let backend = ratatui::backend::TestBackend::new(100, 32);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let mut state = AppState::new();
-        state.providers = vec![pv];
-        state.selected = 0;
-        state.screen = Screen::Detail;
-        state.status = FetchStatus::Loaded;
-        state.animations = true;
-
-        state.anim_frame = 0;
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame0 = terminal.backend().buffer().clone();
-
-        state.anim_frame = 18; // ~metade do ciclo de 37 ticks do pulso
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame18 = terminal.backend().buffer().clone();
-
-        assert_ne!(
-            buf_frame0, buf_frame18,
-            "janela de sessão crítica deveria pulsar (cor diferente) entre anim_frame 0 e 18"
-        );
-    }
-
-    /// Self-review do brief: animations=false → zero lerp visual — o pulso
-    /// não deve alterar UM ÚNICO byte do buffer entre `anim_frame`s
-    /// distintos (mesmo provider crítico do teste acima). `render_detail`
-    /// direto pelo mesmo motivo do teste acima (isola do blink da sidebar).
-    #[test]
-    fn critical_window_gauge_stays_static_when_animations_off() {
-        let mut pv = make_claude_full();
-        pv.quota.primary = Some(window(5.0, Some("2026-07-02T02:39:59Z"), Some("critical")));
-
-        let backend = ratatui::backend::TestBackend::new(100, 32);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let mut state = AppState::new();
-        state.providers = vec![pv];
-        state.selected = 0;
-        state.screen = Screen::Detail;
-        state.status = FetchStatus::Loaded;
-        state.animations = false;
-
-        state.anim_frame = 0;
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame0 = terminal.backend().buffer().clone();
-
-        state.anim_frame = 18;
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                render_detail(&state, f, area, &mut HitMap::default());
-            })
-            .unwrap();
-        let buf_frame18 = terminal.backend().buffer().clone();
-
-        assert_eq!(
-            buf_frame0, buf_frame18,
-            "com animations=false, o pulso não deve alterar nada entre anim_frames"
-        );
-    }
+    // Pulso crítico (Task 16) removido em v8 (spec §6): `window_line` usa a
+    // cor de severidade direto, sem modulação de brilho — os testes que
+    // confirmavam o pulso saíram junto.
 }

@@ -78,7 +78,7 @@ Ele descobre como você instalou e age de acordo. Instalação pelo instalador: 
 | --- | --- |
 | `agent-bar` | Chamado pela Waybar (sem TTY), imprime o JSON do módulo. Num terminal, abre a TUI. |
 | `agent-bar status` | Quotas de todos os providers no terminal, sem TUI. Com `-r`, ignora o cache. |
-| `agent-bar menu` | A TUI: overview com gauges e sparklines, detalhe por provider, histórico de uso (24 h/7 d), login e config da Waybar. Mouse funciona. |
+| `agent-bar menu` | A TUI: abre no detalhe do primeiro provider habilitado (gauges e sparklines), histórico de uso (24 h/7 d), login e Config. Mouse funciona. |
 | `agent-bar setup` | (Re)aplica a integração: assets, patches na config da Waybar, symlink, reload. Pergunta antes. |
 | `agent-bar update` | Atualiza a instalação (detalhes acima). |
 | `agent-bar uninstall` | Remove binário, assets da Waybar, settings e cache, e reverte os patches na config. Pede confirmação. |

@@ -6,17 +6,18 @@
 | --- | --- | --- |
 | `agent-bar` | Print Waybar JSON for enabled providers. | Cache only when providers fetch fresh data |
 | `agent-bar status` | Print the quota view in a terminal. | Cache only |
-| `agent-bar menu` | Interactive TUI: overview, per-provider detail, hourly/daily history, provider login, and the Waybar config editor. | Settings and provider auth as requested |
+| `agent-bar menu` | Interactive TUI: boots on the first enabled provider's detail view, plus hourly/daily history, provider login, and the Config editor. | Settings and provider auth as requested |
 | `agent-bar update` | Update the install: managed `~/.agent-bar` checkout, or defers to system package manager. | `~/.agent-bar`, managed Waybar files |
 
 ## `menu` Navigation
 
-The TUI has a left sidebar (Overview, one entry per provider, History, Login,
-Waybar) and a right-hand content pane.
+The TUI boots straight into the first enabled provider's detail view. The left
+sidebar lists one entry per provider, then History, Login, and Config, next to
+a right-hand content pane.
 
 - **Keyboard:** `up`/`down` (or `j`/`k`) move the sidebar cursor, `Enter`
   activates the selected item, `h`/`g`/`w` jump directly to History/Login/
-  Waybar from anywhere, `r` refreshes quotas, `Esc` backs out of a detail
+  Config from anywhere, `r` refreshes quotas, `Esc` backs out of a detail
   view, `?` toggles a help overlay listing every binding per screen, `q`
   quits.
 - **Mouse:** click selects (sidebar rows, provider cards, chips), the wheel
@@ -34,22 +35,19 @@ actions (see [waybar-contract.md](waybar-contract.md)).
 
 | Command | Trigger | Behavior |
 | --- | --- | --- |
-| `agent-bar menu` | Left click | Interactive login/layout TUI (also a primary command). |
-| `agent-bar action-right <provider>` | Right click | Refresh **or** login for one provider. Requires a provider arg. |
+| `agent-bar menu` | Left click | Interactive TUI (also a primary command). |
+| `agent-bar action-right <provider>` | Right click | Opens the TUI already focused on one provider. Requires a provider arg. |
 
-`action-right` opens inside the terminal helper and branches:
+`action-right` resolves whether the clicked provider looks connected, then opens
+the interactive TUI already focused there:
 
 - **Disconnected** — no credentials, or a quota error matching the base pattern
   (`expired` / `not logged in` / `login again` / `please login`); for Codex,
   additionally `no session data` / `no rate limit data` / `auth` / `token` →
-  launches the single-provider login flow.
-- **Connected** — invalidates that provider's cache (force refresh, ignoring the
-  5-minute TTL), fetches fresh, prints the terminal quota view, and waits for
-  Enter before closing.
+  boots straight into the Login screen with that provider preselected.
+- **Connected** — boots straight into that provider's detail view.
 
-It requires a provider argument — the CLI parser exits non-zero without one. Like
-the `--refresh` flag, it deliberately bypasses the quota cache, but scoped to just
-the clicked provider on every right-click.
+It requires a provider argument — the CLI parser exits non-zero without one.
 
 ## JSON Output (non-Waybar bars)
 

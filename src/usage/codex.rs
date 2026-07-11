@@ -44,14 +44,24 @@ pub fn parse_codex_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<UsageR
                 let u = |k: &str| last.get(k).and_then(Value::as_u64).unwrap_or(0);
                 // input_tokens reportado como vem (cached é subconjunto contado à parte
                 // no preço de cache_read — premissa conservadora, ver spec §4b).
+                let input = u("input_tokens");
+                let output = u("output_tokens") + u("reasoning_output_tokens");
+                let cache_read = u("cached_input_tokens");
+                // Registros com os quatro campos de token zerados não carregam
+                // informação — mesmo guard do parser Claude (ver claude.rs).
+                if input == 0 && output == 0 && cache_read == 0 {
+                    continue;
+                }
                 out.push(UsageRecord {
                     provider: "codex".to_string(),
                     model: current_model.clone(),
-                    input: u("input_tokens"),
-                    output: u("output_tokens") + u("reasoning_output_tokens"),
-                    cache_read: u("cached_input_tokens"),
+                    input,
+                    output,
+                    cache_read,
                     cache_write: 0,
                     ts,
+                    session_id: None,
+                    project: None,
                 });
             }
             _ => {}
@@ -106,6 +116,13 @@ mod tests {
             ]
             .into_iter(),
         );
+        assert_eq!(recs.len(), 0);
+    }
+
+    #[test]
+    fn skips_token_count_with_all_zero_usage() {
+        let zero_tokens = r#"{"type":"event_msg","timestamp":"2026-06-16T14:36:00Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"total_tokens":0}}}}"#;
+        let recs = parse_codex_lines([META, zero_tokens].into_iter());
         assert_eq!(recs.len(), 0);
     }
 }

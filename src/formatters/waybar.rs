@@ -1,6 +1,7 @@
 //! Assembly da superfície Waybar ({text,tooltip,class}). Port fiel de
 //! `src/formatters/waybar.ts`. Funções puras: Settings e Clock injetados.
-//! O cache 5s de settings e o hidden-module short-circuit vivem no CLI (Plano 5).
+//! Settings são lidas do disco a cada invocação — sem cache; o hidden-module
+//! short-circuit vive no CLI (Plano 5).
 
 use serde::Serialize;
 

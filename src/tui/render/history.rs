@@ -1,62 +1,42 @@
-//! Aba History (T13): chart nativo (braille, área preenchida) + tabela por
-//! dia/provider. Toggle 24h/7d via tecla `t` (`state.history_range`,
-//! `Action::ToggleHistoryRange`) — só o CHART respeita o toggle; a tabela e
-//! o rodapé "Total 7d" sempre cobrem os 7 dias inteiros de `state.history`
-//! (a fonte já é `records_since(7d)`, T2).
+//! Aba History (T20): chart de colunas (`column_chart`, T8) + lista de dias
+//! expansível (▸/▾, T5 `sessions_by_day`) — a antiga tabela `dia | provider
+//! | tokens | custo` morre aqui. Toggle 24h/7d via tecla `t`
+//! (`state.history_range`, `Action::ToggleHistoryRange`) — só o CHART
+//! respeita o toggle; a lista de dias e o rodapé "7 DIAS" sempre cobrem os
+//! 7 dias inteiros de `state.history` (a fonte já é `records_since(7d)`, T2).
 //!
-//! Mata o gráfico de 7 pontos esticados (sparkline diário virando blocos
-//! repetidos tipo ▂▂▂▂▅▅▅▅): o Claude sozinho já gera dezenas de records/dia,
-//! e `bucket_by_hour` com 24 ou 168 pontos dá resolução suficiente pro
-//! `Chart` braille desenhar uma curva de verdade.
+//! O chart braille ORIGINAL desta tela (`render_trend_chart`/`chart_series`/
+//! `x_axis_labels`/`CHART_PROVIDERS`) morreu na Task 11 junto com
+//! `dashboard.rs` (único consumidor, painel "Hoje (24h)" do extinto
+//! Overview). `weekday_abbrev` sobreviveu — reaproveitada pelos rótulos de
+//! dia da lista nova (`day_list_lines`).
 
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Axis, Block, BorderType, Borders, Cell, Chart, Dataset, GraphType, Paragraph, Row, Table,
-};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 
-use crate::theme::{provider_hex, ColorToken};
+use crate::theme::ColorToken;
 use crate::tui::mouse::{ChipKind, HitMap};
-use crate::tui::render::shared::{abbrev_tokens, series_now};
+use crate::tui::render::shared::series_now;
 use crate::tui::state::{AppState, HistoryRange};
-use crate::tui::theme_bridge::{hex_to_color, provider_color, to_ratatui};
+use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
+use crate::tui::widgets::column_chart::{self, column_chart_lines_bucketed, fmt_tokens_short};
 use crate::usage::amp::AmpDollars;
-use crate::usage::buckets::{bucket_by_day, bucket_by_hour, bucket_by_provider_day, DayBucket};
+use crate::usage::buckets::{bucket_by_model_hour, sessions_by_day, DaySessions, ModelHourSeries};
 use crate::usage::UsageRecord;
-
-/// Providers com log local de token — só estes ganham `Dataset` no chart.
-/// Amp não gera `UsageRecord` (sem tracking local de token); ele só aparece
-/// na tabela, via `amp_dollars` (ver `render_table`/`amp_dollars_of`).
-const CHART_PROVIDERS: [&str; 2] = ["claude", "codex"];
 
 // ---------------------------------------------------------------------------
 // Formatação
 // ---------------------------------------------------------------------------
 
-/// Formata tokens do rodapé "Total 7d" — formato PRÉ-EXISTENTE (0 casas
-/// decimais em K, 1 em M), mantido de propósito (contrato do brief: "formato
-/// atual mantido"). Diferente de `abbrev_tokens` (shared.rs — 1 casa decimal
-/// em toda unidade, usado pelo chart/tabela, elementos NOVOS desta task).
-/// As duas funções coexistem por design, não por descuido.
-fn fmt_tokens(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.0}K", n as f64 / 1_000.0)
-    } else {
-        format!("{n}")
-    }
-}
-
-/// Abreviação PT de dia-da-semana (`seg`..`dom`) para o eixo X do chart no
-/// range Week.
+/// Abreviação PT de dia-da-semana (`seg`..`dom`) — usada pelo rótulo de dia
+/// da lista de dias (`day_list_lines`, dia != hoje).
 fn weekday_abbrev(w: time::Weekday) -> &'static str {
     match w {
         time::Weekday::Monday => "seg",
@@ -69,64 +49,13 @@ fn weekday_abbrev(w: time::Weekday) -> &'static str {
     }
 }
 
-/// Labels do eixo X: exatamente 3 pontos (mais que isso quebra o
-/// posicionamento das labels do meio — ver doc de `ratatui::widgets::Axis::
-/// labels`). `now` é a âncora determinística (`series_now`, NUNCA
-/// `OffsetDateTime::now_utc()`), convertida para `offset` (`state.
-/// local_offset`) ANTES de extrair hora/dia-da-semana — mesmo contrato de
-/// `spark_line` em `detail.rs` (T12): um `OffsetDateTime` não carrega "hora
-/// local" por si só, tem que converter explicitamente.
-fn x_axis_labels(
-    now: time::OffsetDateTime,
-    hours: usize,
-    range: HistoryRange,
-    offset: time::UtcOffset,
-) -> Vec<Line<'static>> {
-    let local_now = now.to_offset(offset);
-    let oldest = local_now - time::Duration::hours((hours - 1) as i64);
-    let mid = local_now - time::Duration::hours(((hours - 1) / 2) as i64);
-    match range {
-        HistoryRange::Day => vec![
-            Line::from(format!("{:02}h", oldest.hour())),
-            Line::from(format!("{:02}h", mid.hour())),
-            Line::from("agora"),
-        ],
-        HistoryRange::Week => vec![
-            Line::from(weekday_abbrev(oldest.weekday())),
-            Line::from(weekday_abbrev(mid.weekday())),
-            Line::from("hoje"),
-        ],
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Dados
 // ---------------------------------------------------------------------------
 
-/// Série (x, y) de tokens/hora de um provider, pronta para `Dataset::data`.
-/// Pura/testável sem depender de `Frame` — separada de `render_chart` de
-/// propósito (a montagem do widget não pode ser unit-testada diretamente).
-fn chart_series(
-    records: &[UsageRecord],
-    provider: &str,
-    now: time::OffsetDateTime,
-    hours: usize,
-) -> Vec<(f64, f64)> {
-    let filtered: Vec<UsageRecord> = records
-        .iter()
-        .filter(|r| r.provider == provider)
-        .cloned()
-        .collect();
-    bucket_by_hour(&filtered, now, hours)
-        .iter()
-        .enumerate()
-        .map(|(i, b)| (i as f64, b.tokens as f64))
-        .collect()
-}
-
 /// `AmpDollars` do `state.usage`, se o provider "amp" estiver presente.
 /// Amp nunca aparece em `state.history` (sem `UsageRecord`), então esta é a
-/// ÚNICA fonte da linha Amp na tabela.
+/// ÚNICA fonte da nota Amp na lista de dias (`amp_note_line`).
 fn amp_dollars_of(state: &AppState) -> Option<&AmpDollars> {
     state
         .usage
@@ -141,8 +70,8 @@ fn amp_dollars_of(state: &AppState) -> Option<&AmpDollars> {
 // Render principal
 // ---------------------------------------------------------------------------
 
-/// Renderiza a aba History: chart braille (claude/codex) + tabela por
-/// dia/provider + chips. `hits` recebe as zonas clicáveis dos chips.
+/// Renderiza a aba History: chart de colunas (topo) + lista de dias
+/// expansível + chips. `hits` recebe as zonas clicáveis dos chips.
 pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
     // `None` = HistoryLoaded ainda não chegou (parse em voo) → skeleton.
     // `Some` = carregado (mesmo vazio) → tela real. O gate antigo derivava
@@ -155,30 +84,63 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
     let records: &[UsageRecord] = state.history.as_deref().unwrap_or(&[]);
     let amp_dollars = amp_dollars_of(state);
 
-    let title = match state.history_range {
-        HistoryRange::Day => " Hist\u{f3}rico (24h) ",
-        HistoryRange::Week => " Hist\u{f3}rico (7 dias) ",
-    };
     let mut block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)))
-        .title(Span::styled(
-            title,
-            Style::default()
-                .fg(to_ratatui(ColorToken::TextBright))
-                .add_modifier(Modifier::BOLD),
-        ));
+        .border_style(Style::default().fg(to_ratatui(ColorToken::Blue)));
 
-    // Rodapé "Total 7d" some enquanto carrega e quando NÃO HÁ NADA pra
-    // mostrar (nem token nem Amp). Com Amp-only (records vazio,
-    // amp_dollars presente), ainda mostra "Total 7d: 0 tokens" — honesto,
-    // não esconde o rodapé por causa de um campo vazio.
-    if !loading && (!records.is_empty() || amp_dollars.is_some()) {
-        block = block.title_bottom(footer_line(records));
+    // `inner.width` decide o plano do chart (downsampling horizontal da
+    // semana, `week_chart_plan`) ANTES do título — o título tem que refletir
+    // a janela REAL que o chart desenha (achado Critical: "(7 dias)" no
+    // título enquanto o chart só cobria o que coubesse na largura, com a
+    // legenda contradizendo o rodapé). `.inner()` só depende das bordas, não
+    // do título, então dá pra consultar aqui e anexar o `Span` do título
+    // depois, sem duplicar a conta de bordas.
+    let inner = block.inner(area);
+    let (chart_hours, bucket_hours) = match state.history_range {
+        HistoryRange::Day => (24usize, 1usize),
+        HistoryRange::Week => {
+            let avail = (inner.width as usize)
+                .saturating_sub(column_chart::Y_AXIS_W)
+                .max(1);
+            match week_chart_plan(avail) {
+                Some(n) => (24 * 7, n),
+                // Último recurso: nem N=24 (7 colunas de 24h) cabe — terminal
+                // absurdamente estreito. Mesmo clamp horário de antes
+                // (bucket_hours=1, ver `render_top_chart`), mas o título
+                // abaixo não pode mais afirmar "7 dias" se a janela real
+                // encolheu.
+                None => (avail.min(24 * 7), 1),
+            }
+        }
+    };
+    let title = match state.history_range {
+        HistoryRange::Day => " Hist\u{f3}rico (24h) ".to_string(),
+        HistoryRange::Week if chart_hours < 24 * 7 => {
+            format!(" Hist\u{f3}rico (\u{fa}ltimas {chart_hours}h) ")
+        }
+        HistoryRange::Week => " Hist\u{f3}rico (7 dias) ".to_string(),
+    };
+    block = block.title(Span::styled(
+        title,
+        Style::default()
+            .fg(to_ratatui(ColorToken::TextBright))
+            .add_modifier(Modifier::BOLD),
+    ));
+
+    // Sessões por dia (T5) — fonte única da lista E do rodapé "7 DIAS".
+    // Computada mesmo com `loading=true` seria sempre vazia (records vazio),
+    // então não custa nada calcular incondicionalmente aqui.
+    let days = sessions_by_day(records, state.local_offset);
+
+    // Rodapé "7 DIAS" some enquanto carrega e quando NÃO HÁ NADA pra
+    // mostrar (nem dia nem Amp). Com Amp-only (records vazio, amp_dollars
+    // presente), ainda mostra o rodapé — honesto, não esconde por causa de
+    // um campo vazio.
+    if !loading && (!days.is_empty() || amp_dollars.is_some()) {
+        block = block.title_bottom(footer_line(&days));
     }
 
-    let inner = block.inner(area);
     frame.render_widget(block, area);
 
     // Skeleton com spinner enquanto o parse está em voo. NUNCA branco.
@@ -187,12 +149,13 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         return;
     }
 
-    // `now`: âncora do chart. Sem records não há nada pra bucketizar — usa
-    // uma constante determinística (`UNIX_EPOCH`, NUNCA `now_utc()`); os
-    // buckets ficam 100% zero de qualquer forma (bucket_by_hour(&[], ..)),
-    // então `render_chart` cai sozinho no texto "sem uso de tokens..." —
-    // mesmo caminho de quando um provider não tem dado no range
-    // selecionado, sem precisar de uma mensagem/branch nova.
+    // `now`: âncora do chart (E da comparação "hoje" da lista de dias).
+    // Sem records não há nada pra bucketizar — usa uma constante
+    // determinística (`UNIX_EPOCH`, NUNCA `now_utc()`); os buckets ficam
+    // 100% zero de qualquer forma, então `render_top_chart` cai sozinho no
+    // estado vazio embutido do `column_chart` — mesmo caminho de quando um
+    // provider não tem dado no range selecionado, sem precisar de uma
+    // mensagem/branch nova.
     let now = if records.is_empty() {
         time::OffsetDateTime::UNIX_EPOCH
     } else {
@@ -208,48 +171,58 @@ pub fn render_history(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         }
     };
 
-    let hours = match state.history_range {
-        HistoryRange::Day => 24,
-        HistoryRange::Week => 24 * 7,
-    };
+    let today_local = now.to_offset(state.local_offset).date();
 
-    let provider_buckets = bucket_by_provider_day(records);
-
-    let mut n_rows: u16 = provider_buckets.values().map(|v| v.len() as u16).sum();
-    if amp_dollars.is_some() {
-        n_rows += 1;
+    let mut list_lines = day_list_lines(
+        &days,
+        state.history_selected,
+        &state.history_expanded,
+        today_local,
+        state.local_offset,
+    );
+    if let Some(ad) = amp_dollars {
+        list_lines.push(amp_note_line(ad));
     }
-    let table_len = n_rows.saturating_add(1).max(2); // +1 header, mínimo 2
+    let list_len = list_lines.len() as u16;
 
     let vert = Layout::vertical([
         Constraint::Min(10),
-        Constraint::Length(table_len),
+        Constraint::Length(list_len),
         Constraint::Length(1),
     ])
     .split(inner);
 
-    render_chart(state, frame, vert[0], records, now, hours);
-    render_table(frame, vert[1], &provider_buckets, amp_dollars, state.scroll);
+    render_top_chart(
+        frame,
+        vert[0],
+        records,
+        now,
+        chart_hours,
+        bucket_hours,
+        state.local_offset,
+    );
+    render_day_list(frame, vert[1], list_lines, state.scroll);
     render_footer_chips(frame, vert[2], hits);
 }
 
-/// Rodapé fixo do bloco: "Total 7d: X tokens / $Y" (right-aligned), sempre
-/// sobre os 7 dias inteiros de `records` — independe do toggle 24h/7d.
-fn footer_line(records: &[UsageRecord]) -> Line<'static> {
-    let total_buckets = bucket_by_day(records);
-    let total_tokens: u64 = total_buckets.iter().map(|b| b.tokens).sum();
-    let total_cost: Option<f64> = {
-        let costs: Vec<f64> = total_buckets.iter().filter_map(|b| b.cost_usd).collect();
-        if costs.is_empty() {
-            None
-        } else {
-            Some(costs.iter().sum())
-        }
+/// Rodapé fixo do bloco: "7 DIAS $X.XX · N tok · M sessões" (right-aligned),
+/// sempre sobre os 7 dias inteiros de `days` — independe do toggle 24h/7d
+/// (mesmo contrato do antigo "Total 7d").
+fn footer_line(days: &[DaySessions]) -> Line<'static> {
+    let total_tokens: u64 = days.iter().map(|d| d.tokens).sum();
+    let total_sessions: usize = days.iter().map(|d| d.sessions.len()).sum();
+    let total_cost: Option<f64> = days
+        .iter()
+        .filter_map(|d| d.cost_usd)
+        .fold(None, |acc, c| Some(acc.unwrap_or(0.0) + c));
+    let cost_str = match total_cost {
+        Some(c) => format!("${c:.2}"),
+        None => "\u{2014}".to_string(),
     };
-    let footer_str = match total_cost {
-        Some(c) => format!(" Total 7d: {} tokens / ${c:.2} ", fmt_tokens(total_tokens)),
-        None => format!(" Total 7d: {} tokens ", fmt_tokens(total_tokens)),
-    };
+    let footer_str = format!(
+        " 7 DIAS {cost_str} \u{b7} {} tok \u{b7} {total_sessions} sess\u{f5}es ",
+        fmt_tokens_short(total_tokens)
+    );
     Line::from(Span::styled(
         footer_str,
         Style::default()
@@ -260,235 +233,212 @@ fn footer_line(records: &[UsageRecord]) -> Line<'static> {
 }
 
 // ---------------------------------------------------------------------------
-// Chart (metade superior)
+// Chart novo (topo) — column_chart (T8)
 // ---------------------------------------------------------------------------
 
-/// Chart nativo `ratatui` (braille, área preenchida) por provider. Amp fica
-/// de fora (nunca tem `UsageRecord`); claude/codex sem dados no range
-/// selecionado também ficam de fora (dataset totalmente zero é ruído, não
-/// curva). Sem NENHUM provider com dado → placeholder textual.
-fn render_chart(
-    state: &AppState,
-    frame: &mut Frame,
-    area: Rect,
-    records: &[UsageRecord],
-    now: time::OffsetDateTime,
-    hours: usize,
-) {
-    render_trend_chart(
-        frame,
-        area,
-        records,
-        now,
-        hours,
-        state.history_range,
-        state.local_offset,
-        " sem uso de tokens no per\u{ed}odo selecionado",
-    );
+/// Escolhe o fator de agregação horária (`bucket_hours`) do range Week: o
+/// menor N em `{1,2,3,4,6,8,12,24}` cujas `ceil(168/N)` colunas cabem em
+/// `avail` (largura do chart já sem a reserva do eixo Y,
+/// `column_chart::Y_AXIS_W` — calculada por quem chama). `None` = nem N=24
+/// (7 colunas de 24h) cabe — terminal absurdamente estreito; quem chama cai
+/// no último recurso (clamp horário antigo + título honesto, ver
+/// `render_history`).
+fn week_chart_plan(avail: usize) -> Option<usize> {
+    const CANDIDATES: [usize; 8] = [1, 2, 3, 4, 6, 8, 12, 24];
+    CANDIDATES
+        .into_iter()
+        .find(|&n| (24 * 7usize).div_ceil(n) <= avail)
 }
 
-/// Corpo reusável do chart (History E painel "Hoje (24h)" do Overview):
-/// mesma visualização, parametrizada em vez de ler `AppState` direto —
-/// `range` decide o estilo dos labels do eixo X, `empty_msg` é o
-/// placeholder quando nenhum provider tem dado no range (o texto muda
-/// conforme a tela: o History tem seletor de período, o Overview não).
-#[allow(clippy::too_many_arguments)]
-pub(super) fn render_trend_chart(
+/// Chart do topo da aba History: `column_chart_lines_bucketed` (T8 + fix de
+/// downsampling da semana) com séries tokens/hora concatenadas de TODOS os
+/// providers presentes em `records` (não uma lista fixa como
+/// `CHART_PROVIDERS` — generaliza pra qualquer provider que gere
+/// `UsageRecord` no futuro). Estado vazio (nenhum provider com dado) é
+/// resolvido pelo próprio `column_chart_lines_bucketed`.
+///
+/// `hours`/`bucket_hours` já vêm decididos por `render_history`
+/// (`week_chart_plan` pro range Week; Day sempre `(24, 1)`) — aqui só
+/// reclampa em resolução horária (`bucket_hours == 1`, tanto Day quanto o
+/// último recurso do Week): sem downsampling, 1 hora sempre vira ≥1 coluna,
+/// e pedir mais horas do que colunas disponíveis faria o `Paragraph`
+/// truncar a linha à direita, cortando os dados mais RECENTES (as séries
+/// vêm ordenadas do mais antigo pro mais novo). Com `bucket_hours > 1`, quem
+/// chamou já garantiu que as colunas agregadas cabem — não reclampa de novo.
+fn render_top_chart(
     frame: &mut Frame,
     area: Rect,
     records: &[UsageRecord],
     now: time::OffsetDateTime,
     hours: usize,
-    range: HistoryRange,
+    bucket_hours: usize,
     local_offset: time::UtcOffset,
-    empty_msg: &str,
 ) {
     if area.width == 0 || area.height == 0 {
         return;
     }
+    let hours = if bucket_hours <= 1 {
+        let max_hours = (area.width as usize)
+            .saturating_sub(column_chart::Y_AXIS_W)
+            .max(1);
+        hours.min(max_hours)
+    } else {
+        hours
+    };
 
-    // Materializa as séries ANTES de montar os `Dataset`s — `Dataset::data`
-    // recebe `&[(f64, f64)]`; um `Vec` criado dentro do `.map()` de um
-    // iterador não sobreviveria ao escopo (borrow pendurado). `series_by_
-    // provider` é o dono; `datasets` só empresta dele, e os dois ficam
-    // vivos até `frame.render_widget` consumir o `Chart`.
-    let mut series_by_provider: Vec<(&'static str, Vec<(f64, f64)>)> = Vec::new();
-    for pid in CHART_PROVIDERS {
-        let series = chart_series(records, pid, now, hours);
-        if series.iter().any(|&(_, y)| y > 0.0) {
-            series_by_provider.push((pid, series));
-        }
+    let providers: BTreeSet<&str> = records.iter().map(|r| r.provider.as_str()).collect();
+    let mut series: Vec<ModelHourSeries> = Vec::new();
+    for provider in providers {
+        series.extend(bucket_by_model_hour(records, provider, now, hours));
     }
-
-    if series_by_provider.is_empty() {
-        let p = Paragraph::new(Span::styled(
-            empty_msg.to_string(),
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        ));
-        frame.render_widget(p, area);
-        return;
-    }
-
-    let y_max: f64 = series_by_provider
-        .iter()
-        .flat_map(|(_, s)| s.iter().map(|&(_, y)| y))
-        .fold(0.0_f64, f64::max)
-        .max(1.0);
-
-    let datasets: Vec<Dataset> = series_by_provider
-        .iter()
-        .map(|(pid, series)| {
-            Dataset::default()
-                .name(*pid)
-                .marker(Marker::Braille)
-                .graph_type(GraphType::Area)
-                .style(Style::default().fg(hex_to_color(provider_hex(pid))))
-                .data(series)
-        })
-        .collect();
-
-    let x_labels = x_axis_labels(now, hours, range, local_offset);
-    let y_labels = vec![Line::from("0"), Line::from(abbrev_tokens(y_max as u64))];
-
-    let chart = Chart::new(datasets)
-        .x_axis(
-            Axis::default()
-                .style(Style::default().fg(to_ratatui(ColorToken::Comment)))
-                .bounds([0.0, (hours - 1) as f64])
-                .labels(x_labels),
-        )
-        .y_axis(
-            Axis::default()
-                .style(Style::default().fg(to_ratatui(ColorToken::Comment)))
-                .bounds([0.0, y_max])
-                .labels(y_labels),
-        );
-
-    frame.render_widget(chart, area);
+    let lines = column_chart_lines_bucketed(
+        &series,
+        area.width,
+        area.height,
+        now,
+        local_offset,
+        bucket_hours,
+    );
+    frame.render_widget(Paragraph::new(lines), area);
 }
 
 // ---------------------------------------------------------------------------
-// Tabela (metade inferior)
+// Lista de dias expansível (substitui a Table legada)
 // ---------------------------------------------------------------------------
 
-/// Tabela `dia | provider | tokens | custo`: uma linha por (provider, dia)
-/// de `bucket_by_provider_day`, cor da linha = marca do provider. Linha
-/// final do Amp (se `amp_dollars` presente): tokens "–", custo com o resumo
-/// de crédito + nota "sem logs locais de token" em Comment.
-///
-/// `scroll` (`state.scroll`, compartilhado com o ScrollView do Overview):
-/// offset vertical nas LINHAS DE DADOS — o header nunca rola (sempre ocupa
-/// a 1a linha de `area`). O layout externo (`render_history`) já entrega
-/// aqui a altura REAL concedida pelo solver de constraints (pode ser menor
-/// que `table_len`, o "tamanho desejado" usado só como hint); antes deste
-/// fix, `Table` sempre desenhava a partir do início do Vec e as linhas além
-/// da altura concedida ficavam inalcançáveis em terminal baixo — clamp
-/// local (nunca muta `state`) segue o mesmo padrão do `render_cards` do
-/// dashboard.
-fn render_table(
-    frame: &mut Frame,
-    area: Rect,
-    provider_buckets: &BTreeMap<String, Vec<DayBucket>>,
-    amp_dollars: Option<&AmpDollars>,
-    scroll: u16,
-) {
+/// Constrói as linhas visuais da lista de dias: 1 linha por `DaySessions`
+/// (desc — mais recente primeiro, já vem assim de `sessions_by_day`) +
+/// linhas de sessão indentadas quando o dia está em `expanded`. NÃO inclui
+/// a nota do Amp (`amp_note_line`, anexada por quem chama) — mantido
+/// separado pra ficar testável sem depender de `AmpDollars`.
+fn day_list_lines(
+    days: &[DaySessions],
+    selected: usize,
+    expanded: &BTreeSet<time::Date>,
+    today: time::Date,
+    local_offset: time::UtcOffset,
+) -> Vec<Line<'static>> {
+    let mut lines = Vec::with_capacity(days.len());
+    for (i, day) in days.iter().enumerate() {
+        let is_selected = i == selected;
+        let is_expanded = expanded.contains(&day.date);
+        let arrow = if is_expanded { "\u{25be}" } else { "\u{25b8}" }; // ▾ / ▸
+        let label = if day.date == today {
+            "hoje".to_string()
+        } else {
+            weekday_abbrev(day.date.weekday()).to_string()
+        };
+        let tokens = fmt_tokens_short(day.tokens);
+        let cost = day
+            .cost_usd
+            .map(|c| format!("${c:.2}"))
+            .unwrap_or_else(|| "\u{2014}".to_string());
+
+        let arrow_style = Style::default().fg(to_ratatui(if is_selected {
+            ColorToken::Blue
+        } else {
+            ColorToken::Muted
+        }));
+        let text_style = Style::default().fg(to_ratatui(ColorToken::Text));
+
+        let mut line = Line::from(vec![
+            Span::styled(format!("{arrow} "), arrow_style),
+            Span::styled(
+                format!(
+                    "{:02}/{:02} \u{b7} {label} \u{b7} {tokens} \u{b7} {cost} \u{b7} {} sess\u{f5}es",
+                    day.date.day(),
+                    day.date.month() as u8,
+                    day.sessions.len(),
+                ),
+                text_style,
+            ),
+        ]);
+        // Preenche a linha INTEIRA com o bg de seleção — mesmo padrão de
+        // `render/login.rs::render_provider_list` (o bg entra "por baixo"
+        // dos estilos de cada span, que só definem fg).
+        if is_selected {
+            line = line.style(Style::default().bg(to_ratatui(ColorToken::SelBg)));
+        }
+        lines.push(line);
+
+        if is_expanded {
+            for s in &day.sessions {
+                let local_start = s.start.to_offset(local_offset);
+                let hhmm = format!("{:02}:{:02}", local_start.hour(), local_start.minute());
+                let project = s.project.as_deref().unwrap_or("\u{2014}");
+                let model = s.dominant_model.as_deref().unwrap_or("\u{2014}");
+                let stokens = fmt_tokens_short(s.tokens);
+                let scost = s
+                    .cost_usd
+                    .map(|c| format!("${c:.2}"))
+                    .unwrap_or_else(|| "\u{2014}".to_string());
+                lines.push(Line::from(Span::styled(
+                    format!("    {hhmm}  {project}  {model}  {stokens}  {scost}"),
+                    Style::default().fg(to_ratatui(ColorToken::Comment)),
+                )));
+            }
+        }
+    }
+    lines
+}
+
+/// Nota do Amp (crédito, sem log local de token) — mesmo conteúdo da antiga
+/// linha "hoje/amp" da Table (T13), adaptada pra 1 linha de texto (a lista
+/// de dias não tem mais colunas).
+fn amp_note_line(ad: &AmpDollars) -> Line<'static> {
+    let p_color = provider_color("amp");
+    let spent = ad
+        .spent
+        .map(|v| format!("${v:.2}"))
+        .unwrap_or_else(|| "-".to_string());
+    let total = ad
+        .total
+        .map(|v| format!("${v:.2}"))
+        .unwrap_or_else(|| "-".to_string());
+    let remaining = ad
+        .remaining
+        .map(|v| format!("${v:.2}"))
+        .unwrap_or_else(|| "-".to_string());
+    Line::from(vec![
+        Span::styled(
+            format!("hoje \u{b7} amp \u{b7} {spent} de {total} (saldo cr {remaining})  "),
+            Style::default().fg(p_color),
+        ),
+        Span::styled(
+            "sem logs locais de token",
+            Style::default().fg(to_ratatui(ColorToken::Comment)),
+        ),
+    ])
+}
+
+/// Desenha a lista de dias já construída (`lines`) com clamp local de
+/// scroll — mesmo padrão do antigo `render_table` (T13): o layout externo
+/// já entrega aqui a altura REAL concedida pelo solver de constraints (pode
+/// ser menor que `list_len`, o "tamanho desejado" usado só como hint);
+/// clamp local (nunca muta `state`) evita que linhas fiquem inalcançáveis
+/// em terminal baixo.
+fn render_day_list(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, scroll: u16) {
     if area.height == 0 {
         return;
     }
-
-    let header_style = Style::default()
-        .fg(to_ratatui(ColorToken::Muted))
-        .add_modifier(Modifier::BOLD);
-    let header = Row::new(vec![
-        Cell::from("dia").style(header_style),
-        Cell::from("provider").style(header_style),
-        Cell::from("tokens").style(header_style),
-        Cell::from("custo").style(header_style),
-    ]);
-
-    let mut rows: Vec<Row<'_>> = Vec::new();
-    for (provider, buckets) in provider_buckets {
-        let p_color = provider_color(provider);
-        for b in buckets {
-            let dia = format!("{:02}/{:02}", b.date.month() as u8, b.date.day());
-            let tokens = abbrev_tokens(b.tokens);
-            let custo = match b.cost_usd {
-                Some(c) => format!("${c:.2}"),
-                None => "-".to_string(),
-            };
-            rows.push(
-                Row::new(vec![
-                    Cell::from(dia),
-                    Cell::from(provider.as_str()),
-                    Cell::from(tokens),
-                    Cell::from(custo),
-                ])
-                .style(Style::default().fg(p_color)),
-            );
-        }
-    }
-
-    if let Some(ad) = amp_dollars {
-        let p_color = provider_color("amp");
-        let spent = ad
-            .spent
-            .map(|v| format!("${v:.2}"))
-            .unwrap_or_else(|| "-".to_string());
-        let total = ad
-            .total
-            .map(|v| format!("${v:.2}"))
-            .unwrap_or_else(|| "-".to_string());
-        let remaining = ad
-            .remaining
-            .map(|v| format!("${v:.2}"))
-            .unwrap_or_else(|| "-".to_string());
-        let custo_line = Line::from(vec![
-            Span::raw(format!("{spent} de {total} (saldo cr {remaining})  ")),
-            Span::styled(
-                "sem logs locais de token",
-                Style::default().fg(to_ratatui(ColorToken::Comment)),
-            ),
-        ]);
-        rows.push(
-            Row::new(vec![
-                Cell::from("hoje"),
-                Cell::from("amp"),
-                Cell::from("\u{2013}"),
-                Cell::from(custo_line),
-            ])
-            .style(Style::default().fg(p_color)),
-        );
-    }
-
-    let widths = [
-        Constraint::Length(6),
-        Constraint::Length(9),
-        Constraint::Length(8),
-        Constraint::Fill(1),
-    ];
-
-    // Clamp local: header reserva a 1a linha, o resto é viewport de dados.
-    let total_rows = rows.len();
-    let visible_rows = area.height.saturating_sub(1) as usize;
+    let total_rows = lines.len();
+    let visible_rows = area.height as usize;
     let max_scroll = total_rows.saturating_sub(visible_rows);
     let scroll = (scroll as usize).min(max_scroll);
     let hidden_above = scroll;
-    let visible: Vec<Row<'_>> = rows.into_iter().skip(scroll).take(visible_rows).collect();
+    let visible: Vec<Line<'static>> = lines.into_iter().skip(scroll).take(visible_rows).collect();
     let visible_len = visible.len();
     let hidden_below = total_rows.saturating_sub(scroll + visible_len);
 
-    let table = Table::new(visible, widths).header(header).column_spacing(1);
-    frame.render_widget(table, area);
-
-    render_overflow_indicators(frame, area, hidden_above, hidden_below, visible_len);
+    frame.render_widget(Paragraph::new(visible), area);
+    render_list_overflow(frame, area, hidden_above, hidden_below, visible_len);
 }
 
-/// Indicador de overflow (`▲ +N` acima / `▼ +N` abaixo) quando o clamp de
-/// `render_table` esconde linhas fora do viewport — derive do clamp, nunca
-/// de um cálculo paralelo. Desenhado por cima da última coluna (Comment),
-/// alinhado à direita: só ocupa a largura do próprio texto, não a linha
-/// inteira (senão apagaria as células de dado daquela linha).
-fn render_overflow_indicators(
+/// Indicador de overflow (`▲ +N` acima / `▼ +N` abaixo) da lista de dias —
+/// mesmo racional do antigo `render_overflow_indicators` (T13), SEM o
+/// offset de header: a lista não é mais tabela, a linha 0 de `area` já é a
+/// 1a linha de DADO.
+fn render_list_overflow(
     frame: &mut Frame,
     area: Rect,
     hidden_above: usize,
@@ -500,18 +450,16 @@ fn render_overflow_indicators(
     }
     let top = (hidden_above > 0).then(|| format!("\u{25b2} +{hidden_above}"));
     let bottom = (hidden_below > 0).then(|| format!("\u{25bc} +{hidden_below}"));
-    // Linha 0 de `area` é o header; a 1a linha de dados visível é a linha 1,
-    // a última é `visible_len` (1-indexado a partir do header).
-    let last_row_offset = visible_len as u16;
+    let last_row_offset = (visible_len - 1) as u16;
     match (top, bottom) {
-        (Some(t), Some(b)) if last_row_offset == 1 => {
+        (Some(t), Some(b)) if last_row_offset == 0 => {
             // Só 1 linha visível: os dois indicadores caem na mesma linha —
             // combina num único span em vez de um sobrescrever o outro.
-            render_overflow_span(frame, area, 1, &format!("{t} {b}"));
+            render_overflow_span(frame, area, 0, &format!("{t} {b}"));
         }
         (top, bottom) => {
             if let Some(t) = top {
-                render_overflow_span(frame, area, 1, &t);
+                render_overflow_span(frame, area, 0, &t);
             }
             if let Some(b) = bottom {
                 render_overflow_span(frame, area, last_row_offset, &b);
@@ -578,9 +526,10 @@ fn render_skeleton_screen(state: &AppState, frame: &mut Frame, inner: Rect, hits
     render_footer_chips(frame, vert[1], hits);
 }
 
-/// Chips centrados: `[t 24h/7d] [r atualizar] [esc voltar]`.
+/// Chips centrados: `[↵ expandir] [t 24h/7d] [r atualizar] [esc voltar]`.
 fn render_footer_chips(frame: &mut Frame, area: Rect, hits: &mut HitMap) {
-    let chips: [(ChipKind, &str, &str); 3] = [
+    let chips: [(ChipKind, &str, &str); 4] = [
+        (ChipKind::ExpandDay, "\u{21b5}", "expandir"),
         (ChipKind::ToggleRange, "t", "24h/7d"),
         (ChipKind::Refresh, "r", "atualizar"),
         (ChipKind::Back, "esc", "voltar"),
@@ -611,21 +560,31 @@ mod tests {
             cache_read: 0,
             cache_write: 0,
             ts,
+            session_id: None,
+            project: None,
         }
     }
 
-    // -----------------------------------------------------------------
-    // Unit tests: fmt_tokens / weekday_abbrev / x_axis_labels / chart_series
-    // -----------------------------------------------------------------
-
-    #[test]
-    fn fmt_tokens_footer_format_differs_from_abbrev_in_k_scale() {
-        // fmt_tokens (rodapé, formato preservado) usa 0 casas em K —
-        // abbrev_tokens (shared.rs, chart/tabela) usaria "1.2K" pro mesmo n.
-        assert_eq!(fmt_tokens(1_200), "1K");
-        assert_eq!(fmt_tokens(29_100_000), "29.1M");
-        assert_eq!(fmt_tokens(500), "500");
+    /// `rec` + `session_id`/`project` — necessário pra exercitar
+    /// `sessions_by_day` de verdade (sem session_id, tudo colapsa numa
+    /// sessão "—" por dia).
+    fn session_rec(
+        provider: &str,
+        model: &str,
+        session_id: &str,
+        project: Option<&str>,
+        ts: time::OffsetDateTime,
+        tokens: u64,
+    ) -> UsageRecord {
+        let mut r = rec(provider, model, ts, tokens);
+        r.session_id = Some(session_id.to_string());
+        r.project = project.map(|s| s.to_string());
+        r
     }
+
+    // -----------------------------------------------------------------
+    // Unit tests: weekday_abbrev
+    // -----------------------------------------------------------------
 
     #[test]
     fn weekday_abbrev_pt_short_names() {
@@ -634,65 +593,36 @@ mod tests {
         assert_eq!(weekday_abbrev(time::Weekday::Sunday), "dom");
     }
 
-    #[test]
-    fn x_axis_labels_day_ends_in_agora_and_uses_local_hours() {
-        let now = time::macros::datetime!(2026-07-02 05:00:00 UTC);
-        let labels = x_axis_labels(now, 24, HistoryRange::Day, time::UtcOffset::UTC);
-        assert_eq!(labels.len(), 3);
-        let text =
-            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
-        assert_eq!(
-            text(&labels[0]),
-            "06h",
-            "24h atras de 05h (offset UTC) = 06h do dia anterior"
-        );
-        assert_eq!(text(&labels[1]), "18h");
-        assert_eq!(text(&labels[2]), "agora");
-    }
+    // -----------------------------------------------------------------
+    // Unit tests: day_list_lines (formato de data dd/mm, day-first)
+    // -----------------------------------------------------------------
 
     #[test]
-    fn x_axis_labels_day_uses_local_offset_not_utc() {
-        // Regressao no espirito do fix T12 (spark_line): o eixo tem que
-        // converter pro offset local ANTES de extrair a hora, nunca vazar
-        // a hora UTC crua rotulada como "local".
-        let now = time::macros::datetime!(2026-07-02 02:00:00 UTC);
-        let offset = time::UtcOffset::from_hms(-3, 0, 0).unwrap();
-        let labels = x_axis_labels(now, 24, HistoryRange::Day, offset);
-        let text =
-            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
-        // now em -03:00 = 23h do dia anterior; 23h atras disso = 00h local
-        // (NAO "03h", que seria o resultado se a hora UTC vazasse crua).
-        assert_eq!(text(&labels[0]), "00h");
-    }
-
-    #[test]
-    fn x_axis_labels_week_ends_in_hoje() {
-        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
-        let hours = 24 * 7;
-        let labels = x_axis_labels(now, hours, HistoryRange::Week, time::UtcOffset::UTC);
-        let text =
-            |l: &Line<'_>| -> String { l.spans.iter().map(|s| s.content.as_ref()).collect() };
-        assert_eq!(text(&labels[2]), "hoje");
-        let expected_oldest =
-            weekday_abbrev((now - time::Duration::hours((hours - 1) as i64)).weekday());
-        assert_eq!(text(&labels[0]), expected_oldest);
-    }
-
-    #[test]
-    fn chart_series_has_hours_points_and_filters_provider() {
-        let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
-        let records = vec![
-            rec("claude", "m", now - time::Duration::hours(1), 500),
-            rec("codex", "m", now - time::Duration::hours(1), 999),
-        ];
-        let series = chart_series(&records, "claude", now, 24);
-        assert_eq!(series.len(), 24);
-        // Indice 22 = "1h atras" (indice 23 = hora atual/"now").
-        assert_eq!(series[22].1, 500.0);
-        assert!(series
+    fn day_list_lines_uses_day_first_date_format() {
+        // 10 de julho (mês != dia, pra pinar a ordem — não pega falso-positivo
+        // em datas simétricas tipo 07/07).
+        let date = time::macros::date!(2026 - 07 - 10);
+        let today = time::macros::date!(2026 - 07 - 09); // != date → label = weekday, não "hoje"
+        let day = DaySessions {
+            date,
+            tokens: 1_000,
+            cost_usd: Some(1.23),
+            sessions: vec![],
+        };
+        let lines = day_list_lines(&[day], 0, &BTreeSet::new(), today, time::UtcOffset::UTC);
+        let text = lines[0]
+            .spans
             .iter()
-            .enumerate()
-            .all(|(i, &(_, y))| i == 22 || y == 0.0));
+            .map(|s| s.content.as_ref())
+            .collect::<String>();
+        assert!(
+            text.contains("10/07"),
+            "esperava dd/mm (10/07), texto: {text}"
+        );
+        assert!(
+            !text.contains("07/10"),
+            "não pode sobrar formato MM/DD (07/10): {text}"
+        );
     }
 
     // -----------------------------------------------------------------
@@ -740,7 +670,7 @@ mod tests {
 
     /// Gera uma onda de records (nao uma reta) pra provar que o chart tem
     /// FORMA de verdade — mata o antigo esticamento de 7 pontos que virava
-    /// blocos repetidos.
+    /// blocos repetidos tipo ▂▂▂▂▅▅▅▅.
     fn synth_wave(
         provider: &str,
         model: &str,
@@ -880,39 +810,86 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // Fix: `state.scroll` na tabela (dados inalcançáveis em terminal baixo)
+    // Lista de dias expansível (Task 20)
     // -----------------------------------------------------------------
 
-    /// Muitos providers/dias sintéticos numa área curta (100x20 — mesmo
-    /// terminal do smoke manual da spec) força a tabela a ter menos altura
-    /// do que `total_rows`. Antes do fix, a tabela sempre desenhava a
-    /// partir do topo do Vec e as linhas abaixo ficavam permanentemente
-    /// inalcançáveis; `state.scroll=5` prova que a janela desliza e os
-    /// indicadores ▲/▼ aparecem.
-    fn many_provider_day_records(now: time::OffsetDateTime) -> Vec<UsageRecord> {
-        let mut records = vec![];
-        for provider in ["claude", "codex", "amp2"] {
-            for d in 0..10 {
-                records.push(rec(
-                    provider,
-                    "m",
-                    now - time::Duration::days(d),
-                    1000 + d as u64,
-                ));
-            }
-        }
-        records
+    /// Fixture com 2 dias reais (sessões com session_id/project distintos)
+    /// — reusada pelo snapshot de dia expandido.
+    fn fixture_history() -> AppState {
+        let mut state = AppState::new();
+        state.screen = Screen::History;
+        let now = time::macros::datetime!(2026-07-10 18:00:00 UTC);
+        state.last_update = Some(now);
+        state.history = Some(vec![
+            session_rec(
+                "claude",
+                "claude-fable-5",
+                "s1",
+                Some("agent-bar"),
+                time::macros::datetime!(2026-07-10 09:15:00 UTC),
+                12_400,
+            ),
+            session_rec(
+                "claude",
+                "claude-opus-4-8",
+                "s2",
+                None,
+                time::macros::datetime!(2026-07-10 14:42:00 UTC),
+                31_000,
+            ),
+            session_rec(
+                "codex",
+                "gpt-5.5",
+                "s3",
+                Some("crm"),
+                time::macros::datetime!(2026-07-09 08:05:00 UTC),
+                8_200,
+            ),
+        ]);
+        state
     }
 
     #[test]
-    fn history_table_scrolled() {
+    fn history_snapshot_with_expanded_day() {
+        let backend = ratatui::backend::TestBackend::new(100, 32);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = fixture_history();
+        state
+            .history_expanded
+            .insert(time::macros::date!(2026 - 07 - 10));
+        terminal
+            .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    /// Sessões distintas em 10 dias diferentes — força o scroll da lista de
+    /// dias (mesmo racional do antigo `history_table_scrolled`, T13):
+    /// terminal baixo não cabe as 10 linhas de dia + chart mínimo + chips.
+    fn many_day_records(now: time::OffsetDateTime) -> Vec<UsageRecord> {
+        (0..10i64)
+            .map(|d| {
+                session_rec(
+                    "claude",
+                    "claude-fable-5",
+                    &format!("s{d}"),
+                    None,
+                    now - time::Duration::days(d),
+                    1_000 + d as u64,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn history_day_list_scrolled() {
         let backend = ratatui::backend::TestBackend::new(100, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.screen = Screen::History;
         let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
         state.last_update = Some(now);
-        state.history = Some(many_provider_day_records(now));
+        state.history = Some(many_day_records(now));
         state.scroll = 5;
         terminal
             .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
@@ -921,19 +898,19 @@ mod tests {
     }
 
     /// Clamp local: scroll absurdamente além do fim não pode panicar nem
-    /// deixar a tabela vazia — trava na última página (mesmo padrão do
-    /// `render_cards` do dashboard, que faz `state.scroll.min(max_scroll)`
-    /// sem mutar `state`). Na última página só o indicador ▲ (linhas
-    /// acima) pode aparecer — ▼ nunca, já que não sobra nada abaixo.
+    /// deixar a lista vazia — trava na última página (mesmo padrão do
+    /// antigo `history_table_scroll_clamps_beyond_max`, T13). Na última
+    /// página só o indicador ▲ (linhas acima) pode aparecer — ▼ nunca, já
+    /// que não sobra nada abaixo.
     #[test]
-    fn history_table_scroll_clamps_beyond_max() {
+    fn history_day_list_scroll_clamps_beyond_max() {
         let backend = ratatui::backend::TestBackend::new(100, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
         state.screen = Screen::History;
         let now = time::macros::datetime!(2026-07-02 12:00:00 UTC);
         state.last_update = Some(now);
-        state.history = Some(many_provider_day_records(now));
+        state.history = Some(many_day_records(now));
         state.scroll = u16::MAX;
         terminal
             .draw(|f| render_history(&state, f, f.area(), &mut HitMap::default()))
@@ -956,14 +933,14 @@ mod tests {
             text.contains('\u{25b2}'),
             "esperava indicador ▲ (linhas ocultas acima) na última página:\n{text}"
         );
-        // A última linha de dados sintética é a de "d=0" (mais recente,
-        // 07/02 = `now`, último provider em ordem alfabética "codex") —
-        // tem que estar visível na última página, senão o clamp cortou
-        // demais e escondeu dado alcançável.
+        // A última linha de dia (mais antigo, d=9, now - 9 dias) tem que
+        // estar visível na última página, senão o clamp cortou demais e
+        // escondeu dado alcançável.
+        let oldest = now - time::Duration::days(9);
+        let oldest_str = format!("{:02}/{:02}", oldest.day(), oldest.month() as u8);
         assert!(
-            text.contains("07/02"),
-            "esperava a última linha de dados (d=0, 07/02) visível:\n{text}"
+            text.contains(&oldest_str),
+            "esperava a linha do dia mais antigo ({oldest_str}) visível:\n{text}"
         );
     }
 }
-

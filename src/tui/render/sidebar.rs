@@ -1,4 +1,5 @@
-//! Sidebar: VISÃO / PROVIDERS / MAIS. Sem tabs — este é o hub de navegação.
+//! Sidebar: PROVEDORES / MAIS. Sem tabs — este é o hub de navegação.
+//! (Task 11: a seção VISÃO/Overview morreu — Detail agora é a tela default.)
 
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -18,7 +19,6 @@ const NARROW_THRESHOLD: u16 = 6;
 fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static> {
     if narrow {
         return match item {
-            SidebarItem::Overview => Line::from(" ▸".to_string()),
             SidebarItem::Provider(i) => {
                 let pv = &state.providers[i];
                 let mark = if pv.quota.provider == "claude" {
@@ -36,11 +36,10 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
             // com a sidebar colapsada.
             SidebarItem::History => Line::from(" H".to_string()),
             SidebarItem::Login => Line::from(" L".to_string()),
-            SidebarItem::Waybar => Line::from(" W".to_string()),
+            SidebarItem::Waybar => Line::from(" C".to_string()),
         };
     }
     match item {
-        SidebarItem::Overview => Line::from(" ▸ Geral".to_string()),
         SidebarItem::Provider(i) => {
             let pv = &state.providers[i];
             let mark = if pv.quota.provider == "claude" {
@@ -61,7 +60,7 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
         }
         SidebarItem::History => Line::from("   Histórico".to_string()),
         SidebarItem::Login => Line::from("   Login".to_string()),
-        SidebarItem::Waybar => Line::from("   Waybar".to_string()),
+        SidebarItem::Waybar => Line::from("   Config".to_string()),
     }
 }
 
@@ -87,10 +86,9 @@ pub fn render_sidebar(state: &AppState, frame: &mut Frame, area: Rect, hits: &mu
         // preserva a contagem de linhas (e portanto o offset de cada item)
         // idêntica ao modo largo.
         match item {
-            SidebarItem::Overview => lines.push(section(" VISÃO", narrow)),
             SidebarItem::Provider(0) => {
                 lines.push(Line::from(""));
-                lines.push(section(" PROVIDERS", narrow));
+                lines.push(section(" PROVEDORES", narrow));
             }
             SidebarItem::History => {
                 lines.push(Line::from(""));
@@ -161,12 +159,11 @@ fn item_color(state: &AppState, item: SidebarItem) -> ratatui::style::Color {
                     // Animação D: blink crítico da MARCA da sidebar. Migrado
                     // de widgets/provider_list.rs (órfão desta task,
                     // apagado): mesma cadência de ~450ms (ticks de 30ms →
-                    // 15 ticks por fase). Task 16 acrescenta um pulso
-                    // (`widgets::quota_gauge::pulse_color`) nos GAUGES do
-                    // card/detalhe — os dois coexistem (alvo/cadência
-                    // diferentes), este blink NÃO foi substituído.
-                    // spec §8: `animations=false` desativa TUDO — mesmo
-                    // gate do pulso dos gauges (dashboard.rs/detail.rs).
+                    // 15 ticks por fase). O pulso dos GAUGES do card/detalhe
+                    // (Task 16, `widgets::quota_gauge::pulse_color`) morreu
+                    // em v8 (spec §6, gauge sólido) — este blink da sidebar
+                    // não foi substituído e continua intacto.
+                    // spec §8: `animations=false` desativa TUDO.
                     // Com animações off, cor estática Red (não Muted: o
                     // crítico não pode "sumir" só porque não pisca).
                     if !state.animations {
@@ -323,9 +320,10 @@ mod tests {
 
     #[test]
     fn hit_zones_respect_height_guard() {
-        // area.height=3 só cabe a linha de VISAO(0) + Overview(1); todo o
-        // resto (providers/History/Login/Waybar) fica fora da tela — não
-        // deve registrar zona de clique pra linha invisível.
+        // area.height=3: só cabe o header PROVEDORES (2 linhas: em branco +
+        // rótulo) + Provider(0) — o resto (History/Login/Waybar) fica fora
+        // da tela — não deve registrar zona de clique pra linha invisível.
+        // (Task 11: sem Overview, Provider(0) é o 1º item da sidebar.)
         let backend = ratatui::backend::TestBackend::new(17, 3);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         let mut state = AppState::new();
@@ -338,9 +336,9 @@ mod tests {
             })
             .unwrap();
 
-        // Overview (indice 0) cai na linha 1, dentro da area de altura 3.
-        assert_eq!(hits.at(0, 1), Some(MouseTarget::Sidebar(0)));
-        // Provider(0) (indice 1) cairia na linha 4 — fora da area (0..3).
+        // Provider(0) (indice 0) cai na linha 2, dentro da area de altura 3.
+        assert_eq!(hits.at(0, 2), Some(MouseTarget::Sidebar(0)));
+        // History (indice 1) cairia na linha 5 — fora da area (0..3).
         for y in 0..3u16 {
             assert_ne!(hits.at(0, y), Some(MouseTarget::Sidebar(1)));
         }

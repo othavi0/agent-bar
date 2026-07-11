@@ -1,18 +1,19 @@
 ---
 source: src/tui/render/detail.rs
+assertion_line: 1454
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
-"│ VISÃO           ┏ Codex ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
-"│ ▸ Geral         ┃                                                                               ┃│"
-"│                 ┃ ! Erro ao carregar dados                                                      ┃│"
-"│ PROVIDERS       ┃                                                                               ┃│"
-"│ ● Codex    –    ┃ Failed to fetch Codex usage                                                   ┃│"
+"│                 ┏ Codex ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│"
+"│ PROVEDORES      ┃                                                                               ┃│"
+"│ ● Codex    –    ┃ ! Erro ao carregar dados                                                      ┃│"
 "│                 ┃                                                                               ┃│"
-"│ MAIS            ┃                                                                               ┃│"
+"│ MAIS            ┃ Failed to fetch Codex usage                                                   ┃│"
 "│   Histórico     ┃                                                                               ┃│"
 "│   Login         ┃                                                                               ┃│"
-"│   Waybar        ┃                                                                               ┃│"
+"│   Config        ┃                                                                               ┃│"
+"│                 ┃                                                                               ┃│"
+"│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"
 "│                 ┃                                                                               ┃│"

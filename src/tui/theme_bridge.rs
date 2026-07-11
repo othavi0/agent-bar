@@ -24,12 +24,7 @@ pub fn hex_to_color(hex: &str) -> Color {
 }
 
 pub fn provider_color(id: &str) -> Color {
-    match id {
-        "claude" => to_ratatui(ColorToken::Orange),
-        "codex" => to_ratatui(ColorToken::Green),
-        "amp" => to_ratatui(ColorToken::Magenta),
-        _ => to_ratatui(ColorToken::Text),
-    }
+    hex_to_color(crate::theme::provider_hex(id))
 }
 
 #[cfg(test)]

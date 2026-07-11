@@ -1,22 +1,17 @@
 //! Handler do right-click do Waybar (`agent-bar action-right <provider>`).
-//! Port fiel de `src/action-right.ts:28-90`.
 //!
-//! Roteamento:
-//! - Provider indisponível ou desconectado → **login stub** (TUI não portado no Plano 5).
-//! - Conectado → invalida cache, busca quota fresca e imprime view terminal.
+//! Roteamento (Task 12): resolve o foco inicial da TUI a partir do estado do
+//! provider e devolve pro caller abrir `tui::run_tui` já focada — sem login
+//! stub nem view terminal (essa era a UX pré-TUI do Plano 5).
 //!
 //! `looks_disconnected` espelha as 2 regexes de action-right.ts:52-56 (case-insensitive).
 
-use std::io::BufRead as _;
 use std::sync::OnceLock;
 
 use regex::Regex;
 
 use crate::app_identity::APP_NAME;
-use crate::formatters::clock::Clock;
-use crate::formatters::terminal::format_for_terminal;
-use crate::providers::types::AllQuotas;
-use crate::providers::{get_provider, get_quota_for, iso_from_ms, Ctx};
+use crate::providers::{get_provider, Ctx};
 
 // ---- Detecção de desconexão ----------------------------------------
 
@@ -60,93 +55,55 @@ pub fn looks_disconnected(provider_id: &str, error: Option<&str>) -> bool {
     base_match || codex_match
 }
 
-// ---- Utilitários -------------------------------------------------------
+// ---- Roteamento de foco -------------------------------------------------
 
-/// Lê uma linha de stdin (bloqueante). Mantém o popup do Waybar aberto até
-/// o usuário pressionar Enter — espelha `waitEnter` do TS.
-fn wait_enter() {
-    let stdin = std::io::stdin();
-    let mut line = String::new();
-    let _ = stdin.lock().read_line(&mut line);
-}
-
-/// Lanca o login interativo para o provider, sem TUI ativa (contexto right-click).
-/// Usa `launch_login_no_tui` de `tui::login_spawn` para executar o CLI com
-/// stdio herdado. Em caso de erro, loga e aguarda Enter.
-fn login_stub(provider_id: &str) {
-    if let Err(e) = crate::tui::login_spawn::launch_login_no_tui(provider_id) {
-        log::error!("Falha no login de '{}': {}", provider_id, e);
+/// Decisão pura de foco a partir do estado do provider (testável sem IO).
+pub fn focus_for(
+    provider_id: &str,
+    available: bool,
+    quota_error: Option<&str>,
+) -> crate::tui::InitialFocus {
+    if !available || looks_disconnected(provider_id, quota_error) {
+        crate::tui::InitialFocus::Login(provider_id.to_string())
+    } else {
+        crate::tui::InitialFocus::Provider(provider_id.to_string())
     }
-    wait_enter();
 }
 
-// ---- Handler principal -------------------------------------------------
-
-/// Handler do right-click do Waybar. Espelha `handleActionRight` do TS.
+/// Resolve o foco inicial da TUI pro right-click. `None` = provider inválido
+/// (argumento vazio ou desconhecido; erro já logado).
 ///
-/// Fluxo:
-/// 1. `provider_id` vazio → erro + exit(1).
-/// 2. Provider desconhecido → erro + wait_enter + return.
-/// 3. Provider indisponível → login stub + return.
-/// 4. Quota indica desconexão → login stub + return.
-/// 5. Conectado → refresh + imprime view terminal + wait_enter.
-pub async fn handle_action_right(provider_id: &str, ctx: &Ctx<'_>, clock: &Clock, no_color: bool) {
-    // 1. Argumento vazio.
+/// Contrato: invalida o cache do provider ANTES de consultar
+/// `is_available`/`get_quota` (ver comentário no corpo) — a rota
+/// Login-vs-Detail sempre decide sobre dado fresco. Coberto por
+/// `tests::action_right_focus_invalidates_cache_before_routing`.
+pub async fn action_right_focus(
+    provider_id: &str,
+    ctx: &Ctx<'_>,
+) -> Option<crate::tui::InitialFocus> {
     if provider_id.is_empty() {
         log::error!("Usage: {APP_NAME} action-right <provider>");
-        std::process::exit(1);
+        return None;
     }
-
-    // 2. Provider desconhecido.
     let provider = match get_provider(provider_id) {
         Some(p) => p,
         None => {
             log::error!("Unknown provider: {provider_id}");
-            wait_enter();
-            return;
+            return None;
         }
     };
-
-    // 3. Provider indisponível (sem credenciais ou binário ausente).
-    let available = provider.is_available(ctx).await;
-    if !available {
-        login_stub(provider_id);
-        return;
-    }
-
-    // 4. Quota indica desconexão (token expirado, sessão inválida, etc.).
-    let quota = provider.get_quota(ctx).await;
-    if looks_disconnected(provider_id, quota.error.as_deref()) {
-        login_stub(provider_id);
-        return;
-    }
-
-    // 5. Conectado: força refresh ignorando TTL e imprime view terminal.
+    // Invalida o cache ANTES de decidir a rota: a decisão Login-vs-Detail
+    // não pode se basear em quota servida do cache (TTL de até 5min pro
+    // Claude) — um usuário que deslogou há pouco cairia em Detail com dado
+    // "conectado" obsoleto. Contrato do right-click (pré-v8 fazia o mesmo).
     crate::cache::invalidate(&ctx.paths.cache_dir, provider.cache_key());
-
-    match get_quota_for(provider_id, ctx).await {
-        Some(fresh) => {
-            let quotas = AllQuotas {
-                providers: vec![fresh],
-                fetched_at: iso_from_ms(ctx.now_ms),
-            };
-            println!(
-                "{}",
-                format_for_terminal(
-                    clock,
-                    &quotas,
-                    ctx.settings,
-                    ctx.settings.waybar.display_mode,
-                    no_color,
-                )
-            );
-        }
-        None => {
-            log::error!("Failed to fetch {} quota", provider.name());
-        }
-    }
-
-    wait_enter();
+    let available = provider.is_available(ctx).await;
+    let error = if available {
+        provider.get_quota(ctx).await.error
+    } else {
+        None
+    };
+    Some(focus_for(provider_id, available, error.as_deref()))
 }
 
 // ---- Testes -----------------------------------------------------------
@@ -154,6 +111,8 @@ pub async fn handle_action_right(provider_id: &str, ctx: &Ctx<'_>, clock: &Clock
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::test_support::{ctx_for, settings};
+    use tempfile::tempdir;
 
     // --- looks_disconnected ---
 
@@ -198,5 +157,64 @@ mod tests {
     fn empty_error_is_not_disconnected() {
         // string vazia é falsy no TS (!!quota.error === false).
         assert!(!looks_disconnected("claude", Some("")));
+    }
+
+    // --- focus_for ---
+
+    #[test]
+    fn focus_routes_disconnected_to_login() {
+        match focus_for("claude", true, Some("Token expired")) {
+            crate::tui::InitialFocus::Login(id) => assert_eq!(id, "claude"),
+            other => panic!("esperava Login, veio {other:?}"),
+        }
+    }
+
+    #[test]
+    fn focus_routes_connected_to_provider_detail() {
+        match focus_for("claude", true, None) {
+            crate::tui::InitialFocus::Provider(id) => assert_eq!(id, "claude"),
+            other => panic!("esperava Provider, veio {other:?}"),
+        }
+    }
+
+    #[test]
+    fn focus_routes_unavailable_to_login() {
+        assert!(matches!(
+            focus_for("amp", false, None),
+            crate::tui::InitialFocus::Login(_)
+        ));
+    }
+
+    // --- action_right_focus (invalidate contract) ---
+
+    /// `action_right_focus` invalida o cache do provider ANTES de rotear —
+    /// mesmo que o resultado da rota nao mude, a entrada de cache preexistente
+    /// (potencialmente obsoleta) nunca deve sobreviver a chamada.
+    #[tokio::test]
+    async fn action_right_focus_invalidates_cache_before_routing() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 0);
+
+        // Semeia uma entrada de cache "conectado" como se fosse o estado
+        // anterior ao logout do usuario.
+        crate::cache::set(
+            &ctx.paths.cache_dir,
+            "claude-usage",
+            &serde_json::json!({"stale": true}),
+            300_000,
+            0,
+        )
+        .unwrap();
+        let cache_file = crate::cache::cache_path(&ctx.paths.cache_dir, "claude-usage").unwrap();
+        assert!(cache_file.exists(), "setup: cache deveria existir");
+
+        let _ = action_right_focus("claude", &ctx).await;
+
+        assert!(
+            !cache_file.exists(),
+            "action_right_focus deveria invalidar o cache antes de rotear"
+        );
     }
 }

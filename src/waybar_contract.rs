@@ -52,11 +52,12 @@ pub fn module_definition(
     app_bin: &str,
     terminal_script: &str,
     signal: Option<u8>,
+    interval: u32,
 ) -> WaybarModuleConfig {
     WaybarModuleConfig {
         exec: format!("{app_bin} --provider {provider}"),
         return_type: "json".to_string(),
-        interval: 120,
+        interval,
         exec_on_event: true,
         tooltip: true,
         on_click: format!("{terminal_script} {app_bin} menu"),
@@ -83,12 +84,13 @@ pub fn export_waybar_modules(
     terminal_script: &str,
     signal: Option<u8>,
     providers: &[String],
+    interval: u32,
 ) -> WaybarModulesExport {
     let mut modules = IndexMap::new();
     for provider in providers {
         modules.insert(
             format!("{WAYBAR_MODULE_PREFIX}{provider}"),
-            module_definition(provider, app_bin, terminal_script, signal),
+            module_definition(provider, app_bin, terminal_script, signal, interval),
         );
     }
     WaybarModulesExport {
@@ -512,6 +514,7 @@ mod tests {
             "$HOME/.config/waybar/scripts/agent-bar-open-terminal",
             None,
             &s(&["claude", "codex", "amp"]),
+            120,
         );
         let claude = &e.modules["custom/agent-bar-claude"];
         assert_eq!(
@@ -535,6 +538,7 @@ mod tests {
             "/usr/bin/open-terminal",
             None,
             &s(&["claude"]),
+            120,
         );
         assert_eq!(e.modules.len(), 1);
         assert!(e.modules.contains_key("custom/agent-bar-claude"));
@@ -543,10 +547,18 @@ mod tests {
 
     #[test]
     fn signal_present_when_provided_absent_otherwise() {
-        let with = export_waybar_modules("bin", "term", Some(8), &s(&["claude", "codex"]));
+        let with = export_waybar_modules("bin", "term", Some(8), &s(&["claude", "codex"]), 120);
         assert_eq!(with.modules["custom/agent-bar-claude"].signal, Some(8));
-        let without = export_waybar_modules("bin", "term", None, &s(&["claude"]));
+        let without = export_waybar_modules("bin", "term", None, &s(&["claude"]), 120);
         assert_eq!(without.modules["custom/agent-bar-claude"].signal, None);
+    }
+
+    #[test]
+    fn module_definition_uses_settings_interval() {
+        let m = module_definition("claude", "agent-bar", "term.sh", Some(8), 60);
+        assert_eq!(m.interval, 60);
+        let m2 = module_definition("claude", "agent-bar", "term.sh", Some(8), 120);
+        assert_eq!(m2.interval, 120);
     }
 
     #[test]

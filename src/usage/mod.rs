@@ -6,6 +6,7 @@ pub mod buckets;
 pub mod cache;
 pub mod claude;
 pub mod codex;
+pub mod model_names;
 pub mod pricing;
 
 use std::collections::BTreeMap;
@@ -29,6 +30,11 @@ pub struct UsageRecord {
     pub cache_read: u64,
     pub cache_write: u64,
     pub ts: OffsetDateTime,
+    /// File stem do session log de origem (arquivo = sessão). Preenchido
+    /// por `records()`; parsers deixam `None`.
+    pub session_id: Option<String>,
+    /// Basename do `cwd` do log (só Claude). Preenchido pelo parser.
+    pub project: Option<String>,
 }
 
 /// Custo em USD e BRL.
@@ -124,12 +130,26 @@ pub fn records(opts: AggregateOptions) -> Vec<UsageRecord> {
     let mut all: Vec<UsageRecord> = Vec::new();
 
     for path in collect_jsonl(opts.claude_dir) {
-        let recs = cache.cached_or_parse(&path, |content| parse_claude_lines(content.lines()));
+        let mut recs = cache.cached_or_parse(&path, |content| parse_claude_lines(content.lines()));
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string);
+        for r in &mut recs {
+            r.session_id = stem.clone();
+        }
         all.extend(recs);
     }
 
     for path in collect_jsonl(opts.codex_dir) {
-        let recs = cache.cached_or_parse(&path, |content| parse_codex_lines(content.lines()));
+        let mut recs = cache.cached_or_parse(&path, |content| parse_codex_lines(content.lines()));
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string);
+        for r in &mut recs {
+            r.session_id = stem.clone();
+        }
         all.extend(recs);
     }
 
@@ -506,6 +526,8 @@ mod tests {
             cache_read: 0,
             cache_write: 0,
             ts: datetime!(2026-06-20 09:00 UTC),
+            session_id: None,
+            project: None,
         };
         let summary = aggregate_records(vec![rec], 5.0, None);
 
@@ -559,5 +581,27 @@ mod tests {
             amp_meta: None,
         });
         assert!(s.providers.is_empty());
+    }
+
+    // --- Test: session_id + project ---
+
+    #[test]
+    fn records_carry_session_id_from_file_stem() {
+        let claude = tempdir().unwrap();
+        let codex = tempdir().unwrap();
+        write(
+            claude.path(),
+            "-home-user-proj/abc-123.jsonl",
+            r#"{"type":"assistant","timestamp":"2026-07-10T10:00:00Z","cwd":"/home/user/proj","message":{"model":"claude-fable-5","usage":{"input_tokens":10,"output_tokens":5}}}"#,
+        );
+        let recs = records(AggregateOptions {
+            claude_dir: claude.path(),
+            codex_dir: codex.path(),
+            fx_rate: 5.0,
+            amp_meta: None,
+        });
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].session_id.as_deref(), Some("abc-123"));
+        assert_eq!(recs[0].project.as_deref(), Some("proj"));
     }
 }

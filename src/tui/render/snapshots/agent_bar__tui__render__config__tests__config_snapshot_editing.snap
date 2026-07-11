@@ -1,18 +1,18 @@
 ---
 source: src/tui/render/config.rs
-assertion_line: 318
+assertion_line: 345
 expression: terminal.backend()
 ---
-"╭ Config do Waybar ╮╭ fxRate  [editando]  ─────────────────────╮"
-"│   providers      ││ 6.25                                     │"
-"│   providerOrder  │╰──────────────────────────────────────────╯"
-"│   separators     │╭──────────────────────────────────────────╮"
-"│   displayMode    ││ Taxa US$/BRL para custo em R$. Ex: 5.75  │"
-"│ > fxRate         ││ Enter confirma   Esc cancela             │"
+"╭ Config ──────────╮╭ fxRate  [editando]  ─────────────────────╮"
+"│ WAYBAR           ││ 6.25                                     │"
+"│   providers      │╰──────────────────────────────────────────╯"
+"│   providerOrder  │╭──────────────────────────────────────────╮"
+"│   separators     ││ Taxa US$/BRL para custo em R$. Ex: 5.75  │"
+"│   displayMode    ││ Enter confirma   Esc cancela             │"
 "│   signal         ││                                          │"
 "│   interval       ││                                          │"
-"│                  ││                                          │"
-"│                  ││                                          │"
+"│ TUI · afeta só es││                                          │"
+"│ > fxRate         ││                                          │"
 "│                  ││                                          │"
 "│                  ││                                          │"
 "│                  ││                                          │"

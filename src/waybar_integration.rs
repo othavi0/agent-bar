@@ -552,6 +552,7 @@ pub fn apply_waybar_integration(
         &terminal_script,
         settings.waybar.signal,
         &provider_order,
+        settings.waybar.interval,
     );
     let modules_json = serde_json::to_string_pretty(&export.modules)?;
     write_text(&paths.modules_include_path, &modules_json)?;
@@ -934,5 +935,22 @@ mod orchestration_tests {
         assert!(inc
             .iter()
             .any(|v| v.as_str() == Some(p.modules_include_path.to_str().unwrap())));
+    }
+
+    #[test]
+    fn modules_jsonc_uses_settings_interval() {
+        // Bug real: interval do settings.json era ignorado no export, que
+        // hardcodava 120. Aqui settings.waybar.interval = 60 deve chegar
+        // ao modules.jsonc gerado.
+        let dir = tempdir().unwrap();
+        let p = test_paths(dir.path());
+        let mut s = default_settings(dir.path());
+        s.waybar.interval = 60;
+        apply_waybar_integration(&s, apply_opts(&p)).unwrap();
+        let modules_json = std::fs::read_to_string(&p.modules_include_path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&modules_json).unwrap();
+        for (_, module) in parsed.as_object().unwrap() {
+            assert_eq!(module["interval"], 60);
+        }
     }
 }

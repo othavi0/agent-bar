@@ -69,8 +69,6 @@ pode não aparecer. Use apenas um filtro posicional por invocação de `cargo te
 - **Nunca round-trip live Waybar config via `serde_json`.**
   Os `.jsonc` têm comentários e ordem que precisam sobreviver.
   `waybar_integration.rs` patcha in-place.
-- **`waybar_contract.rs` cacheia settings 5s** porque Waybar pulla em interval
-  apertado.
 
 ## 4. Testing Patterns
 
