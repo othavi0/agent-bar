@@ -16,6 +16,8 @@ pub mod runtime;
 pub mod settings;
 pub mod setup;
 pub mod term_prompt;
+#[cfg(test)]
+pub mod test_support;
 pub mod theme;
 pub mod tui;
 pub mod uninstall;
