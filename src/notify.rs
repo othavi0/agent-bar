@@ -511,7 +511,15 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
+    // O guard fica preso através do `.await` de propósito: este teste zera
+    // PATH process-wide via `temp_env` e precisa travar o mutex pelo tempo
+    // inteiro em que PATH fica vazio, senão testes de outra thread (ex.:
+    // install::tests) leem PATH vazio e flakam. O runtime tokio aqui é
+    // current-thread (sem feature `rt-multi-thread`) e a task é única, então
+    // não há risco de deadlock por contenção consigo mesma.
+    #[allow(clippy::await_holding_lock)]
     async fn no_op_and_no_persist_when_notify_send_absent() {
+        let _env = crate::test_support::env_guard();
         let dir = tempdir().unwrap();
         let cache = dir.path().join("cache");
         std::fs::create_dir_all(&cache).unwrap();
