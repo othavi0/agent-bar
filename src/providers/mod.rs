@@ -5,6 +5,7 @@ pub mod claude;
 pub mod codex;
 pub mod error;
 pub mod extras;
+pub mod grok_cli;
 pub mod types;
 
 use std::time::Duration;
