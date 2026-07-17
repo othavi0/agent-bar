@@ -11,6 +11,6 @@ pkgbase = agent-bar-bin
 	provides = agent-bar
 	conflicts = agent-bar
 	source = agent-bar-8.1.0-x86_64.tar.gz::https://github.com/othavi0/agent-bar/releases/download/v8.1.0/agent-bar-8.1.0-x86_64.tar.gz
-	sha256sums = 0000000000000000000000000000000000000000000000000000000000000000
+	sha256sums = 0d5314be67412cca03696fc341712cd0094c1a8b909c1ef4cdd28f2497144ea2
 
 pkgname = agent-bar-bin
