@@ -57,13 +57,13 @@ Two Waybar render shapes share the formatter:
 - **Single-provider module** — `agent-bar --provider <id>` →
   `formatProviderForWaybar`. This is what generated Waybar modules call (one
   module per provider). A provider disabled in settings never reaches the
-  formatter — `index.ts` short-circuits first and prints the hidden-module
-  payload (`class: agent-bar-hidden`) so Waybar collapses it.
+  formatter — `main.rs` / gate `is_hidden_module` short-circuits first and prints
+  the hidden-module payload (`class: agent-bar-hidden`) so Waybar collapses it.
 - **Aggregate** — `agent-bar` with no provider → `outputWaybar` /
   `formatForWaybar`, joining every enabled provider into one module.
 
 After Waybar output, low/critical desktop notifications fire best-effort
-(`src/notify.ts`) — only when `notify.enabled` is set (default on) and stdout is
+(`src/notify.rs`) — only when `notify.enabled` is set (default on) and stdout is
 piped (i.e. real Waybar polling), never on an interactive terminal run, and never
 in json/terminal/watch modes.
 
