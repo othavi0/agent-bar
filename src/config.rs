@@ -17,13 +17,13 @@ pub const PROVIDER_TIMEOUT_SECS: u64 = 10;
 /// Poll interval default do módulo Waybar (era 120s hardcoded; ver design §1).
 pub const DEFAULT_INTERVAL_SECS: u32 = 60;
 
-pub const KNOWN_PROVIDER_IDS: [&str; 3] = ["claude", "codex", "amp"];
+pub const KNOWN_PROVIDER_IDS: [&str; 4] = ["claude", "codex", "amp", "grok"];
 
 /// TTL default de cache por provider (segundos). Claude conservador (rate-limit);
-/// Codex/Amp são locais e podem ser mais frescos.
+/// Codex/Amp/Grok são locais e podem ser mais frescos.
 pub fn default_ttl_secs(provider: &str) -> u32 {
     match provider {
-        "codex" | "amp" => 90,
+        "codex" | "amp" | "grok" => 90,
         _ => 300,
     }
 }
@@ -110,6 +110,8 @@ pub struct Paths {
     pub codex_sessions: PathBuf,
     pub amp_settings: PathBuf,
     pub amp_threads: PathBuf,
+    pub grok_home: PathBuf,
+    pub grok_auth: PathBuf,
 }
 
 impl Paths {
@@ -130,6 +132,11 @@ impl Paths {
         let xdg_cache = xdg_dir("XDG_CACHE_HOME", ".cache");
         let xdg_config = xdg_dir("XDG_CONFIG_HOME", ".config");
 
+        let grok_home = env::var_os("GROK_HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".grok"));
+
         Ok(Self {
             cache_dir: xdg_cache.join("agent-bar"),
             config_dir: xdg_config.join("agent-bar"),
@@ -142,6 +149,8 @@ impl Paths {
                 .join("share")
                 .join("amp")
                 .join("threads"),
+            grok_home: grok_home.clone(),
+            grok_auth: grok_home.join("auth.json"),
         })
     }
 
@@ -260,6 +269,7 @@ mod tests {
         assert_eq!(default_ttl_secs("claude"), 300);
         assert_eq!(default_ttl_secs("codex"), 90);
         assert_eq!(default_ttl_secs("amp"), 90);
+        assert_eq!(default_ttl_secs("grok"), 90);
         assert_eq!(default_ttl_secs("unknown"), 300);
     }
 

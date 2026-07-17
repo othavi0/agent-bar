@@ -69,6 +69,21 @@ pub struct AmpQuotaExtra {
     pub meta: Option<BTreeMap<String, String>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GrokQuotaExtra {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions_today: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turns_today: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_tokens_used: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_window_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recent_model: Option<String>,
+}
+
 /// Untagged: serializa apenas o conteúdo do struct interno (sem chave de variante),
 /// reproduzindo a forma de `extra` do TS.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -77,6 +92,7 @@ pub enum ProviderExtra {
     Claude(ClaudeQuotaExtra),
     Codex(CodexQuotaExtra),
     Amp(AmpQuotaExtra),
+    Grok(GrokQuotaExtra),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -379,6 +379,8 @@ mod tests {
             codex_sessions: PathBuf::new(),
             amp_settings: PathBuf::new(),
             amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
         }
     }
 
@@ -387,7 +389,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let s = load(&paths_in(dir.path()));
         assert_eq!(s.version, 2);
-        assert_eq!(s.waybar.providers, vec!["claude", "codex", "amp"]);
+        assert_eq!(
+            s.waybar.providers,
+            vec!["claude", "codex", "amp", "grok"]
+        );
         assert_eq!(s.waybar.separators, SeparatorStyle::Gap);
         assert_eq!(s.waybar.display_mode, DisplayMode::Remaining);
         assert_eq!(s.waybar.interval, 60);
@@ -395,6 +400,7 @@ mod tests {
         assert!(s.notify.enabled);
         assert_eq!(s.cache.ttl.get("claude"), Some(&300));
         assert_eq!(s.cache.ttl.get("codex"), Some(&90));
+        assert_eq!(s.cache.ttl.get("grok"), Some(&90));
         assert_eq!(s.window_policy.get("codex"), Some(&WindowPolicy::Both));
     }
 

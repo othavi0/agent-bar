@@ -804,6 +804,8 @@ mod orchestration_tests {
             codex_sessions: PathBuf::new(),
             amp_settings: PathBuf::new(),
             amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
         })
     }
 

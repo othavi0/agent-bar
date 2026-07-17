@@ -220,6 +220,8 @@ pub(crate) mod test_support {
             codex_sessions: PathBuf::new(),
             amp_settings: PathBuf::new(),
             amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
         })
     }
 
@@ -232,6 +234,8 @@ pub(crate) mod test_support {
             codex_sessions: dir.join("codex-sessions"),
             amp_settings: dir.join("amp-settings.json"),
             amp_threads: dir.join("amp-threads"),
+            grok_home: dir.join("grok"),
+            grok_auth: dir.join("grok").join("auth.json"),
         }
     }
 
