@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.1.0] - 2026-07-17
+
+Fundações de código, hardening de legibilidade e polish da TUI
+(trilhas A/B/C pós-8.0.0).
+
+### Added
+- Fixtures de regressão do Amp (`tests/fixtures/amp/`) para formatos
+  legado `$X/$Y` e free-tier em `% remaining`.
+- Rótulo dual de tokens nos totais do Detail: principal = input+output,
+  sufixo `(+N cache)` quando há cache.
+- Legenda do chart com indicador `…+N` quando séries não cabem na largura.
+- Discoverability de ajuda: chip `? ajuda` no Detail e hint na borda
+  inferior da moldura.
+- Specs: fundações/confiança, hardening de produto, polish TUI.
+
+### Changed
+- **Codex / TUI update / Detail** modularizados (sem mudança de contrato de
+  produto nos splits).
+- Config da TUI com rótulos humanos (`Provedores`, `Ordem`, `Exibição`,
+  `Câmbio R$`…); chave técnica permanece na dica do campo.
+- Sidebar colapsada usa `≡` / `→` / `⚙` em vez de H/L/C.
+- Chart no Detail usa `Min(6)` em painel estreito (&lt; 72 cols); `Min(9)` no resto.
+- Tokens de cor com contraste ≥4.5:1 sobre o fundo (`Comment`, `Red`,
+  séries do chart).
+- Pricing revalidado contra a tabela oficial Anthropic (2026-07-17).
+
+### Fixed
+- **Amp Free em `% remaining`** (CLI atual): parseava só o formato `$X/$Y`
+  e deixava a janela primary vazia no free tier percentual.
+- Serialização Waybar em falha de serde: nunca mais stdout vazio; payload
+  degradado com `class: agent-bar disconnected`.
+- Docs de arquitetura sem residual TypeScript (`main.rs` / `notify.rs`).
+
 ## [8.0.0] - 2026-07-11
 
 Redesign completo da TUI (v8) + números confiáveis no usage.
