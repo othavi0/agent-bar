@@ -170,7 +170,7 @@ injection bug, so all Pango output goes through it.
 | `src/cache.rs` | File-based quota cache (5 min, cross-process, atomic writes). |
 | `src/providers/mod.rs` | Registration, parallel fan-out, timeout/retry. |
 | `src/providers/base.rs` | `BaseProvider` `get_quota()` orchestration. |
-| `src/providers/{claude,codex,amp}.rs` | Concrete providers. Claude is direct; others extend `BaseProvider`. |
+| `src/providers/{claude,codex,amp,grok}.rs` | Concrete providers. Claude is direct; others extend `BaseProvider`. |
 | `src/providers/types.rs` | `ProviderQuota`, `QuotaWindow`, `Provider`, `AllQuotas`. |
 | `src/formatters/waybar.rs` | Waybar JSON assembly ({text,tooltip,class}). |
 | `src/formatters/render_pango.rs` | Single XML-escape boundary for Pango. |

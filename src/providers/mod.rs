@@ -5,6 +5,8 @@ pub mod claude;
 pub mod codex;
 pub mod error;
 pub mod extras;
+pub mod grok;
+pub mod grok_cli;
 pub mod types;
 
 use std::time::Duration;
@@ -110,12 +112,13 @@ pub trait Provider {
     async fn get_quota(&self, ctx: &Ctx<'_>) -> ProviderQuota;
 }
 
-/// Providers de produção. Cresce a cada plano (04a: Claude; 04b: Amp; 04c: Codex).
+/// Providers de produção. Cresce a cada plano (04a: Claude; 04b: Amp; 04c: Codex; grok).
 pub fn registry() -> Vec<Box<dyn Provider>> {
     vec![
         Box::new(claude::ClaudeProvider),
         Box::new(amp::AmpProvider),
         Box::new(codex::CodexProvider),
+        Box::new(grok::GrokProvider),
     ]
 }
 
@@ -183,7 +186,7 @@ pub fn get_provider(id: &str) -> Option<Box<dyn Provider>> {
 }
 
 /// Ids registrados na ordem do registry (espelha `getRegisteredProviderIds`).
-/// Retorna `["claude", "amp", "codex"]`.
+/// Retorna `["claude", "amp", "codex", "grok"]`.
 pub fn registered_provider_ids() -> Vec<&'static str> {
     registry().iter().map(|p| p.id()).collect()
 }
@@ -220,6 +223,8 @@ pub(crate) mod test_support {
             codex_sessions: PathBuf::new(),
             amp_settings: PathBuf::new(),
             amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
         })
     }
 
@@ -232,6 +237,8 @@ pub(crate) mod test_support {
             codex_sessions: dir.join("codex-sessions"),
             amp_settings: dir.join("amp-settings.json"),
             amp_threads: dir.join("amp-threads"),
+            grok_home: dir.join("grok"),
+            grok_auth: dir.join("grok").join("auth.json"),
         }
     }
 
@@ -350,13 +357,13 @@ mod tests {
     }
 
     #[test]
-    fn registry_has_claude_amp_and_codex() {
+    fn registry_has_claude_amp_codex_grok() {
         let r = registry();
-        assert_eq!(r.len(), 3);
+        assert_eq!(r.len(), 4);
         assert_eq!(r[0].id(), "claude");
         assert_eq!(r[1].id(), "amp");
         assert_eq!(r[2].id(), "codex");
-        assert!(r.iter().any(|p| p.id() == "codex"));
+        assert_eq!(r[3].id(), "grok");
     }
 
     // --- Task 3: get_provider / registered_provider_ids / get_quota_for ---
@@ -366,6 +373,7 @@ mod tests {
         assert!(get_provider("claude").is_some());
         assert!(get_provider("amp").is_some());
         assert!(get_provider("codex").is_some());
+        assert!(get_provider("grok").is_some());
     }
 
     #[test]
@@ -375,7 +383,10 @@ mod tests {
 
     #[test]
     fn registered_provider_ids_matches_registry_order() {
-        assert_eq!(registered_provider_ids(), vec!["claude", "amp", "codex"]);
+        assert_eq!(
+            registered_provider_ids(),
+            vec!["claude", "amp", "codex", "grok"]
+        );
     }
 
     #[tokio::test]

@@ -202,7 +202,7 @@ pub struct AppState {
     pub throbber: ThrobberAnim,
     /// Estado da aba Waybar config. None ate a aba ser aberta pela 1a vez.
     pub config_state: Option<ConfigState>,
-    /// Indice selecionado na aba Login (0=claude, 1=codex, 2=amp).
+    /// Indice selecionado na aba Login (0=claude, 1=codex, 2=amp, 3=grok).
     pub login_selected: usize,
     /// Mensagem de status da aba Login (feedback de erro ou instrucao).
     pub login_status: Option<String>,

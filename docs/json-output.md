@@ -47,8 +47,8 @@ agent-bar --watch --interval 30            # custom poll floor
 | --- | --- | --- |
 | `schemaVersion` | number | Contract version. See stability below. |
 | `fetchedAt` | string (ISO) | When agent-bar produced the snapshot — **not** the network fetch time. On a cache hit the underlying data can be up to the cache TTL (~5min) older. |
-| `providers[]` | array | One entry per provider. Order is registry order (currently `amp`, `claude`, `codex`) and is **not** part of the contract — key on the `provider` field, never on array index. |
-| `provider` | string | `claude` / `codex` / `amp`. |
+| `providers[]` | array | One entry per provider. Order is registry order (currently includes `claude`, `codex`, `amp`, `grok`) and is **not** part of the contract — key on the `provider` field, never on array index. |
+| `provider` | string | `claude` / `codex` / `amp` / `grok`. |
 | `displayName` | string | Human label. |
 | `available` | boolean | Authenticated and fetched OK. |
 | `account` / `plan` / `planType` | string | Optional; omitted when absent. |

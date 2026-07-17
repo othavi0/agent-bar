@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn provider_color_matches_theme_provider_hex() {
-        for id in ["claude", "codex", "amp", "other"] {
+        for id in ["claude", "codex", "amp", "grok", "other"] {
             let h = provider_hex(id).trim_start_matches('#');
             let want = Color::Rgb(
                 u8::from_str_radix(&h[0..2], 16).unwrap(),

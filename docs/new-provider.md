@@ -69,6 +69,7 @@ panicking. Keep messages stable; tests assert exact strings in several places.
 | Claude | reads Claude Code OAuth credentials and fetches Anthropic usage API |
 | Codex | prefers `codex app-server`, falls back to recent session `.jsonl` rate-limit events |
 | Amp | runs `amp usage` and parses stdout |
+| Grok | local-only: `~/.grok/auth.json` + walk of `sessions/**/signals.json`; primary = remaining session context % (not plan quota) |
 
 ## Standard Not Logged In Message
 

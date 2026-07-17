@@ -4,7 +4,7 @@
   <img src="docs/assets/agent-bar-banner.png" alt="Banner do Agent Bar">
 </p>
 
-Monitor de quota de Claude Code, OpenAI Codex e Amp na Waybar. Quota de agente é aquele recurso que você só descobre que acabou quando acabou; aqui ela fica visível na barra o tempo todo. Um binário em Rust, sem daemon: a Waybar chama, ele imprime JSON e vai embora.
+Monitor de quota de Claude Code, OpenAI Codex, Amp e Grok Build na Waybar. Quota de agente é aquele recurso que você só descobre que acabou quando acabou; aqui ela fica visível na barra o tempo todo. Um binário em Rust, sem daemon: a Waybar chama, ele imprime JSON e vai embora.
 
 ## O que ele mostra
 
@@ -15,8 +15,10 @@ De onde vem o dado, por provider:
 - **Claude Code** — token OAuth de `~/.claude/.credentials.json` + endpoint de usage da Anthropic. Janela de sessão (5 h), semanal (7 d), limites semanais por modelo e o gasto extra do plano, quando existe.
 - **Codex** — fala JSON-RPC com `codex app-server`; se não der, cai pro parse do session log em `~/.codex/sessions`.
 - **Amp** — roda `amp usage` e parseia o texto com regex, porque `--json` não existe. É o que tem.
+- **Grok Build** — OAuth em `~/.grok/auth.json` + `signals.json` das sessões.
+  O % da barra é **contexto restante da sessão recente**, não cota de plano xAI.
 
-Tudo passa por um cache em disco (`~/.cache/agent-bar/`): 5 minutos pro Claude, 90 segundos pra Codex e Amp. A barra consulta a cada 2 minutos e ninguém martela API.
+Tudo passa por um cache em disco (`~/.cache/agent-bar/`): 5 minutos pro Claude, 90 segundos pra Codex, Amp e Grok. A barra consulta a cada 2 minutos e ninguém martela API.
 
 ## Requisitos
 

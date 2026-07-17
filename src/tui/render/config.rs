@@ -243,7 +243,7 @@ fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect, hits:
 fn field_hint(field: ConfigField) -> Option<&'static str> {
     match field {
         ConfigField::Providers => {
-            Some("Quais providers aparecem na barra. Ex: claude, codex, amp (providers)")
+            Some("Quais providers aparecem na barra. Ex: claude, codex, amp, grok (providers)")
         }
         ConfigField::ProviderOrder => {
             Some("Ordem dos módulos no Waybar. Ex: claude, codex (providerOrder)")

@@ -6,6 +6,7 @@ use crate::formatters::builders::amp::build_amp;
 use crate::formatters::builders::claude::build_claude;
 use crate::formatters::builders::codex::build_codex;
 use crate::formatters::builders::generic::build_generic;
+use crate::formatters::builders::grok::build_grok;
 use crate::formatters::builders::shared::{AmpLayout, BuildOptions};
 use crate::formatters::clock::Clock;
 use crate::formatters::render_ansi::render_ansi;
@@ -73,6 +74,23 @@ fn terminal_section(
                     footer_fetched_at: None,
                     plan_label: None,
                     amp_free_tier_layout: AmpLayout::Sublines,
+                    account_in_header: false,
+                },
+            ),
+            no_color,
+        ),
+        "grok" => render_ansi(
+            &build_grok(
+                clock,
+                p,
+                &BuildOptions {
+                    mode,
+                    header_title: "Grok".into(),
+                    header_width: 56,
+                    label_color: ColorToken::Cyan,
+                    footer_fetched_at: None,
+                    plan_label: None,
+                    amp_free_tier_layout: AmpLayout::Inline,
                     account_in_header: false,
                 },
             ),
@@ -154,6 +172,8 @@ mod tests {
             codex_sessions: PathBuf::new(),
             amp_settings: PathBuf::new(),
             amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
         })
     }
 

@@ -11,6 +11,7 @@
 //!   - claude: `claude` (sem args; o usuario digita `/login` dentro da REPL)
 //!   - codex:  `codex login`
 //!   - amp:    `amp login`
+//!   - grok:   `grok login`
 
 use std::process::Command;
 
@@ -18,6 +19,7 @@ use anyhow::{bail, Context as _};
 
 use crate::install::ensure_command;
 use crate::providers::amp_cli::find_amp_bin;
+use crate::providers::grok_cli::find_grok_bin;
 
 /// Trait mockavel para testes unitarios do update/event_loop.
 pub trait ProviderLogin {
@@ -116,6 +118,27 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
                 .context("falha ao executar amp login")?;
             if !status.success() {
                 log::warn!("amp login encerrou com código {:?}", status.code());
+            }
+            Ok(())
+        }
+
+        "grok" => {
+            let home = std::env::var("HOME").unwrap_or_default();
+            let grok_home = std::env::var_os("GROK_HOME").map(std::path::PathBuf::from);
+            let bin = find_grok_bin(&home, grok_home.as_deref()).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Grok CLI não encontrado. Instale com: curl -fsSL https://x.ai/cli/install.sh | bash"
+                )
+            })?;
+            let status = Command::new(&bin)
+                .arg("login")
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .context("falha ao executar grok login")?;
+            if !status.success() {
+                log::warn!("grok login encerrou com código {:?}", status.code());
             }
             Ok(())
         }

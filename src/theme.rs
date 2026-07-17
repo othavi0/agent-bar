@@ -93,6 +93,7 @@ pub fn provider_hex(id: &str) -> &'static str {
         "claude" => ColorToken::Orange.hex(),
         "codex" => ColorToken::Green.hex(),
         "amp" => ColorToken::Magenta.hex(),
+        "grok" => ColorToken::Cyan.hex(),
         _ => ColorToken::Text.hex(),
     }
 }
@@ -159,6 +160,7 @@ mod tests {
         assert_eq!(provider_hex("claude"), ColorToken::Orange.hex());
         assert_eq!(provider_hex("codex"), ColorToken::Green.hex());
         assert_eq!(provider_hex("amp"), ColorToken::Magenta.hex());
+        assert_eq!(provider_hex("grok"), ColorToken::Cyan.hex());
         assert_eq!(provider_hex("other"), ColorToken::Text.hex());
     }
 

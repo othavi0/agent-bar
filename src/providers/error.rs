@@ -49,6 +49,16 @@ pub enum AmpError {
 }
 
 #[derive(Error, Debug)]
+pub enum GrokError {
+    #[error("Grok CLI not installed. Install from https://x.ai/cli or ensure ~/.grok/bin/grok is on PATH.")]
+    NotInstalled,
+    #[error("Not logged in. Open `agent-bar menu` and choose Provider login.")]
+    NotLoggedIn,
+    #[error("Failed to read Grok credentials.")]
+    InvalidCredentials,
+}
+
+#[derive(Error, Debug)]
 pub enum ProviderError {
     #[error(transparent)]
     Claude(#[from] ClaudeError),
@@ -56,6 +66,8 @@ pub enum ProviderError {
     Codex(#[from] CodexError),
     #[error(transparent)]
     Amp(#[from] AmpError),
+    #[error(transparent)]
+    Grok(#[from] GrokError),
 }
 
 #[cfg(test)]
@@ -122,6 +134,22 @@ mod tests {
         );
         assert_eq!(AmpError::ParseFailed.to_string(), "Failed to parse usage");
         assert_eq!(AmpError::Generic.to_string(), "Failed to fetch Amp usage");
+    }
+
+    #[test]
+    fn grok_strings_are_verbatim() {
+        assert_eq!(
+            GrokError::NotInstalled.to_string(),
+            "Grok CLI not installed. Install from https://x.ai/cli or ensure ~/.grok/bin/grok is on PATH."
+        );
+        assert_eq!(
+            GrokError::NotLoggedIn.to_string(),
+            format!("Not logged in. Open `{APP_NAME} menu` and choose Provider login.")
+        );
+        assert_eq!(
+            GrokError::InvalidCredentials.to_string(),
+            "Failed to read Grok credentials."
+        );
     }
 
     #[test]

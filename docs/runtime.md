@@ -46,8 +46,8 @@ Settings schema version: `2`.
 
 Defaults:
 
-- providers: `claude`, `codex`, `amp`
-- provider order: `claude`, `codex`, `amp`
+- providers: `claude`, `codex`, `amp`, `grok`
+- provider order: `claude`, `codex`, `amp`, `grok`
 - separator style: `gap`
 - display mode: `remaining`
 - show percentage: `true`

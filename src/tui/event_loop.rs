@@ -166,14 +166,16 @@ fn drain(
     }
 }
 
-/// Índice do provider na tela Login (0=claude, 1=codex, 2=amp) — mesma ordem
-/// de `render/login.rs::PROVIDERS` e `update.rs::login_selected_id`
-/// (inverso). Usado só no boot (`InitialFocus::Login`, Task 11); id
-/// desconhecido cai em 0 (claude) em vez de panicar.
+/// Índice do provider na tela Login (0=claude, 1=codex, 2=amp, 3=grok) —
+/// mesma ordem de `render/login.rs::PROVIDERS` e
+/// `update.rs::login_selected_id` (inverso). Usado só no boot
+/// (`InitialFocus::Login`, Task 11); id desconhecido cai em 0 (claude) em
+/// vez de panicar.
 fn login_index_of(id: &str) -> usize {
     match id {
         "codex" => 1,
         "amp" => 2,
+        "grok" => 3,
         _ => 0,
     }
 }

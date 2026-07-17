@@ -11,6 +11,7 @@ use crate::formatters::builders::amp::build_amp;
 use crate::formatters::builders::claude::build_claude;
 use crate::formatters::builders::codex::build_codex;
 use crate::formatters::builders::generic::build_generic;
+use crate::formatters::builders::grok::build_grok;
 use crate::formatters::builders::shared::{AmpLayout, BuildOptions, TOOLTIP_BORDER};
 use crate::formatters::clock::Clock;
 use crate::formatters::render_pango::{render_pango, span};
@@ -149,6 +150,26 @@ fn provider_tooltip(
                     plan_label: None,
                     amp_free_tier_layout: AmpLayout::Inline,
                     account_in_header: true,
+                },
+            ))
+        }
+        "grok" => {
+            let title = match p.plan.as_deref().filter(|s| !s.is_empty()) {
+                Some(plan) => format!("Grok · {plan}"),
+                None => "Grok".to_string(),
+            };
+            render_pango(&build_grok(
+                clock,
+                p,
+                &BuildOptions {
+                    mode,
+                    header_title: title,
+                    header_width: header_width_waybar(),
+                    label_color: ColorToken::Cyan,
+                    footer_fetched_at: fetched,
+                    plan_label: None,
+                    amp_free_tier_layout: AmpLayout::Inline,
+                    account_in_header: false,
                 },
             ))
         }
@@ -295,6 +316,8 @@ mod tests {
             codex_sessions: PathBuf::new(),
             amp_settings: PathBuf::new(),
             amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
         })
     }
     fn claude(remaining: f64) -> ProviderQuota {

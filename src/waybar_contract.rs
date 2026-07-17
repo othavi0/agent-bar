@@ -22,7 +22,7 @@ const SURFACE: &str = "#242a33";
 const SYSTEM_ASSET_DIR_PREFIX: &str = "/usr/share/";
 
 /// Providers Waybar na ordem canônica — espelha `WAYBAR_PROVIDERS` do TS.
-pub const WAYBAR_PROVIDERS: [&str; 3] = ["claude", "codex", "amp"];
+pub const WAYBAR_PROVIDERS: [&str; 4] = ["claude", "codex", "amp", "grok"];
 
 // ---------------------------------------------------------------------------
 // WaybarModuleConfig
@@ -275,6 +275,10 @@ pub fn export_waybar_css(
             "{WAYBAR_SELECTOR_PREFIX}amp {{ background-image: url(\"{}\"); }}",
             icon_ref("amp-icon.svg")
         ),
+        format!(
+            "{WAYBAR_SELECTOR_PREFIX}grok {{ background-image: url(\"{}\"); }}",
+            icon_ref("grok-icon.svg")
+        ),
         String::new(),
         format!(
             "{} {{ color: {}; }}",
@@ -513,7 +517,7 @@ mod tests {
             "$HOME/.local/bin/agent-bar",
             "$HOME/.config/waybar/scripts/agent-bar-open-terminal",
             None,
-            &s(&["claude", "codex", "amp"]),
+            &s(&["claude", "codex", "amp", "grok"]),
             120,
         );
         let claude = &e.modules["custom/agent-bar-claude"];
@@ -529,6 +533,8 @@ mod tests {
             amp.on_click_right,
             "$HOME/.config/waybar/scripts/agent-bar-open-terminal $HOME/.local/bin/agent-bar action-right amp"
         );
+        let grok = &e.modules["custom/agent-bar-grok"];
+        assert_eq!(grok.exec, "$HOME/.local/bin/agent-bar --provider grok");
     }
 
     #[test]
@@ -565,17 +571,23 @@ mod tests {
     fn css_has_base_styles_icons_states() {
         let css = export_waybar_css(
             "/home/user/.config/waybar/agent-bar/icons",
-            &s(&["claude", "codex", "amp"]),
+            &s(&["claude", "codex", "amp", "grok"]),
             SeparatorStyle::Gap,
         );
         for sel in [
             "#custom-agent-bar-claude",
             "#custom-agent-bar-codex",
             "#custom-agent-bar-amp",
+            "#custom-agent-bar-grok",
         ] {
             assert!(css.contains(sel), "missing {sel}");
         }
-        for icon in ["claude-code-icon.png", "codex-icon.png", "amp-icon.svg"] {
+        for icon in [
+            "claude-code-icon.png",
+            "codex-icon.png",
+            "amp-icon.svg",
+            "grok-icon.svg",
+        ] {
             assert!(css.contains(icon), "missing {icon}");
         }
         for st in [".ok", ".low", ".warn", ".critical", ".disconnected"] {

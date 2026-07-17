@@ -311,7 +311,8 @@ pub(super) fn click(state: &mut AppState, target: MouseTarget) -> Vec<Action> {
         // tela Login no primeiro clique, contrariando "click seleciona;
         // ativação continua pelo Enter/chip" (T14).
         MouseTarget::Card(i) if state.screen == Screen::Login => {
-            if i < 3 {
+            // 4 providers na lista Login (claude/codex/amp/grok).
+            if i < 4 {
                 state.login_selected = i;
                 state.login_status = None;
             }
