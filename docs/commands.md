@@ -97,7 +97,7 @@ These are mostly for tests, packagers, and manual integration.
 
 | Flag | Purpose |
 | --- | --- |
-| `-p`, `--provider <id>` | Limit output to `claude`, `codex`, or `amp`. |
+| `-p`, `--provider <id>` | Limit output to `claude`, `codex`, `amp`, or `grok`. |
 | `-r`, `--refresh` | Ignore cache and fetch fresh provider data. |
 | `-t`, `--terminal` | Force terminal output mode. |
 | `--format <waybar\|json>` | Output format. Default `waybar`. `json` emits the versioned contract (see below). |

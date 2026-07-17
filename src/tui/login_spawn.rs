@@ -124,7 +124,8 @@ fn run_login_cli(provider_id: &str) -> anyhow::Result<()> {
 
         "grok" => {
             let home = std::env::var("HOME").unwrap_or_default();
-            let bin = find_grok_bin(&home).ok_or_else(|| {
+            let grok_home = std::env::var_os("GROK_HOME").map(std::path::PathBuf::from);
+            let bin = find_grok_bin(&home, grok_home.as_deref()).ok_or_else(|| {
                 anyhow::anyhow!(
                     "Grok CLI não encontrado. Instale com: curl -fsSL https://x.ai/cli/install.sh | bash"
                 )

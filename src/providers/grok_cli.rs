@@ -1,5 +1,6 @@
 //! Descoberta do binário `grok` (locator). Ordem: PATH (`which`), depois
-//! caminhos conhecidos sob `$HOME`.
+//! `{grok_home}/bin/grok` (quando `GROK_HOME`/paths.grok_home é conhecido),
+//! depois caminhos conhecidos sob `$HOME`.
 
 use std::path::{Path, PathBuf};
 
@@ -16,23 +17,28 @@ pub fn grok_candidate_paths(home: &str) -> Vec<PathBuf> {
 }
 
 /// Locator com seams injetáveis (`which`/`exists`) para teste. PATH primeiro;
-/// depois o 1º candidato que existe; senão `None`.
+/// em seguida `{grok_home}/bin/grok` se fornecido; depois candidatos sob `$HOME`.
 pub fn find_grok_bin_with(
     home: &str,
+    grok_home: Option<&Path>,
     which: impl Fn(&str) -> Option<PathBuf>,
     exists: impl Fn(&Path) -> bool,
 ) -> Option<PathBuf> {
     if let Some(p) = which("grok") {
         return Some(p);
     }
-    grok_candidate_paths(home)
-        .into_iter()
-        .find(|p| exists(p))
+    let mut candidates = Vec::new();
+    if let Some(gh) = grok_home {
+        candidates.push(gh.join("bin").join("grok"));
+    }
+    candidates.extend(grok_candidate_paths(home));
+    candidates.into_iter().find(|p| exists(p))
 }
 
 /// Locator de produção: `which_in_path` + `Path::is_file`.
-pub fn find_grok_bin(home: &str) -> Option<PathBuf> {
-    find_grok_bin_with(home, crate::providers::amp_cli::which_in_path, |p| {
+/// `grok_home` (ex. `paths.grok_home` / `GROK_HOME`) vira candidato logo após o PATH.
+pub fn find_grok_bin(home: &str, grok_home: Option<&Path>) -> Option<PathBuf> {
+    find_grok_bin_with(home, grok_home, crate::providers::amp_cli::which_in_path, |p| {
         p.is_file()
     })
 }
@@ -66,6 +72,7 @@ mod tests {
     fn prefers_path_when_available() {
         let found = find_grok_bin_with(
             "/tmp/agent-bar-home",
+            Some(Path::new("/custom/grok-home")),
             |_| Some(PathBuf::from("/usr/local/bin/grok")),
             |_| false,
         );
@@ -73,9 +80,24 @@ mod tests {
     }
 
     #[test]
+    fn prefers_grok_home_bin_before_home_candidates() {
+        let found = find_grok_bin_with(
+            "/tmp/agent-bar-home",
+            Some(Path::new("/custom/grok-home")),
+            |_| None,
+            |p| p == Path::new("/custom/grok-home/bin/grok"),
+        );
+        assert_eq!(
+            found,
+            Some(PathBuf::from("/custom/grok-home/bin/grok"))
+        );
+    }
+
+    #[test]
     fn falls_back_to_known_locations() {
         let found = find_grok_bin_with(
             "/tmp/agent-bar-home",
+            None,
             |_| None,
             |p| p == Path::new("/tmp/agent-bar-home/.grok/bin/grok"),
         );
@@ -87,7 +109,7 @@ mod tests {
 
     #[test]
     fn none_when_unavailable() {
-        let found = find_grok_bin_with("/tmp/agent-bar-home", |_| None, |_| false);
+        let found = find_grok_bin_with("/tmp/agent-bar-home", None, |_| None, |_| false);
         assert_eq!(found, None);
     }
 }

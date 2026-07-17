@@ -346,7 +346,12 @@ impl QuotaSource for GrokProvider {
     }
 
     async fn is_available(&self, ctx: &Ctx<'_>) -> bool {
-        ctx.paths.grok_auth.is_file() || find_grok_bin(&ctx.home.to_string_lossy()).is_some()
+        ctx.paths.grok_auth.is_file()
+            || find_grok_bin(
+                &ctx.home.to_string_lossy(),
+                Some(ctx.paths.grok_home.as_path()),
+            )
+            .is_some()
     }
 
     async fn fetch_raw(&self, ctx: &Ctx<'_>) -> Result<GrokRaw, ProviderError> {
