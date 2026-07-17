@@ -1,5 +1,5 @@
 ---
-source: src/tui/render/detail.rs
+source: src/tui/render/detail/mod.rs
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────────────────────────────────────- ╮"
@@ -31,6 +31,6 @@ expression: terminal.backend()
 "│                 ┃                                                                               ┃│"
 "│                 ┃ EXTRA USAGE  $12.34 usado · sem limite                                        ┃│"
 "│                 ┃ hoje coletando…    7 dias coletando…                                          ┃│"
-"│                 ┃            esc voltar     r atualizar     g login     h histórico             ┃│"
+"│                 ┃      esc voltar     r atualizar     g login     h histórico     ? ajuda       ┃│"
 "│                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│"
-"╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+"╰──────────────────────────────────────────── ? ajuda ─────────────────────────────────────────────╯"

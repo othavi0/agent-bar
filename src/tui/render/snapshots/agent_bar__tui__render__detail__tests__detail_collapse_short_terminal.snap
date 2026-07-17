@@ -1,5 +1,5 @@
 ---
-source: src/tui/render/detail.rs
+source: src/tui/render/detail/mod.rs
 expression: text
 ---
 ╭ agent-bar ─────────────────────────────────────────────────────────────────────────$2.10 · 02:00 ╮
@@ -19,6 +19,6 @@ expression: text
 │                 ┃  ● Opus 4.8 1,0M  ● Sonnet 4.6 50k                                            ┃│
 │                 ┃ 2 modelos hoje · $1.40  …                                                     ┃│
 │                 ┃ hoje 1,2M tok · $2.10    7 dias 1,1M tok · $5.15                              ┃│
-│                 ┃            esc voltar     r atualizar     g login     h histórico             ┃│
+│                 ┃      esc voltar     r atualizar     g login     h histórico     ? ajuda       ┃│
 │                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╰──────────────────────────────────────────── ? ajuda ─────────────────────────────────────────────╯

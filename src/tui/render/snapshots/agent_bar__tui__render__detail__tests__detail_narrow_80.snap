@@ -1,5 +1,5 @@
 ---
-source: src/tui/render/detail.rs
+source: src/tui/render/detail/mod.rs
 expression: terminal.backend()
 ---
 "╭ agent-bar ─────────────────────────────────────────────────────$2.10 · 02:00 ╮"
@@ -31,6 +31,6 @@ expression: terminal.backend()
 "│                 ┃ Sonnet 4.6   ████████▋░░░░░░░░░░░░░░░░░     300k         —┃│"
 "│                 ┃ EXTRA USAGE  ████████████████████▏░░  $12.34 de $100.00   ┃│"
 "│                 ┃ hoje 1,2M tok · $2.10    7 dias 900k tok · $4.50          ┃│"
-"│                 ┃  esc voltar     r atualizar     g login     h histórico   ┃│"
+"│                 ┃ esc voltar     r atualizar     g login     h histórico    ┃│"
 "│                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│"
-"╰──────────────────────────────────────────────────────────────────────────────╯"
+"╰────────────────────────────────── ? ajuda ───────────────────────────────────╯"

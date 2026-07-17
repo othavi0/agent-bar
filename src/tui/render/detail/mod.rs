@@ -66,7 +66,9 @@ fn render_full(
     let extra_full = extra_lines(q, area.width);
     let totals = totals_line(state, provider_usage, &q.provider);
 
-    const CHART_MIN: u16 = 9; // título + chart (≥8 linhas úteis)
+    // Progressive disclosure (trilha C): em painel estreito (~80 cols de
+    // terminal com sidebar) o chart cede altura; em largo mantém Min(9).
+    let chart_min: u16 = if area.width < 72 { 6 } else { 9 };
     const TOTALS_LEN: u16 = 1;
     let windows_len = windows.len() as u16;
     let models_full_len = models_full.len() as u16;
@@ -74,8 +76,8 @@ fn render_full(
 
     // Colapso progressivo (spec §2): tenta tudo, depois sem EXTRA USAGE,
     // depois com MODELOS HOJE também colapsado pra 1 linha-resumo.
-    let with_extra = windows_len + models_full_len + extra_full_len + TOTALS_LEN + CHART_MIN;
-    let without_extra = windows_len + models_full_len + TOTALS_LEN + CHART_MIN;
+    let with_extra = windows_len + models_full_len + extra_full_len + TOTALS_LEN + chart_min;
+    let without_extra = windows_len + models_full_len + TOTALS_LEN + chart_min;
     let (extra, models) = if area.height >= with_extra {
         (extra_full, models_full)
     } else if area.height >= without_extra {
@@ -86,7 +88,7 @@ fn render_full(
 
     let chunks = Layout::vertical([
         Constraint::Length(windows_len),
-        Constraint::Min(CHART_MIN),
+        Constraint::Min(chart_min),
         Constraint::Length(models.len() as u16),
         Constraint::Length(extra.len() as u16),
         Constraint::Length(TOTALS_LEN),
@@ -106,11 +108,13 @@ fn render_full(
 /// As 4 teclas já são globais (`update.rs`) — os chips só tornam a ação
 /// clicável/visível, não introduzem comportamento novo.
 fn render_footer_chips(frame: &mut Frame, area: Rect, hits: &mut HitMap) {
-    let chips: [(ChipKind, &str, &str); 4] = [
+    // "?" no rodapé do Detail: discoverability do help (trilha C).
+    let chips: [(ChipKind, &str, &str); 5] = [
         (ChipKind::Back, "esc", "voltar"),
         (ChipKind::Refresh, "r", "atualizar"),
         (ChipKind::Login, "g", "login"),
         (ChipKind::History, "h", "hist\u{f3}rico"),
+        (ChipKind::Help, "?", "ajuda"),
     ];
     let line = chips_line(&chips, area.width);
     frame.render_widget(Paragraph::new(line), area);

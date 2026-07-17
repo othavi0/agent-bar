@@ -102,7 +102,22 @@ impl ConfigField {
         ConfigField::FxRate,
     ];
 
+    /// Rótulo humano na lista/título do painel Config (trilha C).
+    /// Não é a chave do settings.json — só UI.
     pub fn label(self) -> &'static str {
+        match self {
+            ConfigField::Providers => "Provedores",
+            ConfigField::ProviderOrder => "Ordem",
+            ConfigField::Separators => "Separadores",
+            ConfigField::DisplayMode => "Exibição",
+            ConfigField::Signal => "Sinal",
+            ConfigField::Interval => "Intervalo",
+            ConfigField::FxRate => "Câmbio R$",
+        }
+    }
+
+    /// Chave técnica (settings / docs) — dica no painel de ajuda.
+    pub fn settings_key(self) -> &'static str {
         match self {
             ConfigField::Providers => "providers",
             ConfigField::ProviderOrder => "providerOrder",

@@ -17,7 +17,8 @@ pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut
     // Layout: [field_list | detail_panel]
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(20), Constraint::Min(0)])
+        // Lista um pouco mais larga p/ rótulos humanos (trilha C).
+        .constraints([Constraint::Length(22), Constraint::Min(0)])
         .split(area);
 
     let list_area = horiz[0];
@@ -237,19 +238,28 @@ fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect, hits:
     }
 }
 
-/// Dica por campo (None = sem dica especifica).
+/// Dica por campo (None = sem dica especifica). Inclui a chave técnica
+/// entre parênteses pra quem edita settings.json à mão.
 fn field_hint(field: ConfigField) -> Option<&'static str> {
     match field {
-        ConfigField::Providers => Some("IDs separados por vírgula. Ex: claude, codex, amp"),
-        ConfigField::ProviderOrder => Some("Ordem de exibição no Waybar. Ex: claude, codex"),
-        ConfigField::Separators => Some("Estilo: pill / gap / bare / glass / shadow / none"),
-        ConfigField::DisplayMode => Some("Modo: remaining (restante) / used (usado)"),
+        ConfigField::Providers => {
+            Some("Quais providers aparecem na barra. Ex: claude, codex, amp (providers)")
+        }
+        ConfigField::ProviderOrder => {
+            Some("Ordem dos módulos no Waybar. Ex: claude, codex (providerOrder)")
+        }
+        ConfigField::Separators => {
+            Some("Estilo entre módulos: pill / gap / bare / glass / shadow / none (separators)")
+        }
+        ConfigField::DisplayMode => {
+            Some("Na barra: remaining = % restante · used = % usado (displayMode)")
+        }
         ConfigField::Signal => Some(
-            "sinal para refresh externo (pkill -SIGRTMIN+<n> waybar); \
-             o agent-bar não o dispara sozinho",
+            "Sinal p/ refresh externo (pkill -SIGRTMIN+N waybar). \
+             O agent-bar não dispara sozinho (signal)",
         ),
-        ConfigField::Interval => Some("Intervalo de poll em segundos. Ex: 60"),
-        ConfigField::FxRate => Some("Taxa US$/BRL para custo em R$. Ex: 5.75"),
+        ConfigField::Interval => Some("Poll da barra em segundos. Ex: 60 (interval)"),
+        ConfigField::FxRate => Some("US$ → R$ nos custos da TUI. Ex: 5.75 (fxRate)"),
     }
 }
 
