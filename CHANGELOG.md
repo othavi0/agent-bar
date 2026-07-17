@@ -7,10 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.2.0] - 2026-07-17
+
+Provider **Grok** (Grok Build CLI) na barra e na TUI.
+
 ### Added
 - **Provider Grok (Grok Build CLI)** — OAuth em `~/.grok/auth.json` e
-  `signals.json` das sessões; o % da barra é contexto restante da sessão
-  recente (não cota de plano xAI). Login via `grok login` na TUI.
+  `signals.json` das sessões; o % da barra é **contexto restante da sessão
+  recente** (não cota de plano xAI). Login via `grok login` na TUI.
+  Módulo Waybar, ícone, builder e fixtures de regressão.
   **Novos installs** listam `grok` por default; **settings existentes**
   precisam habilitar em Config (não há auto-inserção).
 
