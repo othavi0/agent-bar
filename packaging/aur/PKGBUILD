@@ -15,7 +15,7 @@ optdepends=('waybar: status bar integration'
 install="${pkgname}.install"
 source=("agent-bar-${pkgver}-x86_64.tar.gz::${url}/releases/download/v${pkgver}/agent-bar-${pkgver}-x86_64.tar.gz")
 # Preenchido por release a partir do .sha256 produzido pelo CI. Nunca 'SKIP'.
-sha256sums=('0000000000000000000000000000000000000000000000000000000000000000')
+sha256sums=('e25d8fb869cd279267098c8312726d78a859abddda8ca658d985218437c3bc8e')
 
 package() {
   install -Dm755 "${srcdir}/agent-bar" "${pkgdir}/usr/bin/agent-bar"
