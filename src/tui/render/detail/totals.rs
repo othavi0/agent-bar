@@ -6,15 +6,17 @@ use ratatui::text::{Line, Span};
 use crate::theme::ColorToken;
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::to_ratatui;
-use crate::tui::widgets::column_chart::fmt_tokens_short;
+use crate::tui::widgets::column_chart::fmt_tokens_dual;
 use crate::usage::pricing::cost_usd_of;
 use crate::usage::{ProviderUsage, UsageRecord};
 
-use super::format::{fmt_cost_generic, provider_usage_tokens};
+use super::format::fmt_cost_generic;
 
 /// Linha de totais: "hoje" vem de `state.usage` (já agregado pelo engine);
 /// "7 dias" soma `state.history` filtrado por provider (records brutos —
 /// `state.usage` não cobre a janela de 7d).
+///
+/// Rótulos usam dual io/cache (trilha B): principal = input+output.
 pub(super) fn totals_line(
     state: &AppState,
     provider_usage: Option<&ProviderUsage>,
@@ -28,15 +30,15 @@ pub(super) fn totals_line(
     let today_str = if state.usage.is_none() {
         "coletando\u{2026}".to_string()
     } else {
-        let (today_tokens, today_cost) = match provider_usage {
-            Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
-            None => (0, "-".to_string()),
+        let (today_label, today_cost) = match provider_usage {
+            Some(pu) => {
+                let io = pu.total_input + pu.total_output;
+                let cache = pu.total_cache_read + pu.total_cache_write;
+                (fmt_tokens_dual(io, cache), fmt_cost_generic(pu))
+            }
+            None => ("0".to_string(), "-".to_string()),
         };
-        format!(
-            "{} tok \u{b7} {}",
-            fmt_tokens_short(today_tokens),
-            today_cost
-        )
+        format!("{today_label} tok \u{b7} {today_cost}")
     };
 
     if state.history.is_none() {
@@ -53,9 +55,10 @@ pub(super) fn totals_line(
         .iter()
         .filter(|r| r.provider == provider)
         .collect();
-    let week_tokens: u64 = week_records
+    let week_io: u64 = week_records.iter().map(|r| r.input + r.output).sum();
+    let week_cache: u64 = week_records
         .iter()
-        .map(|r| r.input + r.output + r.cache_read + r.cache_write)
+        .map(|r| r.cache_read + r.cache_write)
         .sum();
     let week_cost: Option<f64> = week_records
         .iter()
@@ -71,7 +74,7 @@ pub(super) fn totals_line(
         format!(
             " hoje {}    7 dias {} tok \u{b7} {}",
             today_str,
-            fmt_tokens_short(week_tokens),
+            fmt_tokens_dual(week_io, week_cache),
             week_cost_str
         ),
         Style::default().fg(to_ratatui(ColorToken::TextBright)),

@@ -49,7 +49,7 @@ mod tests {
     #[test]
     fn bold_segment_includes_bold_code() {
         let out = render_ansi(&[vec![Segment::new("x", ColorToken::Red).bold()]], false);
-        assert_eq!(out, "\x1b[38;2;224;108;117m\x1b[1mx\x1b[0m");
+        assert_eq!(out, "\x1b[38;2;232;139;147m\x1b[1mx\x1b[0m");
     }
 
     #[test]

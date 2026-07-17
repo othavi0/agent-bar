@@ -43,8 +43,9 @@ impl ColorToken {
             ColorToken::Green => "#98c379",
             ColorToken::Yellow => "#e5c07b",
             ColorToken::Orange => "#d19a66",
-            ColorToken::Red => "#e06c75",
-            ColorToken::Comment => "#6a7485",
+            // Contraste ≥4.5:1 sobre Bg #282c34 (trilha B / WCAG AA body).
+            ColorToken::Red => "#e88b93",
+            ColorToken::Comment => "#8b95a5",
             ColorToken::Text => "#c0c9d4",
             ColorToken::TextBright => "#e2e8f0",
             ColorToken::Muted => "#97a1ae",
@@ -57,12 +58,12 @@ impl ColorToken {
             ColorToken::ChipBg => "#262d3a",
             ColorToken::EmptyTrack => "#343b49",
             ColorToken::GreenHi => "#b5e890",
-            ColorToken::Series1 => "#3f8fd6",
-            ColorToken::Series2 => "#cb7e30",
-            ColorToken::Series3 => "#b562d6",
-            ColorToken::Series4 => "#55a34a",
-            ColorToken::Series5 => "#2ba3b4",
-            ColorToken::Series6 => "#af8f2c",
+            ColorToken::Series1 => "#4a9ae0",
+            ColorToken::Series2 => "#d4924a",
+            ColorToken::Series3 => "#c47ae0",
+            ColorToken::Series4 => "#63b358",
+            ColorToken::Series5 => "#3ab3c4",
+            ColorToken::Series6 => "#c2a23a",
             ColorToken::Bg => "#282c34",
         }
     }
@@ -127,8 +128,8 @@ mod tests {
     #[test]
     fn hex_values_match_one_dark() {
         assert_eq!(ColorToken::Green.hex(), "#98c379");
-        assert_eq!(ColorToken::Red.hex(), "#e06c75");
-        assert_eq!(ColorToken::Comment.hex(), "#6a7485");
+        assert_eq!(ColorToken::Red.hex(), "#e88b93");
+        assert_eq!(ColorToken::Comment.hex(), "#8b95a5");
         assert_eq!(ColorToken::BrightBlue.hex(), "#528bff");
         assert_eq!(ColorToken::TextBright.hex(), "#e2e8f0");
     }
@@ -137,7 +138,7 @@ mod tests {
     fn ansi_truecolor_format() {
         // #98c379 → 152;195;121
         assert_eq!(ColorToken::Green.ansi(), "\x1b[38;2;152;195;121m");
-        assert_eq!(ansi_truecolor("#e06c75"), "\x1b[38;2;224;108;117m");
+        assert_eq!(ansi_truecolor("#e88b93"), "\x1b[38;2;232;139;147m");
     }
 
     #[test]
@@ -179,12 +180,12 @@ mod tests {
 
     #[test]
     fn series_tokens_hex() {
-        assert_eq!(ColorToken::Series1.hex(), "#3f8fd6");
-        assert_eq!(ColorToken::Series2.hex(), "#cb7e30");
-        assert_eq!(ColorToken::Series3.hex(), "#b562d6");
-        assert_eq!(ColorToken::Series4.hex(), "#55a34a");
-        assert_eq!(ColorToken::Series5.hex(), "#2ba3b4");
-        assert_eq!(ColorToken::Series6.hex(), "#af8f2c");
+        assert_eq!(ColorToken::Series1.hex(), "#4a9ae0");
+        assert_eq!(ColorToken::Series2.hex(), "#d4924a");
+        assert_eq!(ColorToken::Series3.hex(), "#c47ae0");
+        assert_eq!(ColorToken::Series4.hex(), "#63b358");
+        assert_eq!(ColorToken::Series5.hex(), "#3ab3c4");
+        assert_eq!(ColorToken::Series6.hex(), "#c2a23a");
         assert_eq!(ColorToken::Bg.hex(), "#282c34");
     }
 
