@@ -1,0 +1,10 @@
+{
+  "https://auth.x.ai::test-client": {
+    "key": "test-access-token",
+    "refresh_token": "test-refresh",
+    "expires_at": "2099-01-01T00:00:00Z",
+    "first_name": "Test User",
+    "user_id": "00000000-0000-0000-0000-000000000001",
+    "auth_mode": "oidc"
+  }
+}
