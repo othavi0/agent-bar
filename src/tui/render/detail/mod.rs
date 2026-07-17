@@ -10,582 +10,38 @@
 //! colapso é progressivo: EXTRA USAGE some primeiro, depois MODELOS HOJE
 //! vira 1 linha-resumo.
 
+mod chart;
+mod extra;
+mod format;
+mod models;
+mod states;
+mod totals;
+mod windows;
+
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use ratatui::Frame;
 use throbber_widgets_tui::{Throbber, ThrobberState, BRAILLE_SIX};
 
-use crate::providers::extras::get_claude_extra;
-use crate::providers::types::{ExtraUsage, ProviderQuota, QuotaWindow};
-use crate::settings::GlyphMode;
+use crate::providers::types::ProviderQuota;
 use crate::theme::ColorToken;
 use crate::tui::login_state::{login_state_for, LoginState};
 use crate::tui::mouse::{ChipKind, HitMap};
 use crate::tui::state::AppState;
 use crate::tui::theme_bridge::{provider_color, to_ratatui};
 use crate::tui::widgets::chips::{chips_line, register_chip_hits};
-use crate::tui::widgets::column_chart::{column_chart_lines, fmt_tokens_short};
-use crate::tui::widgets::icons::{glyph, Icon};
 use crate::tui::widgets::quota_gauge::gauge_spans;
-use crate::tui::widgets::severity::{severity_color as sev_color, severity_color_api};
-use crate::usage::buckets::bucket_by_model_hour;
-use crate::usage::model_names::display_model_name;
-use crate::usage::pricing::cost_usd_of;
-use crate::usage::{ModelUsage, ProviderUsage, UsageRecord};
+use crate::usage::ProviderUsage;
 
-/// Largura do rótulo (janela/modelo) — MESMA coluna em toda seção com gauge
-/// (contrato do brief: "todas alinhadas na mesma coluna de gauge"). 12 =
-/// o limite de `truncate_name`, então um nome truncado nunca estoura a
-/// coluna do gauge.
-const LABEL_W: usize = 12;
-
-/// Sufixo reservado após o gauge — cada seção tem o seu (pct+reset pras
-/// janelas, tokens+custo pros modelos, "$usado de $limite" pro extra
-/// usage), então NÃO dá pra derivar com um valor único (era o bug do
-/// primeiro draft da Task 9: reusar o sufixo das janelas pros modelos
-/// estourava a borda, cortando o custo no meio — "$1.4" em vez de "$1.40").
-const WINDOW_SUFFIX_W: usize = 1 + 4 + 1 + 2 + 1 + 1 + 5; // pct(" NNN%"=6) + reset("  → "+HH:MM=9)
-const MODEL_SUFFIX_W: usize = 1 + 8 + 1 + 9; // tokens(" "+8=9) + custo(" "+9=10, larguras fixas do format!)
-const EXTRA_SUFFIX_W: usize = 22; // "  $9999.99 de $9999.99" (generoso; custo real bem menor)
-
-/// Deriva a largura do gauge a partir da área real do conteúdo e do
-/// `suffix_w` de quem chama — MESMA função usada por janelas, modelos hoje
-/// e extra usage (Task 9: antes só as janelas deriviam, "Modelos
-/// hoje"/"extra usage" tinham `FIXED_GAUGE_W` fixo). Prefixo fixo: label("
-/// "+12+" "=14). Contrato: NUNCA estourar a borda (era o off-by-1 do
-/// primeiro draft, que cortava o sufixo no meio).
-fn derive_bar_width(content_width: u16, suffix_w: usize) -> usize {
-    let label_w = 1 + LABEL_W + 1;
-    (content_width as usize)
-        .saturating_sub(label_w + suffix_w)
-        .max(10)
-}
-
-/// Trunca um nome pra no máximo `max` colunas, usando `…` no lugar do
-/// último caractere cortado — NUNCA corte seco (contrato do brief; era o
-/// bug que produzia "Free Tie" a partir de "Free Tier").
-fn truncate_name(name: &str, max: usize) -> String {
-    if name.chars().count() <= max {
-        name.to_string()
-    } else {
-        let head: String = name.chars().take(max.saturating_sub(1)).collect();
-        format!("{head}\u{2026}")
-    }
-}
-
-/// Tokens totais de um `ModelUsage` (todas as 4 categorias — mesma
-/// convenção do bucket horário em `usage::buckets::bucket_by_model_hour`,
-/// que alimenta o chart da seção 2; mantém as duas seções coerentes entre
-/// si mesmo divergindo do bucket diário de `render/history.rs`, que soma
-/// só input+output).
-fn model_tokens(mu: &ModelUsage) -> u64 {
-    mu.input + mu.output + mu.cache_read + mu.cache_write
-}
-
-/// Tokens totais de um `ProviderUsage` (mesma convenção de `model_tokens`).
-fn provider_usage_tokens(pu: &ProviderUsage) -> u64 {
-    pu.total_input + pu.total_output + pu.total_cache_read + pu.total_cache_write
-}
-
-/// Encontra um ModelUsage cujo nome contem `quota_name` (case-insensitive).
-/// Necessario porque o nome no quota (ex "Opus") e curto, enquanto o nome no
-/// usage engine e completo (ex "claude-opus-4-8").
-fn find_model_usage<'a>(by_model: &'a [ModelUsage], quota_name: &str) -> Option<&'a ModelUsage> {
-    let lower = quota_name.to_lowercase();
-    by_model
-        .iter()
-        .find(|mu| mu.model.to_lowercase().contains(&lower))
-}
-
-/// Formats a reset time string from an ISO timestamp or raw string.
-/// Extracts HH:MM if ISO, else returns raw string or "-".
-fn fmt_reset(resets_at: Option<&str>) -> String {
-    match resets_at {
-        None => "-".to_string(),
-        Some(s) => s
-            .split('T')
-            .nth(1)
-            .and_then(|t| t.get(..5))
-            .map(|hm| hm.to_string())
-            .unwrap_or_else(|| s.to_string()),
-    }
-}
-
-/// Custo/crédito "de hoje" de um provider (Amp mostra crédito restante, os
-/// demais mostram custo acumulado — mesma convenção de `dashboard.rs`).
-fn fmt_cost_generic(pu: &ProviderUsage) -> String {
-    if pu.provider == "amp" {
-        return pu
-            .amp_dollars
-            .as_ref()
-            .and_then(|ad| ad.remaining)
-            .map(|r| format!("cr ${r:.2}"))
-            .unwrap_or_else(|| "-".to_string());
-    }
-    match &pu.cost {
-        Some(c) => format!("${:.2}", c.usd),
-        None => "-".to_string(),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Seção 1: Janelas (sessão/semana/modelos)
-// ---------------------------------------------------------------------------
-
-/// Uma linha de janela (sessão/semana/modelo): label(12) + gauge + pct(4) +
-/// reset. Cor vem da severidade da API quando presente (spec §4.1),
-/// fallback pro threshold local — sem modulação de brilho (v8: gauge sólido,
-/// pulso removido de propósito, spec §6).
-fn window_line(label: &str, w: &QuotaWindow, gauge_w: usize) -> Line<'static> {
-    let color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
-    let reset_str = fmt_reset(w.resets_at.as_deref());
-    let name = truncate_name(label, LABEL_W);
-    let mut spans = vec![Span::styled(
-        format!(" {name:<LABEL_W$} "),
-        Style::default().fg(to_ratatui(ColorToken::Muted)),
-    )];
-    spans.extend(gauge_spans(w.remaining, gauge_w, color));
-    spans.push(Span::styled(
-        format!(" {:>4.0}%", w.remaining),
-        Style::default().fg(to_ratatui(ColorToken::TextBright)),
-    ));
-    spans.push(Span::styled(
-        format!("  \u{2192} {reset_str}"),
-        Style::default().fg(to_ratatui(ColorToken::Comment)),
-    ));
-    Line::from(spans)
-}
-
-/// Linha de modelo (q.models): igual a `window_line`, com custo do dia
-/// anexado quando `find_model_usage` acha o modelo correspondente em
-/// `provider_usage.by_model` — mas SÓ se couber em `content_width` (nunca
-/// estoura a borda; opcional > alinhamento). Modelos de sessão semanal do
-/// Claude (ex. "Opus") batem por substring com o id completo do usage
-/// engine (ex. "claude-opus-4-8"), então isto é o caminho comum, não raro.
-fn model_window_line(
-    name: &str,
-    w: &QuotaWindow,
-    gauge_w: usize,
-    content_width: u16,
-    provider_usage: Option<&ProviderUsage>,
-) -> Line<'static> {
-    let mut line = window_line(name, w, gauge_w);
-    if let Some(cost) = provider_usage
-        .and_then(|pu| find_model_usage(&pu.by_model, name))
-        .and_then(|mu| mu.cost.as_ref())
-    {
-        let cost_span = format!("  ${:.2}", cost.usd);
-        let current_w: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
-        if current_w + cost_span.chars().count() <= content_width as usize {
-            line.spans.push(Span::styled(
-                cost_span,
-                Style::default().fg(to_ratatui(ColorToken::Comment)),
-            ));
-        }
-    }
-    line
-}
-
-/// Seção JANELAS completa: sessão + semana + 1 linha por `q.models` (nome
-/// real da API). MESMO `bar_width` em todas — a coluna de gauge tem que
-/// alinhar entre sessão/semana/modelos (contrato do brief) — e a mesma
-/// `derive_bar_width` alimenta as seções 2 e 4 (Task 9), então o gauge
-/// COMEÇA na mesma coluna em toda seção. A LARGURA (e portanto a coluna
-/// onde termina) varia entre seções, porque cada uma tem seu próprio
-/// `suffix_w` (`WINDOW_SUFFIX_W` vs `MODEL_SUFFIX_W` vs `EXTRA_SUFFIX_W`) —
-/// isso é deliberado, não um bug de alinhamento (ver comentário acima de
-/// `WINDOW_SUFFIX_W`).
-fn window_lines(
-    q: &ProviderQuota,
-    provider_usage: Option<&ProviderUsage>,
-    content_width: u16,
-) -> Vec<Line<'static>> {
-    let bar_width = derive_bar_width(content_width, WINDOW_SUFFIX_W);
-    let mut lines = Vec::new();
-    if let Some(primary) = &q.primary {
-        lines.push(window_line("sessão", primary, bar_width));
-    }
-    if let Some(secondary) = &q.secondary {
-        lines.push(window_line("semana", secondary, bar_width));
-    }
-    if let Some(models) = &q.models {
-        for (name, w) in models {
-            lines.push(model_window_line(
-                name,
-                w,
-                bar_width,
-                content_width,
-                provider_usage,
-            ));
-        }
-    }
-    lines
-}
-
-// ---------------------------------------------------------------------------
-// Seção 2: Modelos hoje (tokens + custo, de provider_usage.by_model)
-// ---------------------------------------------------------------------------
-
-/// Uma linha de "MODELOS HOJE": label(12, nome TRATADO — `display_model_name`,
-/// Task 9) + barra PROPORCIONAL a tokens (não a 100% — normalizada pelo
-/// modelo de maior consumo, MESMA largura das janelas via `derive_bar_width`)
-/// + tokens abreviados + custo, ambos right-aligned.
-fn model_usage_line(
-    mu: &ModelUsage,
-    max_tokens: u64,
-    brand: Color,
-    content_width: u16,
-) -> Line<'static> {
-    let tokens = model_tokens(mu);
-    let pct = if max_tokens > 0 {
-        (tokens as f64 / max_tokens as f64 * 100.0).clamp(0.0, 100.0)
-    } else {
-        0.0
-    };
-    let display_name = display_model_name(&mu.model);
-    let name = truncate_name(&display_name, LABEL_W);
-    let cost_str = match &mu.cost {
-        Some(c) => format!("${:.2}", c.usd),
-        None => "\u{2014}".to_string(),
-    };
-    let mut spans = vec![Span::styled(
-        format!(" {name:<LABEL_W$} "),
-        Style::default().fg(to_ratatui(ColorToken::Text)),
-    )];
-    spans.extend(gauge_spans(
-        pct,
-        derive_bar_width(content_width, MODEL_SUFFIX_W),
-        brand,
-    ));
-    spans.push(Span::styled(
-        format!(" {:>8}", fmt_tokens_short(tokens)),
-        Style::default().fg(to_ratatui(ColorToken::Muted)),
-    ));
-    spans.push(Span::styled(
-        format!(" {cost_str:>9}"),
-        Style::default().fg(to_ratatui(ColorToken::Comment)),
-    ));
-    Line::from(spans)
-}
-
-/// Seção MODELOS HOJE completa (título + 1 linha por `pu.by_model`) e a
-/// versão colapsada (1 linha-resumo, Task 9 §2 — usada quando a área não
-/// cabe tudo + chart mínimo). Vazio (sem `provider_usage` ou sem modelos
-/// hoje) → ambas vazias, a seção inteira desaparece do layout.
-fn model_lines(
-    provider_usage: Option<&ProviderUsage>,
-    brand: Color,
-    content_width: u16,
-) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
-    let Some(pu) = provider_usage else {
-        return (Vec::new(), Vec::new());
-    };
-    if pu.by_model.is_empty() {
-        return (Vec::new(), Vec::new());
-    }
-    let mut full = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            " MODELOS HOJE",
-            Style::default()
-                .fg(to_ratatui(ColorToken::TextBright))
-                .add_modifier(Modifier::BOLD),
-        )),
-    ];
-    let max_tokens = pu
-        .by_model
-        .iter()
-        .map(model_tokens)
-        .max()
-        .unwrap_or(0)
-        .max(1);
-    for mu in &pu.by_model {
-        full.push(model_usage_line(mu, max_tokens, brand, content_width));
-    }
-
-    let total_cost: Option<f64> = pu.by_model.iter().fold(None, |acc, mu| match &mu.cost {
-        Some(c) => Some(acc.unwrap_or(0.0) + c.usd),
-        None => acc,
-    });
-    let cost_str = total_cost
-        .map(|c| format!("${c:.2}"))
-        .unwrap_or_else(|| "\u{2014}".to_string());
-    let collapsed = vec![Line::from(Span::styled(
-        format!(
-            " {} modelos hoje \u{b7} {}  \u{2026}",
-            pu.by_model.len(),
-            cost_str
-        ),
-        Style::default().fg(to_ratatui(ColorToken::Comment)),
-    ))];
-    (full, collapsed)
-}
-
-// ---------------------------------------------------------------------------
-// Seção 2b: chart de tokens/hora por modelo (Task 9 — substitui a antiga
-// sparkline de 1 linha, que era o placeholder morto original desta tela)
-// ---------------------------------------------------------------------------
-
-/// Título de seção: `left` em negrito (Comment) alinhado à esquerda, `right`
-/// alinhado à direita (também Comment) — reaproveitado por qualquer seção
-/// que precise de um cabeçalho (hoje só o chart usa `right`).
-fn section_title(left: &str, right: &str, width: u16) -> Line<'static> {
-    let left_text = format!(" {left}");
-    let left_span = Span::styled(
-        left_text.clone(),
-        Style::default()
-            .fg(to_ratatui(ColorToken::Comment))
-            .add_modifier(Modifier::BOLD),
-    );
-    if right.is_empty() {
-        return Line::from(left_span);
-    }
-    let right_text = format!("{right} ");
-    let pad =
-        (width as usize).saturating_sub(left_text.chars().count() + right_text.chars().count());
-    Line::from(vec![
-        left_span,
-        Span::raw(" ".repeat(pad)),
-        Span::styled(
-            right_text,
-            Style::default().fg(to_ratatui(ColorToken::Comment)),
-        ),
-    ])
-}
-
-/// Seção do chart: título + `column_chart_lines` (largura/altura ganhas do
-/// `Min(9)` do orquestrador — Task 9 §2). `now` vem de `state.last_update`
-/// (NUNCA `OffsetDateTime::now_utc()` — render precisa ser puro/
-/// determinístico p/ snapshot); `None` (boot, sem fetch ainda) → registros
-/// vazios, o chart desenha o próprio estado vazio (`column_chart_lines` já
-/// cobre isso) em vez de inventar uma âncora temporal fake.
-fn render_chart_section(state: &AppState, frame: &mut Frame, area: Rect, q: &ProviderQuota) {
-    let mut lines = vec![section_title(
-        "TOKENS/HORA \u{b7} 24H",
-        "escala \u{221a}",
-        area.width,
-    )];
-    // `history=None` = parse dos session logs em voo — desenhar o estado
-    // vazio do chart aqui seria afirmar zero sobre dado que só não chegou
-    // ainda (regressão "hoje 0 tok"; mesma guarda que a extinta
-    // `spark_line` já fazia). `last_update=None` (boot, sem fetch algum) É
-    // o caso coberto pela regra do brief — aí o chart recebe série vazia
-    // (via `now` sentinel abaixo) e desenha o próprio estado vazio.
-    if state.history.is_none() {
-        lines.push(Line::from(Span::styled(
-            " coletando hist\u{f3}rico\u{2026}",
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        )));
-        lines.resize(area.height.max(1) as usize, Line::default());
-        frame.render_widget(Paragraph::new(lines), area);
-        return;
-    }
-    let now = state
-        .last_update
-        .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
-    let records = state.history.as_deref().unwrap_or(&[]);
-    let series = bucket_by_model_hour(records, &q.provider, now, 24);
-    lines.extend(column_chart_lines(
-        &series,
-        area.width,
-        area.height.saturating_sub(1),
-        now,
-        state.local_offset,
-    ));
-    frame.render_widget(Paragraph::new(lines), area);
-}
-
-// ---------------------------------------------------------------------------
-// Seção 3: extra usage (só Claude — spend novo, Task 1)
-// ---------------------------------------------------------------------------
-
-/// Linha "EXTRA USAGE": `enabled=false` → texto fixo "desativado";
-/// `enabled=true && limit<=0.0` → sentinel de "sem limite configurado"
-/// (`extra_usage_from_spend` em `claude.rs`) → só o valor gasto, SEM gauge
-/// (não há teto p/ dar proporção — gauge 100%+"de $0.00" era
-/// autocontraditório); `enabled=true && limit>0.0` → gauge + "$used de
-/// $limit" (largura via `derive_bar_width`, Task 9 — MESMA coluna das
-/// demais seções). Só Claude tem esta seção (Amp/Codex têm extras próprios,
-/// sem overlap com `ClaudeQuotaExtra.extra_usage`); providers sem extra
-/// omitem a linha inteira (`extra_lines` devolve vazio).
-fn extra_usage_line(eu: &ExtraUsage, content_width: u16) -> Line<'static> {
-    let label = Span::styled(
-        format!(" {:<LABEL_W$} ", "EXTRA USAGE"),
-        Style::default().fg(to_ratatui(ColorToken::Muted)),
-    );
-    if !eu.enabled {
-        return Line::from(vec![
-            label,
-            Span::styled(
-                "desativado",
-                Style::default().fg(to_ratatui(ColorToken::Muted)),
-            ),
-        ]);
-    }
-    if eu.limit <= 0.0 {
-        return Line::from(vec![
-            label,
-            Span::styled(
-                format!("${:.2} usado", eu.used),
-                Style::default().fg(to_ratatui(ColorToken::Yellow)),
-            ),
-            Span::styled(
-                " \u{b7} sem limite",
-                Style::default().fg(to_ratatui(ColorToken::Comment)),
-            ),
-        ]);
-    }
-    // `eu.limit > 0.0` é garantido pelo early-return acima (limit <= 0.0
-    // já saiu com o texto "sem limite") — divisão segura.
-    let pct_used = (eu.used / eu.limit * 100.0).clamp(0.0, 100.0);
-    let remaining_pct = 100.0 - pct_used;
-    let color = sev_color(Some(remaining_pct));
-    let mut spans = vec![label];
-    spans.extend(gauge_spans(
-        remaining_pct,
-        derive_bar_width(content_width, EXTRA_SUFFIX_W),
-        color,
-    ));
-    spans.push(Span::styled(
-        format!("  ${:.2} de ${:.2}", eu.used, eu.limit),
-        Style::default().fg(to_ratatui(ColorToken::TextBright)),
-    ));
-    Line::from(spans)
-}
-
-/// Seção EXTRA USAGE completa: 0 linhas se o provider não tiver extra usage
-/// (chamador colapsa a seção via `Constraint::Length(0)`), 1 linha se tiver.
-fn extra_lines(q: &ProviderQuota, content_width: u16) -> Vec<Line<'static>> {
-    match get_claude_extra(q).and_then(|c| c.extra_usage.as_ref()) {
-        Some(eu) => vec![extra_usage_line(eu, content_width)],
-        None => Vec::new(),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Seção 4: Totais (hoje + 7 dias)
-// ---------------------------------------------------------------------------
-
-/// Linha de totais: "hoje" vem de `state.usage` (já agregado pelo engine);
-/// "7 dias" soma `state.history` filtrado por provider (records brutos —
-/// `state.usage` não cobre a janela de 7d).
-fn totals_line(
-    state: &AppState,
-    provider_usage: Option<&ProviderUsage>,
-    provider: &str,
-) -> Line<'static> {
-    // Cada metade tem seu próprio sinal de loading: "hoje" vem do
-    // UsageComputed (`state.usage`), "7 dias" do HistoryLoaded
-    // (`state.history`) — eles chegam em momentos diferentes. Enquanto o
-    // respectivo dado não chegou, a metade diz "coletando…" em vez de
-    // afirmar zero (regressão "hoje 0 tok").
-    let today_str = if state.usage.is_none() {
-        "coletando\u{2026}".to_string()
-    } else {
-        let (today_tokens, today_cost) = match provider_usage {
-            Some(pu) => (provider_usage_tokens(pu), fmt_cost_generic(pu)),
-            None => (0, "-".to_string()),
-        };
-        format!(
-            "{} tok \u{b7} {}",
-            fmt_tokens_short(today_tokens),
-            today_cost
-        )
-    };
-
-    if state.history.is_none() {
-        return Line::from(Span::styled(
-            format!(" hoje {today_str}    7 dias coletando\u{2026}"),
-            Style::default().fg(to_ratatui(ColorToken::TextBright)),
-        ));
-    }
-
-    let week_records: Vec<&UsageRecord> = state
-        .history
-        .as_deref()
-        .unwrap_or(&[])
-        .iter()
-        .filter(|r| r.provider == provider)
-        .collect();
-    let week_tokens: u64 = week_records
-        .iter()
-        .map(|r| r.input + r.output + r.cache_read + r.cache_write)
-        .sum();
-    let week_cost: Option<f64> = week_records
-        .iter()
-        .fold(None, |acc, r| match cost_usd_of(r) {
-            Some(c) => Some(acc.unwrap_or(0.0) + c),
-            None => acc,
-        });
-    let week_cost_str = week_cost
-        .map(|c| format!("${c:.2}"))
-        .unwrap_or_else(|| "-".to_string());
-
-    Line::from(Span::styled(
-        format!(
-            " hoje {}    7 dias {} tok \u{b7} {}",
-            today_str,
-            fmt_tokens_short(week_tokens),
-            week_cost_str
-        ),
-        Style::default().fg(to_ratatui(ColorToken::TextBright)),
-    ))
-}
-
-// ---------------------------------------------------------------------------
-// Estados especiais (deslogado / erro)
-// ---------------------------------------------------------------------------
-
-/// CTA em tela cheia (provider sem sessão) — igual em espírito ao card do
-/// Overview, mas com instrução maior (a tela toda é deste provider, não
-/// precisa caber em 1 linha).
-fn render_logged_out(q: &ProviderQuota, frame: &mut Frame, area: Rect) {
-    let lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            format!(" {} \u{2014} sem sess\u{e3}o", q.display_name),
-            Style::default()
-                .fg(to_ratatui(ColorToken::TextBright))
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(Span::styled(
-            " Nenhuma credencial v\u{e1}lida encontrada para este provider.",
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        )),
-        Line::from(Span::styled(
-            " Pressione [g] ou clique no chip \"login\" abaixo para autenticar.",
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        )),
-    ];
-    let p = Paragraph::new(lines).wrap(Wrap { trim: false });
-    frame.render_widget(p, area);
-}
-
-/// Mensagem de erro tipado (falha não-auth: parse/rede/API) com ícone —
-/// NUNCA tela branca. `q.error` é a string verbatim do provider (contrato,
-/// ver `providers::error`).
-fn render_error(q: &ProviderQuota, mode: GlyphMode, frame: &mut Frame, area: Rect) {
-    let msg = q.error.as_deref().unwrap_or("Erro desconhecido");
-    let lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            format!(" {} Erro ao carregar dados", glyph(Icon::Warn, mode)),
-            Style::default()
-                .fg(to_ratatui(ColorToken::Red))
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(Span::styled(
-            format!(" {msg}"),
-            Style::default().fg(to_ratatui(ColorToken::Muted)),
-        )),
-    ];
-    let p = Paragraph::new(lines).wrap(Wrap { trim: false });
-    frame.render_widget(p, area);
-}
+use chart::render_chart_section;
+use extra::extra_lines;
+use format::{derive_bar_width, truncate_name, LABEL_W, WINDOW_SUFFIX_W};
+use models::model_lines;
+use states::{render_error, render_logged_out};
+use totals::totals_line;
+use windows::window_lines;
 
 // ---------------------------------------------------------------------------
 // Render principal
@@ -1161,6 +617,15 @@ mod tests {
         state
     }
 
+    /// Mantém snapshots em `src/tui/render/snapshots/` (mesmo path de quando
+    /// o módulo era `detail.rs`) — split para `detail/` não deve mover nem
+    /// reescrever os arquivos `.snap`.
+    fn with_render_snapshots<F: FnOnce()>(f: F) {
+        insta::with_settings!({ snapshot_path => "../snapshots" }, {
+            f();
+        });
+    }
+
     /// Achata um `Buffer` renderizado em texto puro, uma linha por row
     /// (trailing spaces cortados) — usado pelos asserts de conteúdo e pelo
     /// snapshot textual dos testes de layout (Task 9).
@@ -1216,7 +681,7 @@ mod tests {
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
-        insta::assert_snapshot!(terminal.backend());
+        with_render_snapshots(|| insta::assert_snapshot!(terminal.backend()));
     }
 
     // -----------------------------------------------------------------
@@ -1241,7 +706,7 @@ mod tests {
             blank_run < 5,
             "gap de {blank_run} linhas em branco — chart deveria absorver"
         );
-        insta::assert_snapshot!(buffer_to_string(&buf));
+        with_render_snapshots(|| insta::assert_snapshot!(buffer_to_string(&buf)));
     }
 
     #[test]
@@ -1291,7 +756,7 @@ mod tests {
             text.contains("TOKENS/HORA"),
             "chart deveria continuar vis\u{ed}vel mesmo colapsado:\n{text}"
         );
-        insta::assert_snapshot!(text);
+        with_render_snapshots(|| insta::assert_snapshot!(text));
     }
 
     #[test]
@@ -1323,7 +788,7 @@ mod tests {
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
-        insta::assert_snapshot!(terminal.backend());
+        with_render_snapshots(|| insta::assert_snapshot!(terminal.backend()));
     }
 
     #[test]
@@ -1338,7 +803,7 @@ mod tests {
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
-        insta::assert_snapshot!(terminal.backend());
+        with_render_snapshots(|| insta::assert_snapshot!(terminal.backend()));
     }
 
     #[test]
@@ -1370,7 +835,7 @@ mod tests {
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
-        insta::assert_snapshot!(terminal.backend());
+        with_render_snapshots(|| insta::assert_snapshot!(terminal.backend()));
     }
 
     // -----------------------------------------------------------------
@@ -1400,7 +865,7 @@ mod tests {
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
-        insta::assert_snapshot!(terminal.backend());
+        with_render_snapshots(|| insta::assert_snapshot!(terminal.backend()));
     }
 
     #[test]
@@ -1428,7 +893,7 @@ mod tests {
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
-        insta::assert_snapshot!(terminal.backend());
+        with_render_snapshots(|| insta::assert_snapshot!(terminal.backend()));
     }
 
     #[test]
@@ -1457,7 +922,7 @@ mod tests {
         terminal
             .draw(|f| render(&state, f, &mut HitMap::default()))
             .unwrap();
-        insta::assert_snapshot!(terminal.backend());
+        with_render_snapshots(|| insta::assert_snapshot!(terminal.backend()));
     }
 
     // Pulso crítico (Task 16) removido em v8 (spec §6): `window_line` usa a

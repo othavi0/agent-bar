@@ -19,3 +19,4 @@
 .claude/scheduled_tasks.lock
 .claude/.task-output/
 .superpowers/
+.worktrees/

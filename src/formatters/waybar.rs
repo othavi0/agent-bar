@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 
-use crate::app_identity::APP_BASE_CLASS;
+use crate::app_identity::{APP_BASE_CLASS, APP_HIDDEN_CLASS};
 use crate::config::status_for_percent;
 use crate::formatters::builders::amp::build_amp;
 use crate::formatters::builders::claude::build_claude;
@@ -30,6 +30,37 @@ pub struct WaybarOutput {
     pub alt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub percentage: Option<u8>,
+}
+
+/// Payload degradado quando a serialização do `WaybarOutput` falha.
+/// Campos estáticos garantem que o fallback em si serializa.
+pub fn waybar_error_payload(msg: &str) -> WaybarOutput {
+    WaybarOutput {
+        text: "err".to_string(),
+        tooltip: format!("agent-bar: serialize failed: {msg}"),
+        class: APP_HIDDEN_CLASS.to_string(),
+        alt: Some("disconnected".to_string()),
+        percentage: None,
+    }
+}
+
+/// Serializa saída Waybar. Em falha de serde, devolve payload degradado
+/// (nunca string vazia) e emite o erro em `err_log`.
+pub fn waybar_stdout_line(o: &WaybarOutput, err_log: &mut dyn std::io::Write) -> String {
+    match serde_json::to_string(o) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = writeln!(err_log, "waybar serialize failed: {e}");
+            match serde_json::to_string(&waybar_error_payload(&e.to_string())) {
+                Ok(fallback) => fallback,
+                // Teoricamente impossível com strings estáticas; último recurso.
+                Err(_) => {
+                    r#"{"text":"err","tooltip":"agent-bar: serialize failed","class":"agent-bar-hidden"}"#
+                        .to_string()
+                }
+            }
+        }
+    }
 }
 
 fn pct_colored(disp: Option<f64>, mode: DisplayMode) -> String {
@@ -328,5 +359,42 @@ mod tests {
         let out = format_for_waybar(&clk(), &q, &settings(), DisplayMode::Remaining);
         assert!(out.text.contains("No Providers"));
         assert_eq!(out.class, "agent-bar");
+    }
+
+    #[test]
+    fn waybar_stdout_line_happy_path_matches_serde() {
+        let o = WaybarOutput {
+            text: "75%".to_string(),
+            tooltip: "tip".to_string(),
+            class: "agent-bar claude-ok".to_string(),
+            alt: None,
+            percentage: Some(75),
+        };
+        let expected = serde_json::to_string(&o).expect("serde ok");
+        let mut err = Vec::new();
+        let got = waybar_stdout_line(&o, &mut err);
+        assert_eq!(got, expected);
+        assert!(err.is_empty(), "happy path must not log");
+    }
+
+    #[test]
+    fn waybar_error_payload_is_non_empty_json() {
+        let o = waybar_error_payload("boom");
+        let s = serde_json::to_string(&o).expect("fallback must serialize");
+        assert!(!s.is_empty());
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        assert_eq!(
+            v.get("text").and_then(|t| t.as_str()).map(|t| !t.is_empty()),
+            Some(true)
+        );
+        assert_eq!(
+            v.get("class").and_then(|c| c.as_str()),
+            Some(APP_HIDDEN_CLASS)
+        );
+        assert!(
+            v.get("tooltip")
+                .and_then(|t| t.as_str())
+                .is_some_and(|t| t.contains("boom"))
+        );
     }
 }

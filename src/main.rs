@@ -11,7 +11,9 @@ use agent_bar::config::{self, Paths};
 use agent_bar::formatters::clock::Clock;
 use agent_bar::formatters::json::to_json_string;
 use agent_bar::formatters::terminal::format_for_terminal;
-use agent_bar::formatters::waybar::{format_for_waybar, format_provider_for_waybar, WaybarOutput};
+use agent_bar::formatters::waybar::{
+    format_for_waybar, format_provider_for_waybar, waybar_stdout_line, WaybarOutput,
+};
 use agent_bar::notify;
 use agent_bar::providers::types::AllQuotas;
 use agent_bar::providers::{
@@ -51,9 +53,10 @@ fn is_hidden_module(provider: &str, format: Format, settings: &Settings) -> bool
     format != Format::Json && !settings.waybar.providers.iter().any(|s| s == provider)
 }
 
-/// Escreve o payload Waybar em stdout (stdout-limpo; serialização não falha).
+/// Escreve o payload Waybar em stdout (stdout-limpo; nunca vazio em falha de serde).
 fn print_waybar(o: &WaybarOutput) {
-    println!("{}", serde_json::to_string(o).unwrap_or_default());
+    let mut err = std::io::stderr();
+    println!("{}", waybar_stdout_line(o, &mut err));
 }
 
 // ---------------------------------------------------------------------------
