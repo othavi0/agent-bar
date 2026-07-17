@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 
-use crate::app_identity::{APP_BASE_CLASS, APP_HIDDEN_CLASS};
+use crate::app_identity::APP_BASE_CLASS;
 use crate::config::status_for_percent;
 use crate::formatters::builders::amp::build_amp;
 use crate::formatters::builders::claude::build_claude;
@@ -35,10 +35,12 @@ pub struct WaybarOutput {
 /// Payload degradado quando a serialização do `WaybarOutput` falha.
 /// Campos estáticos garantem que o fallback em si serializa.
 pub fn waybar_error_payload(msg: &str) -> WaybarOutput {
+    // Classe visível (não `agent-bar-hidden`): falha de serialize deve
+    // degradar o módulo, não colapsá-lo como provider desabilitado (trilha B).
     WaybarOutput {
         text: "err".to_string(),
         tooltip: format!("agent-bar: serialize failed: {msg}"),
-        class: APP_HIDDEN_CLASS.to_string(),
+        class: format!("{APP_BASE_CLASS} disconnected"),
         alt: Some("disconnected".to_string()),
         percentage: None,
     }
@@ -55,7 +57,7 @@ pub fn waybar_stdout_line(o: &WaybarOutput, err_log: &mut dyn std::io::Write) ->
                 Ok(fallback) => fallback,
                 // Teoricamente impossível com strings estáticas; último recurso.
                 Err(_) => {
-                    r#"{"text":"err","tooltip":"agent-bar: serialize failed","class":"agent-bar-hidden"}"#
+                    r#"{"text":"err","tooltip":"agent-bar: serialize failed","class":"agent-bar disconnected"}"#
                         .to_string()
                 }
             }
@@ -389,7 +391,7 @@ mod tests {
         );
         assert_eq!(
             v.get("class").and_then(|c| c.as_str()),
-            Some(APP_HIDDEN_CLASS)
+            Some("agent-bar disconnected")
         );
         assert!(
             v.get("tooltip")

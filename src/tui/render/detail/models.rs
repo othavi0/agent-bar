@@ -22,9 +22,10 @@ fn model_usage_line(
     brand: Color,
     content_width: u16,
 ) -> Line<'static> {
-    let tokens = model_tokens(mu);
+    // Gauge = tokens totais (io+cache) p/ alinhar com o chart; rótulo = io.
+    let tokens_all = model_tokens(mu);
     let pct = if max_tokens > 0 {
-        (tokens as f64 / max_tokens as f64 * 100.0).clamp(0.0, 100.0)
+        (tokens_all as f64 / max_tokens as f64 * 100.0).clamp(0.0, 100.0)
     } else {
         0.0
     };
@@ -43,8 +44,12 @@ fn model_usage_line(
         derive_bar_width(content_width, MODEL_SUFFIX_W),
         brand,
     ));
+    // Rótulo = input+output (coluna fixa 8). Cache não cabe no suffix aqui;
+    // dual completo vive nos totais (trilha B). Gauge permanece em tokens
+    // totais p/ alinhar com o chart.
+    let io = mu.input + mu.output;
     spans.push(Span::styled(
-        format!(" {:>8}", fmt_tokens_short(tokens)),
+        format!(" {:>8}", fmt_tokens_short(io)),
         Style::default().fg(to_ratatui(ColorToken::Muted)),
     ));
     spans.push(Span::styled(

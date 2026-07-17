@@ -748,12 +748,12 @@ fn waybar_claude_healthy_tooltip() {
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#8b95a5'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#8b95a5'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -777,7 +777,7 @@ fn waybar_claude_error_text() {
             &settings(),
             DisplayMode::Remaining,
         );
-        insta::assert_snapshot!(out.text, @"<span foreground='#6a7485'>No Providers</span>");
+        insta::assert_snapshot!(out.text, @"<span foreground='#8b95a5'>No Providers</span>");
     });
 }
 
@@ -793,9 +793,9 @@ fn waybar_claude_error_tooltip() {
         insta::assert_snapshot!(out.tooltip, @r"
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e06c75'>⚠️ Token expired. Open `agent-bar menu` and choose Provider login.</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e88b93'>⚠️ Token expired. Open `agent-bar menu` and choose Provider login.</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -837,12 +837,12 @@ fn waybar_codex_healthy_tooltip() {
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#8b95a5'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#8b95a5'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
-<span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -883,10 +883,10 @@ fn waybar_amp_healthy_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#8b95a5'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
-<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -910,7 +910,7 @@ fn waybar_all_combined_text() {
             &settings(),
             DisplayMode::Remaining,
         );
-        insta::assert_snapshot!(out.text, @"<span foreground='#98c379'>75%</span> <span foreground='#6a7485'>│</span> <span foreground='#98c379'>60%</span> <span foreground='#6a7485'>│</span> <span foreground='#98c379'>70%</span>");
+        insta::assert_snapshot!(out.text, @"<span foreground='#98c379'>75%</span> <span foreground='#8b95a5'>│</span> <span foreground='#98c379'>60%</span> <span foreground='#8b95a5'>│</span> <span foreground='#98c379'>70%</span>");
     });
 }
 
@@ -927,31 +927,31 @@ fn waybar_all_combined_tooltip() {
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#8b95a5'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#8b95a5'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>
+<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>
 
 <span foreground='#98c379'>┏━</span> <span foreground='#98c379' weight='bold'>Codex · Pro</span> <span foreground='#98c379'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#8b95a5'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#8b95a5'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
-<span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>
+<span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>
 
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#8b95a5'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
-<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -970,7 +970,7 @@ fn waybar_all_combined_class() {
 fn waybar_empty_text() {
     with_filters(|| {
         let out = format_for_waybar(&clk(), &wrap(vec![]), &settings(), DisplayMode::Remaining);
-        insta::assert_snapshot!(out.text, @"<span foreground='#6a7485'>No Providers</span>");
+        insta::assert_snapshot!(out.text, @"<span foreground='#8b95a5'>No Providers</span>");
     });
 }
 
@@ -1018,12 +1018,12 @@ fn waybar_claude_healthy_used_tooltip() {
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>█████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 25%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>█████</span><span foreground='#8b95a5'>░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 25%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 10%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██</span><span foreground='#8b95a5'>░░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 10%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -1065,12 +1065,12 @@ fn waybar_codex_healthy_used_tooltip() {
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████</span><span foreground='#6a7485'>░░░░░░░░░░░░</span> <span foreground='#98c379'> 40%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████</span><span foreground='#8b95a5'>░░░░░░░░░░░░</span> <span foreground='#98c379'> 40%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>███</span><span foreground='#6a7485'>░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 15%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>███</span><span foreground='#8b95a5'>░░░░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 15%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
-<span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#98c379'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -1111,10 +1111,10 @@ fn waybar_amp_healthy_used_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 30%</span>  <span foreground='#56b6c2'>→ Resets in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████</span><span foreground='#8b95a5'>░░░░░░░░░░░░░░</span> <span foreground='#98c379'> 30%</span>  <span foreground='#56b6c2'>→ Resets in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
-<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -1149,10 +1149,10 @@ fn per_provider_claude_healthy_tooltip() {
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#6a7485'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>███████████████</span><span foreground='#8b95a5'>░░░░░</span> <span foreground='#98c379'> 75%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#6a7485'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>██████████████████</span><span foreground='#8b95a5'>░░</span> <span foreground='#98c379'> 90%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>");
     });
@@ -1179,7 +1179,7 @@ fn per_provider_claude_disconnected_text() {
             DisplayMode::Remaining,
         );
         // Glyph nerd-font U+F1616
-        insta::assert_snapshot!(out.text, @"<span foreground='#e06c75'>\u{f1616}</span>");
+        insta::assert_snapshot!(out.text, @"<span foreground='#e88b93'>\u{f1616}</span>");
     });
 }
 
@@ -1195,7 +1195,7 @@ fn per_provider_claude_disconnected_tooltip() {
         insta::assert_snapshot!(out.tooltip, @r"
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e06c75'>⚠️ Token expired. Open `agent-bar menu` and choose Provider login.</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e88b93'>⚠️ Token expired. Open `agent-bar menu` and choose Provider login.</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>");
     });
@@ -1235,10 +1235,10 @@ fn per_provider_codex_healthy_tooltip() {
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 5-hour limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>████████████</span><span foreground='#8b95a5'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┣━</span> <span foreground='#98c379' weight='bold'>◆ 7-day limit</span>
-<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#6a7485'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#98c379'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Codex               </span> <span foreground='#98c379'>█████████████████</span><span foreground='#8b95a5'>░░░</span> <span foreground='#98c379'> 85%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#98c379'>┃</span>
 <span foreground='#98c379'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>");
     });
@@ -1273,8 +1273,8 @@ fn per_provider_amp_healthy_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#8b95a5'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>");
     });
@@ -1317,10 +1317,10 @@ fn waybar_amp_with_account_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp · user@example.com</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#8b95a5'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
-<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -1361,8 +1361,8 @@ fn per_provider_amp_with_account_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp · user@example.com</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#6a7485'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>██████████████</span><span foreground='#8b95a5'>░░░░░░</span> <span foreground='#98c379'> 70%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$3.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>");
     });
@@ -1409,19 +1409,19 @@ fn waybar_claude_with_extras_tooltip() {
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>████████████</span><span foreground='#8b95a5'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly per model</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>claude-opus-4-5     </span> <span foreground='#e5c07b'>████████</span><span foreground='#6a7485'>░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 40%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>claude-sonnet-4-5   </span> <span foreground='#98c379'>█████████████</span><span foreground='#6a7485'>░░░░░░░</span> <span foreground='#98c379'> 65%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>claude-opus-4-5     </span> <span foreground='#e5c07b'>████████</span><span foreground='#8b95a5'>░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 40%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>claude-sonnet-4-5   </span> <span foreground='#98c379'>█████████████</span><span foreground='#8b95a5'>░░░░░░░</span> <span foreground='#98c379'> 65%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#e5c07b'>██████████</span><span foreground='#6a7485'>░░░░░░░░░░</span> <span foreground='#e5c07b'> 50%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#e5c07b'>██████████</span><span foreground='#8b95a5'>░░░░░░░░░░</span> <span foreground='#e5c07b'> 50%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Extra Usage</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Budget              </span> <span foreground='#e5c07b'>███████████</span><span foreground='#6a7485'>░░░░░░░░░</span> <span foreground='#e5c07b'> 55%</span> <span foreground='#56b6c2'>$22.50/$50.00</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Budget              </span> <span foreground='#e5c07b'>███████████</span><span foreground='#8b95a5'>░░░░░░░░░</span> <span foreground='#e5c07b'> 55%</span> <span foreground='#56b6c2'>$22.50/$50.00</span>
 <span foreground='#d19a66'>┃</span>
-<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -1462,13 +1462,13 @@ fn waybar_amp_with_credits_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e5c07b'>██████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 30%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$1.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e5c07b'>██████</span><span foreground='#8b95a5'>░░░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 30%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$1.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Credits</span>
 <span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>$7.50 remaining</span>
 <span foreground='#c678dd'>┃</span>
-<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -1509,10 +1509,10 @@ fn waybar_amp_unknown_models_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Usage</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Custom Plan A       </span> <span foreground='#e5c07b'>█████████</span><span foreground='#6a7485'>░░░░░░░░░░░</span> <span foreground='#e5c07b'> 45%</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Custom Plan B       </span> <span foreground='#98c379'>████████████████</span><span foreground='#6a7485'>░░░░</span> <span foreground='#98c379'> 80%</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Custom Plan A       </span> <span foreground='#e5c07b'>█████████</span><span foreground='#8b95a5'>░░░░░░░░░░░</span> <span foreground='#e5c07b'> 45%</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Custom Plan B       </span> <span foreground='#98c379'>████████████████</span><span foreground='#8b95a5'>░░░░</span> <span foreground='#98c379'> 80%</span>
 <span foreground='#c678dd'>┃</span>
-<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#6a7485'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
+<span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━</span><span foreground='#8b95a5'> cached · __AGO__ </span><span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━</span>");
     });
 }
 
@@ -1557,17 +1557,17 @@ fn per_provider_claude_with_extras_tooltip() {
 <span foreground='#d19a66'>┏━</span> <span foreground='#d19a66' weight='bold'>Claude · Pro</span> <span foreground='#d19a66'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ 5-hour limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>████████████</span><span foreground='#6a7485'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#98c379'>████████████</span><span foreground='#8b95a5'>░░░░░░░░</span> <span foreground='#98c379'> 60%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly per model</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>claude-opus-4-5     </span> <span foreground='#e5c07b'>████████</span><span foreground='#6a7485'>░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 40%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>claude-sonnet-4-5   </span> <span foreground='#98c379'>█████████████</span><span foreground='#6a7485'>░░░░░░░</span> <span foreground='#98c379'> 65%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>claude-opus-4-5     </span> <span foreground='#e5c07b'>████████</span><span foreground='#8b95a5'>░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 40%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>claude-sonnet-4-5   </span> <span foreground='#98c379'>█████████████</span><span foreground='#8b95a5'>░░░░░░░</span> <span foreground='#98c379'> 65%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Weekly limit (shared)</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#e5c07b'>██████████</span><span foreground='#6a7485'>░░░░░░░░░░</span> <span foreground='#e5c07b'> 50%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>All Models          </span> <span foreground='#e5c07b'>██████████</span><span foreground='#8b95a5'>░░░░░░░░░░</span> <span foreground='#e5c07b'> 50%</span> <span foreground='#56b6c2'>→ __HM__ (__:__)</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┣━</span> <span foreground='#d19a66' weight='bold'>◆ Extra Usage</span>
-<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Budget              </span> <span foreground='#e5c07b'>███████████</span><span foreground='#6a7485'>░░░░░░░░░</span> <span foreground='#e5c07b'> 55%</span> <span foreground='#56b6c2'>$22.50/$50.00</span>
+<span foreground='#d19a66'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Budget              </span> <span foreground='#e5c07b'>███████████</span><span foreground='#8b95a5'>░░░░░░░░░</span> <span foreground='#e5c07b'> 55%</span> <span foreground='#56b6c2'>$22.50/$50.00</span>
 <span foreground='#d19a66'>┃</span>
 <span foreground='#d19a66'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>");
     });
@@ -1610,8 +1610,8 @@ fn per_provider_amp_with_credits_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Free Tier</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e5c07b'>██████</span><span foreground='#6a7485'>░░░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 30%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#6a7485'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#6a7485'>  |  </span><span foreground='#c0c9d4'>$1.50 / $5.00</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e5c07b'>██████</span><span foreground='#8b95a5'>░░░░░░░░░░░░░░</span> <span foreground='#e5c07b'> 30%</span>  <span foreground='#56b6c2'>→ Full in __HM__ (__:__)</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#8b95a5'>○</span> <span foreground='#56b6c2'>+$0.25/hr</span><span foreground='#8b95a5'>  |  </span><span foreground='#c0c9d4'>$1.50 / $5.00</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Credits</span>
 <span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#98c379'>$7.50 remaining</span>
@@ -1657,8 +1657,8 @@ fn per_provider_amp_unknown_models_tooltip() {
 <span foreground='#c678dd'>┏━</span> <span foreground='#c678dd' weight='bold'>Amp</span> <span foreground='#c678dd'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┣━</span> <span foreground='#c678dd' weight='bold'>◆ Usage</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Custom Plan A       </span> <span foreground='#e5c07b'>█████████</span><span foreground='#6a7485'>░░░░░░░░░░░</span> <span foreground='#e5c07b'> 45%</span>
-<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Custom Plan B       </span> <span foreground='#98c379'>████████████████</span><span foreground='#6a7485'>░░░░</span> <span foreground='#98c379'> 80%</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#e5c07b'>●</span> <span foreground='#e2e8f0'>Custom Plan A       </span> <span foreground='#e5c07b'>█████████</span><span foreground='#8b95a5'>░░░░░░░░░░░</span> <span foreground='#e5c07b'> 45%</span>
+<span foreground='#c678dd'>┃</span>  <span foreground='#98c379'>●</span> <span foreground='#e2e8f0'>Custom Plan B       </span> <span foreground='#98c379'>████████████████</span><span foreground='#8b95a5'>░░░░</span> <span foreground='#98c379'> 80%</span>
 <span foreground='#c678dd'>┃</span>
 <span foreground='#c678dd'>┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>");
     });

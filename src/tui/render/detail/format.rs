@@ -51,11 +51,6 @@ pub(super) fn model_tokens(mu: &ModelUsage) -> u64 {
     mu.input + mu.output + mu.cache_read + mu.cache_write
 }
 
-/// Tokens totais de um `ProviderUsage` (mesma convenção de `model_tokens`).
-pub(super) fn provider_usage_tokens(pu: &ProviderUsage) -> u64 {
-    pu.total_input + pu.total_output + pu.total_cache_read + pu.total_cache_write
-}
-
 /// Encontra um ModelUsage cujo nome contem `quota_name` (case-insensitive).
 /// Necessario porque o nome no quota (ex "Opus") e curto, enquanto o nome no
 /// usage engine e completo (ex "claude-opus-4-8").

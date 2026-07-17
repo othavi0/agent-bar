@@ -2,7 +2,7 @@
 //! família (os nomes exatos variam por versão). Modelo desconhecido → None
 //! (nunca chutar custo).
 //!
-//! Atualizado: 2026-07-10. Fontes oficiais (verificadas + cross-check adversarial):
+//! Atualizado: 2026-07-17. Fontes oficiais (revalidadas na trilha B):
 //! - Anthropic: <https://platform.claude.com/docs/en/about-claude/pricing>
 //!   (Fable/Mythos, Sonnet 5 introdutório com virada em 2026-09-01, Opus 4.5–4.8,
 //!   Opus legado ≤4.1, Sonnet ≤4.6, Haiku; cache_read = 0.1×input,

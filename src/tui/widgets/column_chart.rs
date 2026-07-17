@@ -493,8 +493,10 @@ pub fn column_chart_lines_bucketed(
 
     // Legenda. Guard de largura (espelha o guard dos labels X): para de
     // acrescentar séries assim que a próxima entrada não couber em `width`.
+    // Séries omitidas → sufixo ` …+N` se ainda couber (trilha B).
     let mut legend: Vec<Span<'static>> = Vec::new();
     let mut legend_w = 0usize;
+    let mut shown = 0usize;
     for s in series {
         let marker = "  ● ".to_string();
         let text = format!("{} {}", s.label, fmt_tokens_short(s.total));
@@ -503,6 +505,7 @@ pub fn column_chart_lines_bucketed(
             break;
         }
         legend_w += entry_w;
+        shown += 1;
         legend.push(Span::styled(
             marker,
             Style::default().fg(to_ratatui(series_token(s.slot))),
@@ -511,6 +514,16 @@ pub fn column_chart_lines_bucketed(
             text,
             Style::default().fg(to_ratatui(ColorToken::Text)),
         ));
+    }
+    let omitted = series.len().saturating_sub(shown);
+    if omitted > 0 {
+        let more = format!(" \u{2026}+{omitted}");
+        if legend_w + more.chars().count() <= width {
+            legend.push(Span::styled(
+                more,
+                Style::default().fg(to_ratatui(ColorToken::Comment)),
+            ));
+        }
     }
     out.push(Line::from(legend));
 
@@ -533,6 +546,21 @@ pub fn fmt_tokens_short(t: u64) -> String {
         format!("{:.0}k", f / 1e3)
     } else {
         format!("{t}")
+    }
+}
+
+/// Rótulo de tokens com dual opcional: principal = input+output; sufixo de
+/// cache quando `cache > 0`. Charts/gauges de intensidade continuam
+/// cache-inclusive no plot — só o texto do rótulo usa este helper
+/// (spec confianca + trilha B).
+///
+/// Exemplos: `9,9M` · `9,9M (+1,4B cache)`.
+pub fn fmt_tokens_dual(io: u64, cache: u64) -> String {
+    let main = fmt_tokens_short(io);
+    if cache == 0 {
+        main
+    } else {
+        format!("{main} (+{} cache)", fmt_tokens_short(cache))
     }
 }
 
@@ -562,6 +590,33 @@ mod tests {
                     .collect::<String>()
             })
             .collect()
+    }
+
+    #[test]
+    fn fmt_tokens_dual_omits_cache_when_zero() {
+        assert_eq!(fmt_tokens_dual(1_200_000, 0), "1,2M");
+        assert_eq!(fmt_tokens_dual(1_200_000, 1_400_000_000), "1,2M (+1,4B cache)");
+    }
+
+    #[test]
+    fn legend_shows_omitted_count_when_narrow() {
+        // Muitas séries com labels longos → só cabem poucas em width=40;
+        // o sufixo …+N deve aparecer.
+        let s: Vec<_> = (0..6u8)
+            .map(|i| {
+                series(
+                    &format!("ModelNameVeryLong{i}"),
+                    i,
+                    vec![1000; 24],
+                )
+            })
+            .collect();
+        let lines = column_chart_lines(&s, 40, 10, datetime!(2026-07-10 12:00:00 UTC), time::UtcOffset::UTC);
+        let legend = plain(&lines).last().cloned().unwrap_or_default();
+        assert!(
+            legend.contains('\u{2026}') || legend.contains("…"),
+            "legenda estreita deveria indicar omissões: {legend:?}"
+        );
     }
 
     #[test]
