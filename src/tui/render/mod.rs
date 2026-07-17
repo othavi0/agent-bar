@@ -235,7 +235,7 @@ fn header_status(state: &AppState) -> Line<'static> {
 pub fn render(state: &AppState, frame: &mut Frame, hits: &mut HitMap) {
     let area = frame.area();
 
-    let outer = Block::default()
+    let mut outer = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(to_ratatui(ColorToken::Comment)))
@@ -246,6 +246,17 @@ pub fn render(state: &AppState, frame: &mut Frame, hits: &mut HitMap) {
                 .add_modifier(Modifier::BOLD),
         ))
         .title(header_status(state));
+    // Discoverability: hint na borda inferior quando o overlay está fechado
+    // (trilha C). Some some com show_help=true pra não competir com o popup.
+    if !state.show_help {
+        outer = outer.title_bottom(
+            Line::from(Span::styled(
+                " ? ajuda ",
+                Style::default().fg(to_ratatui(ColorToken::Muted)),
+            ))
+            .centered(),
+        );
+    }
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
 

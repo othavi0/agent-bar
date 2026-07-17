@@ -34,9 +34,11 @@ fn item_label(state: &AppState, item: SidebarItem, narrow: bool) -> Line<'static
             // item ganha ao menos 1 glifo em vez de string vazia: senão o
             // cursor fica invisível ao navegar até History/Login/Waybar
             // com a sidebar colapsada.
-            SidebarItem::History => Line::from(" H".to_string()),
-            SidebarItem::Login => Line::from(" L".to_string()),
-            SidebarItem::Waybar => Line::from(" C".to_string()),
+            // Glifos estáveis (mesmos do GlyphMode::Box em icons.rs) —
+            // legíveis sem memorizar H/L/C (trilha C).
+            SidebarItem::History => Line::from(" \u{2261}".to_string()), // ≡
+            SidebarItem::Login => Line::from(" \u{2192}".to_string()),   // →
+            SidebarItem::Waybar => Line::from(" \u{2699}".to_string()),  // ⚙
         };
     }
     match item {
