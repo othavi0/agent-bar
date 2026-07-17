@@ -6,7 +6,7 @@ expression: terminal.backend()
 "┃ > ◆ Claude ✗ deslogado     ┃┃ Claude                         ┃"
 "┃   ● Codex  ✗ deslogado     ┃┃                                ┃"
 "┃   ● Amp    ✗ deslogado     ┃┃ Abre a REPL do Claude. Digite /┃"
-"┃                            ┃┃                                ┃"
+"┃   ● Grok   ✗ deslogado     ┃┃                                ┃"
 "┃                            ┃┃ Erro no login: claude nao encon┃"
 "┃                            ┃┃                                ┃"
 "┃                            ┃┃                                ┃"

@@ -1,4 +1,4 @@
-//! Aba Login: lista os 3 providers com status de autenticacao e acao de login.
+//! Aba Login: lista os 4 providers com status de autenticacao e acao de login.
 //! Sem emoji. Status vem do `LoginState` derivado do ULTIMO FETCH REAL (ver
 //! `crate::tui::login_state`) — nunca de path.exists() ou binario no PATH.
 
@@ -17,7 +17,12 @@ use crate::tui::widgets::chips::{chips_line, register_chip_hits};
 use crate::tui::widgets::icons::{glyph, Icon};
 
 /// Constantes dos providers da aba Login (id, nome de exibicao).
-const PROVIDERS: [(&str, &str); 3] = [("claude", "Claude"), ("codex", "Codex"), ("amp", "Amp")];
+const PROVIDERS: [(&str, &str); 4] = [
+    ("claude", "Claude"),
+    ("codex", "Codex"),
+    ("amp", "Amp"),
+    ("grok", "Grok"),
+];
 
 /// Renderiza a aba Login completa. O status de cada provider nao depende de
 /// paths de credencial — vem do `LoginState` (ultimo fetch real).
@@ -169,6 +174,7 @@ fn render_detail_panel(state: &AppState, frame: &mut Frame, area: Rect, hits: &m
         "claude" => "Abre a REPL do Claude. Digite /login e siga as instruções.",
         "codex" => "Executa `codex login` (fluxo OAuth no browser).",
         "amp" => "Executa `amp login` (autenticação no browser).",
+        "grok" => "Executa `grok login` (autenticação no browser).",
         _ => "",
     };
 

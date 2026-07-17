@@ -11,7 +11,8 @@ pub(super) fn login_selected_id(idx: usize) -> &'static str {
     match idx {
         0 => "claude",
         1 => "codex",
-        _ => "amp",
+        2 => "amp",
+        _ => "grok",
     }
 }
 
@@ -24,8 +25,8 @@ pub(super) fn login_up(state: &mut AppState) -> Vec<Action> {
 }
 
 pub(super) fn login_down(state: &mut AppState) -> Vec<Action> {
-    // 3 providers: indices 0, 1, 2.
-    if state.login_selected < 2 {
+    // 4 providers: indices 0..=3 (claude, codex, amp, grok).
+    if state.login_selected < 3 {
         state.login_selected += 1;
     }
     state.login_status = None;

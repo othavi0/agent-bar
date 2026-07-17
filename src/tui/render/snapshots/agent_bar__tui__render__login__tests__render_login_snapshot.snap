@@ -6,7 +6,7 @@ expression: terminal.backend()
 "┃   ◆ Claude ✗ deslogado     ┃┃ Codex                          ┃"
 "┃ > ● Codex  ✗ deslogado     ┃┃                                ┃"
 "┃   ● Amp    ✗ deslogado     ┃┃ Executa `codex login` (fluxo OA┃"
-"┃                            ┃┃                                ┃"
+"┃   ● Grok   ✗ deslogado     ┃┃                                ┃"
 "┃                            ┃┃                                ┃"
 "┃                            ┃┃                                ┃"
 "┃                            ┃┃                                ┃"

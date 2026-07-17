@@ -982,7 +982,7 @@ mod tests {
 
         assert_eq!(
             state.login_selected, 0,
-            "índice fora de faixa (só 3 providers) é ignorado"
+            "índice fora de faixa (só 4 providers) é ignorado"
         );
     }
 
