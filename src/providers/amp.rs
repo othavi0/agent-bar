@@ -45,6 +45,10 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
 
     let account = cap1(lazy_re!(RE_SIGNED, r"Signed in as (\S+)"), 1);
 
+    // Formato novo (CLI ≥ 2026-07-11): `Amp Free: 97% remaining today (resets daily)`.
+    let free_pct = cap1(lazy_re!(RE_FREE_PCT, r"Amp Free:\s*([0-9.]+)%\s*remaining"), 1);
+
+    // Formato antigo: `Amp Free: $3.50/$5.00 remaining` + replenish/bonus.
     let free_re = lazy_re!(RE_FREE, r"Amp Free:\s*\$([0-9.]+)/\$([0-9.]+)\s*remaining");
     let free_caps = free_re.and_then(|r| r.captures(stdout));
 
@@ -69,7 +73,20 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
     let mut meta: BTreeMap<String, String> = BTreeMap::new();
     let mut primary: Option<QuotaWindow> = None;
 
-    if let Some(fc) = free_caps {
+    if let Some(pct_str) = free_pct.as_deref() {
+        // Percentual já vem pronto; reset é diário mas sem horário → sem ETA.
+        let pct: f64 = pct_str.parse().unwrap_or(0.0);
+        let window = QuotaWindow {
+            remaining: pct,
+            resets_at: None,
+            window_minutes: None,
+            used: None,
+            severity: None,
+        };
+        primary = Some(window.clone());
+        models.insert("Free Tier".to_string(), window);
+        meta.insert("freePct".to_string(), format!("{pct}%"));
+    } else if let Some(fc) = free_caps {
         let remaining: f64 = fc
             .get(1)
             .and_then(|m| m.as_str().parse().ok())
@@ -349,19 +366,19 @@ mod tests {
 
     #[test]
     fn fixture_free_pct_parses_primary() {
-        // Formato CLI atual "N% remaining today" — parse_usage ainda só
-        // reconhece Free Tier em $X/$Y; account + credits seguem casando.
         let q = parse_usage(&load_fixture("usage-free-pct.txt"), base(), NOW);
         assert!(q.available);
         assert_eq!(q.account.as_deref(), Some("user@email.com"));
-        assert!(q.primary.is_none());
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 97.0);
+        assert!(q.primary.as_ref().unwrap().resets_at.is_none());
         let models = q.models.as_ref().unwrap();
-        assert!(models.get("Free Tier").is_none());
+        assert_eq!(models["Free Tier"].remaining, 97.0);
         assert_eq!(models["Credits"].remaining, 100.0);
-        assert_eq!(
-            meta_of(&q).get("creditsBalance").map(String::as_str),
-            Some("$4.19")
-        );
+        let m = meta_of(&q);
+        assert_eq!(m.get("freePct").map(String::as_str), Some("97%"));
+        assert_eq!(m.get("creditsBalance").map(String::as_str), Some("$4.19"));
+        assert!(m.get("freeRemaining").is_none());
+        assert!(m.get("freeTotal").is_none());
     }
 
     #[test]
