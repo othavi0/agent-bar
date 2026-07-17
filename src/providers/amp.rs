@@ -289,6 +289,13 @@ mod tests {
 
     const FULL: &str = "Signed in as user@email.com\nAmp Free: $3.50/$5.00 remaining\nreplenishes +$0.25/hour\n+20% bonus for 5 more days\nIndividual credits: $10.00 remaining";
 
+    fn load_fixture(name: &str) -> String {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/amp")
+            .join(name);
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("fixture {name}: {e}"))
+    }
+
     #[test]
     fn parses_full_output() {
         let q = parse_usage(FULL, base(), NOW);
@@ -313,6 +320,48 @@ mod tests {
         // fullAt presente e no futuro
         let resets = q.primary.as_ref().unwrap().resets_at.as_deref().unwrap();
         assert!(resets.ends_with('Z'));
+    }
+
+    #[test]
+    fn fixture_legacy_dollars_parses_primary() {
+        let q = parse_usage(&load_fixture("usage-legacy-dollars.txt"), base(), NOW);
+        assert!(q.available);
+        assert_eq!(q.account.as_deref(), Some("user@email.com"));
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 70.0); // 3.5/5 = 70%
+        let models = q.models.as_ref().unwrap();
+        assert_eq!(models["Free Tier"].remaining, 70.0);
+        assert_eq!(models["Credits"].remaining, 100.0);
+        let keys: Vec<&str> = models.keys().map(String::as_str).collect();
+        assert_eq!(keys, vec!["Free Tier", "Credits"]);
+        let m = meta_of(&q);
+        assert_eq!(m.get("freeRemaining").map(String::as_str), Some("$3.5"));
+        assert_eq!(m.get("freeTotal").map(String::as_str), Some("$5"));
+        assert_eq!(
+            m.get("replenishRate").map(String::as_str),
+            Some("+$0.25/hr")
+        );
+        assert_eq!(m.get("bonus").map(String::as_str), Some("+20% (5d)"));
+        assert_eq!(m.get("creditsBalance").map(String::as_str), Some("$10"));
+        let resets = q.primary.as_ref().unwrap().resets_at.as_deref().unwrap();
+        assert!(resets.ends_with('Z'));
+        assert_eq!(resets, iso_from_ms(NOW + 5 * 3_600_000));
+    }
+
+    #[test]
+    fn fixture_free_pct_parses_primary() {
+        // Formato CLI atual "N% remaining today" — parse_usage ainda só
+        // reconhece Free Tier em $X/$Y; account + credits seguem casando.
+        let q = parse_usage(&load_fixture("usage-free-pct.txt"), base(), NOW);
+        assert!(q.available);
+        assert_eq!(q.account.as_deref(), Some("user@email.com"));
+        assert!(q.primary.is_none());
+        let models = q.models.as_ref().unwrap();
+        assert!(models.get("Free Tier").is_none());
+        assert_eq!(models["Credits"].remaining, 100.0);
+        assert_eq!(
+            meta_of(&q).get("creditsBalance").map(String::as_str),
+            Some("$4.19")
+        );
     }
 
     #[test]
