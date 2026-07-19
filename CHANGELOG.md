@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.2.1] - 2026-07-19
+
+### Fixed
+- **Ícone Waybar do Grok** — substituído o placeholder “G” pelo logomark
+  oficial `Grok_Logomark_Light` do pack de brand xAI
+  (`SpaceXAI_Grok_Assets.zip`). Sem mudança de CSS/contrato de arquivo
+  (`grok-icon.svg`).
+
 ## [8.2.0] - 2026-07-17
 
 Provider **Grok** (Grok Build CLI) na barra e na TUI.

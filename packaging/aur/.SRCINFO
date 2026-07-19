@@ -1,6 +1,6 @@
 pkgbase = agent-bar-bin
 	pkgdesc = LLM quota monitor for Waybar (Claude, Codex, Amp, Grok) — standalone binary
-	pkgver = 8.2.0
+	pkgver = 8.2.1
 	pkgrel = 1
 	url = https://github.com/othavi0/agent-bar
 	install = agent-bar-bin.install
@@ -10,7 +10,7 @@ pkgbase = agent-bar-bin
 	optdepends = libnotify: desktop low/critical quota notifications
 	provides = agent-bar
 	conflicts = agent-bar
-	source = agent-bar-8.2.0-x86_64.tar.gz::https://github.com/othavi0/agent-bar/releases/download/v8.2.0/agent-bar-8.2.0-x86_64.tar.gz
-	sha256sums = e25d8fb869cd279267098c8312726d78a859abddda8ca658d985218437c3bc8e
+	source = agent-bar-8.2.1-x86_64.tar.gz::https://github.com/othavi0/agent-bar/releases/download/v8.2.1/agent-bar-8.2.1-x86_64.tar.gz
+	sha256sums = 0000000000000000000000000000000000000000000000000000000000000000
 
 pkgname = agent-bar-bin
