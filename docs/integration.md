@@ -23,10 +23,15 @@ content alone.
 
 ## Update
 
-`agent-bar update` detects the install type. For the managed `~/.agent-bar`
-checkout (the install.sh path) it fetches and resets to upstream, then
-re-applies setup. For a system package (AUR), it defers to the package manager.
-In a development checkout it refuses and points you to `git pull`.
+`agent-bar update` detects the install type:
+
+- **Managed `~/.agent-bar` checkout** (`install.sh` path): fetches upstream,
+  resets, then re-applies full `setup`.
+- **Standalone binary**: downloads the GitHub Release tarball, replaces the
+  binary, refreshes share data assets, and re-copies **icons + terminal helper**
+  into the Waybar asset dirs (no config patch / no module rewrite).
+- **AUR / system package**: defers to the package manager.
+- **Dev checkout**: refuses and points you to `git pull`.
 
 ## Removal
 

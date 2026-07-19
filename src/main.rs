@@ -443,10 +443,13 @@ async fn main() {
                         }
                     };
                     let data_dir = update::default_data_dir(&home);
+                    let waybar_paths = waybar_contract::get_default_waybar_asset_paths();
                     let opts = update::StandaloneUpdateOptions {
                         current_version: app_identity::VERSION,
                         exe_path: &current_exe,
                         data_dir: &data_dir,
+                        waybar_dir: &waybar_paths.waybar_dir,
+                        scripts_dir: &waybar_paths.scripts_dir,
                         run_command: &run_real_command,
                         http: &http,
                         releases_api_url: format!(
@@ -475,7 +478,7 @@ async fn main() {
                             term_prompt::status(
                                 "OK",
                                 &format!(
-                                    "agent-bar atualizado: v{old_version} -> v{new_version}. Rode `agent-bar setup` se a integração com o Waybar precisar de refresh."
+                                    "agent-bar atualizado: v{old_version} -> v{new_version}. Icons e helper da Waybar atualizados."
                                 ),
                             );
                             std::process::exit(0);

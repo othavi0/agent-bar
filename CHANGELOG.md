@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Standalone `agent-bar update`** re-copia icons e o terminal helper para os
+  paths da Waybar (`~/.config/waybar/agent-bar/icons` e `…/scripts`) após
+  baixar o release. Não re-patcha config/modules/CSS (use `setup` se a
+  integração mudou).
+
 ## [8.2.1] - 2026-07-19
 
 ### Fixed

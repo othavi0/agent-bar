@@ -114,6 +114,12 @@ These are mostly for tests, packagers, and manual integration.
 - **Managed `~/.agent-bar` checkout (install.sh path):** fetches upstream, shows
   incoming commits and local changes, and after confirmation runs
   `git reset --hard <upstream>` + `git clean -fd`, and re-applies setup.
-- **System install (AUR `-bin`, standalone binary):** does not self-update —
-  directs you to your package manager (e.g. `paru -Syu agent-bar-bin`).
+- **Standalone binary** (`~/.local/bin/agent-bar` from GitHub Release / install.sh
+  tarball path): downloads the latest release, replaces the binary, refreshes
+  assets under the data dir **and** re-copies provider icons + terminal helper
+  into the Waybar paths (`~/.config/waybar/agent-bar/icons`,
+  `~/.config/waybar/scripts`). Does **not** re-patch Waybar `config.jsonc` /
+  modules / CSS — use `agent-bar setup` when integration itself changed.
+- **System install (AUR `-bin`):** does not self-update — directs you to your
+  package manager (e.g. `paru -Syu agent-bar-bin`).
 - **Development checkout:** refuses and tells you to update with `git pull`.

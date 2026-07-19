@@ -598,6 +598,11 @@ pub struct StandaloneUpdateOptions<'a> {
     pub current_version: &'a str,
     pub exe_path: &'a Path,
     pub data_dir: &'a Path,
+    /// Destino dos icons Waybar (`~/.config/waybar/agent-bar` em produção).
+    /// Só re-copia icons/helper — **não** patcha config nem dá reload.
+    pub waybar_dir: &'a Path,
+    /// Destino do terminal helper (`~/.config/waybar/scripts` em produção).
+    pub scripts_dir: &'a Path,
     pub run_command: &'a dyn Fn(&str, &[String], &Path) -> CommandResult,
     pub http: &'a reqwest::Client,
     pub releases_api_url: String,
@@ -678,11 +683,24 @@ pub async fn run_standalone_update(
     }
     replace_binary_atomic(&new_binary, opts.exe_path)?;
     install_standalone_assets(tmp_path, opts.data_dir)?;
+    // Icons/helper que a Waybar lê em ~/.config — sem re-patchar modules/CSS.
+    refresh_waybar_assets_from_extract(tmp_path, opts.waybar_dir, opts.scripts_dir)?;
 
     Ok(StandaloneUpdateStatus::Updated {
         old_version: opts.current_version.to_string(),
         new_version: ver_bare,
     })
+}
+
+/// Re-copia `icons/` e o terminal helper do tarball extraído para os paths da
+/// Waybar. Não mexe em `config.jsonc` / `style.css` / reload — isso é `setup`.
+fn refresh_waybar_assets_from_extract(
+    extracted_dir: &Path,
+    waybar_dir: &Path,
+    scripts_dir: &Path,
+) -> anyhow::Result<()> {
+    crate::waybar_contract::install_waybar_assets(waybar_dir, scripts_dir, Some(extracted_dir))
+        .map(|_| ())
 }
 
 // ---------------------------------------------------------------------------
@@ -1265,6 +1283,40 @@ mod tests {
         assert!(data_dir.join("scripts").is_dir());
     }
 
+    #[test]
+    fn refresh_waybar_assets_from_extract_copies_icons_and_helper() {
+        let tmp = tempdir().unwrap();
+        let extracted = tmp.path().join("extracted");
+        fs::create_dir_all(extracted.join("icons")).unwrap();
+        fs::write(extracted.join("icons").join("grok-icon.svg"), b"<svg/>").unwrap();
+        fs::create_dir_all(extracted.join("scripts")).unwrap();
+        fs::write(
+            extracted.join("scripts").join(TERMINAL_HELPER_NAME),
+            b"#!/usr/bin/env bash\n",
+        )
+        .unwrap();
+
+        let waybar_dir = tmp.path().join("waybar-agent-bar");
+        let scripts_dir = tmp.path().join("waybar-scripts");
+        // Simula install anterior com ícone velho:
+        fs::create_dir_all(waybar_dir.join("icons")).unwrap();
+        fs::write(waybar_dir.join("icons").join("grok-icon.svg"), b"OLD").unwrap();
+
+        refresh_waybar_assets_from_extract(&extracted, &waybar_dir, &scripts_dir).unwrap();
+
+        assert_eq!(
+            fs::read(waybar_dir.join("icons").join("grok-icon.svg")).unwrap(),
+            b"<svg/>"
+        );
+        let helper = scripts_dir.join(TERMINAL_HELPER_NAME);
+        assert!(helper.exists());
+        let mode = fs::metadata(&helper).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755);
+        // Não cria/patcha config da Waybar — só assets:
+        assert!(!waybar_dir.join("modules.jsonc").exists());
+        assert!(!waybar_dir.join("style.css").exists());
+    }
+
     // -----------------------------------------------------------------------
     // run_standalone_update: orquestração, rede mockada via wiremock (NUNCA
     // bate na API real do GitHub)
@@ -1287,6 +1339,8 @@ mod tests {
             current_version: "7.0.0",
             exe_path: &tmp.path().join("agent-bar"),
             data_dir: &tmp.path().join("data"),
+            waybar_dir: &tmp.path().join("waybar"),
+            scripts_dir: &tmp.path().join("scripts"),
             run_command: &|c, a, p| fake.run(c, a, p),
             http: &client,
             releases_api_url: format!("{}/releases/latest", server.uri()),
@@ -1321,6 +1375,8 @@ mod tests {
             current_version: "7.0.0",
             exe_path: &tmp.path().join("agent-bar"),
             data_dir: &tmp.path().join("data"),
+            waybar_dir: &tmp.path().join("waybar"),
+            scripts_dir: &tmp.path().join("scripts"),
             run_command: &|c, a, p| fake.run(c, a, p),
             http: &client,
             releases_api_url: format!("{}/releases/latest", server.uri()),
