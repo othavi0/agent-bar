@@ -111,6 +111,7 @@ fn claude_healthy() -> ProviderQuota {
         models: None,
         extra: None,
         error: None,
+        stale_reason: None,
     }
 }
 
@@ -127,6 +128,7 @@ fn claude_error() -> ProviderQuota {
         models: None,
         extra: None,
         error: Some("Token expired. Open `agent-bar menu` and choose Provider login.".into()),
+        stale_reason: None,
     }
 }
 
@@ -158,6 +160,7 @@ fn codex_healthy() -> ProviderQuota {
             extra_usage: None,
         })),
         error: None,
+        stale_reason: None,
     }
 }
 
@@ -174,6 +177,7 @@ fn codex_error() -> ProviderQuota {
         models: None,
         extra: None,
         error: Some("No session data found".into()),
+        stale_reason: None,
     }
 }
 
@@ -198,6 +202,7 @@ fn amp_healthy() -> ProviderQuota {
         models: Some(models),
         extra: Some(ProviderExtra::Amp(AmpQuotaExtra { meta: Some(meta) })),
         error: None,
+        stale_reason: None,
     }
 }
 
@@ -214,6 +219,7 @@ fn amp_error() -> ProviderQuota {
         models: None,
         extra: None,
         error: Some("Amp CLI not installed. Right-click to install and log in.".into()),
+        stale_reason: None,
     }
 }
 
@@ -254,6 +260,7 @@ fn claude_with_extras() -> ProviderQuota {
             }),
         })),
         error: None,
+        stale_reason: None,
     }
 }
 
@@ -280,6 +287,7 @@ fn amp_with_credits() -> ProviderQuota {
         models: Some(models),
         extra: Some(ProviderExtra::Amp(AmpQuotaExtra { meta: Some(meta) })),
         error: None,
+        stale_reason: None,
     }
 }
 
@@ -302,6 +310,7 @@ fn amp_unknown_models() -> ProviderQuota {
             meta: Some(BTreeMap::new()),
         })),
         error: None,
+        stale_reason: None,
     }
 }
 

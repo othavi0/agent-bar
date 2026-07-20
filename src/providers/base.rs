@@ -26,6 +26,7 @@ pub fn quota_base(id: &str, name: &str) -> ProviderQuota {
         models: None,
         extra: None,
         error: None,
+        stale_reason: None,
     }
 }
 

@@ -159,6 +159,7 @@ mod helper_tests {
             models: None,
             extra: None,
             error: None,
+            stale_reason: None,
         };
         assert_eq!(normalize_plan_label(&q), "Pro");
         q.plan = None;

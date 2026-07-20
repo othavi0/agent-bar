@@ -73,6 +73,7 @@ mod tests {
             models: Some(m),
             extra: None,
             error: None,
+            stale_reason: None,
         }
     }
 

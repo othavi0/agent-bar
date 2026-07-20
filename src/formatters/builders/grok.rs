@@ -182,6 +182,7 @@ mod tests {
                 recent_model: Some("grok-4.5".into()),
             })),
             error: None,
+            stale_reason: None,
         }
     }
 

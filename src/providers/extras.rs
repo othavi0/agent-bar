@@ -58,6 +58,7 @@ mod tests {
             models: None,
             extra,
             error: None,
+            stale_reason: None,
         }
     }
 

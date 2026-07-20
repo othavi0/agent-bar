@@ -174,6 +174,7 @@ pub(crate) async fn fetch_one(provider: &dyn Provider, ctx: &Ctx<'_>) -> Provide
                     models: None,
                     extra: None,
                     error: Some(msg),
+                    stale_reason: None,
                 };
             }
         }
@@ -315,6 +316,7 @@ mod tests {
                 models: None,
                 extra: None,
                 error: None,
+                stale_reason: None,
             }
         }
     }

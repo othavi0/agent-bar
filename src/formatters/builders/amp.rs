@@ -421,6 +421,7 @@ mod tests {
             models: Some(models),
             extra: Some(ProviderExtra::Amp(AmpQuotaExtra { meta: Some(meta) })),
             error: None,
+            stale_reason: None,
         }
     }
 
@@ -516,6 +517,7 @@ mod tests {
             models: Some(IndexMap::new()),
             extra: Some(ProviderExtra::Amp(AmpQuotaExtra { meta: Some(meta) })),
             error: None,
+            stale_reason: None,
         };
         for layout in [AmpLayout::Inline, AmpLayout::Generic] {
             let out = render_pango(&build_amp(&clk(), &q, &opts(layout)));
