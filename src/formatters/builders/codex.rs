@@ -12,7 +12,9 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::WindowPolicy;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, label_line, model_line, vline, BuildOptions};
+use super::shared::{
+    build_footer_line, header_line, label_line, model_line, stale_line, vline, BuildOptions,
+};
 
 pub fn build_codex(
     clock: &Clock,
@@ -28,6 +30,11 @@ pub fn build_codex(
         options.header_width,
         ColorToken::Green,
     ));
+
+    if let Some(l) = stale_line(p) {
+        lines.push(l);
+    }
+
     lines.push(vline(ColorToken::Green));
 
     if let Some(err) = p.error.as_deref() {

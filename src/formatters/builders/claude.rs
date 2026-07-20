@@ -11,7 +11,9 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::DisplayMode;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, label_line, model_line, vline, BuildOptions};
+use super::shared::{
+    build_footer_line, header_line, label_line, model_line, stale_line, vline, BuildOptions,
+};
 
 /// Linha de Extra Usage: indicador + nome + barra + pct + texto `$used/$limit`.
 fn extra_usage_line(
@@ -52,6 +54,11 @@ pub fn build_claude(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) ->
         options.header_width,
         ColorToken::Orange,
     ));
+
+    if let Some(l) = stale_line(p) {
+        lines.push(l);
+    }
+
     lines.push(vline(ColorToken::Orange));
 
     if let Some(err) = p.error.as_deref() {

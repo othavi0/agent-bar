@@ -8,7 +8,7 @@ use crate::formatters::segments::{
 use crate::formatters::shared::{
     format_ago, format_eta, format_percent, format_reset_time, to_window_display,
 };
-use crate::providers::types::QuotaWindow;
+use crate::providers::types::{ProviderQuota, QuotaWindow};
 use crate::settings::DisplayMode;
 use crate::theme::{box_chars, ColorToken};
 
@@ -61,6 +61,17 @@ pub fn header_line(title: &str, header_width: usize, color: ColorToken) -> Line 
         Segment::raw_text(" "),
         Segment::new(box_chars::H.repeat(fill), color),
     ]
+}
+
+/// Linha de aviso quando a quota veio de cache vencido (erro transitório).
+/// Builders nunca escapam — o escape é do render_pango.
+pub fn stale_line(p: &ProviderQuota) -> Option<Line> {
+    let reason = p.stale_reason.as_deref()?;
+    Some(vec![
+        Segment::new(box_chars::V, ColorToken::Text),
+        Segment::raw_text("  "),
+        Segment::new(format!("⚠️ Cached data — {reason}"), ColorToken::Yellow),
+    ])
 }
 
 /// `┗━…[ cached · {ago} ]…` sempre com 56 chars de largura total.

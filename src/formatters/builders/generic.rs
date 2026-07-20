@@ -10,7 +10,7 @@ use crate::formatters::shared::{format_percent, to_display};
 use crate::providers::types::ProviderQuota;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, BuildOptions};
+use super::shared::{build_footer_line, header_line, stale_line, BuildOptions};
 
 pub fn build_generic(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Vec<Line> {
     let mut lines: Vec<Line> = Vec::new();
@@ -20,6 +20,10 @@ pub fn build_generic(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -
         options.header_width,
         ColorToken::Text,
     ));
+
+    if let Some(l) = stale_line(p) {
+        lines.push(l);
+    }
 
     if let Some(err) = p.error.as_deref() {
         lines.push(vec![
@@ -133,5 +137,16 @@ mod tests {
         q.primary = None;
         let lines = build_generic(&clk(), &q, &opts());
         assert_eq!(lines.len(), 2); // header + footer
+    }
+
+    #[test]
+    fn stale_reason_adds_warning_line() {
+        let mut q = quota();
+        q.stale_reason = Some("Request timeout".into());
+        let lines = build_generic(&clk(), &q, &opts());
+        // header + stale + primary + footer
+        assert_eq!(lines.len(), 4);
+        let rendered = render_pango(&lines);
+        assert!(rendered.contains("Cached data — Request timeout"));
     }
 }

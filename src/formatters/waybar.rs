@@ -377,6 +377,15 @@ mod tests {
     }
 
     #[test]
+    fn per_provider_stale_renders_normal_with_warning() {
+        let mut q = claude(75.0);
+        q.stale_reason = Some("Request timeout".into());
+        let out = format_provider_for_waybar(&clk(), &q, &settings(), DisplayMode::Remaining);
+        assert!(!out.class.contains("disconnected"));
+        assert!(out.tooltip.contains("Cached data — Request timeout"));
+    }
+
+    #[test]
     fn aggregate_empty_text() {
         let q = AllQuotas {
             providers: vec![],

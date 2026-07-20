@@ -10,7 +10,7 @@ use crate::providers::extras::get_grok_extra;
 use crate::providers::types::ProviderQuota;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, vline, BuildOptions};
+use super::shared::{build_footer_line, header_line, stale_line, vline, BuildOptions};
 
 const BRAND: ColorToken = ColorToken::Cyan;
 
@@ -52,6 +52,11 @@ pub fn build_grok(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> V
         options.header_width,
         BRAND,
     ));
+
+    if let Some(l) = stale_line(p) {
+        lines.push(l);
+    }
+
     lines.push(vline(BRAND));
 
     if let Some(err) = p.error.as_deref() {

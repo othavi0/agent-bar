@@ -15,7 +15,9 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::DisplayMode;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, label_line, vline, AmpLayout, BuildOptions};
+use super::shared::{
+    build_footer_line, header_line, label_line, stale_line, vline, AmpLayout, BuildOptions,
+};
 
 /// Valor de meta com semântica truthy do JS: Some só se presente E não-vazio.
 fn meta_get<'a>(m: &'a BTreeMap<String, String>, k: &str) -> Option<&'a str> {
@@ -95,6 +97,11 @@ pub fn build_amp(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Ve
         options.header_width,
         ColorToken::Magenta,
     ));
+
+    if let Some(l) = stale_line(p) {
+        lines.push(l);
+    }
+
     lines.push(vline(ColorToken::Magenta));
 
     if let Some(err) = p.error.as_deref() {
