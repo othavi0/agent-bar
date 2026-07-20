@@ -53,7 +53,7 @@ pub fn build_grok(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> V
         BRAND,
     ));
 
-    if let Some(l) = stale_line(p) {
+    if let Some(l) = stale_line(p, BRAND) {
         lines.push(l);
     }
 

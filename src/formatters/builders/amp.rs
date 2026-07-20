@@ -98,7 +98,7 @@ pub fn build_amp(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Ve
         ColorToken::Magenta,
     ));
 
-    if let Some(l) = stale_line(p) {
+    if let Some(l) = stale_line(p, ColorToken::Magenta) {
         lines.push(l);
     }
 

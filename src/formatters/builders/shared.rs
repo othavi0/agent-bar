@@ -64,11 +64,12 @@ pub fn header_line(title: &str, header_width: usize, color: ColorToken) -> Line 
 }
 
 /// Linha de aviso quando a quota veio de cache vencido (erro transitório).
+/// `vline_color` deve casar com a cor usada pelos demais `┃` do builder chamador.
 /// Builders nunca escapam — o escape é do render_pango.
-pub fn stale_line(p: &ProviderQuota) -> Option<Line> {
+pub fn stale_line(p: &ProviderQuota, vline_color: ColorToken) -> Option<Line> {
     let reason = p.stale_reason.as_deref()?;
     Some(vec![
-        Segment::new(box_chars::V, ColorToken::Text),
+        Segment::new(box_chars::V, vline_color),
         Segment::raw_text("  "),
         Segment::new(format!("⚠️ Cached data — {reason}"), ColorToken::Yellow),
     ])

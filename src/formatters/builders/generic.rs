@@ -21,7 +21,7 @@ pub fn build_generic(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -
         ColorToken::Text,
     ));
 
-    if let Some(l) = stale_line(p) {
+    if let Some(l) = stale_line(p, ColorToken::Text) {
         lines.push(l);
     }
 
@@ -146,6 +146,10 @@ mod tests {
         let lines = build_generic(&clk(), &q, &opts());
         // header + stale + primary + footer
         assert_eq!(lines.len(), 4);
+        let stale = &lines[1];
+        assert_eq!(stale[0].text, "┃");
+        assert_eq!(stale[0].color, ColorToken::Text); // generic: mesma cor dos demais vline
+        assert_eq!(stale[2].color, ColorToken::Yellow);
         let rendered = render_pango(&lines);
         assert!(rendered.contains("Cached data — Request timeout"));
     }

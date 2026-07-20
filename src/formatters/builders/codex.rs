@@ -31,7 +31,7 @@ pub fn build_codex(
         ColorToken::Green,
     ));
 
-    if let Some(l) = stale_line(p) {
+    if let Some(l) = stale_line(p, ColorToken::Green) {
         lines.push(l);
     }
 
