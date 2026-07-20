@@ -233,8 +233,9 @@ async fn run_amp_usage(bin: &Path) -> Result<String, ProviderError> {
     {
         Ok(Ok(o)) => o,
         Ok(Err(_)) => return Err(AmpError::Generic.into()),
-        // timeout: kill_on_drop mata o filho; espelha o TS (kill→exit≠0→não-logado).
-        Err(_) => return Err(AmpError::NotLoggedIn.into()),
+        // timeout: CLI viva demais não é logout — erro transitório; a base
+        // serve cache stale. (Divergência consciente do TS, que deslogava.)
+        Err(_) => return Err(AmpError::Timeout.into()),
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -284,7 +285,7 @@ impl QuotaSource for AmpProvider {
 
     fn to_user_facing_error(&self, error: &ProviderError) -> String {
         match error {
-            ProviderError::Amp(AmpError::NotLoggedIn) => AmpError::NotLoggedIn.to_string(),
+            ProviderError::Amp(e) => e.to_string(),
             _ => AmpError::Generic.to_string(),
         }
     }
@@ -573,6 +574,12 @@ mod tests {
             err.to_string(),
             "Not logged in. Open `agent-bar menu` and choose Provider login."
         );
+    }
+
+    #[test]
+    fn timeout_maps_to_own_message() {
+        let e: ProviderError = AmpError::Timeout.into();
+        assert_eq!(AmpProvider.to_user_facing_error(&e), "Request timeout");
     }
 
     #[tokio::test]

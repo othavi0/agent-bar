@@ -149,6 +149,11 @@ mod tests {
     }
 
     #[test]
+    fn request_timeout_is_not_disconnected_for_amp() {
+        assert!(!looks_disconnected("amp", Some("Request timeout")));
+    }
+
+    #[test]
     fn none_error_is_not_disconnected() {
         assert!(!looks_disconnected("claude", None));
     }
