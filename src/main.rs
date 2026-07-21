@@ -183,6 +183,81 @@ async fn main() {
             std::process::exit(0);
         }
 
+        Command::ConfigShow => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let view = agent_bar::config_cmd::show(&paths);
+            match serde_json::to_string_pretty(&view) {
+                Ok(j) => {
+                    println!("{j}");
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        Command::ConfigApply => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let raw = if opts.config_json_stdin {
+                use std::io::Read;
+                let mut buf = String::new();
+                if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
+                    log::error!("failed to read stdin: {e}");
+                    std::process::exit(2);
+                }
+                buf
+            } else if let Some(path) = &opts.config_file {
+                match std::fs::read_to_string(path) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        log::error!("failed to read {path}: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            } else if let Some(j) = &opts.config_json {
+                j.clone()
+            } else {
+                log::error!(
+                    "config apply requires --json <blob>, --json -, or --file <path>"
+                );
+                std::process::exit(2);
+            };
+            match agent_bar::config_cmd::apply_json(&paths, &raw) {
+                Ok(view) => match serde_json::to_string_pretty(&view) {
+                    Ok(j) => {
+                        println!("{j}");
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        log::error!("{e}");
+                        std::process::exit(1);
+                    }
+                },
+                Err(agent_bar::config_cmd::ApplyError::Validation(m)) => {
+                    eprintln!("{m}");
+                    std::process::exit(1);
+                }
+                Err(agent_bar::config_cmd::ApplyError::Io(m)) => {
+                    eprintln!("{m}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
         Command::Setup => {
             let paths = match Paths::from_env() {
                 Ok(p) => p,

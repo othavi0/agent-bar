@@ -30,6 +30,10 @@ pub enum Command {
     /// `settings.menu` p/ o helper `scripts/agent-bar-open-terminal`. Não
     /// aparece no help nem em `KNOWN_COMMANDS` (não é sugerido em typos).
     MenuFont,
+    /// `config show` — imprime subset editável do settings como JSON.
+    ConfigShow,
+    /// `config apply` — aplica patch JSON (--json / --file / stdin).
+    ConfigApply,
 }
 
 /// Formato de saída do módulo Waybar.
@@ -57,6 +61,12 @@ pub struct CliOptions {
     pub terminal_script: Option<String>,
     pub dry_run: bool,
     pub yes: bool,
+    /// Payload de `config apply --json` (None se `--json -` ou `--file`).
+    pub config_json: Option<String>,
+    /// `config apply --json -` — main deve ler o blob de stdin.
+    pub config_json_stdin: bool,
+    /// Path de `config apply --file <path>` — main lê o arquivo.
+    pub config_file: Option<String>,
     /// Avisos não-fatais coletados durante o parse — o caller imprime em stderr.
     pub warnings: Vec<String>,
 }
@@ -79,6 +89,9 @@ impl Default for CliOptions {
             terminal_script: None,
             dry_run: false,
             yes: false,
+            config_json: None,
+            config_json_stdin: false,
+            config_file: None,
             warnings: Vec::new(),
         }
     }
@@ -102,6 +115,7 @@ const KNOWN_COMMANDS: &[&str] = &[
     "remove",
     "action-right",
     "doctor",
+    "config",
     "help",
 ];
 
@@ -219,6 +233,31 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
             "remove" => opts.command = Command::Remove,
             "doctor" => opts.command = Command::Doctor,
 
+            "config" => match args.get(i + 1).map(|s| s.as_str()) {
+                Some("show") => {
+                    opts.command = Command::ConfigShow;
+                    i += 1;
+                }
+                Some("apply") => {
+                    opts.command = Command::ConfigApply;
+                    i += 1;
+                }
+                Some("--help" | "help" | "-h") => {
+                    opts.command = Command::Help;
+                    i += 1;
+                }
+                None => {
+                    opts.command = Command::Help;
+                }
+                Some(other) => {
+                    return Err(CliError {
+                        message: format!(
+                            "Unknown subcommand for 'config': {other}. Use 'show' or 'apply'."
+                        ),
+                    });
+                }
+            },
+
             "action-right" => {
                 let provider = require_next_arg(args, i, "action-right")?;
                 opts.provider = Some(provider.to_string());
@@ -315,6 +354,22 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
                 i += 1;
             }
 
+            "--json" => {
+                let val = require_next_arg(args, i, "--json")?;
+                if val == "-" {
+                    opts.config_json_stdin = true;
+                } else {
+                    opts.config_json = Some(val.to_string());
+                }
+                i += 1;
+            }
+
+            "--file" => {
+                let val = require_next_arg(args, i, "--file")?;
+                opts.config_file = Some(val.to_string());
+                i += 1;
+            }
+
             "--help" | "-h" | "help" => opts.command = Command::Help,
 
             "--version" | "-V" => opts.command = Command::Version,
@@ -358,6 +413,28 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
     if interval_given && !opts.watch {
         opts.warnings
             .push("[agent-bar] --interval has no effect without --watch".to_string());
+    }
+
+    if opts.command == Command::ConfigApply {
+        let sources = [
+            opts.config_json.is_some(),
+            opts.config_json_stdin,
+            opts.config_file.is_some(),
+        ]
+        .into_iter()
+        .filter(|b| *b)
+        .count();
+        if sources == 0 {
+            return Err(CliError {
+                message: "config apply requires --json <blob>, --json -, or --file <path>"
+                    .to_string(),
+            });
+        }
+        if sources > 1 {
+            return Err(CliError {
+                message: "config apply: use only one of --json or --file".to_string(),
+            });
+        }
     }
 
     Ok(opts)
@@ -827,6 +904,62 @@ mod tests {
         assert_eq!(
             parse_args(&args(&["doctor"])).unwrap().command,
             Command::Doctor
+        );
+    }
+
+    #[test]
+    fn command_config_show() {
+        let opts = parse_args(&args(&["config", "show"])).unwrap();
+        assert_eq!(opts.command, Command::ConfigShow);
+    }
+
+    #[test]
+    fn command_config_apply_json() {
+        let opts = parse_args(&args(&[
+            "config",
+            "apply",
+            "--json",
+            r#"{"schemaVersion":1}"#,
+        ]))
+        .unwrap();
+        assert_eq!(opts.command, Command::ConfigApply);
+        assert_eq!(
+            opts.config_json.as_deref(),
+            Some(r#"{"schemaVersion":1}"#)
+        );
+        assert!(!opts.config_json_stdin);
+        assert!(opts.config_file.is_none());
+    }
+
+    #[test]
+    fn command_config_apply_json_stdin() {
+        let opts = parse_args(&args(&["config", "apply", "--json", "-"])).unwrap();
+        assert_eq!(opts.command, Command::ConfigApply);
+        assert!(opts.config_json_stdin);
+        assert!(opts.config_json.is_none());
+        assert!(opts.config_file.is_none());
+    }
+
+    #[test]
+    fn command_config_apply_file() {
+        let opts = parse_args(&args(&["config", "apply", "--file", "/tmp/c.json"])).unwrap();
+        assert_eq!(opts.command, Command::ConfigApply);
+        assert_eq!(opts.config_file.as_deref(), Some("/tmp/c.json"));
+        assert!(opts.config_json.is_none());
+        assert!(!opts.config_json_stdin);
+    }
+
+    #[test]
+    fn command_config_apply_requires_payload() {
+        let err = parse_args(&args(&["config", "apply"])).unwrap_err();
+        assert!(err.message.contains("--json") || err.message.contains("--file"));
+    }
+
+    #[test]
+    fn command_config_bare_is_help() {
+        assert_eq!(
+            parse_args(&args(&["config"])).unwrap().command,
+            Command::Help
         );
     }
 
