@@ -531,6 +531,7 @@ async fn main() {
                 false,
                 &format!("{APP_NAME} uninstall"),
                 &ipaths,
+                &omarchy_integration::default_omarchy_plugins_dir(&home),
             ) {
                 Ok(()) => std::process::exit(0),
                 Err(e) => {
@@ -560,6 +561,7 @@ async fn main() {
                 true,
                 &format!("{APP_NAME} remove"),
                 &ipaths,
+                &omarchy_integration::default_omarchy_plugins_dir(&home),
             ) {
                 Ok(()) => std::process::exit(0),
                 Err(e) => {
