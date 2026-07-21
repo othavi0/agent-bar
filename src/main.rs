@@ -320,6 +320,19 @@ async fn main() {
                 .unwrap_or_default();
             let install_root = home.join(format!(".{APP_NAME}"));
 
+            // O binário novo traz QML novo — o drop-in do omarchy-shell só
+            // atualiza via setup (o update não toca nele; ver setup::SetupConfig.omarchy).
+            let omarchy_setup_hint = |home: &Path| {
+                let plugin_dir = omarchy_integration::default_omarchy_plugins_dir(home)
+                    .join(app_identity::OMARCHY_PLUGIN_ID);
+                if plugin_dir.exists() {
+                    term_prompt::note(&format!(
+                        "Plugin omarchy-shell detectado. Rode `{} setup` para atualizá-lo.",
+                        app_identity::APP_NAME
+                    ));
+                }
+            };
+
             // Detecção pelo binário real, não por CARGO_MANIFEST_DIR (compile-time —
             // aponta pro runner do CI, não pra máquina do usuário; hotfix 7.0.1).
             let current_exe = match std::env::current_exe().and_then(|p| p.canonicalize()) {
@@ -428,6 +441,7 @@ async fn main() {
                             match r.status {
                                 update::ManagedUpdateStatus::Updated => {
                                     term_prompt::status("OK", "Update aplicado");
+                                    omarchy_setup_hint(&home);
                                 }
                                 update::ManagedUpdateStatus::UpToDate => {
                                     term_prompt::status("OK", "Já na versão mais recente");
@@ -500,6 +514,7 @@ async fn main() {
                                     "agent-bar atualizado: v{old_version} -> v{new_version}. Icons e helper da Waybar atualizados."
                                 ),
                             );
+                            omarchy_setup_hint(&home);
                             std::process::exit(0);
                         }
                         Err(e) => {

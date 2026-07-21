@@ -23,6 +23,7 @@ Tudo passa por um cache em disco (`~/.cache/agent-bar/`): 5 minutos pro Claude, 
 ## Requisitos
 
 - Linux x86_64 com Waybar. Uso no Hyprland, mas não tem nada específico dele aqui.
+- **Omarchy 4 (omarchy-shell)**: bar-widget plugin nativo com chips + popup — `agent-bar setup` detecta e instala. Waybar segue suportada.
 - `curl`, `tar` e `sha256sum` pro instalador.
 - Um terminal que o helper reconheça: alacritty, kitty, foot, ghostty, wezterm, ou `xdg-terminal-exec`.
 - As CLIs que você quer monitorar, instaladas. O login dá pra fazer pela própria TUI.

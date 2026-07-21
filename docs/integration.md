@@ -56,3 +56,9 @@ agent-bar assets install --waybar-dir <path> --scripts-dir <path>
 agent-bar export waybar-modules --app-bin <path> --terminal-script <path>
 agent-bar export waybar-css --icons-dir <path>
 ```
+
+## Omarchy 4 (omarchy-shell)
+
+No Omarchy 4 a Waybar foi substituída pelo omarchy-shell (Quickshell).
+`agent-bar setup` detecta e instala o plugin nativo — ver
+[`omarchy-shell.md`](omarchy-shell.md).
