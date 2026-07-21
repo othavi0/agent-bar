@@ -4,9 +4,6 @@
 
 use std::path::{Path, PathBuf};
 
-/// Comando oficial de instalação (usado pelo Plano 6; contrato de display).
-pub const AMP_INSTALL_COMMAND: &str = "curl -fsSL https://ampcode.com/install.sh | bash";
-
 /// Caminhos candidatos sob `$HOME`, na ordem de preferência. Vazio se `home` vazio.
 pub fn amp_candidate_paths(home: &str) -> Vec<PathBuf> {
     if home.is_empty() {
@@ -105,6 +102,7 @@ mod tests {
 
     #[test]
     fn install_command_is_official() {
+        use crate::app_identity::AMP_INSTALL_COMMAND;
         assert_eq!(
             AMP_INSTALL_COMMAND,
             "curl -fsSL https://ampcode.com/install.sh | bash"
