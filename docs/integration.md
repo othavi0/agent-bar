@@ -59,6 +59,6 @@ agent-bar export waybar-css --icons-dir <path>
 
 ## Omarchy 4 (omarchy-shell)
 
-No Omarchy 4 a Waybar foi substituída pelo omarchy-shell (Quickshell).
-`agent-bar setup` detecta e instala o plugin nativo — ver
+Omarchy 4 replaced Waybar with omarchy-shell (Quickshell).
+`agent-bar setup` detects it and installs the native plugin — see
 [`omarchy-shell.md`](omarchy-shell.md).
