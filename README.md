@@ -8,7 +8,9 @@ Monitor de quota de Claude Code, OpenAI Codex, Amp e Grok Build na Waybar. Quota
 
 ## O que ele mostra
 
-Cada provider vira um módulo na barra com o percentual restante, colorido pelo estado: verde de 60% pra cima, amarelo entre 30 e 59, laranja entre 10 e 29, vermelho abaixo de 10. Passando o mouse, o tooltip abre as janelas de quota com horário de reset. Clique esquerdo abre a TUI num terminal à parte; clique direito força um refresh, ou o login se a sessão caiu.
+Cada provider vira um módulo na barra com o percentual restante, colorido pelo estado: verde de 60% pra cima, amarelo entre 30 e 59, laranja entre 10 e 29, vermelho abaixo de 10. Passando o mouse, o tooltip abre as janelas de quota com horário de reset.
+
+Na **Waybar**, clique esquerdo abre a TUI num terminal à parte; clique direito foca o provider (detail ou login se a sessão caiu). No **Omarchy 4** (omarchy-shell): esquerdo = popup de usage, direito = settings nativo no mesmo popup, meio = refresh. Dashboard completo (charts, histórico, login): `agent-bar menu` ou o link no rodapé do popup.
 
 De onde vem o dado, por provider:
 
@@ -80,20 +82,18 @@ Ele descobre como você instalou e age de acordo. Instalação pelo instalador: 
 | Comando | O que faz |
 | --- | --- |
 | `agent-bar` | Chamado pela Waybar (sem TTY), imprime o JSON do módulo. Num terminal, abre a TUI. |
-| `agent-bar status` | Quotas de todos os providers no terminal, sem TUI. Com `-r`, ignora o cache. |
-| `agent-bar menu` | A TUI: abre no detalhe do primeiro provider habilitado (gauges e sparklines), histórico de uso (24 h/7 d), login e Config. Mouse funciona. |
-| `agent-bar setup` | (Re)aplica a integração: assets, patches na config da Waybar, symlink, reload. Pergunta antes. |
+| `agent-bar status` | Quotas de todos os providers no terminal, sem TUI. Com `-r`, ignora o cache. `-t` / `--terminal` é alias. |
+| `agent-bar menu` | A TUI (dashboard): detalhe do primeiro provider habilitado, histórico, login e Config. |
+| `agent-bar config show` | Imprime o subset editável de settings (JSON). |
+| `agent-bar config apply` | Aplica patch JSON em settings (`--json` / `--file`). Não recarrega a Waybar. |
+| `agent-bar setup` | (Re)aplica a integração: assets, Waybar e/ou plugin Omarchy, symlink, reload. Pergunta antes. |
 | `agent-bar update` | Atualiza a instalação (detalhes acima). |
-| `agent-bar uninstall` | Remove binário, assets da Waybar, settings e cache, e reverte os patches na config. Pede confirmação. |
-| `agent-bar remove` | O mesmo, sem perguntar. |
-| `agent-bar doctor` | Caça sobras da era npm do projeto no `$HOME` (`package.json`, `node_modules`, lockfiles) e limpa. `--dry-run` só lista, `--yes` não pergunta. |
-| `agent-bar assets install` | Só copia ícones e helper, sem tocar na config. Aceita `--waybar-dir` e `--scripts-dir`. |
-| `agent-bar export waybar-modules` | Imprime o contrato JSON dos módulos, pra quem prefere fiação manual. |
-| `agent-bar export waybar-css` | O mesmo pro CSS. |
-| `agent-bar help` | Todos os comandos e flags. |
+| `agent-bar uninstall` | Remove binário, assets, settings e cache, e reverte patches. Pede confirmação. |
+| `agent-bar doctor` | Caça sobras da era npm no `$HOME` e limpa. `--dry-run` só lista, `--yes` não pergunta. |
+| `agent-bar help` | Comandos e flags públicos (internos de packager/Waybar ficam ocultos). |
 | `agent-bar --version` | Versão instalada. |
 
-Flags úteis no dia a dia: `--provider <id>` (`-p`) limita a um provider, `--refresh` (`-r`) invalida o cache antes de buscar, `--verbose` (`-v`) liga o debug no stderr sem sujar o stdout que a Waybar parseia.
+Flags úteis no dia a dia: `--provider <id>` (`-p`) limita a um provider, `--refresh` (`-r`) invalida o cache antes de buscar, `--verbose` (`-v`) liga o debug no stderr sem sujar o stdout que a Waybar parseia. Superfície completa em [docs/commands.md](docs/commands.md).
 
 ## Outras barras (Quickshell, Eww, Ironbar)
 
@@ -108,7 +108,7 @@ O schema é versionado (`schemaVersion: 1`) e está descrito, com exemplo de Qui
 
 ## Desinstalação
 
-`agent-bar uninstall` mostra a lista do que vai remover e pede confirmação; `agent-bar remove` faz o mesmo sem perguntar. Os dois revertem os patches na config da Waybar. Os backups `.agent-bar-backup` ficam, caso você queira comparar depois.
+`agent-bar uninstall` mostra a lista do que vai remover e pede confirmação; `agent-bar remove` é alias forçado (`uninstall --yes`). Os dois revertem os patches na config da Waybar e desregistram o plugin Omarchy quando existir. Os backups `.agent-bar-backup` ficam, caso você queira comparar depois.
 
 ## Stack
 
@@ -121,6 +121,7 @@ Rust 2021 (MSRV 1.88), tokio + reqwest/rustls no fetch, ratatui na TUI, serde no
 - [Comandos](docs/commands.md) — a versão longa da tabela acima
 - [Runtime](docs/runtime.md) — quais paths o agent-bar considera dele
 - [Integração com a Waybar](docs/integration.md)
+- [Omarchy shell](docs/omarchy-shell.md) — plugin, clicks, settings nativo
 - [Contrato Waybar](docs/waybar-contract.md) — module IDs, CSS, refresh por signal
 - [Saída JSON](docs/json-output.md)
 - [Troubleshooting](docs/troubleshooting.md)
