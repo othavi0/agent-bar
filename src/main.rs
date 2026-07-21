@@ -23,8 +23,8 @@ use agent_bar::settings::{self, Settings};
 use agent_bar::tui;
 use agent_bar::watch;
 use agent_bar::{
-    doctor, install, runtime, setup, term_prompt, uninstall, update, waybar_contract,
-    waybar_integration,
+    doctor, install, omarchy_integration, runtime, setup, term_prompt, uninstall, update,
+    waybar_contract, waybar_integration,
 };
 
 // ---------------------------------------------------------------------------
@@ -197,6 +197,21 @@ async fn main() {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)
                 .unwrap_or_default();
+            let omarchy_forced = opts.omarchy_plugins_dir.as_ref().map(PathBuf::from);
+            let omarchy_detected = omarchy_integration::detect_omarchy_shell();
+            let omarchy = match (omarchy_forced, omarchy_detected) {
+                (Some(dir), _) => Some(setup::OmarchySetupOptions {
+                    plugins_dir: dir,
+                    run_cli: false, // dir injetado = teste/CI: não toca o shell vivo
+                }),
+                (None, true) => Some(setup::OmarchySetupOptions {
+                    plugins_dir: omarchy_integration::default_omarchy_plugins_dir(&home),
+                    run_cli: true,
+                }),
+                (None, false) => None,
+            };
+            let skip_waybar =
+                omarchy.is_some() && !setup::waybar_present(std::env::var_os("PATH").as_deref());
             let cfg = setup::SetupConfig {
                 asset_paths: Some(asset_paths),
                 integration_paths: Some(ipaths),
@@ -204,6 +219,8 @@ async fn main() {
                 home,
                 skip_reload: false,
                 system_install: runtime::is_system_install(),
+                omarchy,
+                skip_waybar,
             };
             match setup::run_setup(&settings, cfg, true, true) {
                 Ok(_) => std::process::exit(0),
@@ -303,6 +320,19 @@ async fn main() {
                 .unwrap_or_default();
             let install_root = home.join(format!(".{APP_NAME}"));
 
+            // O binário novo traz QML novo — o drop-in do omarchy-shell só
+            // atualiza via setup (o update não toca nele; ver setup::SetupConfig.omarchy).
+            let omarchy_setup_hint = |home: &Path| {
+                let plugin_dir = omarchy_integration::default_omarchy_plugins_dir(home)
+                    .join(app_identity::OMARCHY_PLUGIN_ID);
+                if plugin_dir.exists() {
+                    term_prompt::note(&format!(
+                        "Plugin omarchy-shell detectado. Rode `{} setup` para atualizá-lo.",
+                        app_identity::APP_NAME
+                    ));
+                }
+            };
+
             // Detecção pelo binário real, não por CARGO_MANIFEST_DIR (compile-time —
             // aponta pro runner do CI, não pra máquina do usuário; hotfix 7.0.1).
             let current_exe = match std::env::current_exe().and_then(|p| p.canonicalize()) {
@@ -384,6 +414,8 @@ async fn main() {
                             home: home_for_setup.clone(),
                             skip_reload: false,
                             system_install: runtime::is_system_install(),
+                            omarchy: None,
+                            skip_waybar: false,
                         };
                         if let Err(e) = setup::run_setup(&settings_for_setup, cfg, false, false) {
                             log::error!("Setup falhou após update: {e}");
@@ -409,6 +441,7 @@ async fn main() {
                             match r.status {
                                 update::ManagedUpdateStatus::Updated => {
                                     term_prompt::status("OK", "Update aplicado");
+                                    omarchy_setup_hint(&home);
                                 }
                                 update::ManagedUpdateStatus::UpToDate => {
                                     term_prompt::status("OK", "Já na versão mais recente");
@@ -481,6 +514,7 @@ async fn main() {
                                     "agent-bar atualizado: v{old_version} -> v{new_version}. Icons e helper da Waybar atualizados."
                                 ),
                             );
+                            omarchy_setup_hint(&home);
                             std::process::exit(0);
                         }
                         Err(e) => {
@@ -512,6 +546,7 @@ async fn main() {
                 false,
                 &format!("{APP_NAME} uninstall"),
                 &ipaths,
+                &omarchy_integration::default_omarchy_plugins_dir(&home),
             ) {
                 Ok(()) => std::process::exit(0),
                 Err(e) => {
@@ -541,6 +576,7 @@ async fn main() {
                 true,
                 &format!("{APP_NAME} remove"),
                 &ipaths,
+                &omarchy_integration::default_omarchy_plugins_dir(&home),
             ) {
                 Ok(()) => std::process::exit(0),
                 Err(e) => {

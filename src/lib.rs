@@ -11,6 +11,7 @@ pub mod http;
 pub mod install;
 pub mod logger;
 pub mod notify;
+pub mod omarchy_integration;
 pub mod providers;
 pub mod runtime;
 pub mod settings;

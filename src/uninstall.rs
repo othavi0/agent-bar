@@ -2,7 +2,10 @@
 
 use std::path::Path;
 
-use crate::app_identity::APP_NAME;
+use crate::app_identity::{APP_NAME, OMARCHY_PLUGIN_ID};
+use crate::omarchy_integration::{
+    omarchy_cli_available, remove_omarchy_plugin, run_omarchy_remove_commands,
+};
 use crate::waybar_contract::get_default_waybar_asset_paths;
 use crate::waybar_integration::{remove_waybar_integration, WaybarIntegrationPaths};
 use crate::{setup, term_prompt};
@@ -37,13 +40,14 @@ pub fn run_uninstall(
     force: bool,
     title: &str,
     integration_paths: &WaybarIntegrationPaths,
+    omarchy_plugins_dir: &Path,
 ) -> anyhow::Result<()> {
     let asset_paths = get_default_waybar_asset_paths();
     let app_symlink = home.join(".local").join("bin").join(APP_NAME);
 
     // 1. Nota listando o que será removido
     term_prompt::note(&format!(
-        "{title} — paths que serão removidos:\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}",
+        "{title} — paths que serão removidos:\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}\n  • {}",
         integration_paths.waybar_config_path.display(),
         integration_paths.waybar_style_path.display(),
         integration_paths.modules_include_path.display(),
@@ -53,6 +57,7 @@ pub fn run_uninstall(
         settings_dir.display(),
         cache_dir.display(),
         app_symlink.display(),
+        omarchy_plugins_dir.join(OMARCHY_PLUGIN_ID).display(),
     ));
 
     // 2. Confirmação (pula se force=true)
@@ -76,6 +81,21 @@ pub fn run_uninstall(
     remove_path_if_exists(settings_dir, &mut removed, &mut failed);
     remove_path_if_exists(cache_dir, &mut removed, &mut failed);
     remove_path_if_exists(&app_symlink, &mut removed, &mut failed);
+
+    // Omarchy-shell: desregistra no shell (best-effort) e remove o drop-in.
+    let plugin_dir = omarchy_plugins_dir.join(OMARCHY_PLUGIN_ID);
+    if plugin_dir.exists() {
+        if omarchy_cli_available() {
+            for warning in run_omarchy_remove_commands() {
+                term_prompt::status("Aviso", &warning);
+            }
+        }
+        match remove_omarchy_plugin(omarchy_plugins_dir) {
+            Ok(true) => removed.push(plugin_dir.to_string_lossy().into_owned()),
+            Ok(false) => {}
+            Err(_) => failed.push(plugin_dir.to_string_lossy().into_owned()),
+        }
+    }
 
     // 5. Reload Waybar se config/style foram alterados
     if integration_result.config_changed || integration_result.style_changed {

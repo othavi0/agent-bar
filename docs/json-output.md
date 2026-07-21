@@ -58,9 +58,15 @@ agent-bar --watch --interval 30            # custom poll floor
 | `error` | string | Present only on failure (key omitted when OK — check `'error' in p`). |
 | `staleReason` | string | Present only when the data was served from an expired cache after a transient fetch error (timeout, expired token). The quota fields are the last known good values; the string is the user-facing reason. Omitted for fresh data. |
 
-`Window`: `{ remaining: number, used?: number|null, resetsAt: string|null, windowMinutes?: number|null }`.
+`Window`: `{ remaining: number, used?: number|null, resetsAt: string|null, windowMinutes?: number|null, severity?: string }`.
 `remaining`/`used` are percentages (0-100). `used` is only present when a provider
 reports a distinct "used" metric that is not simply `100 - remaining` (it can exceed 100 with overage).
+`severity` is optional (`Option<String>`, omitted when absent) and comes from the
+provider's own API — today only Claude populates it, from `limits[].severity`.
+Known values: `normal`/`ok`/`warning`/`elevated`/`high`/`critical`/`exceeded`/`blocked`.
+Consumers should fall back to a local threshold on `remaining` (≥60/30/10) when
+`severity` is absent or unrecognized — this mirrors `severity_color_api` in
+`src/tui/widgets/severity.rs`.
 
 ## Stability
 
