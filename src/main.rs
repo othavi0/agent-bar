@@ -375,7 +375,7 @@ async fn main() {
                 update::InstallKind::System => {
                     term_prompt::status(
                         "Info",
-                        "Instalação de sistema detectada. Use o AUR helper (ex: yay -Syu agent-bar) para atualizar.",
+                        "Instalação de sistema detectada. Use o AUR helper para atualizar (ex: yay -Syu; pacote: agent-bar-bin).",
                     );
                     std::process::exit(0);
                 }
