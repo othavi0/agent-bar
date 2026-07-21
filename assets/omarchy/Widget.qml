@@ -21,7 +21,9 @@ BarWidget {
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property string fontFamily: bar ? bar.fontFamily : "monospace"
   readonly property var providers: payload && Array.isArray(payload.providers) ? payload.providers : []
-  readonly property int refreshIntervalSec: Math.max(30, Number(setting("refreshIntervalSec", 60)))
+  // Clamp aos limites do schema do manifest (min 30 / max 3600) — o editor
+  // do shell respeita o schema, mas shell.json editado à mão não.
+  readonly property int refreshIntervalSec: Math.min(3600, Math.max(30, Number(setting("refreshIntervalSec", 60)) || 60))
 
   // Chamado pelo PopupCard no clique-fora (owner.close()). Sem isto o card
   // faz `open = false` imperativo, o que DESTRÓI o binding open:popupOpen —

@@ -35,13 +35,7 @@ pub fn default_omarchy_plugins_dir(home: &Path) -> PathBuf {
 /// Ambos exigidos — só o dir pode ser resíduo de pacote; só a CLI pode
 /// ser um Omarchy < 4 sem shell.
 pub fn omarchy_shell_present(shell_dir: &Path, path_var: Option<&OsStr>) -> bool {
-    if !shell_dir.is_dir() {
-        return false;
-    }
-    let Some(path_var) = path_var else {
-        return false;
-    };
-    std::env::split_paths(path_var).any(|dir| dir.join("omarchy").is_file())
+    shell_dir.is_dir() && cli_on_path(path_var)
 }
 
 pub fn detect_omarchy_shell() -> bool {
@@ -51,11 +45,15 @@ pub fn detect_omarchy_shell() -> bool {
     )
 }
 
+/// Scan único de `path_var` pela CLI `omarchy` — compartilhado pela detecção
+/// do shell e pelo check do uninstall.
+fn cli_on_path(path_var: Option<&OsStr>) -> bool {
+    path_var.is_some_and(|p| std::env::split_paths(p).any(|dir| dir.join("omarchy").is_file()))
+}
+
 /// Só a CLI (usado pelo uninstall best-effort, que não exige o shell dir).
 pub fn omarchy_cli_available() -> bool {
-    std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).any(|dir| dir.join("omarchy").is_file()))
-        .unwrap_or(false)
+    cli_on_path(std::env::var_os("PATH").as_deref())
 }
 
 /// Manifest com a versão do binário injetada.
