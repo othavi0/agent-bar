@@ -50,6 +50,7 @@ pub struct CliOptions {
     pub watch: bool,
     pub interval_seconds: u32,
     pub waybar_dir: Option<String>,
+    pub omarchy_plugins_dir: Option<String>,
     pub scripts_dir: Option<String>,
     pub icons_dir: Option<String>,
     pub app_bin: Option<String>,
@@ -71,6 +72,7 @@ impl Default for CliOptions {
             watch: false,
             interval_seconds: DEFAULT_INTERVAL_SECS,
             waybar_dir: None,
+            omarchy_plugins_dir: None,
             scripts_dir: None,
             icons_dir: None,
             app_bin: None,
@@ -280,6 +282,12 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
             "--waybar-dir" => {
                 let val = require_next_arg(args, i, "--waybar-dir")?;
                 opts.waybar_dir = Some(val.to_string());
+                i += 1;
+            }
+
+            "--omarchy-plugins-dir" => {
+                let val = require_next_arg(args, i, "--omarchy-plugins-dir")?;
+                opts.omarchy_plugins_dir = Some(val.to_string());
                 i += 1;
             }
 
@@ -656,6 +664,14 @@ pub fn build_help(no_color: bool) -> String {
     ));
     out.push_str(&format!(
         "{}\n",
+        opt_line(
+            "--omarchy-plugins-dir <path>",
+            "Omarchy plugin target (setup)",
+            no_color
+        )
+    ));
+    out.push_str(&format!(
+        "{}\n",
         opt_line("--scripts-dir <path>", "Terminal helper target", no_color)
     ));
     out.push_str(&format!(
@@ -826,6 +842,24 @@ mod tests {
         assert_eq!(opts.command, Command::Doctor);
         assert!(opts.dry_run);
         assert!(opts.yes);
+    }
+
+    #[test]
+    fn setup_omarchy_plugins_dir_flag() {
+        let opts = parse_args(&args(&["setup", "--omarchy-plugins-dir", "/tmp/x"])).unwrap();
+        assert_eq!(opts.command, Command::Setup);
+        assert_eq!(opts.omarchy_plugins_dir.as_deref(), Some("/tmp/x"));
+    }
+
+    #[test]
+    fn omarchy_plugins_dir_requires_value() {
+        assert!(parse_args(&args(&["setup", "--omarchy-plugins-dir"])).is_err());
+    }
+
+    #[test]
+    fn omarchy_plugins_dir_defaults_none() {
+        let opts = parse_args(&args(&["setup"])).unwrap();
+        assert!(opts.omarchy_plugins_dir.is_none());
     }
 
     #[test]
