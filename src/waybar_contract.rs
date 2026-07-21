@@ -100,23 +100,6 @@ pub fn export_waybar_modules(
 }
 
 // ---------------------------------------------------------------------------
-// getAllProviderIds
-// ---------------------------------------------------------------------------
-
-/// Todos os provider ids conhecidos — built-in + registrados sem duplicatas.
-/// Espelha `getAllProviderIds` do TS.
-pub fn get_all_provider_ids() -> Vec<String> {
-    let mut ids: Vec<String> = WAYBAR_PROVIDERS.iter().map(|s| s.to_string()).collect();
-    for id in crate::providers::registered_provider_ids() {
-        let id_str = id.to_string();
-        if !ids.contains(&id_str) {
-            ids.push(id_str);
-        }
-    }
-    ids
-}
-
-// ---------------------------------------------------------------------------
 // CSS export
 // ---------------------------------------------------------------------------
 
