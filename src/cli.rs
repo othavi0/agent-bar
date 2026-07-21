@@ -270,7 +270,7 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
 
             "--yes" | "-y" => opts.yes = true,
 
-            // Alias histórico de status (não Command::Terminal).
+            // Alias histórico de status.
             "--terminal" | "-t" => opts.command = Command::Status,
 
             "--refresh" | "-r" => opts.refresh = true,

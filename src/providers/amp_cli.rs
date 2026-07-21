@@ -1,6 +1,6 @@
 //! Descoberta do binário `amp` (locator). Port de `src/amp-cli.ts` (só a metade
-//! locator; o `ensure_amp_cli` interativo é Plano 6). Ordem: PATH (`which`),
-//! depois caminhos conhecidos sob `$HOME`.
+//! locator; a metade `ensure_amp_cli` foi removida na limpeza v9 por não ter
+//! caller). Ordem: PATH (`which`), depois caminhos conhecidos sob `$HOME`.
 
 use std::path::{Path, PathBuf};
 
