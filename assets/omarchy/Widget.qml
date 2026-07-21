@@ -69,7 +69,7 @@ BarWidget {
   function windowLabel(w, fallback) {
     var m = Number(w && w.windowMinutes)
     if (isFinite(m) && m > 0) {
-      if (Math.abs(m - 300) <= 60) return "5h"
+      if (Math.abs(m - 300) <= 90) return "5h"
       if (Math.abs(m - 10080) <= 1440) return "Weekly"
     }
     return fallback
@@ -151,6 +151,7 @@ BarWidget {
           id: chipRow
           anchors.centerIn: parent
           spacing: 4
+          opacity: chip.modelData.staleReason ? 0.55 : 1.0
 
           Image {
             source: root.iconFile(chip.modelData.provider) ? Qt.resolvedUrl(root.iconFile(chip.modelData.provider)) : ""
