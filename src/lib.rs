@@ -5,6 +5,7 @@ pub mod app_identity;
 pub mod cache;
 pub mod cli;
 pub mod config;
+pub mod config_cmd;
 pub mod doctor;
 pub mod formatters;
 pub mod http;
