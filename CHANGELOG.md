@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.3.0] - 2026-07-21
+
+### Fixed
+- **Falso "disconnected" com usuário logado.** O Grok considera logado quem
+  tem `key` no `auth.json` — o access token de 6h (renovado pelo Grok CLI via
+  refresh token) não desloga mais a barra. Timeout do `amp usage` virou erro
+  transitório em vez de "Not logged in".
+
+### Added
+- **Fallback de cache stale:** em erro transitório (timeout de rede, token
+  expirado do Claude), a barra serve o último dado bom do cache com o aviso
+  `⚠️ Cached data — {motivo}` no tooltip, em vez do ícone de desconectado.
+  `disconnected` ficou reservado a logout real. Novo campo opcional
+  `staleReason` no `--format json` (docs/json-output.md).
+- **Amp:** ETA de reset diário (meia-noite UTC, regra do frontend oficial) no
+  free tier, indicador `↻ auto-replenish` e fallback de linhas cruas do
+  servidor no tooltip para formatos futuros do `amp usage`.
+
 ## [8.2.2] - 2026-07-19
 
 ### Changed
