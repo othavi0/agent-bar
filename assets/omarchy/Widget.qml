@@ -23,6 +23,13 @@ BarWidget {
   readonly property var providers: payload && Array.isArray(payload.providers) ? payload.providers : []
   readonly property int refreshIntervalSec: Math.max(30, Number(setting("refreshIntervalSec", 60)))
 
+  // Chamado pelo PopupCard no clique-fora (owner.close()). Sem isto o card
+  // faz `open = false` imperativo, o que DESTRÓI o binding open:popupOpen —
+  // o popup nunca mais abre. Resetar a fonte da verdade preserva o binding.
+  function close() {
+    popupOpen = false
+  }
+
   function pathFromUrl(url) { return String(url).replace(/^file:\/\//, "") }
   readonly property string helperPath: pathFromUrl(Qt.resolvedUrl("scripts/agent-bar-open-terminal"))
 
