@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.5.0] - 2026-07-21
+
+### Added
+- **Settings nativo no omarchy-shell.** Clique direito no widget abre o
+  mesmo popup em modo settings (estilo `model-usage`): toggles por
+  provider, reordenação ↑↓, display remaining/used, notify on/off e
+  intervalo de refresh. Esquerdo = usage (popup mais largo); meio =
+  refresh. Link “Abrir menu (TUI)” no rodapé; a TUI completa continua em
+  `agent-bar menu`.
+- **`agent-bar config show` / `config apply`.** Mini-API JSON do subset
+  editável (`providers`, `providerOrder`, `displayMode`, `notify`) em
+  `settings.json`, com normalização e validação. O plugin grava o
+  intervalo só via `updateEntryInline` no `shell.json` (dual-write).
+  `config apply` **não** recarrega Waybar.
+
+### Changed
+- **Help da CLI enxuto.** Vitrine: menu, status, config, setup, update,
+  uninstall, doctor. Internos (`action-right`, `assets`, `export`,
+  `menu-font`) continuam parseáveis mas fora do help. `remove` vira
+  alias de `uninstall --yes`; `-t`/`--terminal` vira alias de `status`.
+- **Docs** (`commands.md`, `omarchy-shell.md`, `architecture.md`, README)
+  alinhados aos clicks Omarchy e à taxonomia da CLI.
+
+### Fixed
+- Clique esquerdo com settings aberto volta ao usage sem fechar o popup.
+- Barreira de flush do stdout no `config apply` do QML (evita race
+  `onExited` vs `StdioCollector`).
+
 ## [8.4.1] - 2026-07-21
 
 ### Fixed
