@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.4.0] - 2026-07-21
+
+### Added
+- **Suporte ao Omarchy 4 (omarchy-shell/Quickshell).** O Omarchy 4 substituiu
+  a Waybar pelo omarchy-shell; o agent-bar agora se instala como bar-widget
+  plugin nativo de terceiro (`agent-bar.usage`): um chip por provider
+  (ícone + % restante, cores do tema do shell, severidade espelhando o TUI)
+  e popup nativo com janelas primária/secundária, breakdown por modelo e
+  reset times. Clique esquerdo abre o popup, direito abre o TUI, meio força
+  refresh. `agent-bar setup` detecta o bar disponível (Waybar, omarchy-shell
+  ou ambos) e escreve o plugin como drop-in em
+  `~/.config/omarchy/plugins/agent-bar.usage/` — arquivos QML embutidos no
+  binário, version-locked com o schema de `--format json`.
+  `uninstall`/`remove` desregistram e apagam o drop-in; `update` avisa para
+  re-rodar `setup` quando o drop-in existe. Flag nova
+  `--omarchy-plugins-dir <path>` (setup, para testes/CI). Docs:
+  `docs/omarchy-shell.md`.
+- **`severity` documentado no contrato JSON** (`docs/json-output.md`): campo
+  opcional de `Window`, vindo da API do provider, com fallback de threshold
+  local (≥60/30/10) para consumidores.
+
+### Fixed
+- Integração Waybar intocada; contrato existente segue como estava.
+
 ## [8.3.0] - 2026-07-21
 
 ### Fixed
