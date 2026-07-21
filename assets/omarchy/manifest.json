@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "agent-bar",
-    "description": "Quota chips per provider; left = popup, right = TUI, middle = refresh.",
+    "description": "Quota chips per provider; left = usage, right = settings, middle = refresh.",
     "category": "AI",
     "aliases": ["agent-bar"],
     "allowMultiple": false,
