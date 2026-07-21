@@ -100,11 +100,9 @@ pub(super) fn fetch_completed(
     // Mesmo parse de timestamp usado pelo antigo DataFetched, mas
     // nunca regride: fica o mais recente entre o atual e o parseado
     // (ondas sobrepostas podem terminar fora de ordem).
-    let parsed = time::OffsetDateTime::parse(
-        &fetched_at,
-        &time::format_description::well_known::Rfc3339,
-    )
-    .ok();
+    let parsed =
+        time::OffsetDateTime::parse(&fetched_at, &time::format_description::well_known::Rfc3339)
+            .ok();
     if let Some(new) = parsed {
         state.last_update = Some(state.last_update.map_or(new, |cur| cur.max(new)));
     }

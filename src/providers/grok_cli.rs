@@ -38,9 +38,12 @@ pub fn find_grok_bin_with(
 /// Locator de produção: `which_in_path` + `Path::is_file`.
 /// `grok_home` (ex. `paths.grok_home` / `GROK_HOME`) vira candidato logo após o PATH.
 pub fn find_grok_bin(home: &str, grok_home: Option<&Path>) -> Option<PathBuf> {
-    find_grok_bin_with(home, grok_home, crate::providers::amp_cli::which_in_path, |p| {
-        p.is_file()
-    })
+    find_grok_bin_with(
+        home,
+        grok_home,
+        crate::providers::amp_cli::which_in_path,
+        |p| p.is_file(),
+    )
 }
 
 #[cfg(test)]
@@ -87,10 +90,7 @@ mod tests {
             |_| None,
             |p| p == Path::new("/custom/grok-home/bin/grok"),
         );
-        assert_eq!(
-            found,
-            Some(PathBuf::from("/custom/grok-home/bin/grok"))
-        );
+        assert_eq!(found, Some(PathBuf::from("/custom/grok-home/bin/grok")));
     }
 
     #[test]

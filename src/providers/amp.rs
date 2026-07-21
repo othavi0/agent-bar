@@ -46,7 +46,10 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
     let account = cap1(lazy_re!(RE_SIGNED, r"Signed in as (\S+)"), 1);
 
     // Formato novo (CLI ≥ 2026-07-11): `Amp Free: 97% remaining today (resets daily)`.
-    let free_pct = cap1(lazy_re!(RE_FREE_PCT, r"Amp Free:\s*([0-9.]+)%\s*remaining"), 1);
+    let free_pct = cap1(
+        lazy_re!(RE_FREE_PCT, r"Amp Free:\s*([0-9.]+)%\s*remaining"),
+        1,
+    );
 
     // Formato antigo: `Amp Free: $3.50/$5.00 remaining` + replenish/bonus.
     let free_re = lazy_re!(RE_FREE, r"Amp Free:\s*\$([0-9.]+)/\$([0-9.]+)\s*remaining");

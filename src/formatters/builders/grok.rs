@@ -29,10 +29,7 @@ fn fmt_tokens_compact(n: u64) -> String {
 
 /// Linha da barra de contexto: `┃  ● contexto ████  87%`.
 fn contexto_bar_line(disp: Option<f64>, mode: crate::settings::DisplayMode) -> Line {
-    let mut line: Line = vec![
-        Segment::new(box_chars::V, BRAND),
-        Segment::raw_text("  "),
-    ];
+    let mut line: Line = vec![Segment::new(box_chars::V, BRAND), Segment::raw_text("  ")];
     line.extend(indicator_segments(disp, mode));
     line.push(Segment::raw_text(" "));
     line.push(Segment::new("contexto", ColorToken::TextBright));
@@ -191,7 +188,10 @@ mod tests {
     #[test]
     fn builder_mentions_context_not_plan_quota() {
         let out = render_pango(&build_grok(&clk(), &quota_with_primary(), &opts()));
-        assert!(out.contains("contexto"), "must name session context, got:\n{out}");
+        assert!(
+            out.contains("contexto"),
+            "must name session context, got:\n{out}"
+        );
         assert!(!out.to_lowercase().contains("plano"));
         assert!(!out.to_lowercase().contains("quota de plano"));
         assert!(out.contains("87%"));

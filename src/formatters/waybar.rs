@@ -409,17 +409,18 @@ mod tests {
         assert!(!s.is_empty());
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(
-            v.get("text").and_then(|t| t.as_str()).map(|t| !t.is_empty()),
+            v.get("text")
+                .and_then(|t| t.as_str())
+                .map(|t| !t.is_empty()),
             Some(true)
         );
         assert_eq!(
             v.get("class").and_then(|c| c.as_str()),
             Some("agent-bar disconnected")
         );
-        assert!(
-            v.get("tooltip")
-                .and_then(|t| t.as_str())
-                .is_some_and(|t| t.contains("boom"))
-        );
+        assert!(v
+            .get("tooltip")
+            .and_then(|t| t.as_str())
+            .is_some_and(|t| t.contains("boom")));
     }
 }

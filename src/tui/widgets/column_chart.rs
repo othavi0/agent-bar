@@ -595,7 +595,10 @@ mod tests {
     #[test]
     fn fmt_tokens_dual_omits_cache_when_zero() {
         assert_eq!(fmt_tokens_dual(1_200_000, 0), "1,2M");
-        assert_eq!(fmt_tokens_dual(1_200_000, 1_400_000_000), "1,2M (+1,4B cache)");
+        assert_eq!(
+            fmt_tokens_dual(1_200_000, 1_400_000_000),
+            "1,2M (+1,4B cache)"
+        );
     }
 
     #[test]
@@ -603,15 +606,15 @@ mod tests {
         // Muitas séries com labels longos → só cabem poucas em width=40;
         // o sufixo …+N deve aparecer.
         let s: Vec<_> = (0..6u8)
-            .map(|i| {
-                series(
-                    &format!("ModelNameVeryLong{i}"),
-                    i,
-                    vec![1000; 24],
-                )
-            })
+            .map(|i| series(&format!("ModelNameVeryLong{i}"), i, vec![1000; 24]))
             .collect();
-        let lines = column_chart_lines(&s, 40, 10, datetime!(2026-07-10 12:00:00 UTC), time::UtcOffset::UTC);
+        let lines = column_chart_lines(
+            &s,
+            40,
+            10,
+            datetime!(2026-07-10 12:00:00 UTC),
+            time::UtcOffset::UTC,
+        );
         let legend = plain(&lines).last().cloned().unwrap_or_default();
         assert!(
             legend.contains('\u{2026}') || legend.contains("…"),

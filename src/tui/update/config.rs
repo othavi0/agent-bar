@@ -122,7 +122,10 @@ pub(super) fn apply_field_edit(
     }
 }
 
-pub(super) fn init_config(state: &mut AppState, settings: crate::settings::Settings) -> Vec<Action> {
+pub(super) fn init_config(
+    state: &mut AppState,
+    settings: crate::settings::Settings,
+) -> Vec<Action> {
     // So inicializa se ainda nao existe (preserva edicoes em andamento).
     if state.config_state.is_none() {
         state.config_state = Some(ConfigState::new(&settings));
@@ -210,10 +213,7 @@ pub(super) fn save_config(state: &mut AppState) -> Vec<Action> {
     vec![]
 }
 
-pub(super) fn config_save_result(
-    state: &mut AppState,
-    result: Result<(), String>,
-) -> Vec<Action> {
+pub(super) fn config_save_result(state: &mut AppState, result: Result<(), String>) -> Vec<Action> {
     if let Some(cs) = state.config_state.as_mut() {
         cs.status_msg = Some(match result {
             Ok(()) => "Configuracao salva e Waybar recarregado.".to_string(),

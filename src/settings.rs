@@ -389,10 +389,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let s = load(&paths_in(dir.path()));
         assert_eq!(s.version, 2);
-        assert_eq!(
-            s.waybar.providers,
-            vec!["claude", "codex", "amp", "grok"]
-        );
+        assert_eq!(s.waybar.providers, vec!["claude", "codex", "amp", "grok"]);
         assert_eq!(s.waybar.separators, SeparatorStyle::Gap);
         assert_eq!(s.waybar.display_mode, DisplayMode::Remaining);
         assert_eq!(s.waybar.interval, 60);
