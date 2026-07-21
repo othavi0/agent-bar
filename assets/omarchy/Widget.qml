@@ -101,7 +101,10 @@ BarWidget {
   }
 
   function openTui() {
-    if (bar) bar.run(bar.shellQuote(root.helperPath) + " agent-bar menu")
+    // Util.shellQuote, não bar.shellQuote: o README do bar documenta
+    // bar.shellQuote(), mas o Bar do 4.0.0.alpha não expõe a função —
+    // widgets first-party usam Util (Workspaces.qml faz igual).
+    if (bar) bar.run(Util.shellQuote(root.helperPath) + " agent-bar menu")
   }
 
   implicitWidth: root.vertical ? root.barSize : chips.implicitWidth + 12
