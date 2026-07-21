@@ -1,6 +1,6 @@
 [package]
 name = "agent-bar"
-version = "8.4.0"
+version = "8.4.1"
 edition = "2021"
 # 1.88: piso real, não 1.80 — tachyonfx (via anpa) exige 1.82.
 rust-version = "1.88"

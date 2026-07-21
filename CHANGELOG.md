@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [8.4.1] - 2026-07-21
+
+### Fixed
+- **Widget omarchy-shell:** `refreshIntervalSec` agora respeita também o teto
+  do schema (3600s) quando o `shell.json` é editado à mão — antes só o piso
+  (30s) era aplicado.
+
+### Changed
+- **Publicação automática no AUR.** O workflow de release ganhou o job
+  `publish-aur`: a cada GitHub Release, o CI preenche
+  `pkgver`/`pkgrel`/`sha256sums` e pusha o `agent-bar-bin` para o AUR
+  (versão nova → `pkgrel=1`; mesma versão com packaging alterado →
+  `pkgrel+1`; sem mudança → skip). `pkgdesc` e mensagens de
+  install/upgrade do pacote agora citam o omarchy-shell.
+- Dedup interno do scan de PATH pela CLI `omarchy`
+  (`omarchy_integration::cli_on_path`).
+
 ## [8.4.0] - 2026-07-21
 
 ### Added
