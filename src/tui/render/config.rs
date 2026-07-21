@@ -278,7 +278,6 @@ mod tests {
             version: 2,
             waybar: Waybar {
                 providers: vec!["claude".to_string(), "codex".to_string()],
-                show_percentage: true,
                 separators: SeparatorStyle::Gap,
                 provider_order: vec!["claude".to_string(), "codex".to_string()],
                 display_mode: DisplayMode::Remaining,
