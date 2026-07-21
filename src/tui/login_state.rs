@@ -53,6 +53,7 @@ mod tests {
             models: None,
             extra: None,
             error: error.map(|s| s.to_string()),
+            stale_reason: None,
         }
     }
 

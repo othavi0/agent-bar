@@ -339,6 +339,7 @@ mod tests {
             models: None,
             extra: None,
             error: None,
+            stale_reason: None,
         }
     }
 
@@ -376,6 +377,15 @@ mod tests {
     }
 
     #[test]
+    fn per_provider_stale_renders_normal_with_warning() {
+        let mut q = claude(75.0);
+        q.stale_reason = Some("Request timeout".into());
+        let out = format_provider_for_waybar(&clk(), &q, &settings(), DisplayMode::Remaining);
+        assert!(!out.class.contains("disconnected"));
+        assert!(out.tooltip.contains("Cached data — Request timeout"));
+    }
+
+    #[test]
     fn aggregate_empty_text() {
         let q = AllQuotas {
             providers: vec![],
@@ -409,17 +419,18 @@ mod tests {
         assert!(!s.is_empty());
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(
-            v.get("text").and_then(|t| t.as_str()).map(|t| !t.is_empty()),
+            v.get("text")
+                .and_then(|t| t.as_str())
+                .map(|t| !t.is_empty()),
             Some(true)
         );
         assert_eq!(
             v.get("class").and_then(|c| c.as_str()),
             Some("agent-bar disconnected")
         );
-        assert!(
-            v.get("tooltip")
-                .and_then(|t| t.as_str())
-                .is_some_and(|t| t.contains("boom"))
-        );
+        assert!(v
+            .get("tooltip")
+            .and_then(|t| t.as_str())
+            .is_some_and(|t| t.contains("boom")));
     }
 }

@@ -81,21 +81,24 @@ pub(crate) fn context_remaining_pct(used: u64, window: u64) -> Option<f64> {
 }
 
 /// Parse de `auth.json`. JSON inválido → `InvalidCredentials`.
-/// Sem entry com `key` não vazio, ou todas expiradas → `logged_in = false`.
-pub(crate) fn parse_auth_entries(bytes: &[u8], now: OffsetDateTime) -> Result<AuthView, GrokError> {
+/// Logado = existe entry com `key` não vazio. `expires_at` NÃO desloga:
+/// o access token (6h) é renovado pelo Grok CLI via refresh_token, e este
+/// provider é zero-rede — nem usa o token, só lê signals.json.
+pub(crate) fn parse_auth_entries(
+    bytes: &[u8],
+    _now: OffsetDateTime,
+) -> Result<AuthView, GrokError> {
     let map: HashMap<String, AuthEntry> =
         serde_json::from_slice(bytes).map_err(|_| GrokError::InvalidCredentials)?;
 
-    // Entre entries com key não vazio, preferir a de expires_at mais distante.
+    // Entre entries com key não vazio, preferir a de expires_at mais distante
+    // (desempate estável quando o CLI mantém múltiplas entradas).
     let mut best: Option<(OffsetDateTime, AuthEntry)> = None;
-    let mut any_with_key = false;
-
     for (_k, entry) in map {
         let key = entry.key.as_deref().unwrap_or("").trim();
         if key.is_empty() {
             continue;
         }
-        any_with_key = true;
         let exp = entry
             .expires_at
             .as_deref()
@@ -107,25 +110,16 @@ pub(crate) fn parse_auth_entries(bytes: &[u8], now: OffsetDateTime) -> Result<Au
         }
     }
 
-    if !any_with_key {
-        return Ok(AuthView {
-            account: None,
-            logged_in: false,
-        });
-    }
-
-    let Some((exp, entry)) = best else {
+    let Some((_exp, entry)) = best else {
         return Ok(AuthView {
             account: None,
             logged_in: false,
         });
     };
 
-    let account = account_label(&entry);
-    let logged_in = exp > now;
     Ok(AuthView {
-        account: Some(account),
-        logged_in,
+        account: Some(account_label(&entry)),
+        logged_in: true,
     })
 }
 
@@ -526,11 +520,21 @@ mod tests {
     }
 
     #[test]
-    fn parse_auth_expired() {
+    fn parse_auth_expired_token_still_logged_in() {
         let now = datetime!(2026-07-17 12:00:00 UTC);
         let view = parse_auth_entries(&fixture_bytes("auth-expired.json"), now).unwrap();
-        assert!(!view.logged_in);
+        // Access token vencido ≠ logout: o Grok CLI renova via refresh_token.
+        assert!(view.logged_in);
         assert_eq!(view.account.as_deref(), Some("Test User"));
+    }
+
+    #[test]
+    fn parse_auth_empty_key_not_logged_in() {
+        let now = datetime!(2026-07-17 12:00:00 UTC);
+        let json = br#"{"https://auth.x.ai::c": {"key": "", "first_name": "X"}}"#;
+        let view = parse_auth_entries(json, now).unwrap();
+        assert!(!view.logged_in);
+        assert!(view.account.is_none());
     }
 
     #[test]
@@ -624,19 +628,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn not_logged_in_expired() {
+    async fn expired_access_token_still_serves_quota() {
         let dir = tempdir().unwrap();
         write_auth(dir.path(), "auth-expired.json");
+        write_signals(
+            dir.path(),
+            "proj/sid/signals.json",
+            &fixture_str("signals-recent.json"),
+        );
         let s = settings();
         let client = reqwest::Client::new();
         let ctx = ctx_for(dir.path(), &s, &client, 1_720_000_000_000);
         let q = GrokProvider.get_quota(&ctx).await;
-        assert!(!q.available);
-        assert_eq!(
-            q.error.as_deref(),
-            Some("Not logged in. Open `agent-bar menu` and choose Provider login.")
-        );
+        assert!(q.available, "err={:?}", q.error);
         assert_eq!(q.account.as_deref(), Some("Test User"));
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 90.0);
     }
 
     #[tokio::test]

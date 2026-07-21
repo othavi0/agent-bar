@@ -26,6 +26,7 @@ pub fn quota_base(id: &str, name: &str) -> ProviderQuota {
         models: None,
         extra: None,
         error: None,
+        stale_reason: None,
     }
 }
 
@@ -91,6 +92,22 @@ pub async fn base_get_quota<S: QuotaSource>(source: &S, ctx: &Ctx<'_>) -> Provid
                 "Provider quota fetch error: provider={} error={e}",
                 source.id()
             );
+            // Erro transitório não é logout: servir cache mesmo vencido,
+            // marcado como stale, em vez de derrubar pra "disconnected".
+            if e.is_transient() {
+                if let Some(raw) =
+                    cache::get_stale::<S::Raw>(&ctx.paths.cache_dir, source.cache_key())
+                {
+                    let mut q = source.build_quota(raw, base.clone(), ctx);
+                    // Raw degenerado (ex. sem janelas) constrói quota de erro:
+                    // stale só serve se renderiza saudável; senão cai no erro
+                    // transitório normal.
+                    if q.available && q.error.is_none() {
+                        q.stale_reason = Some(source.to_user_facing_error(&e));
+                        return q;
+                    }
+                }
+            }
             ProviderQuota {
                 error: Some(source.to_user_facing_error(&e)),
                 ..base
@@ -138,6 +155,14 @@ mod tests {
             }
         }
         fn build_quota(&self, raw: String, base: ProviderQuota, _ctx: &Ctx<'_>) -> ProviderQuota {
+            // Raw degenerado simula ex. Codex sem janelas de quota: constrói
+            // quota de erro em vez de saudável.
+            if raw == "BAD" {
+                return ProviderQuota {
+                    error: Some("degenerate".to_string()),
+                    ..base
+                };
+            }
             ProviderQuota {
                 available: true,
                 account: Some(raw),
@@ -193,6 +218,68 @@ mod tests {
         // segunda chamada: serve do cache, sem novo fetch.
         let _ = base_get_quota(&f, &ctx).await;
         assert_eq!(calls.get(), 1, "fetch só uma vez (cache hit no 2º)");
+    }
+
+    #[tokio::test]
+    async fn transient_error_with_stale_cache_serves_stale() {
+        let dir = tempdir().unwrap();
+        let calls = Cell::new(0);
+        let settings = crate::providers::test_support::settings();
+        let client = reqwest::Client::new();
+        let f = Fake {
+            available: true,
+            fail: true,
+            calls: &calls,
+        };
+        // Cache vencido: escrito em t=0 com ttl=1ms; ctx roda em t=1_000.
+        crate::cache::set(
+            &dir.path().join("cache"),
+            "fake-key",
+            &"OLD".to_string(),
+            1,
+            0,
+        )
+        .unwrap();
+        let ctx = ctx_for(dir.path(), &settings, &client, 1_000);
+        let q = base_get_quota(&f, &ctx).await;
+        assert!(q.available, "stale deve construir quota normal");
+        assert_eq!(q.account.as_deref(), Some("OLD"));
+        assert_eq!(q.error, None);
+        assert_eq!(q.stale_reason.as_deref(), Some("Failed to parse usage"));
+    }
+
+    #[tokio::test]
+    async fn stale_cache_with_degenerate_raw_falls_through_to_transient_error() {
+        let dir = tempdir().unwrap();
+        let calls = Cell::new(0);
+        let settings = crate::providers::test_support::settings();
+        let client = reqwest::Client::new();
+        let f = Fake {
+            available: true,
+            fail: true,
+            calls: &calls,
+        };
+        // Cache vencido com raw degenerado: build_quota("BAD") produz uma
+        // quota já com `error` setado — não deve ser servida como "stale".
+        crate::cache::set(
+            &dir.path().join("cache"),
+            "fake-key",
+            &"BAD".to_string(),
+            1,
+            0,
+        )
+        .unwrap();
+        let ctx = ctx_for(dir.path(), &settings, &client, 1_000);
+        let q = base_get_quota(&f, &ctx).await;
+        assert!(
+            !q.available,
+            "stale degenerado não deve ser servido como saudável"
+        );
+        assert_eq!(q.error.as_deref(), Some("Failed to parse usage"));
+        assert_eq!(
+            q.stale_reason, None,
+            "sem stale_reason: cai no erro transitório normal"
+        );
     }
 
     #[tokio::test]

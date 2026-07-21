@@ -56,6 +56,7 @@ agent-bar --watch --interval 30            # custom poll floor
 | `models` | map of `Window` | Optional per-model/bucket windows. |
 | `extra` | object | **Unstable** — see below. |
 | `error` | string | Present only on failure (key omitted when OK — check `'error' in p`). |
+| `staleReason` | string | Present only when the data was served from an expired cache after a transient fetch error (timeout, expired token). The quota fields are the last known good values; the string is the user-facing reason. Omitted for fresh data. |
 
 `Window`: `{ remaining: number, used?: number|null, resetsAt: string|null, windowMinutes?: number|null }`.
 `remaining`/`used` are percentages (0-100). `used` is only present when a provider

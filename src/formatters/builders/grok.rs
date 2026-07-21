@@ -10,7 +10,7 @@ use crate::providers::extras::get_grok_extra;
 use crate::providers::types::ProviderQuota;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, vline, BuildOptions};
+use super::shared::{build_footer_line, header_line, stale_line, vline, BuildOptions};
 
 const BRAND: ColorToken = ColorToken::Cyan;
 
@@ -29,10 +29,7 @@ fn fmt_tokens_compact(n: u64) -> String {
 
 /// Linha da barra de contexto: `┃  ● contexto ████  87%`.
 fn contexto_bar_line(disp: Option<f64>, mode: crate::settings::DisplayMode) -> Line {
-    let mut line: Line = vec![
-        Segment::new(box_chars::V, BRAND),
-        Segment::raw_text("  "),
-    ];
+    let mut line: Line = vec![Segment::new(box_chars::V, BRAND), Segment::raw_text("  ")];
     line.extend(indicator_segments(disp, mode));
     line.push(Segment::raw_text(" "));
     line.push(Segment::new("contexto", ColorToken::TextBright));
@@ -55,6 +52,11 @@ pub fn build_grok(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> V
         options.header_width,
         BRAND,
     ));
+
+    if let Some(l) = stale_line(p, BRAND) {
+        lines.push(l);
+    }
+
     lines.push(vline(BRAND));
 
     if let Some(err) = p.error.as_deref() {
@@ -185,13 +187,17 @@ mod tests {
                 recent_model: Some("grok-4.5".into()),
             })),
             error: None,
+            stale_reason: None,
         }
     }
 
     #[test]
     fn builder_mentions_context_not_plan_quota() {
         let out = render_pango(&build_grok(&clk(), &quota_with_primary(), &opts()));
-        assert!(out.contains("contexto"), "must name session context, got:\n{out}");
+        assert!(
+            out.contains("contexto"),
+            "must name session context, got:\n{out}"
+        );
         assert!(!out.to_lowercase().contains("plano"));
         assert!(!out.to_lowercase().contains("quota de plano"));
         assert!(out.contains("87%"));

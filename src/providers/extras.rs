@@ -58,6 +58,7 @@ mod tests {
             models: None,
             extra,
             error: None,
+            stale_reason: None,
         }
     }
 
@@ -101,10 +102,7 @@ mod tests {
 
     #[test]
     fn grok_getter_returns_payload() {
-        let q = base(
-            "grok",
-            Some(ProviderExtra::Grok(GrokQuotaExtra::default())),
-        );
+        let q = base("grok", Some(ProviderExtra::Grok(GrokQuotaExtra::default())));
         assert!(get_grok_extra(&q).is_some());
         assert!(get_claude_extra(&q).is_none());
         assert!(get_codex_extra(&q).is_none());
@@ -114,10 +112,7 @@ mod tests {
     #[test]
     fn grok_getter_gated_by_provider_string() {
         // provider diz "amp" mas o payload é Grok → None.
-        let q = base(
-            "amp",
-            Some(ProviderExtra::Grok(GrokQuotaExtra::default())),
-        );
+        let q = base("amp", Some(ProviderExtra::Grok(GrokQuotaExtra::default())));
         assert!(get_grok_extra(&q).is_none());
         assert!(get_amp_extra(&q).is_none());
     }

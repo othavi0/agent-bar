@@ -288,6 +288,7 @@ mod tests {
             models: None,
             extra: None,
             error: None,
+            stale_reason: None,
         }
     }
 
@@ -426,6 +427,7 @@ mod tests {
             models: None,
             extra: None,
             error: Some("x".into()),
+            stale_reason: None,
         };
         let plan = plan_notifications(&wrap(vec![p]), &HashMap::new());
         assert_eq!(plan.fires.len(), 0);
@@ -452,6 +454,7 @@ mod tests {
             models: Some(models),
             extra: None,
             error: None,
+            stale_reason: None,
         };
         let plan = plan_notifications(&wrap(vec![amp]), &HashMap::new());
         assert_eq!(plan.fires.len(), 1);
@@ -478,6 +481,7 @@ mod tests {
                 extra_usage: None,
             })),
             error: None,
+            stale_reason: None,
         };
         let plan = plan_notifications(&wrap(vec![c]), &HashMap::new());
         assert!(plan

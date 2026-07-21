@@ -15,11 +15,21 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::DisplayMode;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, label_line, vline, AmpLayout, BuildOptions};
+use super::shared::{
+    build_footer_line, header_line, label_line, stale_line, vline, AmpLayout, BuildOptions,
+};
 
 /// Valor de meta com semântica truthy do JS: Some só se presente E não-vazio.
 fn meta_get<'a>(m: &'a BTreeMap<String, String>, k: &str) -> Option<&'a str> {
     m.get(k).map(|s| s.as_str()).filter(|s| !s.is_empty())
+}
+
+/// Linhas cruas `Label: valor` preservadas pelo parser quando o formato do
+/// servidor não é reconhecido (preparo p/ assinatura megawatt/gigawatt).
+fn raw_lines(m: &BTreeMap<String, String>) -> Vec<&str> {
+    (0..4)
+        .filter_map(|i| meta_get(m, &format!("raw{i}")))
+        .collect()
 }
 
 /// Junta freeRemaining/freeTotal (truthy) com " / ".
@@ -87,6 +97,11 @@ pub fn build_amp(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Ve
         options.header_width,
         ColorToken::Magenta,
     ));
+
+    if let Some(l) = stale_line(p, ColorToken::Magenta) {
+        lines.push(l);
+    }
+
     lines.push(vline(ColorToken::Magenta));
 
     if let Some(err) = p.error.as_deref() {
@@ -98,11 +113,24 @@ pub fn build_amp(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Ve
     } else if layout == AmpLayout::Generic {
         // TUI: loop genérico, sem special-casing de Free Tier/Credits.
         match p.models.as_ref().filter(|mm| !mm.is_empty()) {
-            None => lines.push(vec![
-                Segment::new(box_chars::V, ColorToken::Magenta),
-                Segment::raw_text("  "),
-                Segment::new("No usage data", ColorToken::Muted),
-            ]),
+            None => {
+                let raws = raw_lines(m);
+                if raws.is_empty() {
+                    lines.push(vec![
+                        Segment::new(box_chars::V, ColorToken::Magenta),
+                        Segment::raw_text("  "),
+                        Segment::new("No usage data", ColorToken::Muted),
+                    ]);
+                } else {
+                    for raw in raws {
+                        lines.push(vec![
+                            Segment::new(box_chars::V, ColorToken::Magenta),
+                            Segment::raw_text("  "),
+                            Segment::new(raw.to_string(), ColorToken::Text),
+                        ]);
+                    }
+                }
+            }
             Some(models) => {
                 let max_len = models
                     .keys()
@@ -128,8 +156,13 @@ pub fn build_amp(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Ve
         if let Some(free) = free {
             let rem = free.remaining;
             let disp = to_display(Some(rem), mode);
+            let free_label = if meta_get(m, "freeCadence") == Some("daily") {
+                "Free Tier · daily"
+            } else {
+                "Free Tier"
+            };
             lines.push(label_line(
-                "Free Tier",
+                free_label,
                 options.label_color,
                 ColorToken::Magenta,
             ));
@@ -262,6 +295,10 @@ pub fn build_amp(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Ve
             line.extend(indicator_segments(credit_disp, mode));
             line.push(Segment::raw_text(" "));
             line.push(Segment::new(balance_text, credit_color));
+            if meta_get(m, "creditsReplenish").is_some() {
+                line.push(Segment::raw_text("  "));
+                line.push(Segment::new("↻ auto-replenish", ColorToken::Comment));
+            }
             lines.push(line);
         }
 
@@ -282,6 +319,24 @@ pub fn build_amp(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) -> Ve
                 for (name, window) in models {
                     let disp = to_display(Some(window.remaining), mode);
                     lines.push(generic_model_line(name, max_len, disp, mode));
+                }
+            } else {
+                // Formato de servidor não reconhecido: mostra as linhas cruas
+                // em vez de um card vazio (ex.: assinatura nova do Amp).
+                let raws = raw_lines(m);
+                if !raws.is_empty() {
+                    lines.push(label_line(
+                        "Usage",
+                        options.label_color,
+                        ColorToken::Magenta,
+                    ));
+                    for raw in raws {
+                        lines.push(vec![
+                            Segment::new(box_chars::V, ColorToken::Magenta),
+                            Segment::raw_text("  "),
+                            Segment::new(raw.to_string(), ColorToken::Text),
+                        ]);
+                    }
                 }
             }
         }
@@ -373,6 +428,7 @@ mod tests {
             models: Some(models),
             extra: Some(ProviderExtra::Amp(AmpQuotaExtra { meta: Some(meta) })),
             error: None,
+            stale_reason: None,
         }
     }
 
@@ -422,6 +478,60 @@ mod tests {
         o.account_in_header = true;
         let out = render_pango(&build_amp(&clk(), &amp_with_free_and_credits(), &o));
         assert!(!out.contains("Account:"));
+    }
+
+    #[test]
+    fn daily_cadence_label_and_replenish_hint() {
+        let mut q = amp_with_free_and_credits();
+        if let Some(ProviderExtra::Amp(a)) = q.extra.as_mut() {
+            let m = a.meta.as_mut().unwrap();
+            m.insert("freeCadence".to_string(), "daily".to_string());
+            m.insert("creditsReplenish".to_string(), "auto".to_string());
+        }
+        let out = render_pango(&build_amp(&clk(), &q, &opts(AmpLayout::Inline)));
+        assert!(out.contains("Free Tier · daily"));
+        assert!(out.contains("↻ auto-replenish"));
+    }
+
+    #[test]
+    fn no_cadence_keeps_plain_labels() {
+        let out = render_pango(&build_amp(
+            &clk(),
+            &amp_with_free_and_credits(),
+            &opts(AmpLayout::Inline),
+        ));
+        assert!(!out.contains("Free Tier · daily"));
+        assert!(!out.contains("auto-replenish"));
+    }
+
+    #[test]
+    fn raw_lines_fallback_when_no_known_models() {
+        let mut meta = BTreeMap::new();
+        meta.insert(
+            "raw0".to_string(),
+            "Subscription (Gigawatt): $12.00 of $200.00 used".to_string(),
+        );
+        meta.insert("raw1".to_string(), "Orb usage: 3% used".to_string());
+        let q = ProviderQuota {
+            provider: "amp".into(),
+            display_name: "Amp".into(),
+            available: true,
+            account: Some("me@x.com".into()),
+            plan: None,
+            plan_type: None,
+            primary: None,
+            secondary: None,
+            models: Some(IndexMap::new()),
+            extra: Some(ProviderExtra::Amp(AmpQuotaExtra { meta: Some(meta) })),
+            error: None,
+            stale_reason: None,
+        };
+        for layout in [AmpLayout::Inline, AmpLayout::Generic] {
+            let out = render_pango(&build_amp(&clk(), &q, &opts(layout)));
+            assert!(out.contains("Subscription (Gigawatt): $12.00 of $200.00 used"));
+            assert!(out.contains("Orb usage: 3% used"));
+            assert!(!out.contains("No usage data"));
+        }
     }
 
     #[test]

@@ -80,6 +80,16 @@ pub fn set<T: Serialize>(
     Ok(())
 }
 
+/// Lê o cache IGNORANDO o TTL (`None` só em miss/corrompido/key inválida).
+/// Para fallback em erro transitório: dado velho identificado no tooltip
+/// é mais honesto que ícone de desconectado quando o usuário está logado.
+pub fn get_stale<T: DeserializeOwned>(cache_dir: &Path, key: &str) -> Option<T> {
+    let path = cache_path(cache_dir, key).ok()?;
+    let bytes = std::fs::read(&path).ok()?;
+    let entry: CacheEntryOwned<T> = serde_json::from_slice(&bytes).ok()?;
+    Some(entry.data)
+}
+
 /// Remove a entrada (no-op se ausente ou key inválida).
 pub fn invalidate(cache_dir: &Path, key: &str) {
     if let Ok(path) = cache_path(cache_dir, key) {
@@ -140,5 +150,26 @@ mod tests {
         invalidate(dir.path(), "k");
         let got: Option<u32> = get(dir.path(), "k", 0);
         assert_eq!(got, None);
+    }
+
+    #[test]
+    fn get_stale_ignores_expiry() {
+        let dir = tempdir().unwrap();
+        set(dir.path(), "k", &"v".to_string(), 5_000, 1_000).unwrap();
+        // now (10_000) > expires_at (6_000): get normal → None, stale → Some
+        let fresh: Option<String> = get(dir.path(), "k", 10_000);
+        assert_eq!(fresh, None);
+        let stale: Option<String> = get_stale(dir.path(), "k");
+        assert_eq!(stale, Some("v".to_string()));
+    }
+
+    #[test]
+    fn get_stale_none_on_missing_or_corrupt() {
+        let dir = tempdir().unwrap();
+        let missing: Option<String> = get_stale(dir.path(), "nope");
+        assert_eq!(missing, None);
+        std::fs::write(dir.path().join("bad.json"), b"{ not json").unwrap();
+        let corrupt: Option<String> = get_stale(dir.path(), "bad");
+        assert_eq!(corrupt, None);
     }
 }

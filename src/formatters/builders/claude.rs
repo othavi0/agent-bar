@@ -11,7 +11,9 @@ use crate::providers::types::ProviderQuota;
 use crate::settings::DisplayMode;
 use crate::theme::{box_chars, ColorToken};
 
-use super::shared::{build_footer_line, header_line, label_line, model_line, vline, BuildOptions};
+use super::shared::{
+    build_footer_line, header_line, label_line, model_line, stale_line, vline, BuildOptions,
+};
 
 /// Linha de Extra Usage: indicador + nome + barra + pct + texto `$used/$limit`.
 fn extra_usage_line(
@@ -52,6 +54,11 @@ pub fn build_claude(clock: &Clock, p: &ProviderQuota, options: &BuildOptions) ->
         options.header_width,
         ColorToken::Orange,
     ));
+
+    if let Some(l) = stale_line(p, ColorToken::Orange) {
+        lines.push(l);
+    }
+
     lines.push(vline(ColorToken::Orange));
 
     if let Some(err) = p.error.as_deref() {
@@ -207,6 +214,7 @@ mod tests {
             models: None,
             extra: None,
             error: None,
+            stale_reason: None,
         }
     }
 
@@ -245,6 +253,20 @@ mod tests {
         let out = render_pango(&build_claude(&clk(), &q, &opts()));
         assert!(out.contains("⚠️ token expired"));
         assert!(!out.contains("5-hour limit"));
+    }
+
+    #[test]
+    fn stale_reason_uses_brand_vline_color() {
+        let mut q = base();
+        q.stale_reason = Some("Request timeout".into());
+        let lines = build_claude(&clk(), &q, &opts());
+        // header + stale + ...
+        let stale = &lines[1];
+        assert_eq!(stale[0].text, "┃");
+        assert_eq!(stale[0].color, ColorToken::Orange); // brand color, não Text
+        assert_eq!(stale[2].color, ColorToken::Yellow);
+        let rendered = render_pango(&lines);
+        assert!(rendered.contains("Cached data — Request timeout"));
     }
 
     #[test]

@@ -103,12 +103,11 @@ impl Provider for CodexProvider {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::iso_from_ms;
     use super::super::types::{CodexQuotaExtra, ProviderExtra, ProviderQuota};
+    use super::*;
     use indexmap::IndexMap;
     use time::UtcOffset;
 
@@ -125,6 +124,7 @@ mod tests {
             models: None,
             extra: None,
             error: None,
+            stale_reason: None,
         }
     }
 

@@ -356,6 +356,7 @@ mod tests {
             models: None,
             extra: None,
             error: None,
+            stale_reason: None,
         }
     }
 
@@ -478,6 +479,7 @@ mod tests {
                 }),
             })),
             error: None,
+            stale_reason: None,
         })
     }
 
@@ -498,6 +500,7 @@ mod tests {
             models: Some(models),
             extra: Some(ProviderExtra::Amp(AmpQuotaExtra { meta: None })),
             error: None,
+            stale_reason: None,
         })
     }
 
@@ -516,6 +519,7 @@ mod tests {
             error: Some(
                 "Not logged in. Open `agent-bar menu` and choose Provider login.".to_string(),
             ),
+            stale_reason: None,
         })
     }
 
@@ -914,6 +918,7 @@ mod tests {
             models: None,
             extra: None,
             error: Some("Failed to fetch Codex usage".to_string()),
+            stale_reason: None,
         });
 
         let backend = ratatui::backend::TestBackend::new(100, 32);

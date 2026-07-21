@@ -13,6 +13,7 @@ use super::base::{get_or_fetch, quota_base};
 use super::error::ClaudeError;
 use super::types::{ClaudeQuotaExtra, ExtraUsage, ProviderExtra, ProviderQuota, QuotaWindow};
 use super::{Ctx, Provider};
+use crate::cache;
 
 /// Resolve o plano de exibição a partir de `subscriptionType` + `rateLimitTier`
 /// (o tier carrega o multiplicador, ex. `default_claude_max_5x` → `Max 5x`).
@@ -345,9 +346,30 @@ impl Provider for ClaudeProvider {
             oauth.as_ref().and_then(|o| o.rate_limit_tier.as_deref()),
         );
 
-        // Short-circuit pré-request: token já expirado → sem rede, sem cache.
+        // Token expirado: sem rede (o refresh é do Claude Code, não nosso).
+        // Cache válido → serve normal; cache vencido → serve como stale;
+        // sem cache nenhum → erro (disconnected honesto).
         if let Some(exp) = oauth.as_ref().and_then(|o| o.expires_at) {
             if exp <= ctx.now_ms as f64 {
+                if let Some(usage) = cache::get::<ClaudeUsageResponse>(
+                    &ctx.paths.cache_dir,
+                    self.cache_key(),
+                    ctx.now_ms,
+                ) {
+                    return quota_from_usage(usage, plan, base, None);
+                }
+                if let Some(usage) =
+                    cache::get_stale::<ClaudeUsageResponse>(&ctx.paths.cache_dir, self.cache_key())
+                {
+                    if let Some(q) = healthy_stale_quota(
+                        usage,
+                        plan.clone(),
+                        base.clone(),
+                        ClaudeError::TokenExpired.to_string(),
+                    ) {
+                        return q;
+                    }
+                }
                 return ProviderQuota {
                     plan: Some(plan),
                     error: Some(ClaudeError::TokenExpired.to_string()),
@@ -373,108 +395,159 @@ impl Provider for ClaudeProvider {
             Ok(u) => u,
             Err(ClaudeError::Timeout) => {
                 log::warn!("Claude API timeout");
-                return ProviderQuota {
-                    plan: Some(plan),
-                    error: Some(ClaudeError::Timeout.to_string()),
-                    ..base
-                };
+                return stale_or_error(
+                    ctx,
+                    self.cache_key(),
+                    plan,
+                    base,
+                    ClaudeError::Timeout.to_string(),
+                );
             }
             Err(e @ ClaudeError::Api(_)) => {
                 log::warn!("Claude API error: {e}");
-                return ProviderQuota {
-                    plan: Some(plan),
-                    error: Some(e.to_string()),
-                    ..base
-                };
+                return stale_or_error(ctx, self.cache_key(), plan, base, e.to_string());
             }
             Err(e) => {
                 log::error!("Claude API fetch error: {e}");
-                return ProviderQuota {
-                    plan: Some(plan),
-                    error: Some(ClaudeError::Generic.to_string()),
-                    ..base
-                };
+                return stale_or_error(
+                    ctx,
+                    self.cache_key(),
+                    plan,
+                    base,
+                    ClaudeError::Generic.to_string(),
+                );
             }
         };
 
-        // Check pós-cache: body 200 pode trazer token_expired.
-        if usage.error.as_ref().map(|e| e.error_code.as_str()) == Some("token_expired") {
-            return ProviderQuota {
-                plan: Some(plan),
-                error: Some(ClaudeError::TokenExpired.to_string()),
-                ..base
-            };
-        }
+        quota_from_usage(usage, plan, base, None)
+    }
+}
 
-        // limits[] (novo shape) tem precedência; five_hour/seven_day* legado é
-        // o fallback para contas que ainda não recebem o bloco novo.
-        let (primary, secondary, weekly) = match quota_from_limits(&usage) {
-            Some(t) => t,
-            None => {
-                let primary = usage.five_hour.as_ref().map(window_from);
-                let secondary = usage.seven_day.as_ref().map(window_from);
-                let mut weekly: IndexMap<String, QuotaWindow> = IndexMap::new();
-                if let Some(w) = usage.seven_day_opus.as_ref() {
-                    weekly.insert("Opus".to_string(), window_from(w));
-                }
-                if let Some(w) = usage.seven_day_sonnet.as_ref() {
-                    weekly.insert("Sonnet".to_string(), window_from(w));
-                }
-                if let Some(w) = usage.seven_day_cowork.as_ref() {
-                    weekly.insert("Cowork".to_string(), window_from(w));
-                }
-                (primary, secondary, weekly)
-            }
-        };
-
-        // extra_usage: spend novo tem precedência; legado como fallback.
-        let extra_usage = match usage.spend.as_ref() {
-            Some(s) => Some(extra_usage_from_spend(s)),
-            None => usage
-                .extra_usage
-                .as_ref()
-                .filter(|e| e.is_enabled)
-                .and_then(|e| {
-                    // A API nova pode mandar is_enabled=true com os 3 campos null
-                    // (crédito migrou p/ `spend`). Só montamos ExtraUsage se houver
-                    // dados reais — senão omitimos (não inventar 0%/$0).
-                    Some(ExtraUsage {
-                        enabled: true,
-                        remaining: (100.0 - e.utilization?).round(),
-                        limit: e.monthly_limit?,
-                        used: e.used_credits?.round(),
-                    })
-                }),
-        };
-
-        let models = if weekly.is_empty() {
-            None
-        } else {
-            Some(weekly.clone())
-        };
-
-        let extra = if !weekly.is_empty() || extra_usage.is_some() {
-            Some(ProviderExtra::Claude(ClaudeQuotaExtra {
-                weekly_models: if weekly.is_empty() {
-                    None
-                } else {
-                    Some(weekly)
-                },
-                extra_usage,
-            }))
-        } else {
-            None
-        };
-
-        ProviderQuota {
-            available: true,
+/// Bloco pós-fetch/pós-cache: body 200 pode trazer `token_expired`; senão
+/// monta janelas (limits[] novo ou five_hour/seven_day* legado) + extra_usage.
+/// `stale_reason` rotula o quota quando `usage` vem de cache vencido; as
+/// saídas de erro internas (ex. token_expired no corpo) mantêm `..base`
+/// (que já carrega `stale_reason: None` de `quota_base`) — um corpo cacheado
+/// doente nunca deve ser rotulado como stale saudável.
+fn quota_from_usage(
+    usage: ClaudeUsageResponse,
+    plan: String,
+    base: ProviderQuota,
+    stale_reason: Option<String>,
+) -> ProviderQuota {
+    // Check pós-cache: body 200 pode trazer token_expired.
+    if usage.error.as_ref().map(|e| e.error_code.as_str()) == Some("token_expired") {
+        return ProviderQuota {
             plan: Some(plan),
-            primary,
-            secondary,
-            models,
-            extra,
+            error: Some(ClaudeError::TokenExpired.to_string()),
             ..base
+        };
+    }
+
+    // limits[] (novo shape) tem precedência; five_hour/seven_day* legado é
+    // o fallback para contas que ainda não recebem o bloco novo.
+    let (primary, secondary, weekly) = match quota_from_limits(&usage) {
+        Some(t) => t,
+        None => {
+            let primary = usage.five_hour.as_ref().map(window_from);
+            let secondary = usage.seven_day.as_ref().map(window_from);
+            let mut weekly: IndexMap<String, QuotaWindow> = IndexMap::new();
+            if let Some(w) = usage.seven_day_opus.as_ref() {
+                weekly.insert("Opus".to_string(), window_from(w));
+            }
+            if let Some(w) = usage.seven_day_sonnet.as_ref() {
+                weekly.insert("Sonnet".to_string(), window_from(w));
+            }
+            if let Some(w) = usage.seven_day_cowork.as_ref() {
+                weekly.insert("Cowork".to_string(), window_from(w));
+            }
+            (primary, secondary, weekly)
         }
+    };
+
+    // extra_usage: spend novo tem precedência; legado como fallback.
+    let extra_usage = match usage.spend.as_ref() {
+        Some(s) => Some(extra_usage_from_spend(s)),
+        None => usage
+            .extra_usage
+            .as_ref()
+            .filter(|e| e.is_enabled)
+            .and_then(|e| {
+                // A API nova pode mandar is_enabled=true com os 3 campos null
+                // (crédito migrou p/ `spend`). Só montamos ExtraUsage se houver
+                // dados reais — senão omitimos (não inventar 0%/$0).
+                Some(ExtraUsage {
+                    enabled: true,
+                    remaining: (100.0 - e.utilization?).round(),
+                    limit: e.monthly_limit?,
+                    used: e.used_credits?.round(),
+                })
+            }),
+    };
+
+    let models = if weekly.is_empty() {
+        None
+    } else {
+        Some(weekly.clone())
+    };
+
+    let extra = if !weekly.is_empty() || extra_usage.is_some() {
+        Some(ProviderExtra::Claude(ClaudeQuotaExtra {
+            weekly_models: if weekly.is_empty() {
+                None
+            } else {
+                Some(weekly)
+            },
+            extra_usage,
+        }))
+    } else {
+        None
+    };
+
+    ProviderQuota {
+        available: true,
+        plan: Some(plan),
+        primary,
+        secondary,
+        models,
+        extra,
+        stale_reason,
+        ..base
+    }
+}
+
+/// Constrói o quota a partir de cache stale e só o devolve se saudável
+/// (`available` e sem erro embutido no corpo cacheado, ex. token_expired).
+/// Doente → `None`: quem chama cai no erro puro em vez de expor um "stale"
+/// que já nasce quebrado.
+fn healthy_stale_quota(
+    usage: ClaudeUsageResponse,
+    plan: String,
+    base: ProviderQuota,
+    stale_reason: String,
+) -> Option<ProviderQuota> {
+    let q = quota_from_usage(usage, plan, base, Some(stale_reason));
+    (q.available && q.error.is_none()).then_some(q)
+}
+
+/// Erro de fetch (timeout/API/decode): tenta servir cache stale saudável
+/// antes do erro puro; sem stale utilizável, retorna o erro corrente.
+fn stale_or_error(
+    ctx: &Ctx<'_>,
+    cache_key: &str,
+    plan: String,
+    base: ProviderQuota,
+    err_msg: String,
+) -> ProviderQuota {
+    if let Some(usage) = cache::get_stale::<ClaudeUsageResponse>(&ctx.paths.cache_dir, cache_key) {
+        if let Some(q) = healthy_stale_quota(usage, plan.clone(), base.clone(), err_msg.clone()) {
+            return q;
+        }
+    }
+    ProviderQuota {
+        plan: Some(plan),
+        error: Some(err_msg),
+        ..base
     }
 }
 
@@ -553,6 +626,148 @@ mod tests {
             q.error.as_deref(),
             Some("Token expired. Open `agent-bar menu` and choose Provider login.")
         );
+    }
+
+    /// Fixture de usage compartilhada entre os testes de cache stale.
+    fn usage_fixture() -> ClaudeUsageResponse {
+        serde_json::from_value(json!({
+            "five_hour": {"utilization": 25.0, "resets_at": "2026-03-28T14:00:00Z"},
+            "seven_day": {"utilization": 40.0, "resets_at": "2026-04-01T00:00:00Z"}
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn token_expired_with_stale_cache_serves_stale() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 10_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"t","subscriptionType":"Pro","expiresAt":5000}}),
+        );
+        // Cache já vencido (ttl=1ms escrito em now_ms=0, lido em now_ms=10_000).
+        cache::set(&ctx.paths.cache_dir, "claude-usage", &usage_fixture(), 1, 0).unwrap();
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(q.available);
+        assert_eq!(q.error, None);
+        assert_eq!(
+            q.stale_reason.as_deref(),
+            Some("Token expired. Open `agent-bar menu` and choose Provider login.")
+        );
+        assert!(q.primary.is_some());
+    }
+
+    #[tokio::test]
+    async fn token_expired_without_cache_keeps_error() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 10_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"t","subscriptionType":"Pro","expiresAt":5000}}),
+        );
+        // sem cache no disco.
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(!q.available);
+        assert_eq!(
+            q.error.as_deref(),
+            Some("Token expired. Open `agent-bar menu` and choose Provider login.")
+        );
+        assert_eq!(q.stale_reason, None);
+    }
+
+    /// Guard-rail (revisão da Task 3): servir stale só se o resultado for
+    /// saudável. Corpo cacheado que já traz `token_expired` embutido não pode
+    /// virar um "stale" que na verdade está quebrado — cai no erro puro.
+    #[tokio::test]
+    async fn token_expired_stale_cache_itself_unhealthy_falls_through_to_error() {
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let ctx = ctx_for(dir.path(), &s, &client, 10_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"t","subscriptionType":"Pro","expiresAt":5000}}),
+        );
+        let unhealthy: ClaudeUsageResponse = serde_json::from_value(json!({
+            "error": {"error_code": "token_expired", "message": "expired"}
+        }))
+        .unwrap();
+        cache::set(&ctx.paths.cache_dir, "claude-usage", &unhealthy, 1, 0).unwrap();
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(!q.available);
+        assert_eq!(
+            q.error.as_deref(),
+            Some("Token expired. Open `agent-bar menu` and choose Provider login.")
+        );
+        assert_eq!(q.stale_reason, None, "não deve rotular um stale doente");
+    }
+
+    /// Mesmo guard-rail, agora no braço de erro de fetch (429): stale doente
+    /// no disco não pode mascarar o erro real com um "stale" quebrado.
+    #[tokio::test]
+    async fn fetch_error_stale_cache_itself_unhealthy_falls_through_to_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(429))
+            .mount(&server)
+            .await;
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+        let unhealthy: ClaudeUsageResponse = serde_json::from_value(json!({
+            "error": {"error_code": "token_expired", "message": "expired"}
+        }))
+        .unwrap();
+        cache::set(&ctx.paths.cache_dir, "claude-usage", &unhealthy, 1, 0).unwrap();
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(!q.available);
+        assert_eq!(q.error.as_deref(), Some("Claude API error: 429"));
+        assert_eq!(q.stale_reason, None, "não deve rotular um stale doente");
+    }
+
+    /// Braço de erro de fetch com stale SAUDÁVEL disponível: serve o cache
+    /// vencido rotulado com o erro transitório, em vez de "disconnected".
+    #[tokio::test]
+    async fn fetch_timeout_with_healthy_stale_cache_serves_stale() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/oauth/usage"))
+            .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(5)))
+            .mount(&server)
+            .await;
+        let dir = tempdir().unwrap();
+        let s = settings();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(50))
+            .build()
+            .unwrap();
+        let url = format!("{}/api/oauth/usage", server.uri());
+        let ctx = ctx_with_url(&dir, &s, &client, url, 1_000);
+        write_creds(
+            &ctx.paths.claude_credentials,
+            json!({"claudeAiOauth":{"accessToken":"tok","subscriptionType":"Pro"}}),
+        );
+        cache::set(&ctx.paths.cache_dir, "claude-usage", &usage_fixture(), 1, 0).unwrap();
+
+        let q = ClaudeProvider.get_quota(&ctx).await;
+        assert!(q.available);
+        assert_eq!(q.error, None);
+        assert_eq!(q.stale_reason.as_deref(), Some("Request timeout"));
+        assert!(q.primary.is_some());
     }
 
     #[tokio::test]

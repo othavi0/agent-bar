@@ -117,6 +117,10 @@ pub struct ProviderQuota {
     pub extra: Option<ProviderExtra>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Motivo de dado stale: erro transitório respondido com cache vencido.
+    /// `None` = dado fresco (ou erro real em `error`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stale_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -185,6 +189,7 @@ mod tests {
             models: None,
             extra: None,
             error: None,
+            stale_reason: None,
         };
         let j = serde_json::to_value(q).unwrap();
         assert_eq!(j["provider"], "claude");
@@ -199,6 +204,7 @@ mod tests {
             "models",
             "extra",
             "error",
+            "staleReason",
         ] {
             assert!(
                 j.get(absent).is_none(),
@@ -230,5 +236,28 @@ mod tests {
         let j = serde_json::to_value(aq).unwrap();
         assert_eq!(j["fetchedAt"], "2026-06-19T14:00:00Z");
         assert!(j["providers"].is_array());
+    }
+
+    #[test]
+    fn stale_reason_omitted_when_none_present_when_some() {
+        let mut q = ProviderQuota {
+            provider: "amp".into(),
+            display_name: "Amp".into(),
+            available: true,
+            account: None,
+            plan: None,
+            plan_type: None,
+            primary: None,
+            secondary: None,
+            models: None,
+            extra: None,
+            error: None,
+            stale_reason: None,
+        };
+        let j = serde_json::to_value(&q).unwrap();
+        assert!(j.get("staleReason").is_none());
+        q.stale_reason = Some("Request timeout".into());
+        let j = serde_json::to_value(&q).unwrap();
+        assert_eq!(j["staleReason"], "Request timeout");
     }
 }

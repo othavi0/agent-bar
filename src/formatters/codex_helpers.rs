@@ -131,6 +131,7 @@ mod tests {
             models: Some(models),
             extra: None,
             error: None,
+            stale_reason: None,
         }
     }
 

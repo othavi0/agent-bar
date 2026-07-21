@@ -337,9 +337,7 @@ pub(super) fn click(state: &mut AppState, target: MouseTarget) -> Vec<Action> {
         MouseTarget::Chip(ChipKind::ToggleRange) => {
             super::update(state, Action::ToggleHistoryRange)
         }
-        MouseTarget::Chip(ChipKind::ExpandDay) => {
-            super::update(state, Action::HistoryToggleDay)
-        }
+        MouseTarget::Chip(ChipKind::ExpandDay) => super::update(state, Action::HistoryToggleDay),
         // Chip "iniciar login" da tela Login: dispara a MESMA action que
         // o Enter dispara lá (Action::LoginRequested pro provider
         // selecionado) — nunca Activate(Login), que seria no-op (a
@@ -348,9 +346,7 @@ pub(super) fn click(state: &mut AppState, target: MouseTarget) -> Vec<Action> {
             state,
             Action::LoginRequested(login_selected_id(state.login_selected).to_string()),
         ),
-        MouseTarget::Chip(ChipKind::EnterEdit) => {
-            super::update(state, Action::ConfigEnterEdit)
-        }
+        MouseTarget::Chip(ChipKind::EnterEdit) => super::update(state, Action::ConfigEnterEdit),
         MouseTarget::Chip(ChipKind::SaveConfig) => super::update(state, Action::SaveConfig),
     }
 }

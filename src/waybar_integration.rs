@@ -835,12 +835,9 @@ mod orchestration_tests {
         let mr = parsed["modules-right"].as_array().unwrap();
         assert!(mr.iter().any(|v| v == "clock"));
         assert!(mr.iter().any(|v| v == "battery"));
-        for id in get_app_module_ids(&[
-            "claude".into(),
-            "codex".into(),
-            "amp".into(),
-            "grok".into(),
-        ]) {
+        for id in
+            get_app_module_ids(&["claude".into(), "codex".into(), "amp".into(), "grok".into()])
+        {
             assert!(mr.iter().any(|v| v.as_str() == Some(&id)), "missing {id}");
         }
         let inc = parsed["include"].as_array().unwrap();
@@ -903,12 +900,9 @@ mod orchestration_tests {
         ))
         .unwrap();
         let mr = final_cfg["modules-right"].as_array().unwrap();
-        for id in get_app_module_ids(&[
-            "claude".into(),
-            "codex".into(),
-            "amp".into(),
-            "grok".into(),
-        ]) {
+        for id in
+            get_app_module_ids(&["claude".into(), "codex".into(), "amp".into(), "grok".into()])
+        {
             assert!(!mr.iter().any(|v| v.as_str() == Some(&id)));
         }
         assert!(mr.iter().any(|v| v == "clock"));
@@ -940,12 +934,9 @@ mod orchestration_tests {
         assert_eq!(cfg["layer"], "top");
         assert_eq!(cfg["position"], "top");
         let mr = cfg["modules-right"].as_array().unwrap();
-        for id in get_app_module_ids(&[
-            "claude".into(),
-            "codex".into(),
-            "amp".into(),
-            "grok".into(),
-        ]) {
+        for id in
+            get_app_module_ids(&["claude".into(), "codex".into(), "amp".into(), "grok".into()])
+        {
             assert!(mr.iter().any(|v| v.as_str() == Some(&id)), "missing {id}");
         }
         let inc = cfg["include"].as_array().unwrap();

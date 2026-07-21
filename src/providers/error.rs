@@ -42,6 +42,8 @@ pub enum AmpError {
     NotInstalled,
     #[error("Not logged in. Open `agent-bar menu` and choose Provider login.")]
     NotLoggedIn,
+    #[error("Request timeout")]
+    Timeout,
     #[error("Failed to parse usage")]
     ParseFailed,
     #[error("Failed to fetch Amp usage")]
@@ -68,6 +70,25 @@ pub enum ProviderError {
     Amp(#[from] AmpError),
     #[error(transparent)]
     Grok(#[from] GrokError),
+}
+
+impl ProviderError {
+    /// Transitório = falha de infra (rede/CLI/parse) que não significa
+    /// logout; o caller pode servir cache stale. Credencial/logout → false.
+    pub fn is_transient(&self) -> bool {
+        match self {
+            ProviderError::Claude(e) => matches!(
+                e,
+                ClaudeError::Timeout | ClaudeError::Api(_) | ClaudeError::Generic
+            ),
+            ProviderError::Codex(e) => matches!(e, CodexError::Generic),
+            ProviderError::Amp(e) => matches!(
+                e,
+                AmpError::Timeout | AmpError::Generic | AmpError::ParseFailed
+            ),
+            ProviderError::Grok(_) => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -156,5 +177,28 @@ mod tests {
     fn provider_error_wraps_transparently() {
         let e: ProviderError = ClaudeError::NoAccessToken.into();
         assert_eq!(e.to_string(), "No access token");
+    }
+
+    #[test]
+    fn amp_timeout_string_verbatim() {
+        assert_eq!(AmpError::Timeout.to_string(), "Request timeout");
+    }
+
+    #[test]
+    fn transient_classification() {
+        assert!(ProviderError::from(ClaudeError::Timeout).is_transient());
+        assert!(ProviderError::from(ClaudeError::Api(500)).is_transient());
+        assert!(ProviderError::from(ClaudeError::Generic).is_transient());
+        assert!(!ProviderError::from(ClaudeError::NotLoggedIn).is_transient());
+        assert!(!ProviderError::from(ClaudeError::TokenExpired).is_transient());
+        assert!(ProviderError::from(AmpError::Timeout).is_transient());
+        assert!(ProviderError::from(AmpError::Generic).is_transient());
+        assert!(ProviderError::from(AmpError::ParseFailed).is_transient());
+        assert!(!ProviderError::from(AmpError::NotLoggedIn).is_transient());
+        assert!(!ProviderError::from(AmpError::NotInstalled).is_transient());
+        assert!(ProviderError::from(CodexError::Generic).is_transient());
+        assert!(!ProviderError::from(CodexError::NotLoggedIn).is_transient());
+        assert!(!ProviderError::from(CodexError::NoRateLimitData).is_transient());
+        assert!(!ProviderError::from(GrokError::NotLoggedIn).is_transient());
     }
 }
