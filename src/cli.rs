@@ -30,6 +30,10 @@ pub enum Command {
     /// `settings.menu` p/ o helper `scripts/agent-bar-open-terminal`. Não
     /// aparece no help nem em `KNOWN_COMMANDS` (não é sugerido em typos).
     MenuFont,
+    /// `config show` — imprime subset editável do settings como JSON.
+    ConfigShow,
+    /// `config apply` — aplica patch JSON (--json / --file / stdin).
+    ConfigApply,
 }
 
 /// Formato de saída do módulo Waybar.
@@ -57,6 +61,12 @@ pub struct CliOptions {
     pub terminal_script: Option<String>,
     pub dry_run: bool,
     pub yes: bool,
+    /// Payload de `config apply --json` (None se `--json -` ou `--file`).
+    pub config_json: Option<String>,
+    /// `config apply --json -` — main deve ler o blob de stdin.
+    pub config_json_stdin: bool,
+    /// Path de `config apply --file <path>` — main lê o arquivo.
+    pub config_file: Option<String>,
     /// Avisos não-fatais coletados durante o parse — o caller imprime em stderr.
     pub warnings: Vec<String>,
 }
@@ -79,6 +89,9 @@ impl Default for CliOptions {
             terminal_script: None,
             dry_run: false,
             yes: false,
+            config_json: None,
+            config_json_stdin: false,
+            config_file: None,
             warnings: Vec::new(),
         }
     }
@@ -95,13 +108,12 @@ const KNOWN_COMMANDS: &[&str] = &[
     "menu",
     "status",
     "setup",
-    "assets",
-    "export",
     "update",
     "uninstall",
     "remove",
     "action-right",
     "doctor",
+    "config",
     "help",
 ];
 
@@ -216,8 +228,37 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
 
             "update" => opts.command = Command::Update,
             "uninstall" => opts.command = Command::Uninstall,
-            "remove" => opts.command = Command::Remove,
+            // Alias: force uninstall (yes=true) sem vitrine no help.
+            "remove" => {
+                opts.command = Command::Uninstall;
+                opts.yes = true;
+            }
             "doctor" => opts.command = Command::Doctor,
+
+            "config" => match args.get(i + 1).map(|s| s.as_str()) {
+                Some("show") => {
+                    opts.command = Command::ConfigShow;
+                    i += 1;
+                }
+                Some("apply") => {
+                    opts.command = Command::ConfigApply;
+                    i += 1;
+                }
+                Some("--help" | "help" | "-h") => {
+                    opts.command = Command::Help;
+                    i += 1;
+                }
+                None => {
+                    opts.command = Command::Help;
+                }
+                Some(other) => {
+                    return Err(CliError {
+                        message: format!(
+                            "Unknown subcommand for 'config': {other}. Use 'show' or 'apply'."
+                        ),
+                    });
+                }
+            },
 
             "action-right" => {
                 let provider = require_next_arg(args, i, "action-right")?;
@@ -230,7 +271,8 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
 
             "--yes" | "-y" => opts.yes = true,
 
-            "--terminal" | "-t" => opts.command = Command::Terminal,
+            // Alias histórico de status (não Command::Terminal).
+            "--terminal" | "-t" => opts.command = Command::Status,
 
             "--refresh" | "-r" => opts.refresh = true,
 
@@ -315,6 +357,22 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
                 i += 1;
             }
 
+            "--json" => {
+                let val = require_next_arg(args, i, "--json")?;
+                if val == "-" {
+                    opts.config_json_stdin = true;
+                } else {
+                    opts.config_json = Some(val.to_string());
+                }
+                i += 1;
+            }
+
+            "--file" => {
+                let val = require_next_arg(args, i, "--file")?;
+                opts.config_file = Some(val.to_string());
+                i += 1;
+            }
+
             "--help" | "-h" | "help" => opts.command = Command::Help,
 
             "--version" | "-V" => opts.command = Command::Version,
@@ -358,6 +416,28 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
     if interval_given && !opts.watch {
         opts.warnings
             .push("[agent-bar] --interval has no effect without --watch".to_string());
+    }
+
+    if opts.command == Command::ConfigApply {
+        let sources = [
+            opts.config_json.is_some(),
+            opts.config_json_stdin,
+            opts.config_file.is_some(),
+        ]
+        .into_iter()
+        .filter(|b| *b)
+        .count();
+        if sources == 0 {
+            return Err(CliError {
+                message: "config apply requires --json <blob>, --json -, or --file <path>"
+                    .to_string(),
+            });
+        }
+        if sources > 1 {
+            return Err(CliError {
+                message: "config apply: use only one of --json or --file".to_string(),
+            });
+        }
     }
 
     Ok(opts)
@@ -524,7 +604,7 @@ pub fn build_help(no_color: bool) -> String {
 
     out.push_str(&format!("{}\n", v_line(no_color)));
 
-    // Seção Commands
+    // Seção Commands (vitrine pública — internos ficam parseáveis mas ocultos)
     out.push_str(&format!("{}\n", label_line("Commands", no_color)));
     out.push_str(&format!(
         "{}\n",
@@ -536,29 +616,17 @@ pub fn build_help(no_color: bool) -> String {
     ));
     out.push_str(&format!(
         "{}\n",
+        cmd_line("config show", "Print editable settings (JSON)", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line("config apply", "Apply settings patch from JSON", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
         cmd_line(
             "setup",
             &format!("Install + wire {APP_NAME} in Waybar"),
-            no_color
-        )
-    ));
-    out.push_str(&format!(
-        "{}\n",
-        cmd_line("assets install", "Install icons/helper only", no_color)
-    ));
-    out.push_str(&format!(
-        "{}\n",
-        cmd_line(
-            "export waybar-modules",
-            "Print Waybar JSON module contract",
-            no_color
-        )
-    ));
-    out.push_str(&format!(
-        "{}\n",
-        cmd_line(
-            "export waybar-css",
-            "Print Waybar CSS JSON contract",
             no_color
         )
     ));
@@ -580,10 +648,6 @@ pub fn build_help(no_color: bool) -> String {
     ));
     out.push_str(&format!(
         "{}\n",
-        cmd_line("remove", "Force remove without prompt", no_color)
-    ));
-    out.push_str(&format!(
-        "{}\n",
         cmd_line(
             "doctor",
             &format!("Detect & clean {APP_NAME} leftovers in $HOME"),
@@ -592,19 +656,27 @@ pub fn build_help(no_color: bool) -> String {
     ));
     out.push_str(&format!("{}\n", v_line(no_color)));
 
-    // Seção Waybar
-    out.push_str(&format!("{}\n", label_line("Waybar", no_color)));
+    // Seção Omarchy / Waybar (resumo curto)
+    out.push_str(&format!("{}\n", label_line("Omarchy / Waybar", no_color)));
     out.push_str(&format!(
         "{}\n",
-        wb_line("Left click", "Interactive menu", no_color)
+        wb_line("Default poll", "Waybar JSON; --format json = shell", no_color)
     ));
     out.push_str(&format!(
         "{}\n",
-        wb_line("Right click", "Refresh / Login", no_color)
+        wb_line(
+            "Omarchy",
+            "Left usage · right settings · middle refresh",
+            no_color
+        )
     ));
     out.push_str(&format!(
         "{}\n",
-        wb_line("Hover", "Detailed tooltip", no_color)
+        wb_line(
+            "Waybar",
+            "Left menu · right action (internal) · hover tooltip",
+            no_color
+        )
     ));
     out.push_str(&format!("{}\n", v_line(no_color)));
 
@@ -816,10 +888,16 @@ mod tests {
 
     #[test]
     fn command_remove() {
-        assert_eq!(
-            parse_args(&args(&["remove"])).unwrap().command,
-            Command::Remove
-        );
+        let opts = parse_args(&args(&["remove"])).unwrap();
+        assert_eq!(opts.command, Command::Uninstall);
+        assert!(opts.yes);
+    }
+
+    #[test]
+    fn remove_aliases_uninstall_yes() {
+        let opts = parse_args(&args(&["remove"])).unwrap();
+        assert_eq!(opts.command, Command::Uninstall);
+        assert!(opts.yes);
     }
 
     #[test]
@@ -827,6 +905,62 @@ mod tests {
         assert_eq!(
             parse_args(&args(&["doctor"])).unwrap().command,
             Command::Doctor
+        );
+    }
+
+    #[test]
+    fn command_config_show() {
+        let opts = parse_args(&args(&["config", "show"])).unwrap();
+        assert_eq!(opts.command, Command::ConfigShow);
+    }
+
+    #[test]
+    fn command_config_apply_json() {
+        let opts = parse_args(&args(&[
+            "config",
+            "apply",
+            "--json",
+            r#"{"schemaVersion":1}"#,
+        ]))
+        .unwrap();
+        assert_eq!(opts.command, Command::ConfigApply);
+        assert_eq!(
+            opts.config_json.as_deref(),
+            Some(r#"{"schemaVersion":1}"#)
+        );
+        assert!(!opts.config_json_stdin);
+        assert!(opts.config_file.is_none());
+    }
+
+    #[test]
+    fn command_config_apply_json_stdin() {
+        let opts = parse_args(&args(&["config", "apply", "--json", "-"])).unwrap();
+        assert_eq!(opts.command, Command::ConfigApply);
+        assert!(opts.config_json_stdin);
+        assert!(opts.config_json.is_none());
+        assert!(opts.config_file.is_none());
+    }
+
+    #[test]
+    fn command_config_apply_file() {
+        let opts = parse_args(&args(&["config", "apply", "--file", "/tmp/c.json"])).unwrap();
+        assert_eq!(opts.command, Command::ConfigApply);
+        assert_eq!(opts.config_file.as_deref(), Some("/tmp/c.json"));
+        assert!(opts.config_json.is_none());
+        assert!(!opts.config_json_stdin);
+    }
+
+    #[test]
+    fn command_config_apply_requires_payload() {
+        let err = parse_args(&args(&["config", "apply"])).unwrap_err();
+        assert!(err.message.contains("--json") || err.message.contains("--file"));
+    }
+
+    #[test]
+    fn command_config_bare_is_help() {
+        assert_eq!(
+            parse_args(&args(&["config"])).unwrap().command,
+            Command::Help
         );
     }
 
@@ -888,6 +1022,12 @@ mod tests {
     }
 
     #[test]
+    fn action_right_still_parses() {
+        let opts = parse_args(&args(&["action-right", "claude"])).unwrap();
+        assert_eq!(opts.command, Command::ActionRight);
+    }
+
+    #[test]
     fn command_version_long() {
         assert_eq!(
             parse_args(&args(&["--version"])).unwrap().command,
@@ -931,7 +1071,7 @@ mod tests {
     fn flag_terminal_long() {
         assert_eq!(
             parse_args(&args(&["--terminal"])).unwrap().command,
-            Command::Terminal
+            Command::Status
         );
     }
 
@@ -939,8 +1079,16 @@ mod tests {
     fn flag_terminal_short() {
         assert_eq!(
             parse_args(&args(&["-t"])).unwrap().command,
-            Command::Terminal
+            Command::Status
         );
+    }
+
+    #[test]
+    fn terminal_flag_aliases_status() {
+        let opts = parse_args(&args(&["--terminal"])).unwrap();
+        assert_eq!(opts.command, Command::Status);
+        let opts = parse_args(&args(&["-t"])).unwrap();
+        assert_eq!(opts.command, Command::Status);
     }
 
     #[test]
@@ -1258,5 +1406,22 @@ mod tests {
     fn build_help_ends_with_newline() {
         let help = build_help(false);
         assert!(help.ends_with('\n'), "build_help deve terminar em '\\n'");
+    }
+
+    #[test]
+    fn build_help_hides_internals() {
+        let help = build_help(true);
+        assert!(help.contains("config"));
+        assert!(help.contains("menu"));
+        assert!(help.contains("status"));
+        assert!(!help.contains("action-right"));
+        assert!(!help.contains("assets install"));
+        assert!(!help.contains("export waybar-modules"));
+        assert!(!help.contains("menu-font"));
+        // remove não como comando de vitrine
+        assert!(
+            !help.lines().any(|l| l.contains("remove") && l.contains("Force")),
+            "remove não deve aparecer como comando primário"
+        );
     }
 }

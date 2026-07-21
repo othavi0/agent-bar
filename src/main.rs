@@ -183,6 +183,81 @@ async fn main() {
             std::process::exit(0);
         }
 
+        Command::ConfigShow => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let view = agent_bar::config_cmd::show(&paths);
+            match serde_json::to_string_pretty(&view) {
+                Ok(j) => {
+                    println!("{j}");
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        Command::ConfigApply => {
+            let paths = match Paths::from_env() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("{e}");
+                    std::process::exit(1);
+                }
+            };
+            let raw = if opts.config_json_stdin {
+                use std::io::Read;
+                let mut buf = String::new();
+                if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
+                    log::error!("failed to read stdin: {e}");
+                    std::process::exit(1);
+                }
+                buf
+            } else if let Some(path) = &opts.config_file {
+                match std::fs::read_to_string(path) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        log::error!("failed to read {path}: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            } else if let Some(j) = &opts.config_json {
+                j.clone()
+            } else {
+                log::error!(
+                    "config apply requires --json <blob>, --json -, or --file <path>"
+                );
+                std::process::exit(1);
+            };
+            match agent_bar::config_cmd::apply_json(&paths, &raw) {
+                Ok(view) => match serde_json::to_string_pretty(&view) {
+                    Ok(j) => {
+                        println!("{j}");
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        log::error!("{e}");
+                        std::process::exit(1);
+                    }
+                },
+                Err(agent_bar::config_cmd::ApplyError::Validation(m)) => {
+                    eprintln!("{m}");
+                    std::process::exit(1);
+                }
+                Err(agent_bar::config_cmd::ApplyError::Io(m)) => {
+                    eprintln!("{m}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
         Command::Setup => {
             let paths = match Paths::from_env() {
                 Ok(p) => p,
@@ -526,6 +601,7 @@ async fn main() {
             }
         }
 
+        // `remove` parseia como Uninstall + yes=true; `--yes` no uninstall também força.
         Command::Uninstall => {
             let paths = match Paths::from_env() {
                 Ok(p) => p,
@@ -539,42 +615,13 @@ async fn main() {
                 .unwrap_or_default();
             let settings_dir = home.join(".config").join(APP_NAME);
             let ipaths = waybar_integration::get_default_waybar_integration_paths();
+            let force = opts.yes;
             match uninstall::run_uninstall(
                 &settings_dir,
                 &paths.cache_dir,
                 &home,
-                false,
+                force,
                 &format!("{APP_NAME} uninstall"),
-                &ipaths,
-                &omarchy_integration::default_omarchy_plugins_dir(&home),
-            ) {
-                Ok(()) => std::process::exit(0),
-                Err(e) => {
-                    log::error!("{e}");
-                    std::process::exit(1);
-                }
-            }
-        }
-
-        Command::Remove => {
-            let paths = match Paths::from_env() {
-                Ok(p) => p,
-                Err(e) => {
-                    log::error!("{e}");
-                    std::process::exit(1);
-                }
-            };
-            let home = std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_default();
-            let settings_dir = home.join(".config").join(APP_NAME);
-            let ipaths = waybar_integration::get_default_waybar_integration_paths();
-            match uninstall::run_uninstall(
-                &settings_dir,
-                &paths.cache_dir,
-                &home,
-                true,
-                &format!("{APP_NAME} remove"),
                 &ipaths,
                 &omarchy_integration::default_omarchy_plugins_dir(&home),
             ) {

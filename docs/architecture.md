@@ -45,12 +45,16 @@ goes to `stderr` via `logger`. Breaking that contract breaks the bar.
 
 `parse_args` (`src/cli.rs`) turns argv into `CliOptions`. `main()` dispatches:
 
-- **Subcommands** (`menu`, `setup`, `doctor`, `update`, `action-right`, …) are
-  dispatched by pattern match and handled, then the process exits.
+- **Subcommands** (`menu`, `setup`, `doctor`, `update`, `config show|apply`,
+  `action-right`, …) are dispatched by pattern match and handled, then the
+  process exits. `config show|apply` is implemented in `src/config_cmd.rs`
+  (editable settings subset only; no Waybar reload). `action-right` remains
+  the Waybar right-click path; Omarchy uses the native popup settings mode
+  instead (see [omarchy-shell.md](omarchy-shell.md)).
 - **`--watch`** hands off to `start_watch` (`src/watch.rs`) and streams NDJSON.
 - Otherwise it resolves quotas and prints a single payload. The default command
-  is `waybar`; `status`/`terminal` print the ANSI view; `--format json` prints
-  the versioned envelope.
+  is `waybar`; `status` (`-t`/`--terminal` alias) prints the ANSI view;
+  `--format json` prints the versioned envelope.
 
 Two Waybar render shapes share the formatter:
 
@@ -167,6 +171,7 @@ injection bug, so all Pango output goes through it.
 | `src/main.rs` | Entry point; dispatch by command/flags. |
 | `src/cli.rs` | argv → `CliOptions`; `--help` rendering; command suggestions. |
 | `src/config.rs` | Paths (XDG), cache TTL, API endpoints, color thresholds. |
+| `src/config_cmd.rs` | `config show` / `config apply` — editable settings subset (JSON). |
 | `src/cache.rs` | File-based quota cache (5 min, cross-process, atomic writes). |
 | `src/providers/mod.rs` | Registration, parallel fan-out, timeout/retry. |
 | `src/providers/base.rs` | `BaseProvider` `get_quota()` orchestration. |
@@ -178,12 +183,14 @@ injection bug, so all Pango output goes through it.
 | `src/formatters/json.rs` | Versioned JSON envelope (`schemaVersion`). |
 | `src/waybar_contract.rs` | Generated Waybar modules/CSS/asset install (the integration contract). |
 | `src/notify.rs` | Best-effort low/critical desktop notifications. |
-| `src/action_right.rs` | Right-click handler — resolves TUI focus (provider detail or Login) from connection state. |
+| `src/action_right.rs` | Waybar right-click handler — resolves TUI focus (provider detail or Login) from connection state. |
+| `src/omarchy_integration.rs` | Omarchy drop-in install/remove; embeds `Widget.qml` / manifest. |
 
 ## See Also
 
-- [Commands](commands.md) — public CLI surface, flags, and `action-right`.
+- [Commands](commands.md) — public CLI surface, `config`, flags, and internals.
 - [Runtime](runtime.md) — owned paths, settings, cache, credentials.
 - [Waybar contract](waybar-contract.md) — generated modules, classes, click actions.
+- [Omarchy shell](omarchy-shell.md) — plugin drop-in, settings popup, dual-write.
 - [JSON output](json-output.md) — `--format json` / `--watch` schema.
 - [New provider guide](new-provider.md) — implementing a provider on `BaseProvider`.
