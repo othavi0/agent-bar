@@ -151,10 +151,16 @@ mod tests {
         let prev = std::env::var_os("XDG_CONFIG_HOME");
         std::env::set_var("XDG_CONFIG_HOME", "/tmp/xdg-test");
         let dir = default_omarchy_plugins_dir(std::path::Path::new("/home/u"));
-        assert_eq!(dir, std::path::PathBuf::from("/tmp/xdg-test/omarchy/plugins"));
+        assert_eq!(
+            dir,
+            std::path::PathBuf::from("/tmp/xdg-test/omarchy/plugins")
+        );
         std::env::remove_var("XDG_CONFIG_HOME");
         let dir = default_omarchy_plugins_dir(std::path::Path::new("/home/u"));
-        assert_eq!(dir, std::path::PathBuf::from("/home/u/.config/omarchy/plugins"));
+        assert_eq!(
+            dir,
+            std::path::PathBuf::from("/home/u/.config/omarchy/plugins")
+        );
         match prev {
             Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
             None => std::env::remove_var("XDG_CONFIG_HOME"),
