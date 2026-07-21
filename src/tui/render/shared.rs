@@ -1,6 +1,7 @@
 //! Helpers compartilhados entre telas de render. `series_now` calcula a
 //! âncora temporal da série real de 24h; `history.rs` é quem consome hoje
-//! (`render_chart_section` do chart de History).
+//! (`render_history`, que alimenta o `render_top_chart` do chart de
+//! History).
 //!
 //! `abbrev_tokens` (formatador de tokens com ponto decimal) morou aqui até
 //! o fix gate de dados reais — removido: `detail.rs` unificou pra
