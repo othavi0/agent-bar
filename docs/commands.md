@@ -28,8 +28,8 @@ agent-bar config apply --file <path>     # packager / QML / tests
 ```
 
 Stdout is JSON only (logs on stderr). Success stdout of `apply` is the same
-envelope as `show` (post-save state). Exit: `0` ok · `1` validation/IO ·
-`2` bad args.
+envelope as `show` (post-save state). Exit: `0` ok · `1` validation, usage
+(missing args), or IO — same as the rest of the CLI.
 
 Example envelope:
 

@@ -111,7 +111,7 @@ agent-bar config apply --file <path>      # opcional (testes)
 agent-bar config --help
 ```
 
-Exit: `0` ok · `1` validação/IO · `2` uso (args).
+Exit: `0` ok · `1` validação, uso (args) ou IO (igual ao resto da CLI).
 
 ### `config show` — envelope
 

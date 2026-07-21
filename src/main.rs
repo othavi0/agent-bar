@@ -217,7 +217,7 @@ async fn main() {
                 let mut buf = String::new();
                 if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
                     log::error!("failed to read stdin: {e}");
-                    std::process::exit(2);
+                    std::process::exit(1);
                 }
                 buf
             } else if let Some(path) = &opts.config_file {
@@ -234,7 +234,7 @@ async fn main() {
                 log::error!(
                     "config apply requires --json <blob>, --json -, or --file <path>"
                 );
-                std::process::exit(2);
+                std::process::exit(1);
             };
             match agent_bar::config_cmd::apply_json(&paths, &raw) {
                 Ok(view) => match serde_json::to_string_pretty(&view) {

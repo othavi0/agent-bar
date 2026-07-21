@@ -220,6 +220,10 @@ BarWidget {
 
   function runConfigApply(blob) {
     if (configApplyProc.running) return
+    configApplyProc._haveStdout = false
+    configApplyProc._haveExit = false
+    configApplyProc._stdout = ""
+    configApplyProc._exitCode = 0
     configApplyProc.command = ["bash", "-lc", root.applyShellScript(blob)]
     configApplyProc.running = true
   }
@@ -363,13 +367,35 @@ BarWidget {
 
   Process {
     id: configApplyProc
+    // Barrier: onExited can race ahead of StdioCollector flush.
+    // Wait for both streamFinished and exited before parsing stdout.
+    property string _stdout: ""
+    property int _exitCode: 0
+    property bool _haveStdout: false
+    property bool _haveExit: false
     command: ["bash", "-lc", "true"]
     stdout: StdioCollector {
       id: applyOut
       waitForEnd: true
+      onStreamFinished: {
+        configApplyProc._stdout = text
+        configApplyProc._haveStdout = true
+        configApplyProc._tryFinishApply()
+      }
     }
     onExited: function(exitCode, exitStatus) {
-      root.onConfigApplyFinished(applyOut.text, exitCode)
+      configApplyProc._exitCode = exitCode
+      configApplyProc._haveExit = true
+      configApplyProc._tryFinishApply()
+    }
+    function _tryFinishApply() {
+      if (!_haveStdout || !_haveExit) return
+      var text = _stdout
+      var code = _exitCode
+      _haveStdout = false
+      _haveExit = false
+      _stdout = ""
+      root.onConfigApplyFinished(text, code)
     }
   }
 
@@ -438,8 +464,14 @@ BarWidget {
             if (mouse.button === Qt.RightButton) root.openSettings()
             else if (mouse.button === Qt.MiddleButton) root.refresh(true)
             else {
-              root.showUsage()
-              root.popupOpen = !root.popupOpen
+              // left: usage; toggle open only if already usage (or closed).
+              // From settings with popup open → switch to usage, keep open.
+              if (root.settingsMode && root.popupOpen) {
+                root.showUsage()
+              } else {
+                root.showUsage()
+                root.popupOpen = !root.popupOpen
+              }
             }
           }
         }
