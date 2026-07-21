@@ -601,6 +601,7 @@ async fn main() {
             }
         }
 
+        // `remove` parseia como Uninstall + yes=true; `--yes` no uninstall também força.
         Command::Uninstall => {
             let paths = match Paths::from_env() {
                 Ok(p) => p,
@@ -614,42 +615,13 @@ async fn main() {
                 .unwrap_or_default();
             let settings_dir = home.join(".config").join(APP_NAME);
             let ipaths = waybar_integration::get_default_waybar_integration_paths();
+            let force = opts.yes;
             match uninstall::run_uninstall(
                 &settings_dir,
                 &paths.cache_dir,
                 &home,
-                false,
+                force,
                 &format!("{APP_NAME} uninstall"),
-                &ipaths,
-                &omarchy_integration::default_omarchy_plugins_dir(&home),
-            ) {
-                Ok(()) => std::process::exit(0),
-                Err(e) => {
-                    log::error!("{e}");
-                    std::process::exit(1);
-                }
-            }
-        }
-
-        Command::Remove => {
-            let paths = match Paths::from_env() {
-                Ok(p) => p,
-                Err(e) => {
-                    log::error!("{e}");
-                    std::process::exit(1);
-                }
-            };
-            let home = std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_default();
-            let settings_dir = home.join(".config").join(APP_NAME);
-            let ipaths = waybar_integration::get_default_waybar_integration_paths();
-            match uninstall::run_uninstall(
-                &settings_dir,
-                &paths.cache_dir,
-                &home,
-                true,
-                &format!("{APP_NAME} remove"),
                 &ipaths,
                 &omarchy_integration::default_omarchy_plugins_dir(&home),
             ) {

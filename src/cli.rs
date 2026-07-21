@@ -108,8 +108,6 @@ const KNOWN_COMMANDS: &[&str] = &[
     "menu",
     "status",
     "setup",
-    "assets",
-    "export",
     "update",
     "uninstall",
     "remove",
@@ -230,7 +228,11 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
 
             "update" => opts.command = Command::Update,
             "uninstall" => opts.command = Command::Uninstall,
-            "remove" => opts.command = Command::Remove,
+            // Alias: force uninstall (yes=true) sem vitrine no help.
+            "remove" => {
+                opts.command = Command::Uninstall;
+                opts.yes = true;
+            }
             "doctor" => opts.command = Command::Doctor,
 
             "config" => match args.get(i + 1).map(|s| s.as_str()) {
@@ -269,7 +271,8 @@ pub fn parse_args(args: &[String]) -> Result<CliOptions, CliError> {
 
             "--yes" | "-y" => opts.yes = true,
 
-            "--terminal" | "-t" => opts.command = Command::Terminal,
+            // Alias histórico de status (não Command::Terminal).
+            "--terminal" | "-t" => opts.command = Command::Status,
 
             "--refresh" | "-r" => opts.refresh = true,
 
@@ -601,7 +604,7 @@ pub fn build_help(no_color: bool) -> String {
 
     out.push_str(&format!("{}\n", v_line(no_color)));
 
-    // Seção Commands
+    // Seção Commands (vitrine pública — internos ficam parseáveis mas ocultos)
     out.push_str(&format!("{}\n", label_line("Commands", no_color)));
     out.push_str(&format!(
         "{}\n",
@@ -613,29 +616,17 @@ pub fn build_help(no_color: bool) -> String {
     ));
     out.push_str(&format!(
         "{}\n",
+        cmd_line("config show", "Print editable settings (JSON)", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
+        cmd_line("config apply", "Apply settings patch from JSON", no_color)
+    ));
+    out.push_str(&format!(
+        "{}\n",
         cmd_line(
             "setup",
             &format!("Install + wire {APP_NAME} in Waybar"),
-            no_color
-        )
-    ));
-    out.push_str(&format!(
-        "{}\n",
-        cmd_line("assets install", "Install icons/helper only", no_color)
-    ));
-    out.push_str(&format!(
-        "{}\n",
-        cmd_line(
-            "export waybar-modules",
-            "Print Waybar JSON module contract",
-            no_color
-        )
-    ));
-    out.push_str(&format!(
-        "{}\n",
-        cmd_line(
-            "export waybar-css",
-            "Print Waybar CSS JSON contract",
             no_color
         )
     ));
@@ -657,10 +648,6 @@ pub fn build_help(no_color: bool) -> String {
     ));
     out.push_str(&format!(
         "{}\n",
-        cmd_line("remove", "Force remove without prompt", no_color)
-    ));
-    out.push_str(&format!(
-        "{}\n",
         cmd_line(
             "doctor",
             &format!("Detect & clean {APP_NAME} leftovers in $HOME"),
@@ -669,19 +656,27 @@ pub fn build_help(no_color: bool) -> String {
     ));
     out.push_str(&format!("{}\n", v_line(no_color)));
 
-    // Seção Waybar
-    out.push_str(&format!("{}\n", label_line("Waybar", no_color)));
+    // Seção Omarchy / Waybar (resumo curto)
+    out.push_str(&format!("{}\n", label_line("Omarchy / Waybar", no_color)));
     out.push_str(&format!(
         "{}\n",
-        wb_line("Left click", "Interactive menu", no_color)
+        wb_line("Default poll", "Waybar JSON; --format json = shell", no_color)
     ));
     out.push_str(&format!(
         "{}\n",
-        wb_line("Right click", "Refresh / Login", no_color)
+        wb_line(
+            "Omarchy",
+            "Left usage · right settings · middle refresh",
+            no_color
+        )
     ));
     out.push_str(&format!(
         "{}\n",
-        wb_line("Hover", "Detailed tooltip", no_color)
+        wb_line(
+            "Waybar",
+            "Left menu · right action (internal) · hover tooltip",
+            no_color
+        )
     ));
     out.push_str(&format!("{}\n", v_line(no_color)));
 
@@ -893,10 +888,16 @@ mod tests {
 
     #[test]
     fn command_remove() {
-        assert_eq!(
-            parse_args(&args(&["remove"])).unwrap().command,
-            Command::Remove
-        );
+        let opts = parse_args(&args(&["remove"])).unwrap();
+        assert_eq!(opts.command, Command::Uninstall);
+        assert!(opts.yes);
+    }
+
+    #[test]
+    fn remove_aliases_uninstall_yes() {
+        let opts = parse_args(&args(&["remove"])).unwrap();
+        assert_eq!(opts.command, Command::Uninstall);
+        assert!(opts.yes);
     }
 
     #[test]
@@ -1021,6 +1022,12 @@ mod tests {
     }
 
     #[test]
+    fn action_right_still_parses() {
+        let opts = parse_args(&args(&["action-right", "claude"])).unwrap();
+        assert_eq!(opts.command, Command::ActionRight);
+    }
+
+    #[test]
     fn command_version_long() {
         assert_eq!(
             parse_args(&args(&["--version"])).unwrap().command,
@@ -1064,7 +1071,7 @@ mod tests {
     fn flag_terminal_long() {
         assert_eq!(
             parse_args(&args(&["--terminal"])).unwrap().command,
-            Command::Terminal
+            Command::Status
         );
     }
 
@@ -1072,8 +1079,16 @@ mod tests {
     fn flag_terminal_short() {
         assert_eq!(
             parse_args(&args(&["-t"])).unwrap().command,
-            Command::Terminal
+            Command::Status
         );
+    }
+
+    #[test]
+    fn terminal_flag_aliases_status() {
+        let opts = parse_args(&args(&["--terminal"])).unwrap();
+        assert_eq!(opts.command, Command::Status);
+        let opts = parse_args(&args(&["-t"])).unwrap();
+        assert_eq!(opts.command, Command::Status);
     }
 
     #[test]
@@ -1391,5 +1406,22 @@ mod tests {
     fn build_help_ends_with_newline() {
         let help = build_help(false);
         assert!(help.ends_with('\n'), "build_help deve terminar em '\\n'");
+    }
+
+    #[test]
+    fn build_help_hides_internals() {
+        let help = build_help(true);
+        assert!(help.contains("config"));
+        assert!(help.contains("menu"));
+        assert!(help.contains("status"));
+        assert!(!help.contains("action-right"));
+        assert!(!help.contains("assets install"));
+        assert!(!help.contains("export waybar-modules"));
+        assert!(!help.contains("menu-font"));
+        // remove não como comando de vitrine
+        assert!(
+            !help.lines().any(|l| l.contains("remove") && l.contains("Force")),
+            "remove não deve aparecer como comando primário"
+        );
     }
 }
