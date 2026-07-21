@@ -51,6 +51,15 @@ BarWidget {
     settingsBusy = false
   }
 
+  // PopupCard (xdg-popup) não tem focusTarget como KeyboardPanel; forçamos
+  // o catcher quando o popup abre. Sem click no card o compositor pode ainda
+  // não entregar teclas — mesmo padrão do shell quando o surface não é Exclusive.
+  onPopupOpenChanged: {
+    if (popupOpen) Qt.callLater(function() {
+      if (root.popupOpen && keyCatcher) keyCatcher.forceActiveFocus()
+    })
+  }
+
   function pathFromUrl(url) { return String(url).replace(/^file:\/\//, "") }
   readonly property string helperPath: pathFromUrl(Qt.resolvedUrl("scripts/agent-bar-open-terminal"))
 
@@ -249,17 +258,19 @@ BarWidget {
     }
     // interval → shell.json (só se apply OK)
     var interval = Math.min(3600, Math.max(30, Number(draftSettings.refreshIntervalSec) || 60))
+    var intervalPersisted = false
     if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function") {
       try {
         var next = Object.assign({}, root.settings || {}, { refreshIntervalSec: interval })
         bar.shell.updateEntryInline(root.moduleName, next)
+        intervalPersisted = true
       } catch (e2) {
-        settingsStatusText = "settings saved; interval not persisted"
-        root.refresh(true)
-        return
+        intervalPersisted = false
       }
     }
-    settingsStatusText = "Saved"
+    settingsStatusText = intervalPersisted
+      ? "Saved"
+      : "settings saved; interval not persisted"
     root.refresh(true)
   }
 
@@ -452,6 +463,19 @@ BarWidget {
     open: root.popupOpen
     contentWidth: Style.space(370)
     contentHeight: Math.min(popupCol.implicitHeight + Style.space(20), Style.space(560))
+
+    // PanelKeyCatcher (qs.Ui): esc → close, s/S → save ou openSettings.
+    // PopupCard não expõe focusTarget; ver onPopupOpenChanged no root.
+    PanelKeyCatcher {
+      id: keyCatcher
+      anchors.fill: parent
+      blocked: root.settingsMode && refreshIntervalField.field.activeFocus
+
+      onCloseRequested: root.close()
+      onTextKey: function(t) {
+        if (t === "s" || t === "S")
+          root.settingsMode ? root.saveSettings() : root.openSettings()
+      }
 
     Flickable {
       anchors.fill: parent
@@ -706,6 +730,7 @@ BarWidget {
           }
 
           NumberField {
+            id: refreshIntervalField
             Layout.fillWidth: true
             label: "Interval (seconds)"
             value: Number(root.draftSettings.refreshIntervalSec || 60)
@@ -773,6 +798,7 @@ BarWidget {
         }
       }
     }
+    } // PanelKeyCatcher
   }
 
   component QuotaRow: RowLayout {
