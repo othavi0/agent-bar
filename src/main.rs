@@ -23,8 +23,8 @@ use agent_bar::settings::{self, Settings};
 use agent_bar::tui;
 use agent_bar::watch;
 use agent_bar::{
-    doctor, install, runtime, setup, term_prompt, uninstall, update, waybar_contract,
-    waybar_integration,
+    doctor, install, omarchy_integration, runtime, setup, term_prompt, uninstall, update,
+    waybar_contract, waybar_integration,
 };
 
 // ---------------------------------------------------------------------------
@@ -197,6 +197,21 @@ async fn main() {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)
                 .unwrap_or_default();
+            let omarchy_forced = opts.omarchy_plugins_dir.as_ref().map(PathBuf::from);
+            let omarchy_detected = omarchy_integration::detect_omarchy_shell();
+            let omarchy = match (omarchy_forced, omarchy_detected) {
+                (Some(dir), _) => Some(setup::OmarchySetupOptions {
+                    plugins_dir: dir,
+                    run_cli: false, // dir injetado = teste/CI: não toca o shell vivo
+                }),
+                (None, true) => Some(setup::OmarchySetupOptions {
+                    plugins_dir: omarchy_integration::default_omarchy_plugins_dir(&home),
+                    run_cli: true,
+                }),
+                (None, false) => None,
+            };
+            let skip_waybar =
+                omarchy.is_some() && !setup::waybar_present(std::env::var_os("PATH").as_deref());
             let cfg = setup::SetupConfig {
                 asset_paths: Some(asset_paths),
                 integration_paths: Some(ipaths),
@@ -204,6 +219,8 @@ async fn main() {
                 home,
                 skip_reload: false,
                 system_install: runtime::is_system_install(),
+                omarchy,
+                skip_waybar,
             };
             match setup::run_setup(&settings, cfg, true, true) {
                 Ok(_) => std::process::exit(0),
@@ -384,6 +401,8 @@ async fn main() {
                             home: home_for_setup.clone(),
                             skip_reload: false,
                             system_install: runtime::is_system_install(),
+                            omarchy: None,
+                            skip_waybar: false,
                         };
                         if let Err(e) = setup::run_setup(&settings_for_setup, cfg, false, false) {
                             log::error!("Setup falhou após update: {e}");

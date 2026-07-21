@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use crate::app_identity::APP_NAME;
+use crate::omarchy_integration::{install_omarchy_plugin, run_omarchy_enable_commands};
 use crate::settings::Settings;
 use crate::waybar_contract::{
     get_default_waybar_asset_paths, install_waybar_assets, WaybarAssetPaths,
@@ -23,6 +24,15 @@ pub fn reload_waybar() {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn();
+}
+
+/// Waybar presente = binário `waybar` em `path_var`. Sinal para o setup
+/// decidir se o fluxo Waybar roda (em Omarchy 4 puro, não há waybar).
+pub fn waybar_present(path_var: Option<&std::ffi::OsStr>) -> bool {
+    let Some(path_var) = path_var else {
+        return false;
+    };
+    std::env::split_paths(path_var).any(|dir| dir.join("waybar").is_file())
 }
 
 /// Cria symlink `~/.local/bin/agent-bar` → binário compilado (`current_exe`).
@@ -53,6 +63,16 @@ pub fn create_symlink(home: &Path) -> std::io::Result<PathBuf> {
     Ok(link)
 }
 
+/// Instalação do plugin omarchy-shell dentro do setup.
+pub struct OmarchySetupOptions {
+    /// Destino dos plugins (`~/.config/omarchy/plugins` em produção;
+    /// temp dir em teste via `--omarchy-plugins-dir`).
+    pub plugins_dir: PathBuf,
+    /// Roda `omarchy plugin rescan/enable` + `bar plugin add` após
+    /// escrever os arquivos. SEMPRE false em testes.
+    pub run_cli: bool,
+}
+
 /// Configuração injetável de `run_setup` — seams p/ testes.
 pub struct SetupConfig {
     /// Paths de assets (None = usa `get_default_waybar_asset_paths()`).
@@ -68,6 +88,11 @@ pub struct SetupConfig {
     /// Instalação de sistema (ex: AUR/pacote): não cria symlink em ~/.local/bin.
     /// O `main` (T7) passa `runtime::is_system_install()`; testes passam explicitamente.
     pub system_install: bool,
+    /// `Some` = instala o plugin do omarchy-shell.
+    pub omarchy: Option<OmarchySetupOptions>,
+    /// `true` = pula o fluxo Waybar inteiro (assets + wiring + reload).
+    /// Usado quando só o omarchy-shell foi detectado.
+    pub skip_waybar: bool,
 }
 
 /// Port de `runSetup` (src/setup.ts:49-177), versão terminal-lite.
@@ -84,8 +109,13 @@ pub fn run_setup(
     }
 
     // 2. Nota descrevendo as ações
+    let target = match (&cfg.omarchy, cfg.skip_waybar) {
+        (Some(_), true) => "integração omarchy-shell",
+        (Some(_), false) => "integração Waybar + omarchy-shell",
+        (None, _) => "integração Waybar",
+    };
     term_prompt::note(&format!(
-        "{APP_NAME} setup — instalando icons, helper e integração Waybar"
+        "{APP_NAME} setup — instalando icons, helper e {target}"
     ));
 
     // 3. Confirmação interativa
@@ -97,17 +127,8 @@ pub fn run_setup(
         }
     }
 
-    // 4. Instala assets (icons + terminal helper)
-    let asset = cfg
-        .asset_paths
-        .unwrap_or_else(get_default_waybar_asset_paths);
-    let installed = install_waybar_assets(
-        &asset.waybar_dir,
-        &asset.scripts_dir,
-        cfg.repo_root.as_deref(),
-    )?;
-
-    // 5. Symlink (somente em instalação dev)
+    // 5. Symlink (somente em instalação dev) — fora do gate Waybar: a
+    // instalação dev precisa do binário no PATH também para o QML omarchy.
     if !cfg.system_install {
         create_symlink(&cfg.home).map_err(|e| anyhow::anyhow!("Falha ao criar symlink: {e}"))?;
 
@@ -124,29 +145,53 @@ pub fn run_setup(
         }
     }
 
-    // 6. Wiring Waybar config e style
-    let ipaths = cfg
-        .integration_paths
-        .unwrap_or_else(get_default_waybar_integration_paths);
-    apply_waybar_integration(
-        settings,
-        ApplyOptions {
-            paths: ipaths,
-            icons_dir: Some(installed.icons_dir.clone()),
-            app_bin: Some(asset.app_bin.clone()),
-            terminal_script: Some(installed.terminal_script.clone()),
-        },
-    )?;
+    if !cfg.skip_waybar {
+        // 4. Instala assets (icons + terminal helper)
+        let asset = cfg
+            .asset_paths
+            .unwrap_or_else(get_default_waybar_asset_paths);
+        let installed = install_waybar_assets(
+            &asset.waybar_dir,
+            &asset.scripts_dir,
+            cfg.repo_root.as_deref(),
+        )?;
 
-    // 7. Reload Waybar
-    if !cfg.skip_reload {
-        reload_waybar();
+        // 6. Wiring Waybar config e style
+        let ipaths = cfg
+            .integration_paths
+            .unwrap_or_else(get_default_waybar_integration_paths);
+        apply_waybar_integration(
+            settings,
+            ApplyOptions {
+                paths: ipaths,
+                icons_dir: Some(installed.icons_dir.clone()),
+                app_bin: Some(asset.app_bin.clone()),
+                terminal_script: Some(installed.terminal_script.clone()),
+            },
+        )?;
+
+        // 7. Reload Waybar
+        if !cfg.skip_reload {
+            reload_waybar();
+        }
+
+        term_prompt::status("Icons", &installed.icons_dir.to_string_lossy());
+        term_prompt::status("Helper", &installed.terminal_script.to_string_lossy());
+    }
+
+    // Omarchy-shell: escreve o drop-in e (fora de testes) ativa via CLI.
+    if let Some(om) = &cfg.omarchy {
+        let installed = install_omarchy_plugin(&om.plugins_dir)?;
+        term_prompt::status("Omarchy", &installed.plugin_dir.to_string_lossy());
+        if om.run_cli {
+            for warning in run_omarchy_enable_commands() {
+                term_prompt::status("Aviso", &warning);
+            }
+        }
     }
 
     // 8. Status de sucesso + scan de leftovers (best-effort, NUNCA falha o setup)
     term_prompt::status("OK", &format!("{APP_NAME} setup completo"));
-    term_prompt::status("Icons", &installed.icons_dir.to_string_lossy());
-    term_prompt::status("Helper", &installed.terminal_script.to_string_lossy());
 
     // Scan best-effort: ignora qualquer erro
     let findings = doctor::scan(&cfg.home);
@@ -222,6 +267,8 @@ mod tests {
             home: dest.path().to_path_buf(),
             skip_reload: true,
             system_install: true, // força o branch system (sem depender de current_exe)
+            omarchy: None,
+            skip_waybar: false,
         };
         let ok = run_setup(&s, cfg, false, false).unwrap();
         assert!(ok);
@@ -232,5 +279,53 @@ mod tests {
             .join("bin")
             .join("agent-bar")
             .exists());
+    }
+
+    #[test]
+    fn waybar_present_checks_path() {
+        let bin = tempdir().unwrap();
+        let path_var = std::ffi::OsString::from(bin.path());
+        assert!(!waybar_present(Some(&path_var)));
+        std::fs::write(bin.path().join("waybar"), b"").unwrap();
+        assert!(waybar_present(Some(&path_var)));
+        assert!(!waybar_present(None));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn setup_omarchy_only_installs_plugin_and_skips_waybar() {
+        let dest = tempdir().unwrap();
+        let plugins = tempdir().unwrap();
+        let s = load(&Paths {
+            cache_dir: dest.path().join("c"),
+            config_dir: dest.path().join("cfg"),
+            claude_credentials: PathBuf::new(),
+            codex_auth: PathBuf::new(),
+            codex_sessions: PathBuf::new(),
+            amp_settings: PathBuf::new(),
+            amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
+        });
+        let cfg = SetupConfig {
+            asset_paths: None,
+            integration_paths: None,
+            repo_root: None,
+            home: dest.path().to_path_buf(),
+            skip_reload: true,
+            system_install: true,
+            omarchy: Some(OmarchySetupOptions {
+                plugins_dir: plugins.path().to_path_buf(),
+                run_cli: false, // NUNCA roda `omarchy` real em teste
+            }),
+            skip_waybar: true,
+        };
+        let ok = run_setup(&s, cfg, false, false).unwrap();
+        assert!(ok);
+        let plugin_dir = plugins.path().join(crate::app_identity::OMARCHY_PLUGIN_ID);
+        assert!(plugin_dir.join("manifest.json").exists());
+        assert!(plugin_dir.join("Widget.qml").exists());
+        // fluxo waybar não rodou: nenhum config.jsonc/style.css criado
+        assert!(!dest.path().join("config.jsonc").exists());
     }
 }
