@@ -9,13 +9,6 @@ pub enum Icon {
     LoggedOut,
     Warn,
     NoToken,
-    Reset,
-    Cost,
-    History,
-    Peak,
-    Refresh,
-    Login,
-    Waybar,
 }
 
 pub fn glyph(icon: Icon, mode: GlyphMode) -> &'static str {
@@ -28,20 +21,6 @@ pub fn glyph(icon: Icon, mode: GlyphMode) -> &'static str {
         (Icon::Warn, GlyphMode::Box) => "!",
         (Icon::NoToken, GlyphMode::Nerd) => "\u{f023}",
         (Icon::NoToken, GlyphMode::Box) => "×",
-        (Icon::Reset, GlyphMode::Nerd) => "\u{f017}",
-        (Icon::Reset, GlyphMode::Box) => "↻",
-        (Icon::Cost, GlyphMode::Nerd) => "\u{f155}",
-        (Icon::Cost, GlyphMode::Box) => "$",
-        (Icon::History, GlyphMode::Nerd) => "\u{f201}",
-        (Icon::History, GlyphMode::Box) => "≡",
-        (Icon::Peak, GlyphMode::Nerd) => "\u{f0e7}",
-        (Icon::Peak, GlyphMode::Box) => "▲",
-        (Icon::Refresh, GlyphMode::Nerd) => "\u{f021}",
-        (Icon::Refresh, GlyphMode::Box) => "↻",
-        (Icon::Login, GlyphMode::Nerd) => "\u{f090}",
-        (Icon::Login, GlyphMode::Box) => "→",
-        (Icon::Waybar, GlyphMode::Nerd) => "\u{f013}",
-        (Icon::Waybar, GlyphMode::Box) => "⚙",
     }
 }
 
@@ -55,13 +34,6 @@ mod tests {
             Icon::Ok,
             Icon::LoggedOut,
             Icon::Warn,
-            Icon::Reset,
-            Icon::Cost,
-            Icon::History,
-            Icon::Peak,
-            Icon::Refresh,
-            Icon::Login,
-            Icon::Waybar,
             Icon::NoToken,
         ] {
             assert!(!glyph(icon, GlyphMode::Nerd).is_empty());

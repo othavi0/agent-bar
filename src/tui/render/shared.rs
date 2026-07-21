@@ -1,8 +1,6 @@
-//! Helpers compartilhados entre telas de render. `series_now` era usada por
-//! `dashboard.rs` (apagado na Task 11 junto com o Overview) e por
-//! `detail.rs` (Task 12) — ambas as telas precisavam da MESMA âncora
-//! temporal pra série real de 24h, então a lógica mora aqui em vez de
-//! duplicada em cada módulo de tela; `detail.rs` continua consumindo.
+//! Helpers compartilhados entre telas de render. `series_now` calcula a
+//! âncora temporal da série real de 24h; `history.rs` é quem consome hoje
+//! (`render_chart_section` do chart de History).
 //!
 //! `abbrev_tokens` (formatador de tokens com ponto decimal) morou aqui até
 //! o fix gate de dados reais — removido: `detail.rs` unificou pra
