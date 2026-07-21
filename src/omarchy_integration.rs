@@ -119,9 +119,13 @@ fn run_omarchy(args: &[&str]) -> Option<String> {
 /// rodar os comandos manualmente).
 pub fn run_omarchy_enable_commands() -> Vec<String> {
     [
+        // Sem `--yes`: enable/add com argumento já são não-interativos e o
+        // CLI do Omarchy 4.0.0.alpha rejeita a flag ("unknown option" —
+        // verificado ao vivo em 2026-07-21; `--yes` só existe em add/update
+        // de repo git).
         vec!["plugin", "rescan"],
-        vec!["plugin", "enable", OMARCHY_PLUGIN_ID, "--yes"],
-        vec!["bar", "plugin", "add", OMARCHY_PLUGIN_ID, "--yes"],
+        vec!["plugin", "enable", OMARCHY_PLUGIN_ID],
+        vec!["bar", "plugin", "add", OMARCHY_PLUGIN_ID],
     ]
     .iter()
     .filter_map(|args| run_omarchy(args))
@@ -131,8 +135,8 @@ pub fn run_omarchy_enable_commands() -> Vec<String> {
 /// Desativa/remove no shell (bar remove + plugin remove). Best-effort.
 pub fn run_omarchy_remove_commands() -> Vec<String> {
     [
-        vec!["bar", "plugin", "remove", OMARCHY_PLUGIN_ID, "--yes"],
-        vec!["plugin", "remove", OMARCHY_PLUGIN_ID, "--yes"],
+        vec!["bar", "plugin", "remove", OMARCHY_PLUGIN_ID],
+        vec!["plugin", "remove", OMARCHY_PLUGIN_ID],
     ]
     .iter()
     .filter_map(|args| run_omarchy(args))
