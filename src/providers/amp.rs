@@ -35,6 +35,8 @@ fn dollars(n: f64) -> String {
     format!("${n}")
 }
 
+const MS_PER_DAY: u64 = 86_400_000;
+
 /// Parse do stdout de `amp usage` para `ProviderQuota`. `now_ms` é o relógio
 /// atual (o `fullAt` recalcula a cada chamada, inclusive em cache hit).
 pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQuota {
@@ -77,11 +79,21 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
     let mut primary: Option<QuotaWindow> = None;
 
     if let Some(pct_str) = free_pct.as_deref() {
-        // Percentual já vem pronto; reset é diário mas sem horário → sem ETA.
+        // Percentual já vem pronto. Reset diário à meia-noite UTC — regra do
+        // frontend oficial (nextAmpFreeResetDate em ampcode.com/settings:
+        // `Date.UTC(y, m, d+1)`). Só afirmamos o horário quando o texto do
+        // CLI ainda diz "resets daily"; se o servidor mudar a cadência, o
+        // ETA some em vez de mentir.
         let pct: f64 = pct_str.parse().unwrap_or(0.0);
+        let resets_at = if stdout.contains("resets daily") {
+            meta.insert("freeCadence".to_string(), "daily".to_string());
+            Some(iso_from_ms((now_ms / MS_PER_DAY + 1) * MS_PER_DAY))
+        } else {
+            None
+        };
         let window = QuotaWindow {
             remaining: pct,
-            resets_at: None,
+            resets_at,
             window_minutes: None,
             used: None,
             severity: None,
@@ -157,6 +169,29 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
             },
         );
         meta.insert("creditsBalance".to_string(), dollars(balance));
+        if stdout.contains("replenishes automatically") {
+            meta.insert("creditsReplenish".to_string(), "auto".to_string());
+        }
+    }
+
+    // Fallback p/ formatos futuros do servidor (o texto de `amp usage` é
+    // renderizado server-side e já mudou sem update do CLI — ex.: linhas de
+    // assinatura megawatt/gigawatt). Sem Free Tier nem Credits reconhecidos,
+    // preserva as linhas `Label: valor` cruas p/ o tooltip não ficar vazio.
+    if primary.is_none() && !stdout.is_empty() && models.is_empty() {
+        let line_re = lazy_re!(RE_RAW_LINE, r"(?m)^([A-Z][A-Za-z0-9 /()&-]{1,39}):\s*(.+)$");
+        if let Some(r) = line_re {
+            for (i, caps) in r.captures_iter(stdout).take(4).enumerate() {
+                let label = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
+                if label.starts_with("Signed in") {
+                    continue;
+                }
+                let value = caps.get(2).map(|m| m.as_str()).unwrap_or_default();
+                // Corta o sufixo " - https://..." que o CLI anexa.
+                let value = value.split(" - http").next().unwrap_or(value).trim();
+                meta.insert(format!("raw{i}"), format!("{label}: {value}"));
+            }
+        }
     }
 
     let extra = if meta.is_empty() {
@@ -373,15 +408,51 @@ mod tests {
         assert!(q.available);
         assert_eq!(q.account.as_deref(), Some("user@email.com"));
         assert_eq!(q.primary.as_ref().unwrap().remaining, 97.0);
-        assert!(q.primary.as_ref().unwrap().resets_at.is_none());
+        // "resets daily" → próxima meia-noite UTC após NOW.
+        let expected_reset = iso_from_ms((NOW / MS_PER_DAY + 1) * MS_PER_DAY);
+        assert_eq!(
+            q.primary.as_ref().unwrap().resets_at.as_deref(),
+            Some(expected_reset.as_str())
+        );
         let models = q.models.as_ref().unwrap();
         assert_eq!(models["Free Tier"].remaining, 97.0);
         assert_eq!(models["Credits"].remaining, 100.0);
         let m = meta_of(&q);
         assert_eq!(m.get("freePct").map(String::as_str), Some("97%"));
+        assert_eq!(m.get("freeCadence").map(String::as_str), Some("daily"));
         assert_eq!(m.get("creditsBalance").map(String::as_str), Some("$4.19"));
+        assert_eq!(m.get("creditsReplenish").map(String::as_str), Some("auto"));
         assert!(m.get("freeRemaining").is_none());
         assert!(m.get("freeTotal").is_none());
+    }
+
+    #[test]
+    fn free_pct_without_resets_daily_has_no_eta() {
+        let out = "Signed in as user@email.com\nAmp Free: 42% remaining this period\nIndividual credits: $1.00 remaining";
+        let q = parse_usage(out, base(), NOW);
+        assert_eq!(q.primary.as_ref().unwrap().remaining, 42.0);
+        assert!(q.primary.as_ref().unwrap().resets_at.is_none());
+        let m = meta_of(&q);
+        assert!(m.get("freeCadence").is_none());
+        assert!(m.get("creditsReplenish").is_none());
+    }
+
+    #[test]
+    fn unknown_server_format_preserves_raw_lines() {
+        let out = "Signed in as user@email.com (nick)\nSubscription (Gigawatt): $12.00 of $200.00 used - https://ampcode.com/settings\nOrb usage: 3% used this period";
+        let q = parse_usage(out, base(), NOW);
+        assert!(q.available);
+        assert!(q.primary.is_none());
+        assert!(q.models.as_ref().unwrap().is_empty());
+        let m = meta_of(&q);
+        assert_eq!(
+            m.get("raw0").map(String::as_str),
+            Some("Subscription (Gigawatt): $12.00 of $200.00 used")
+        );
+        assert_eq!(
+            m.get("raw1").map(String::as_str),
+            Some("Orb usage: 3% used this period")
+        );
     }
 
     #[test]
