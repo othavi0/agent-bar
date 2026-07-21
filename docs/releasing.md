@@ -40,7 +40,13 @@ Criar o Release dispara `publish.yml` (`release: published`), que:
 - builda `cargo zigbuild --release --target x86_64-unknown-linux-musl`;
 - empacota `agent-bar-<version>-x86_64.tar.gz` (binário + `scripts/agent-bar-open-terminal`
   + `icons/` + `LICENSE`, todos na raiz do arquivo) + `.sha256`;
-- anexa ambos ao Release.
+- anexa ambos ao Release;
+- **publica no AUR automaticamente** (job `publish-aur`): preenche
+  `pkgver`/`pkgrel`/`sha256sums` no PKGBUILD/.SRCINFO do repo com os valores
+  do build e pusha para `agent-bar-bin`. Versão nova → `pkgrel=1`; mesma
+  versão com packaging alterado → `pkgrel+1`; nada mudou → skip (re-run
+  seguro). Requer o secret `AUR_SSH_PRIVATE_KEY` (chave dedicada de CI com a
+  pública registrada na conta AUR `noctua`).
 
 Acompanhar e confirmar:
 ```bash
@@ -48,10 +54,12 @@ gh run watch "$(gh run list --workflow=publish.yml -L1 --json databaseId -q '.[0
 gh release view v<version> --json assets   # tarball + .sha256 presentes
 ```
 
-## 4. Preencher o sha256 do PKGBUILD
+## 4. sha256 do PKGBUILD (automático)
 
-O `sha256sums` do PKGBUILD/`.SRCINFO` fica como placeholder (64 zeros) até o
-Release existir. Depois do CI:
+O job `publish-aur` do CI preenche o `sha256sums` na cópia enviada ao AUR —
+o PKGBUILD/.SRCINFO **do repo** pode ficar com o hash da versão anterior ou
+placeholder; ele é template, não a fonte publicada. Opcionalmente, alinhar o
+hash do repo por higiene:
 
 ```bash
 gh release download v<version> -p '*.sha256' -D /tmp/ab-rel
@@ -60,7 +68,10 @@ HASH="$(cut -d' ' -f1 /tmp/ab-rel/*.sha256)"
 git add packaging/aur/ && git commit -m "chore: sha256 do PKGBUILD pro v<version>" && git push
 ```
 
-## 5. Publicar no AUR (`agent-bar-bin`)
+## 5. Publicar no AUR — manual (fallback)
+
+**Normalmente desnecessário**: o passo 3 já publica via CI. Use este fluxo só
+se o job `publish-aur` falhar (ex.: secret ausente/expirado).
 
 O AUR é um repo git **separado** (`ssh://aur@aur.archlinux.org/agent-bar-bin.git`).
 Requer a conta do AUR do mantenedor + chave SSH registrada nela (a chave precisa

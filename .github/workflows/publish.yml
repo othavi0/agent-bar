@@ -10,6 +10,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pkg.outputs.version }}
+      sha256: ${{ steps.pkg.outputs.sha256 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -45,6 +48,7 @@ jobs:
         run: cargo zigbuild --release --target x86_64-unknown-linux-musl
 
       - name: Package tarball + sha256
+        id: pkg
         run: |
           VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
           mkdir -p pkg/scripts pkg/icons
@@ -54,6 +58,8 @@ jobs:
           cp LICENSE pkg/
           tar czf "agent-bar-${VERSION}-x86_64.tar.gz" -C pkg .
           sha256sum "agent-bar-${VERSION}-x86_64.tar.gz" | tee "agent-bar-${VERSION}-x86_64.tar.gz.sha256"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(cut -d' ' -f1 "agent-bar-${VERSION}-x86_64.tar.gz.sha256")" >> "$GITHUB_OUTPUT"
 
       - name: Attach to release
         env:
@@ -64,3 +70,77 @@ jobs:
             "agent-bar-${VERSION}-x86_64.tar.gz" \
             "agent-bar-${VERSION}-x86_64.tar.gz.sha256" \
             --clobber
+
+  # Publica agent-bar-bin no AUR com a versão/sha256 do build acima.
+  # Requer o secret AUR_SSH_PRIVATE_KEY (chave dedicada de CI, cuja pública
+  # está registrada na conta AUR). Se o secret não existir, o job falha —
+  # o release em si já saiu no job anterior, então é seguro re-rodar.
+  publish-aur:
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure SSH for AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur_ci
+          chmod 600 ~/.ssh/aur_ci
+          # Host key PINADA (verificada em push manual real em 2026-07-21) —
+          # sem trust-on-first-use no CI.
+          echo "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" > ~/.ssh/known_hosts
+          echo "GIT_SSH_COMMAND=ssh -i ~/.ssh/aur_ci -o UserKnownHostsFile=~/.ssh/known_hosts -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
+
+      - name: Update and push AUR package
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          SHA256: ${{ needs.release.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          git clone ssh://aur@aur.archlinux.org/agent-bar-bin.git aur
+
+          # pkgrel: versão nova → 1; mesma versão com packaging alterado → +1.
+          AUR_PKGVER="$(grep -m1 '^pkgver=' aur/PKGBUILD 2>/dev/null | cut -d= -f2 || true)"
+          AUR_PKGREL="$(grep -m1 '^pkgrel=' aur/PKGBUILD 2>/dev/null | cut -d= -f2 || echo 0)"
+          if [ "$AUR_PKGVER" = "$VERSION" ]; then
+            PKGREL=$((AUR_PKGREL + 1))
+          else
+            PKGREL=1
+          fi
+
+          mkdir -p out
+          sed -E \
+            -e "s/^pkgver=.*/pkgver=${VERSION}/" \
+            -e "s/^pkgrel=.*/pkgrel=${PKGREL}/" \
+            -e "s/^sha256sums=.*/sha256sums=('${SHA256}')/" \
+            packaging/aur/PKGBUILD > out/PKGBUILD
+          sed -E \
+            -e "s/pkgver = .*/pkgver = ${VERSION}/" \
+            -e "s/pkgrel = .*/pkgrel = ${PKGREL}/" \
+            -e "s/sha256sums = .*/sha256sums = ${SHA256}/" \
+            -e "s#download/v[0-9.]+/agent-bar-[0-9.]+#download/v${VERSION}/agent-bar-${VERSION}#" \
+            -e "s#^\tsource = agent-bar-[0-9.]+#\tsource = agent-bar-${VERSION}#" \
+            packaging/aur/.SRCINFO > out/.SRCINFO
+          cp packaging/aur/agent-bar-bin.install out/
+
+          # Idempotência: mesma versão e conteúdo idêntico (ignorando pkgrel)
+          # → nada a publicar (re-runs do workflow não geram bump fantasma).
+          if [ "$AUR_PKGVER" = "$VERSION" ] \
+            && diff <(grep -v pkgrel aur/PKGBUILD) <(grep -v pkgrel out/PKGBUILD) > /dev/null \
+            && diff <(grep -v pkgrel aur/.SRCINFO) <(grep -v pkgrel out/.SRCINFO) > /dev/null \
+            && diff aur/agent-bar-bin.install out/agent-bar-bin.install > /dev/null; then
+            echo "AUR já está em dia com ${VERSION} — nada a publicar."
+            exit 0
+          fi
+
+          cp out/PKGBUILD out/.SRCINFO out/agent-bar-bin.install aur/
+          cd aur
+          git config user.name "agent-bar-ci"
+          git config user.email "noctuacore@gmail.com"
+          git add -A
+          git commit -m "agent-bar-bin ${VERSION}-${PKGREL}"
+          git push origin HEAD:master
+          echo "Publicado agent-bar-bin ${VERSION}-${PKGREL} no AUR."
