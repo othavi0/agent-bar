@@ -1,6 +1,7 @@
 //! Math de exibição compartilhada (remaining vs used). DisplayMode vem de settings.
 
 use crate::providers::types::QuotaWindow;
+pub use crate::providers::types::WindowKind;
 use crate::settings::DisplayMode;
 
 pub fn to_display(remaining: Option<f64>, mode: DisplayMode) -> Option<f64> {
@@ -34,13 +35,6 @@ pub fn format_percent(val: Option<f64>) -> String {
         None => "?%".to_string(),
         Some(v) => format!("{}%", v.round() as i64),
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WindowKind {
-    FiveHour,
-    SevenDay,
-    Other,
 }
 
 /// fiveHour se |min-300|<=90; sevenDay se |min-10080|<=1440; senão other. None/<=0 → other.
@@ -318,6 +312,7 @@ mod tests {
             window_minutes: None,
             used: Some(70.0),
             severity: None,
+            window_kind: None,
         };
         assert_eq!(to_window_display(Some(&w), DisplayMode::Used), Some(70.0));
         assert_eq!(

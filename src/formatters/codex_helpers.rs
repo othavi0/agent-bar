@@ -115,6 +115,7 @@ mod tests {
             window_minutes: minutes,
             used: None,
             severity: None,
+            window_kind: None,
         }
     }
 

@@ -198,6 +198,7 @@ mod tests {
             window_minutes: m,
             used: None,
             severity: None,
+            window_kind: None,
         }
     }
 

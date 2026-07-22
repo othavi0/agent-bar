@@ -335,6 +335,7 @@ mod tests {
                 window_minutes: Some(300),
                 used: Some(100.0 - remaining),
                 severity: None,
+                window_kind: None,
             }),
             secondary: None,
             models: None,

@@ -221,6 +221,7 @@ mod tests {
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: None,
         };
         let l = model_line(
             &clk(),
@@ -248,6 +249,7 @@ mod tests {
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: None,
         };
         let l = model_line(
             &clk(),

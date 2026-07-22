@@ -30,6 +30,7 @@ fn to_quota_window(raw: &CodexWindowRaw) -> QuotaWindow {
         window_minutes: Some(raw.window_minutes),
         used: None,
         severity: None,
+        window_kind: None,
     }
 }
 

@@ -7,6 +7,16 @@ use std::collections::BTreeMap;
 use indexmap::IndexMap;
 use serde::Serialize;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WindowKind {
+    FiveHour,
+    SevenDay,
+    Daily,
+    Context,
+    Other,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuotaWindow {
@@ -22,6 +32,11 @@ pub struct QuotaWindow {
     /// (mantém golden/waybar_contract intactos).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub severity: Option<String>,
+    /// Classificação da janela decidida UMA VEZ na origem (provider).
+    /// `None` só em dado sintético de teste antigo; produção sempre seta.
+    /// Rótulos de UI (TUI/QML) derivam só disso, nunca de magic numbers.
+    #[serde(rename = "windowKind", skip_serializing_if = "Option::is_none")]
+    pub window_kind: Option<WindowKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Default)]
@@ -142,6 +157,7 @@ mod tests {
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: None,
         }
     }
 
@@ -165,6 +181,7 @@ mod tests {
             window_minutes: Some(300),
             used: None,
             severity: None,
+            window_kind: None,
         };
         let j = serde_json::to_value(w).unwrap();
         assert!(
@@ -259,5 +276,38 @@ mod tests {
         q.stale_reason = Some("Request timeout".into());
         let j = serde_json::to_value(&q).unwrap();
         assert_eq!(j["staleReason"], "Request timeout");
+    }
+
+    #[test]
+    fn window_kind_serializes_camelcase_variants() {
+        let cases = [
+            (WindowKind::FiveHour, "fiveHour"),
+            (WindowKind::SevenDay, "sevenDay"),
+            (WindowKind::Daily, "daily"),
+            (WindowKind::Context, "context"),
+            (WindowKind::Other, "other"),
+        ];
+        for (kind, expected) in cases {
+            let w = QuotaWindow {
+                remaining: 50.0,
+                resets_at: None,
+                window_minutes: None,
+                used: None,
+                severity: None,
+                window_kind: Some(kind),
+            };
+            let j = serde_json::to_value(&w).unwrap();
+            assert_eq!(j["windowKind"], expected, "kind={kind:?}");
+        }
+    }
+
+    #[test]
+    fn window_kind_omitted_when_none() {
+        let w = window(50.0); // helper já existente do módulo
+        let j = serde_json::to_value(&w).unwrap();
+        assert!(
+            j.get("windowKind").is_none(),
+            "windowKind deve ser omitido quando None"
+        );
     }
 }

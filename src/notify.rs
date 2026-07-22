@@ -265,6 +265,7 @@ mod tests {
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: None,
         }
     }
 
@@ -406,6 +407,7 @@ mod tests {
             window_minutes: None,
             used: Some(232.0),
             severity: None,
+            window_kind: None,
         });
         let plan = plan_notifications(&wrap(vec![c]), &HashMap::new());
         assert_eq!(plan.fires[0].label, "primary");

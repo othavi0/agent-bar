@@ -47,6 +47,7 @@ mod tests {
                     window_minutes: None,
                     used: None,
                     severity: None,
+                    window_kind: None,
                 }),
                 secondary: None,
                 models: None,

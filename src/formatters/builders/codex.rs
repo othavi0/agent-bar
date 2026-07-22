@@ -222,6 +222,7 @@ mod tests {
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: None,
         };
         CodexModelEntry {
             name: name.into(),

@@ -123,6 +123,7 @@ fn window_from(raw: &ClaudeWindowRaw) -> QuotaWindow {
         window_minutes: None,
         used: None,
         severity: None,
+        window_kind: None,
     }
 }
 
@@ -183,6 +184,7 @@ fn window_from_limit(l: &ClaudeLimitRaw) -> QuotaWindow {
         window_minutes: None,
         used: Some(used),
         severity: l.severity.clone(),
+        window_kind: None,
     }
 }
 

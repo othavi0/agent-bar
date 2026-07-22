@@ -301,6 +301,7 @@ mod tests {
             window_minutes: Some(300),
             used: Some(100.0 - remaining),
             severity: severity.map(|s| s.to_string()),
+            window_kind: None,
         }
     }
 

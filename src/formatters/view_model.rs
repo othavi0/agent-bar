@@ -59,6 +59,7 @@ mod tests {
                 window_minutes: Some(300),
                 used: None,
                 severity: None,
+                window_kind: None,
             },
         );
         ProviderQuota {

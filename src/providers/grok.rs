@@ -303,6 +303,7 @@ fn build_primary_window(session: &SessionSnap) -> Option<QuotaWindow> {
         window_minutes: None,
         used: Some(used_pct.round()),
         severity: None,
+        window_kind: None,
     })
 }
 
