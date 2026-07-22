@@ -39,14 +39,15 @@ pub fn render_config(state: &AppState, frame: &mut Frame, area: Rect, hits: &mut
             frame.render_widget(p, area);
         }
         Some(cs) => {
-            render_field_list(cs, frame, list_area);
-            render_field_detail(cs, frame, detail_area, hits);
+            let visible = ConfigField::visible(state.platform);
+            render_field_list(cs, &visible, frame, list_area);
+            render_field_detail(cs, &visible, frame, detail_area, hits);
         }
     }
 }
 
 /// Lista os campos editaveis na coluna esquerda.
-fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
+fn render_field_list(cs: &ConfigState, visible: &[ConfigField], frame: &mut Frame, area: Rect) {
     let selected_style = Style::default()
         .fg(to_ratatui(ColorToken::TextBright))
         .add_modifier(Modifier::BOLD)
@@ -64,7 +65,7 @@ fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
     // highlight de selecao compara `i` (indice do campo) com
     // `cs.selected_field`, nunca a posicao visual na lista.
     let mut items: Vec<ListItem<'_>> = Vec::new();
-    for (i, field) in ConfigField::ALL.iter().enumerate() {
+    for (i, field) in visible.iter().enumerate() {
         if i == 0 {
             items.push(ListItem::new(Line::from(Span::styled(
                 " WAYBAR",
@@ -106,7 +107,13 @@ fn render_field_list(cs: &ConfigState, frame: &mut Frame, area: Rect) {
 }
 
 /// Mostra o valor atual + editor inline no painel direito.
-fn render_field_detail(cs: &ConfigState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
+fn render_field_detail(
+    cs: &ConfigState,
+    visible: &[ConfigField],
+    frame: &mut Frame,
+    area: Rect,
+    hits: &mut HitMap,
+) {
     // Vertical split: [value_row (3), help_row (1 fill)]
     let vert = Layout::default()
         .direction(Direction::Vertical)
@@ -116,7 +123,7 @@ fn render_field_detail(cs: &ConfigState, frame: &mut Frame, area: Rect, hits: &m
     let value_area = vert[0];
     let help_area = vert[1];
 
-    let field = ConfigField::ALL[cs.selected_field];
+    let field = visible[cs.selected_field];
 
     // Calcula o valor a exibir: se editando, usa o buffer; senao o valor atual.
     let display_value = if cs.editing {
@@ -158,7 +165,7 @@ fn render_field_detail(cs: &ConfigState, frame: &mut Frame, area: Rect, hits: &m
     frame.render_widget(value_paragraph, value_area);
 
     // Painel de ajuda + status
-    render_help_and_status(cs, frame, help_area, hits);
+    render_help_and_status(cs, visible, frame, help_area, hits);
 }
 
 /// Retorna o valor atual do campo como string.
@@ -183,14 +190,20 @@ fn field_current_value(field: ConfigField, cs: &ConfigState) -> String {
 /// salvar] [esc voltar]` substituindo o hint-text antigo (T14) — só fora do
 /// modo edição (durante edição o campo tem foco do `tui_input`; os chips
 /// dariam a entender que o clique funciona ali, o que não é verdade).
-fn render_help_and_status(cs: &ConfigState, frame: &mut Frame, area: Rect, hits: &mut HitMap) {
+fn render_help_and_status(
+    cs: &ConfigState,
+    visible: &[ConfigField],
+    frame: &mut Frame,
+    area: Rect,
+    hits: &mut HitMap,
+) {
     let muted = Style::default().fg(to_ratatui(ColorToken::Muted));
     let comment = Style::default().fg(to_ratatui(ColorToken::Comment));
 
     let mut lines: Vec<Line<'_>> = Vec::new();
 
     // Dica de campo
-    let field = ConfigField::ALL[cs.selected_field];
+    let field = visible[cs.selected_field];
     if let Some(hint) = field_hint(field) {
         lines.push(Line::from(Span::styled(format!(" {}", hint), comment)));
     }
@@ -413,6 +426,39 @@ mod tests {
         assert!(
             text.contains("refresh externo") && text.contains("agent-bar não"),
             "hint do signal ausente:\n{text}"
+        );
+    }
+
+    #[test]
+    fn config_hides_waybar_only_fields_when_omarchy_only() {
+        let backend = ratatui::backend::TestBackend::new(64, 24);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let mut state = state_on_waybar();
+        state.platform = crate::platform::Platform {
+            omarchy: true,
+            waybar: false,
+        };
+        terminal
+            .draw(|f| render_config(&state, f, f.area(), &mut HitMap::default()))
+            .unwrap();
+        let text = buffer_to_string(terminal.backend().buffer());
+
+        assert!(
+            !text.contains("Separadores"),
+            "Separadores deveria estar oculto:\n{text}"
+        );
+        assert!(!text.contains("Sinal"), "Sinal deveria estar oculto:\n{text}");
+        assert!(
+            !text.contains("Intervalo"),
+            "Intervalo deveria estar oculto:\n{text}"
+        );
+        assert!(
+            text.contains("Provedores"),
+            "Provedores deveria continuar visível:\n{text}"
+        );
+        assert!(
+            text.contains("Câmbio"),
+            "Câmbio (FxRate) deveria continuar visível:\n{text}"
         );
     }
 }

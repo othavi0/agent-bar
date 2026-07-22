@@ -90,21 +90,24 @@ fn handle_save_config(state: &mut AppState, octx: &OwnedCtx) {
         Some(cs) => cs.edit_settings.clone(),
         None => return,
     };
+    let platform = state.platform;
 
     let result: Result<(), String> = (|| {
         settings::save(&octx.paths, &edited).map_err(|e| format!("save falhou: {e}"))?;
 
-        let paths = get_default_waybar_integration_paths();
-        let opts = ApplyOptions {
-            paths,
-            icons_dir: None,
-            app_bin: None,
-            terminal_script: None,
-        };
-        waybar_integration::apply_waybar_integration(&edited, opts)
-            .map_err(|e| format!("apply falhou: {e}"))?;
+        if platform.waybar {
+            let paths = get_default_waybar_integration_paths();
+            let opts = ApplyOptions {
+                paths,
+                icons_dir: None,
+                app_bin: None,
+                terminal_script: None,
+            };
+            waybar_integration::apply_waybar_integration(&edited, opts)
+                .map_err(|e| format!("apply falhou: {e}"))?;
 
-        setup::reload_waybar();
+            setup::reload_waybar();
+        }
         Ok(())
     })();
 
@@ -225,6 +228,11 @@ pub async fn run(
     // configurado — o count-up de display_cost nunca desligaria (o pulse
     // crítico dos gauges morreu em v8, spec §6).
     state.animations = octx.settings.menu.animations;
+    // Plataforma real (spec E): sem isto, `state.platform` fica no default
+    // {omarchy:false, waybar:true} do AppState::new() mesmo em Omarchy-only —
+    // o Save recriaria ~/.config/waybar do zero e a aba Config mostraria
+    // campos só-Waybar que não fazem sentido ali.
+    state.platform = crate::platform::detect();
     // Zonas clicaveis do frame atual (Task 9): populado por `render`, limpo
     // a cada `terminal.draw` (frames antigos nao devem vazar cliques).
     let mut hits = super::mouse::HitMap::default();
@@ -360,4 +368,71 @@ pub async fn run(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Paths;
+    use crate::providers::OwnedCtx;
+    use crate::settings::load as load_settings;
+    use crate::tui::state::ConfigState;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    fn make_octx(cfg_dir: &std::path::Path) -> OwnedCtx {
+        let paths = Paths {
+            cache_dir: cfg_dir.join("cache"),
+            config_dir: cfg_dir.join("config"),
+            claude_credentials: PathBuf::new(),
+            codex_auth: PathBuf::new(),
+            codex_sessions: PathBuf::new(),
+            amp_settings: PathBuf::new(),
+            amp_threads: PathBuf::new(),
+            grok_home: PathBuf::new(),
+            grok_auth: PathBuf::new(),
+        };
+        let settings = load_settings(&paths);
+        OwnedCtx {
+            client: reqwest::Client::new(),
+            paths,
+            settings,
+            local_offset: time::UtcOffset::UTC,
+            claude_usage_url: String::new(),
+            version: "0.0.0-test",
+            home: cfg_dir.to_path_buf(),
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn handle_save_config_skips_waybar_write_when_omarchy_only() {
+        let fake_home = tempdir().unwrap();
+        let prev_home = std::env::var_os("HOME");
+        std::env::set_var("HOME", fake_home.path());
+
+        let octx = make_octx(fake_home.path());
+        let mut state = AppState::new();
+        state.platform = crate::platform::Platform {
+            omarchy: true,
+            waybar: false,
+        };
+        state.config_state = Some(ConfigState::new(&octx.settings));
+
+        handle_save_config(&mut state, &octx);
+
+        assert!(
+            octx.paths.config_dir.join("settings.json").exists(),
+            "settings.json deveria ter sido salvo mesmo com waybar ausente"
+        );
+        assert!(
+            !fake_home.path().join(".config").join("waybar").exists(),
+            "zero escrita em ~/.config/waybar quando Omarchy-only"
+        );
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+    }
 }
