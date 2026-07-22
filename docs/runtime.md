@@ -63,9 +63,10 @@ Normalization:
 - invalid separator, display, or window-policy values fall back to defaults
 - if the normalized form differs from the stored file, it is written back to disk
 
-Older settings files are normalized to schema version 2 on load: the version is
-stamped and unknown providers are dropped (e.g. a `copilot` entry from a previous
-version is removed).
+Older settings files are normalized to schema version 3 on load: the version is
+stamped, unknown providers are dropped (e.g. a `copilot` entry from a previous
+version is removed), and the legacy `waybar.show_percentage` key is dropped
+silently (v2 → v3).
 
 ### Menu Font (`menu.animations`/`menu.fontFamily`/`menu.fontSize`)
 

@@ -1,6 +1,7 @@
 # agent-bar — Agent Instructions
 
-Monitor de quotas LLM para Waybar (Claude, Codex, Amp).
+Monitor de quotas LLM (Claude, Codex, Amp, Grok) — Omarchy 4 first,
+Waybar como tier legado.
 `AGENTS.md` é shim de compat Codex. **O código em `src/` é a fonte da verdade.**
 
 ## 1. Hard Rules
