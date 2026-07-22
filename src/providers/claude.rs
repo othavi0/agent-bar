@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use super::base::{get_or_fetch, quota_base};
 use super::error::ClaudeError;
-use super::types::{ClaudeQuotaExtra, ExtraUsage, ProviderExtra, ProviderQuota, QuotaWindow};
+use super::types::{
+    ClaudeQuotaExtra, ExtraUsage, ProviderExtra, ProviderQuota, QuotaWindow, WindowKind,
+};
 use super::{Ctx, Provider};
 use crate::cache;
 
@@ -115,7 +117,7 @@ fn read_credentials(path: &Path) -> Option<ClaudeCredentials> {
     serde_json::from_slice(&bytes).ok()
 }
 
-fn window_from(raw: &ClaudeWindowRaw) -> QuotaWindow {
+fn window_from(raw: &ClaudeWindowRaw, kind: WindowKind) -> QuotaWindow {
     let used = raw.utilization.round();
     QuotaWindow {
         remaining: 100.0 - used,
@@ -123,7 +125,7 @@ fn window_from(raw: &ClaudeWindowRaw) -> QuotaWindow {
         window_minutes: None,
         used: None,
         severity: None,
-        window_kind: None,
+        window_kind: Some(kind),
     }
 }
 
@@ -176,7 +178,7 @@ struct ClaudeSpendRaw {
     enabled: Option<bool>,
 }
 
-fn window_from_limit(l: &ClaudeLimitRaw) -> QuotaWindow {
+fn window_from_limit(l: &ClaudeLimitRaw, kind: WindowKind) -> QuotaWindow {
     let used = l.percent.unwrap_or(0.0).round();
     QuotaWindow {
         remaining: 100.0 - used,
@@ -184,7 +186,7 @@ fn window_from_limit(l: &ClaudeLimitRaw) -> QuotaWindow {
         window_minutes: None,
         used: Some(used),
         severity: l.severity.clone(),
-        window_kind: None,
+        window_kind: Some(kind),
     }
 }
 
@@ -206,8 +208,8 @@ fn quota_from_limits(
     let mut weekly = IndexMap::new();
     for l in &u.limits {
         match l.kind.as_str() {
-            "session" => primary = Some(window_from_limit(l)),
-            "weekly_all" => secondary = Some(window_from_limit(l)),
+            "session" => primary = Some(window_from_limit(l, WindowKind::FiveHour)),
+            "weekly_all" => secondary = Some(window_from_limit(l, WindowKind::SevenDay)),
             "weekly_scoped" => {
                 let name = l
                     .scope
@@ -215,7 +217,7 @@ fn quota_from_limits(
                     .and_then(|s| s.model.as_ref())
                     .and_then(|m| m.display_name.clone());
                 if let Some(name) = name {
-                    weekly.insert(name, window_from_limit(l));
+                    weekly.insert(name, window_from_limit(l, WindowKind::SevenDay));
                 }
             }
             other => log::debug!("Claude limits[]: kind desconhecido ignorado: {other}"),
@@ -451,17 +453,23 @@ fn quota_from_usage(
     let (primary, secondary, weekly) = match quota_from_limits(&usage) {
         Some(t) => t,
         None => {
-            let primary = usage.five_hour.as_ref().map(window_from);
-            let secondary = usage.seven_day.as_ref().map(window_from);
+            let primary = usage
+                .five_hour
+                .as_ref()
+                .map(|w| window_from(w, WindowKind::FiveHour));
+            let secondary = usage
+                .seven_day
+                .as_ref()
+                .map(|w| window_from(w, WindowKind::SevenDay));
             let mut weekly: IndexMap<String, QuotaWindow> = IndexMap::new();
             if let Some(w) = usage.seven_day_opus.as_ref() {
-                weekly.insert("Opus".to_string(), window_from(w));
+                weekly.insert("Opus".to_string(), window_from(w, WindowKind::SevenDay));
             }
             if let Some(w) = usage.seven_day_sonnet.as_ref() {
-                weekly.insert("Sonnet".to_string(), window_from(w));
+                weekly.insert("Sonnet".to_string(), window_from(w, WindowKind::SevenDay));
             }
             if let Some(w) = usage.seven_day_cowork.as_ref() {
-                weekly.insert("Cowork".to_string(), window_from(w));
+                weekly.insert("Cowork".to_string(), window_from(w, WindowKind::SevenDay));
             }
             (primary, secondary, weekly)
         }
@@ -916,11 +924,23 @@ mod tests {
         assert_eq!(p.remaining, 89.0); // 100 - 11 (limits), NÃO 45 (legacy 55)
         assert_eq!(p.severity.as_deref(), Some("normal"));
         assert_eq!(p.used, Some(11.0));
+        assert_eq!(
+            p.window_kind,
+            Some(crate::providers::types::WindowKind::FiveHour)
+        );
         let s = q.secondary.as_ref().unwrap();
         assert_eq!(s.remaining, 97.0);
+        assert_eq!(
+            s.window_kind,
+            Some(crate::providers::types::WindowKind::SevenDay)
+        );
         // weekly_scoped vira models["Fable"]:
         let models = q.models.as_ref().unwrap();
         assert_eq!(models.get("Fable").unwrap().remaining, 97.0);
+        assert_eq!(
+            models.get("Fable").unwrap().window_kind,
+            Some(crate::providers::types::WindowKind::SevenDay)
+        );
         // spend vira extra_usage habilitado com $12.34 de $100.00:
         let extra = match q.extra.as_ref().unwrap() {
             crate::providers::types::ProviderExtra::Claude(c) => c,
@@ -960,7 +980,15 @@ mod tests {
         let p = q.primary.as_ref().unwrap();
         assert_eq!(p.remaining, 75.0); // 100 - 25
         assert_eq!(p.severity, None, "fallback não inventa severidade");
+        assert_eq!(
+            p.window_kind,
+            Some(crate::providers::types::WindowKind::FiveHour)
+        );
         assert_eq!(q.secondary.as_ref().unwrap().remaining, 60.0); // 100 - 40
+        assert_eq!(
+            q.secondary.as_ref().unwrap().window_kind,
+            Some(crate::providers::types::WindowKind::SevenDay)
+        );
     }
 
     #[tokio::test]
