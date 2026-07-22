@@ -32,7 +32,6 @@ dependencies = [
  "throbber-widgets-tui",
  "time",
  "tokio",
- "tokio-util",
  "tui-input",
  "wiremock",
 ]
@@ -2714,7 +2713,6 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
- "futures-util",
  "pin-project-lite",
  "tokio",
 ]

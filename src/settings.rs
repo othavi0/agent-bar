@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Paths;
 
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 3;
 
 /// Modo de glyph para a TUI.
 ///
@@ -94,7 +94,6 @@ pub struct Tooltip {}
 #[serde(rename_all = "camelCase")]
 pub struct Waybar {
     pub providers: Vec<String>,
-    pub show_percentage: bool,
     pub separators: SeparatorStyle,
     pub provider_order: Vec<String>,
     pub display_mode: DisplayMode,
@@ -165,7 +164,6 @@ struct RawSettings {
 #[serde(rename_all = "camelCase")]
 struct RawWaybar {
     providers: Option<Vec<String>>,
-    show_percentage: Option<bool>,
     separators: Option<String>,
     provider_order: Option<Vec<String>>,
     display_mode: Option<String>,
@@ -299,7 +297,6 @@ fn normalize(raw: RawSettings) -> Settings {
         version: CURRENT_VERSION,
         waybar: Waybar {
             providers,
-            show_percentage: rw.show_percentage.unwrap_or(true),
             separators,
             provider_order,
             display_mode,
@@ -388,7 +385,7 @@ mod tests {
     fn defaults_when_no_file() {
         let dir = tempdir().unwrap();
         let s = load(&paths_in(dir.path()));
-        assert_eq!(s.version, 2);
+        assert_eq!(s.version, 3);
         assert_eq!(s.waybar.providers, vec!["claude", "codex", "amp", "grok"]);
         assert_eq!(s.waybar.separators, SeparatorStyle::Gap);
         assert_eq!(s.waybar.display_mode, DisplayMode::Remaining);
@@ -432,6 +429,30 @@ mod tests {
         let s = load(&p);
         assert_eq!(s.waybar.separators, SeparatorStyle::Glass);
         assert_eq!(s.waybar.signal, Some(8));
+    }
+
+    #[test]
+    fn v2_settings_drops_show_percentage_on_load() {
+        let dir = tempdir().unwrap();
+        let p = paths_in(dir.path());
+        std::fs::create_dir_all(&p.config_dir).unwrap();
+        std::fs::write(
+            p.settings_file(),
+            r#"{"version":2,"waybar":{"providers":["claude"],"showPercentage":false,
+                "separators":"gap","providerOrder":["claude"],"displayMode":"remaining",
+                "interval":60}}"#,
+        )
+        .unwrap();
+
+        let s = load(&p);
+        assert_eq!(s.version, CURRENT_VERSION);
+
+        // Auto-repair já regravou o arquivo sem a chave legada.
+        let saved = std::fs::read_to_string(p.settings_file()).unwrap();
+        assert!(
+            !saved.contains("showPercentage"),
+            "showPercentage deveria ter sido dropada no re-save: {saved}"
+        );
     }
 
     #[test]

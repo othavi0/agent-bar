@@ -758,7 +758,7 @@ async fn main() {
     let mode = settings.waybar.display_mode;
 
     match opts.command {
-        Command::Terminal | Command::Status => {
+        Command::Status => {
             println!(
                 "{}",
                 format_for_terminal(&clock, &quotas, &settings, mode, no_color)
@@ -892,11 +892,11 @@ mod tests {
     }
 
     #[test]
-    fn should_notify_false_when_command_is_terminal() {
+    fn should_notify_false_when_command_is_not_waybar() {
         let s = settings_with_notify(true);
         assert!(!should_notify(
             &s,
-            Command::Terminal,
+            Command::Menu,
             Format::Waybar,
             false,
             false

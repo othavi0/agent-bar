@@ -169,7 +169,6 @@ pub(super) fn activate(state: &mut AppState, item: SidebarItem) -> Vec<Action> {
                     version: 0, // sentinela; event_loop sobrescreve com real
                     waybar: crate::settings::Waybar {
                         providers: vec![],
-                        show_percentage: true,
                         separators: crate::settings::SeparatorStyle::Gap,
                         provider_order: vec![],
                         display_mode: crate::settings::DisplayMode::Remaining,

@@ -1,11 +1,8 @@
 //! Descoberta do binário `amp` (locator). Port de `src/amp-cli.ts` (só a metade
-//! locator; o `ensure_amp_cli` interativo é Plano 6). Ordem: PATH (`which`),
-//! depois caminhos conhecidos sob `$HOME`.
+//! locator; a metade `ensure_amp_cli` foi removida na limpeza v9 por não ter
+//! caller). Ordem: PATH (`which`), depois caminhos conhecidos sob `$HOME`.
 
 use std::path::{Path, PathBuf};
-
-/// Comando oficial de instalação (usado pelo Plano 6; contrato de display).
-pub const AMP_INSTALL_COMMAND: &str = "curl -fsSL https://ampcode.com/install.sh | bash";
 
 /// Caminhos candidatos sob `$HOME`, na ordem de preferência. Vazio se `home` vazio.
 pub fn amp_candidate_paths(home: &str) -> Vec<PathBuf> {
@@ -105,6 +102,7 @@ mod tests {
 
     #[test]
     fn install_command_is_official() {
+        use crate::app_identity::AMP_INSTALL_COMMAND;
         assert_eq!(
             AMP_INSTALL_COMMAND,
             "curl -fsSL https://ampcode.com/install.sh | bash"

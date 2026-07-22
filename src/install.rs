@@ -1,12 +1,9 @@
-//! Verificacao de presenca de comandos no PATH. Port de `src/install.ts` +
-//! a parte `ensure_amp_cli` de `src/amp-cli.ts`.
+//! Verificacao de presenca de comandos no PATH. Port de `src/install.ts`.
 //!
-//! NOTA: `ensure_amp_cli` aqui **orienta** o usuario (imprime o comando de
-//! instalacao) em vez de executar `curl | bash` automaticamente. O instalador
-//! interativo foi descartado por seguranca: a TUI nao deve pipe-executar codigo
-//! remoto sem confirmacao explicita do usuario.
+//! `ensure_amp_cli` (guidance de instalacao do Amp, port de `src/amp-cli.ts`)
+//! foi removida (v9, limpeza de legado) por nao ter caller: o locator real
+//! em producao e `providers::amp_cli::find_amp_bin`.
 
-use crate::app_identity::AMP_INSTALL_COMMAND;
 use crate::providers::amp_cli::which_in_path;
 
 /// Verifica se `cmd` existe no `$PATH`. Usa `which_in_path` do providers/amp_cli.rs
@@ -22,22 +19,6 @@ pub fn ensure_command(cmd: &str, install_hint: &str) -> bool {
         return true;
     }
     log::warn!("{cmd} não encontrado. {install_hint}");
-    false
-}
-
-/// Verifica se `amp` esta disponivel. Se ausente, loga o comando de instalacao
-/// oficial e retorna `false`. Nao executa o instalador automaticamente.
-///
-/// Para instalacao real, o usuario deve rodar manualmente:
-/// `curl -fsSL https://ampcode.com/install.sh | bash`
-pub fn ensure_amp_cli() -> bool {
-    if has_cmd("amp") {
-        return true;
-    }
-    log::warn!(
-        "Amp CLI não encontrado. Para instalar, rode: {}",
-        AMP_INSTALL_COMMAND
-    );
     false
 }
 
@@ -71,13 +52,5 @@ mod tests {
             "__agent_bar_nonexistent_cmd_xyz__",
             "instale-o"
         ));
-    }
-
-    #[test]
-    fn ensure_amp_cli_absent_returns_false() {
-        let _env = crate::test_support::env_guard();
-        // Em ambiente CI/test, amp provavelmente nao esta instalado.
-        // Se estiver, o test passa com true; se nao, com false. Ambos sao corretos.
-        let _ = ensure_amp_cli(); // apenas verifica que nao panica
     }
 }

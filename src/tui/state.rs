@@ -115,19 +115,6 @@ impl ConfigField {
             ConfigField::FxRate => "Câmbio R$",
         }
     }
-
-    /// Chave técnica (settings / docs) — dica no painel de ajuda.
-    pub fn settings_key(self) -> &'static str {
-        match self {
-            ConfigField::Providers => "providers",
-            ConfigField::ProviderOrder => "providerOrder",
-            ConfigField::Separators => "separators",
-            ConfigField::DisplayMode => "displayMode",
-            ConfigField::Signal => "signal",
-            ConfigField::Interval => "interval",
-            ConfigField::FxRate => "fxRate",
-        }
-    }
 }
 
 /// Estado da aba Waybar config.
