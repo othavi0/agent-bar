@@ -159,9 +159,3 @@ Process {
 ```
 
 `Process.command` is an argv array (no shell) — keep each argument separate.
-
-## Future
-
-A native Omarchy Quickshell bar-widget plugin
-(`~/.config/omarchy/plugins/agent-bar/`) is a future step once Omarchy ships its
-Quickshell release (v4).
