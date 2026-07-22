@@ -745,14 +745,14 @@ BarWidget {
             text: "agent-bar"
             color: root.fg
             font.family: root.fontFamily
-            font.pixelSize: 12.5
+            font.pixelSize: 13
             font.bold: true
           }
           Text {
             text: (root.clockTick, root.payload ? "· " + root.fmtAgo(root.payload.fetchedAt, new Date()) : "")
             color: root.dim
             font.family: root.fontFamily
-            font.pixelSize: 10.5
+            font.pixelSize: 11
           }
 
           Item { Layout.fillWidth: true }
@@ -785,14 +785,14 @@ BarWidget {
             text: "agent-bar"
             color: root.fg
             font.family: root.fontFamily
-            font.pixelSize: 12.5
+            font.pixelSize: 13
             font.bold: true
           }
           Text {
             text: "· Settings"
             color: root.dim
             font.family: root.fontFamily
-            font.pixelSize: 12.5
+            font.pixelSize: 13
           }
 
           Item { Layout.fillWidth: true }
@@ -1100,7 +1100,7 @@ BarWidget {
                     text: root.previewChipLabel(modelData)
                     color: root.severityColor(root.severityBucket(modelData.primary))
                     font.family: root.fontFamily
-                    font.pixelSize: 11.5
+                    font.pixelSize: 12
                   }
                 }
               }
@@ -1159,7 +1159,7 @@ BarWidget {
                   text: "segundos entre atualizações"
                   color: Qt.darker(root.fg, 1.6)
                   font.family: root.fontFamily
-                  font.pixelSize: 10.5
+                  font.pixelSize: 11
                 }
               }
 
@@ -1173,7 +1173,7 @@ BarWidget {
                 text: root.draftSettings.refreshIntervalSec + "s"
                 color: root.fg
                 font.family: root.fontFamily
-                font.pixelSize: 11.5
+                font.pixelSize: 12
                 horizontalAlignment: Text.AlignHCenter
                 Layout.preferredWidth: 46
               }
@@ -1330,7 +1330,7 @@ BarWidget {
       text: (root.clockTick, root.fmtEta(row.window, row.extra, new Date()))
       color: root.dim
       font.family: root.fontFamily
-      font.pixelSize: 10.5
+      font.pixelSize: 11
       Layout.preferredWidth: 132
       horizontalAlignment: Text.AlignRight
       elide: Text.ElideRight
