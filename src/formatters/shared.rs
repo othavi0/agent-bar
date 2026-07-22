@@ -189,7 +189,7 @@ use crate::formatters::clock::Clock;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-fn parse_iso(iso: &str) -> Option<OffsetDateTime> {
+pub(crate) fn parse_iso(iso: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::parse(iso, &Rfc3339).ok()
 }
 

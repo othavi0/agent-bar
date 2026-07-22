@@ -3,6 +3,8 @@
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
+use crate::formatters::clock::Clock;
+use crate::formatters::shared::is_duplicate_window;
 use crate::providers::types::{ProviderQuota, QuotaWindow};
 use crate::theme::ColorToken;
 use crate::tui::theme_bridge::to_ratatui;
@@ -18,9 +20,9 @@ use super::format::{
 /// reset. Cor vem da severidade da API quando presente (spec §4.1),
 /// fallback pro threshold local — sem modulação de brilho (v8: gauge sólido,
 /// pulso removido de propósito, spec §6).
-fn window_line(label: &str, w: &QuotaWindow, gauge_w: usize) -> Line<'static> {
+fn window_line(clock: &Clock, label: &str, w: &QuotaWindow, gauge_w: usize) -> Line<'static> {
     let color = severity_color_api(w.severity.as_deref(), Some(w.remaining));
-    let reset_str = fmt_reset(w.resets_at.as_deref());
+    let reset_str = fmt_reset(clock, w.resets_at.as_deref(), w.remaining);
     let name = truncate_name(label, LABEL_W);
     let mut spans = vec![Span::styled(
         format!(" {name:<LABEL_W$} "),
@@ -45,13 +47,14 @@ fn window_line(label: &str, w: &QuotaWindow, gauge_w: usize) -> Line<'static> {
 /// Claude (ex. "Opus") batem por substring com o id completo do usage
 /// engine (ex. "claude-opus-4-8"), então isto é o caminho comum, não raro.
 fn model_window_line(
+    clock: &Clock,
     name: &str,
     w: &QuotaWindow,
     gauge_w: usize,
     content_width: u16,
     provider_usage: Option<&ProviderUsage>,
 ) -> Line<'static> {
-    let mut line = window_line(name, w, gauge_w);
+    let mut line = window_line(clock, name, w, gauge_w);
     if let Some(cost) = provider_usage
         .and_then(|pu| find_model_usage(&pu.by_model, name))
         .and_then(|mu| mu.cost.as_ref())
@@ -76,8 +79,10 @@ fn model_window_line(
 /// onde termina) varia entre seções, porque cada uma tem seu próprio
 /// `suffix_w` (`WINDOW_SUFFIX_W` vs `MODEL_SUFFIX_W` vs `EXTRA_SUFFIX_W`) —
 /// isso é deliberado, não um bug de alinhamento (ver comentário acima de
-/// `WINDOW_SUFFIX_W`).
+/// `WINDOW_SUFFIX_W`). Modelos que colidem com primary/secondary via
+/// `is_duplicate_window` são omitidos (dedup display-level).
 pub(super) fn window_lines(
+    clock: &Clock,
     q: &ProviderQuota,
     provider_usage: Option<&ProviderUsage>,
     content_width: u16,
@@ -85,14 +90,20 @@ pub(super) fn window_lines(
     let bar_width = derive_bar_width(content_width, WINDOW_SUFFIX_W);
     let mut lines = Vec::new();
     if let Some(primary) = &q.primary {
-        lines.push(window_line("sessão", primary, bar_width));
+        lines.push(window_line(clock, "sess\u{e3}o", primary, bar_width));
     }
     if let Some(secondary) = &q.secondary {
-        lines.push(window_line("semana", secondary, bar_width));
+        lines.push(window_line(clock, "semana", secondary, bar_width));
     }
     if let Some(models) = &q.models {
         for (name, w) in models {
+            let dup_primary = q.primary.as_ref().is_some_and(|p| is_duplicate_window(w, p));
+            let dup_secondary = q.secondary.as_ref().is_some_and(|s| is_duplicate_window(w, s));
+            if dup_primary || dup_secondary {
+                continue;
+            }
             lines.push(model_window_line(
+                clock,
                 name,
                 w,
                 bar_width,
