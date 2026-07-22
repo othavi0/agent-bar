@@ -31,7 +31,7 @@ agent-bar --watch --interval 30            # custom poll floor
       "displayName": "Claude",
       "available": true,
       "plan": "Max",
-      "primary":   { "remaining": 30, "used": 70, "resetsAt": "2026-06-17T20:09:59Z", "windowMinutes": 300 },
+      "primary":   { "remaining": 30, "used": 70, "resetsAt": "2026-06-17T20:09:59Z", "windowMinutes": 300, "windowKind": "fiveHour" },
       "secondary": { "remaining": 65, "resetsAt": "2026-06-19T22:59:59Z" },
       "models":    { "Sonnet": { "remaining": 89, "resetsAt": "2026-06-19T22:59:59Z" } },
       "extra":     { "weeklyModels": { "Sonnet": { "remaining": 89, "resetsAt": "2026-06-19T22:59:59Z" } } }
@@ -58,7 +58,7 @@ agent-bar --watch --interval 30            # custom poll floor
 | `error` | string | Present only on failure (key omitted when OK — check `'error' in p`). |
 | `staleReason` | string | Present only when the data was served from an expired cache after a transient fetch error (timeout, expired token). The quota fields are the last known good values; the string is the user-facing reason. Omitted for fresh data. |
 
-`Window`: `{ remaining: number, used?: number|null, resetsAt: string|null, windowMinutes?: number|null, severity?: string }`.
+`Window`: `{ remaining: number, used?: number|null, resetsAt: string|null, windowMinutes?: number|null, severity?: string, windowKind?: string }`.
 `remaining`/`used` are percentages (0-100). `used` is only present when a provider
 reports a distinct "used" metric that is not simply `100 - remaining` (it can exceed 100 with overage).
 `severity` is optional (`Option<String>`, omitted when absent) and comes from the
@@ -67,6 +67,15 @@ Known values: `normal`/`ok`/`warning`/`elevated`/`high`/`critical`/`exceeded`/`b
 Consumers should fall back to a local threshold on `remaining` (≥60/30/10) when
 `severity` is absent or unrecognized — this mirrors `severity_color_api` in
 `src/tui/widgets/severity.rs`.
+`windowKind` is one of `fiveHour`/`sevenDay`/`daily`/`context`/`other`, decided once
+by the provider at fetch time (never a client-side magic-number guess). It replaces
+any window-duration heuristic a consumer might have written against `windowMinutes`
+— `fiveHour`/`sevenDay` map to Claude's and Codex's own quota tiers, `daily` is Amp's
+free-tier reset cadence, `context` is Grok's context-window usage (no reset — see
+`contextTokensUsed`/`contextWindowTokens` in `extra` instead), `other` is any window
+that doesn't fit those tiers (e.g. a Codex bucket with a non-standard duration).
+Omitted when the provider hasn't classified the window (should not happen in
+production; only seen in hand-built test fixtures).
 
 ## Stability
 
@@ -80,6 +89,35 @@ or changes type/meaning. Adding a new optional field does **not** bump.
 
 Absence convention: optional fields are **omitted** when absent (never `null`,
 never a serialized `undefined`). Provider/window array order is not guaranteed.
+
+## `extra` shapes by provider
+
+`extra` is untagged (no variant key in the JSON — see Stability above:
+unstable, no `schemaVersion` bump on change). Shape depends on `provider`:
+
+- **`claude`** (`ClaudeQuotaExtra`): `{ weeklyModels?: Record<string, Window>,
+  extraUsage?: { enabled: boolean, remaining: number, limit: number, used: number } }`.
+  `weeklyModels` keys are model display names (e.g. `"Opus"`, `"Sonnet"`,
+  `"Cowork"`, or a `weekly_scoped` display name from `limits[]`). `extraUsage`
+  mirrors Claude's `spend`/legacy `extra_usage` block — `limit === -1` means
+  unlimited (Codex-style sentinel, see below); a real `$0` limit with `enabled:
+  true` is not expected from Claude today.
+- **`codex`** (`CodexQuotaExtra`): `{ modelsDetailed?: Record<string, ModelWindows>,
+  extraUsage?: { enabled, remaining, limit, used } }`. `ModelWindows` is `{
+  fiveHour?: Window, sevenDay?: Window, other?: Window[] }` — `other` holds any
+  window that didn't classify as `fiveHour`/`sevenDay` (non-standard bucket
+  duration; see `windowKind: "other"` above). `extraUsage.limit === -1` means
+  unlimited credits; `0` means a real (informational) balance with no configured
+  cap.
+- **`amp`** (`AmpQuotaExtra`): `{ meta?: Record<string, string> }` — free-form
+  key/value pairs scraped from `amp usage` output (e.g. `freeRemaining`,
+  `freeTotal`, `replenishRate`, `bonus`, `creditsBalance`, `creditsReplenish`, or
+  `raw0`..`raw3` when the CLI's text format wasn't recognized). No fixed key set —
+  treat as display-only strings, never parse them back into numbers.
+- **`grok`** (`GrokQuotaExtra`): `{ sessionsToday?: number, turnsToday?: number,
+  contextTokensUsed?: number, contextWindowTokens?: number, recentModel?: string }`.
+  Grok's `primary` window (`windowKind: "context"`) has no `resetsAt` — context
+  usage doesn't reset on a timer, it resets when the session/thread does.
 
 ## Quickshell example
 

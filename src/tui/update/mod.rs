@@ -111,6 +111,7 @@ mod tests {
             window_minutes: None,
             used: Some(100.0 - remaining),
             severity: None,
+            window_kind: None,
         });
         q
     }

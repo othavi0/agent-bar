@@ -518,8 +518,10 @@ mod tests {
     }
 
     #[test]
-    fn unrecognized_window_uses_fallback_mapping() {
-        // 60 min = "other" from classify_window, but fallback: primary→fiveHour, secondary→sevenDay
+    fn unrecognized_window_stays_other_no_fallback() {
+        // 60 min = "other" via classify_window; SEM fallback, fica só
+        // em `other` (nunca forçado em fiveHour/sevenDay) — é o fix do
+        // bug de duplicação do Codex (auditoria 2026-07-21).
         let mut buckets = IndexMap::new();
         buckets.insert(
             "b1".to_string(),
@@ -537,13 +539,75 @@ mod tests {
         let q = build_codex_quota(&limits, base());
         let md = codex_extra(&q).models_detailed.as_ref().unwrap();
         let model = md.values().next().unwrap();
-        // primary (60 min → other → fallback fiveHour)
-        // secondary (60 min → other initially, but place_window already put it in other;
-        //   then fallback seven_day fills since five_hour was already filled by place_window fallback)
-        // Actually: place_window(primary, 60) → other; place_window(secondary, 60) → other
-        // then fallback: five_hour is None → fill from primary; seven_day is None → fill from secondary
-        assert!(model.five_hour.is_some());
-        assert!(model.seven_day.is_some());
+        assert!(model.five_hour.is_none(), "60min não deve ir pra fiveHour");
+        assert!(model.seven_day.is_none(), "60min não deve ir pra sevenDay");
+        let other = model.other.as_ref().expect("other deve ter as 2 janelas");
+        assert_eq!(other.len(), 2, "primary+secondary de 60min, ambas em other");
+        for w in other {
+            assert_eq!(
+                w.window_kind,
+                Some(crate::formatters::shared::WindowKind::Other)
+            );
+        }
+    }
+
+    #[test]
+    fn both_windows_weekly_primary_wins_seven_day_slot() {
+        // Payload real que gerava o bug: primary e secondary do MESMO
+        // bucket com window_minutes=10080 (7 dias) — o caso citado na
+        // auditoria 2026-07-21. O loop de build_model_windows itera
+        // [primary, secondary] nessa ordem, então primary preenche o
+        // slot seven_day primeiro; secondary chega com o slot já
+        // ocupado e cai em `other` (sem duplicação, sem fallback).
+        let mut buckets = IndexMap::new();
+        buckets.insert(
+            "b1".to_string(),
+            CodexLimitBucket {
+                limit_id: "b1".into(),
+                limit_name: None,
+                primary: Some(win(10.0, 10080, future_unix())),
+                secondary: Some(win(20.0, 10080, future_unix())),
+            },
+        );
+        let limits = CodexRateLimits {
+            buckets: Some(buckets),
+            ..Default::default()
+        };
+        let q = build_codex_quota(&limits, base());
+        let md = codex_extra(&q).models_detailed.as_ref().unwrap();
+        let model = md.values().next().unwrap();
+
+        assert!(
+            model.five_hour.is_none(),
+            "nada deve ser forçado no slot fiveHour"
+        );
+
+        let seven_day = model
+            .seven_day
+            .as_ref()
+            .expect("seven_day deve conter a primary (primeira a preencher o slot)");
+        assert_eq!(
+            seven_day.remaining, 90.0,
+            "seven_day deve ser a primary (used=10.0)"
+        );
+        assert_eq!(
+            seven_day.window_kind,
+            Some(crate::formatters::shared::WindowKind::SevenDay)
+        );
+
+        let other = model
+            .other
+            .as_ref()
+            .expect("other deve conter a secondary, sem slot livre");
+        assert_eq!(other.len(), 1, "só a secondary sobra pra other");
+        assert_eq!(
+            other[0].remaining, 80.0,
+            "other deve ser a secondary (used=20.0)"
+        );
+        assert_eq!(
+            other[0].window_kind,
+            Some(crate::formatters::shared::WindowKind::SevenDay)
+        );
     }
 
     // -----------------------------------------------------------------------

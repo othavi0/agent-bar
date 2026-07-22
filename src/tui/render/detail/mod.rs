@@ -61,7 +61,13 @@ fn render_full(
     frame: &mut Frame,
     area: Rect,
 ) {
-    let windows = window_lines(q, provider_usage, area.width);
+    let clock = crate::formatters::clock::Clock {
+        now: state
+            .last_update
+            .unwrap_or(time::OffsetDateTime::UNIX_EPOCH),
+        local_offset: state.local_offset,
+    };
+    let windows = window_lines(&clock, q, provider_usage, area.width);
     let (models_full, models_collapsed) = model_lines(provider_usage, brand, area.width);
     let extra_full = extra_lines(q, area.width);
     let totals = totals_line(state, provider_usage, &q.provider);
@@ -301,6 +307,7 @@ mod tests {
             window_minutes: Some(300),
             used: Some(100.0 - remaining),
             severity: severity.map(|s| s.to_string()),
+            window_kind: None,
         }
     }
 
@@ -338,6 +345,75 @@ mod tests {
         let out = truncate_name("claude-opus-4-8-extended", 12);
         assert_eq!(out.chars().count(), 12);
         assert!(out.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn fmt_reset_same_local_day_shows_countdown_and_time() {
+        let clock = crate::formatters::clock::Clock {
+            now: time::macros::datetime!(2026-06-19 12:00:00 UTC),
+            local_offset: time::UtcOffset::from_hms(3, 0, 0).unwrap(),
+        };
+        // 14:05 UTC + 03:00 = 17:05 local, mesmo dia local que "now" (+03:00 = 15:00)
+        let out = super::format::fmt_reset(&clock, Some("2026-06-19T14:05:00Z"), 50.0);
+        assert_eq!(out, "2h 05m \u{b7} 17:05");
+    }
+
+    #[test]
+    fn fmt_reset_different_local_day_shows_weekday_abbrev() {
+        let clock = crate::formatters::clock::Clock {
+            now: time::macros::datetime!(2026-06-19 23:30:00 UTC), // sex 23:30 UTC → sáb 02:30 local
+            local_offset: time::UtcOffset::from_hms(3, 0, 0).unwrap(),
+        };
+        // reset seg 2026-06-22T13:00:00Z + 03:00 = seg 16:00 local (dia diferente do "now" local)
+        let out = super::format::fmt_reset(&clock, Some("2026-06-22T13:00:00Z"), 30.0);
+        assert_eq!(out, "2d 13h \u{b7} seg 16:00");
+    }
+
+    #[test]
+    fn fmt_reset_full_and_unknown_passthrough() {
+        let clock = crate::formatters::clock::Clock {
+            now: time::macros::datetime!(2026-06-19 12:00:00 UTC),
+            local_offset: time::UtcOffset::UTC,
+        };
+        assert_eq!(
+            super::format::fmt_reset(&clock, Some("2026-06-19T14:00:00Z"), 100.0),
+            "Full"
+        );
+        assert_eq!(super::format::fmt_reset(&clock, None, 50.0), "?");
+    }
+
+    #[test]
+    fn window_lines_dedups_model_matching_secondary() {
+        use crate::providers::types::WindowKind;
+        let clock = crate::formatters::clock::Clock {
+            now: time::macros::datetime!(2026-06-19 12:00:00 UTC),
+            local_offset: time::UtcOffset::UTC,
+        };
+        let mut q = minimal_quota("codex");
+        q.secondary = Some(QuotaWindow {
+            remaining: 85.0,
+            resets_at: Some("2026-06-26T12:00:00Z".into()),
+            window_minutes: Some(10080),
+            used: None,
+            severity: None,
+            window_kind: Some(WindowKind::SevenDay),
+        });
+        let mut models = IndexMap::new();
+        models.insert(
+            "Codex".to_string(),
+            QuotaWindow {
+                remaining: 85.0,
+                resets_at: Some("2026-06-26T12:00:00Z".into()),
+                window_minutes: Some(10080),
+                used: None,
+                severity: None,
+                window_kind: Some(WindowKind::SevenDay),
+            },
+        );
+        q.models = Some(models);
+        let lines = super::windows::window_lines(&clock, &q, None, 100);
+        // só "semana" (secondary) — o model "Codex" duplica e some.
+        assert_eq!(lines.len(), 1, "model duplicado deveria sumir");
     }
 
     /// `ProviderQuota` mínima só pra exercitar `render_chart_section`

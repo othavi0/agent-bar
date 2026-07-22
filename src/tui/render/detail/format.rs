@@ -1,5 +1,7 @@
 //! Shared format helpers for Detail sections (label width, gauges, costs).
 
+use crate::formatters::clock::Clock;
+use crate::formatters::shared::{format_eta, parse_iso};
 use crate::usage::{ModelUsage, ProviderUsage};
 
 /// Largura do rótulo (janela/modelo) — MESMA coluna em toda seção com gauge
@@ -13,7 +15,7 @@ pub(super) const LABEL_W: usize = 12;
 /// usage), então NÃO dá pra derivar com um valor único (era o bug do
 /// primeiro draft da Task 9: reusar o sufixo das janelas pros modelos
 /// estourava a borda, cortando o custo no meio — "$1.4" em vez de "$1.40").
-pub(super) const WINDOW_SUFFIX_W: usize = 1 + 4 + 1 + 2 + 1 + 1 + 5; // pct(" NNN%"=6) + reset("  → "+HH:MM=9)
+pub(super) const WINDOW_SUFFIX_W: usize = 1 + 4 + 1 + 2 + 1 + 20; // pct(" NNN%"=6) + reset("  → "+countdown até "99d 23h · qua 23:59"=20)
 pub(super) const MODEL_SUFFIX_W: usize = 1 + 8 + 1 + 9; // tokens(" "+8=9) + custo(" "+9=10, larguras fixas do format!)
 pub(super) const EXTRA_SUFFIX_W: usize = 22; // "  $9999.99 de $9999.99" (generoso; custo real bem menor)
 
@@ -64,17 +66,48 @@ pub(super) fn find_model_usage<'a>(
         .find(|mu| mu.model.to_lowercase().contains(&lower))
 }
 
-/// Formats a reset time string from an ISO timestamp or raw string.
-/// Extracts HH:MM if ISO, else returns raw string or "-".
-pub(super) fn fmt_reset(resets_at: Option<&str>) -> String {
-    match resets_at {
-        None => "-".to_string(),
-        Some(s) => s
-            .split('T')
-            .nth(1)
-            .and_then(|t| t.get(..5))
-            .map(|hm| hm.to_string())
-            .unwrap_or_else(|| s.to_string()),
+/// Abreviação PT (3 letras) do weekday — usada só quando o reset cai
+/// em dia local diferente de "agora" (janela de 7 dias, tipicamente).
+fn weekday_pt(w: time::Weekday) -> &'static str {
+    use time::Weekday::*;
+    match w {
+        Monday => "seg",
+        Tuesday => "ter",
+        Wednesday => "qua",
+        Thursday => "qui",
+        Friday => "sex",
+        Saturday => "s\u{e1}b",
+        Sunday => "dom",
+    }
+}
+
+/// Countdown + horário de reset em fuso LOCAL — substitui o slice cru
+/// de UTC (bug da auditoria: TUI mostrava o reset em UTC). "Xh Ym ·
+/// HH:MM" no mesmo dia local; "{d}d {h}h · seg HH:MM" (weekday
+/// abreviado) quando o reset cai em outro dia local (janela de 7
+/// dias). `Full`/`?` (via `format_eta`) passam direto — sem hora.
+pub(super) fn fmt_reset(clock: &Clock, resets_at: Option<&str>, remaining: f64) -> String {
+    let eta = format_eta(clock, resets_at, remaining);
+    if eta == "Full" || eta == "?" {
+        return eta;
+    }
+    let Some(iso) = resets_at else {
+        return eta;
+    };
+    let Some(dt) = parse_iso(iso) else {
+        return eta;
+    };
+    let local = dt.to_offset(clock.local_offset);
+    let today_local = clock.now.to_offset(clock.local_offset).date();
+    if local.date() == today_local {
+        format!("{eta} \u{b7} {:02}:{:02}", local.hour(), local.minute())
+    } else {
+        format!(
+            "{eta} \u{b7} {} {:02}:{:02}",
+            weekday_pt(local.weekday()),
+            local.hour(),
+            local.minute()
+        )
     }
 }
 

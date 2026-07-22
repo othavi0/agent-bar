@@ -16,6 +16,7 @@ pub struct ConfigView {
     pub provider_order: Vec<String>,
     pub display_mode: DisplayMode,
     pub notify: NotifyView,
+    pub menu_animations: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -61,6 +62,7 @@ pub fn view_from_settings(s: &Settings) -> ConfigView {
         notify: NotifyView {
             enabled: s.notify.enabled,
         },
+        menu_animations: s.menu.animations,
     }
 }
 
@@ -258,5 +260,29 @@ mod tests {
         assert_eq!(j["displayMode"], "remaining");
         assert_eq!(j["notify"]["enabled"], true);
         assert!(j["providers"].is_array());
+        assert_eq!(
+            j["menuAnimations"],
+            true,
+            "default do Settings.menu.animations"
+        );
+    }
+
+    #[test]
+    fn apply_ignores_menu_animations_field() {
+        let dir = tempdir().unwrap();
+        let p = paths_in(dir.path());
+        let v = apply_json(
+            &p,
+            r#"{"schemaVersion":1,"displayMode":"used","menuAnimations":false}"#,
+        )
+        .unwrap();
+        assert_eq!(v.display_mode, DisplayMode::Used);
+        // campo ignorado: não existe em ConfigPatch, apply não falha, e o
+        // valor real de menu.animations em settings.json não é tocado.
+        let loaded = crate::settings::load(&p);
+        assert!(
+            loaded.menu.animations,
+            "apply não deve mexer em menu.animations"
+        );
     }
 }

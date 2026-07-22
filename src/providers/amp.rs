@@ -14,7 +14,7 @@ use regex::Regex;
 use super::base::{base_get_quota, QuotaSource};
 use super::error::{AmpError, ProviderError};
 use super::iso_from_ms;
-use super::types::{AmpQuotaExtra, ProviderExtra, ProviderQuota, QuotaWindow};
+use super::types::{AmpQuotaExtra, ProviderExtra, ProviderQuota, QuotaWindow, WindowKind};
 use super::{Ctx, Provider};
 use crate::config::HTTP_TIMEOUT_SECS;
 use crate::providers::amp_cli::find_amp_bin;
@@ -97,6 +97,7 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: Some(WindowKind::Daily),
         };
         primary = Some(window.clone());
         models.insert("Free Tier".to_string(), window);
@@ -143,6 +144,7 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: Some(WindowKind::Daily),
         };
         primary = Some(window.clone());
         models.insert("Free Tier".to_string(), window);
@@ -166,6 +168,7 @@ pub fn parse_usage(stdout: &str, base: ProviderQuota, now_ms: u64) -> ProviderQu
                 window_minutes: None,
                 used: None,
                 severity: None,
+                window_kind: Some(WindowKind::Daily),
             },
         );
         meta.insert("creditsBalance".to_string(), dollars(balance));
@@ -362,6 +365,14 @@ mod tests {
         let models = q.models.as_ref().unwrap();
         assert_eq!(models["Free Tier"].remaining, 70.0);
         assert_eq!(models["Credits"].remaining, 100.0);
+        assert_eq!(
+            q.primary.as_ref().unwrap().window_kind,
+            Some(crate::providers::types::WindowKind::Daily)
+        );
+        assert_eq!(
+            models["Credits"].window_kind,
+            Some(crate::providers::types::WindowKind::Daily)
+        );
         // ordem de inserção: Free Tier antes de Credits (IndexMap)
         let keys: Vec<&str> = models.keys().map(String::as_str).collect();
         assert_eq!(keys, vec!["Free Tier", "Credits"]);
@@ -419,6 +430,10 @@ mod tests {
         let models = q.models.as_ref().unwrap();
         assert_eq!(models["Free Tier"].remaining, 97.0);
         assert_eq!(models["Credits"].remaining, 100.0);
+        assert_eq!(
+            models["Free Tier"].window_kind,
+            Some(crate::providers::types::WindowKind::Daily)
+        );
         let m = meta_of(&q);
         assert_eq!(m.get("freePct").map(String::as_str), Some("97%"));
         assert_eq!(m.get("freeCadence").map(String::as_str), Some("daily"));

@@ -30,6 +30,7 @@ fn to_quota_window(raw: &CodexWindowRaw) -> QuotaWindow {
         window_minutes: Some(raw.window_minutes),
         used: None,
         severity: None,
+        window_kind: Some(classify_window(Some(raw.window_minutes))),
     }
 }
 
@@ -65,9 +66,9 @@ fn format_bucket_label(bucket: &CodexLimitBucket) -> String {
 /// Insere `qw` no kind certo de `windows` (fiveHour/sevenDay únicos; resto em other).
 fn place_window(windows: &mut ModelWindows, raw: &CodexWindowRaw) {
     let qw = to_quota_window(raw);
-    match classify_window(Some(raw.window_minutes)) {
-        WindowKind::FiveHour if windows.five_hour.is_none() => windows.five_hour = Some(qw),
-        WindowKind::SevenDay if windows.seven_day.is_none() => windows.seven_day = Some(qw),
+    match qw.window_kind {
+        Some(WindowKind::FiveHour) if windows.five_hour.is_none() => windows.five_hour = Some(qw),
+        Some(WindowKind::SevenDay) if windows.seven_day.is_none() => windows.seven_day = Some(qw),
         _ => windows.other.get_or_insert_with(Vec::new).push(qw),
     }
 }
@@ -84,17 +85,6 @@ fn build_model_windows(limits: &CodexRateLimits) -> BTreeMap<String, ModelWindow
                 .flatten()
             {
                 place_window(&mut windows, raw);
-            }
-            // Fallback de mapeamento quando as durações não classificam limpo.
-            if windows.five_hour.is_none() {
-                if let Some(p) = bucket.primary.as_ref() {
-                    windows.five_hour = Some(to_quota_window(p));
-                }
-            }
-            if windows.seven_day.is_none() {
-                if let Some(s) = bucket.secondary.as_ref() {
-                    windows.seven_day = Some(to_quota_window(s));
-                }
             }
             if windows.five_hour.is_none()
                 && windows.seven_day.is_none()
@@ -121,16 +111,6 @@ fn build_model_windows(limits: &CodexRateLimits) -> BTreeMap<String, ModelWindow
             .flatten()
         {
             place_window(&mut windows, raw);
-        }
-        if windows.five_hour.is_none() {
-            if let Some(p) = limits.primary.as_ref() {
-                windows.five_hour = Some(to_quota_window(p));
-            }
-        }
-        if windows.seven_day.is_none() {
-            if let Some(s) = limits.secondary.as_ref() {
-                windows.seven_day = Some(to_quota_window(s));
-            }
         }
         models.insert("Codex".to_string(), windows);
     }

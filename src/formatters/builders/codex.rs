@@ -5,16 +5,51 @@ use crate::formatters::clock::Clock;
 use crate::formatters::segments::{
     bar_segments, color_for_display, indicator_segments, Line, Segment,
 };
-use crate::formatters::shared::{format_percent, to_display};
+use crate::formatters::shared::{format_percent, is_duplicate_window, to_display};
 use crate::formatters::view_model::CodexViewModel;
 use crate::providers::extras::get_codex_extra;
-use crate::providers::types::ProviderQuota;
+use crate::providers::types::{ProviderQuota, QuotaWindow};
 use crate::settings::WindowPolicy;
 use crate::theme::{box_chars, ColorToken};
 
 use super::shared::{
     build_footer_line, header_line, label_line, model_line, stale_line, vline, BuildOptions,
 };
+
+/// Rótulo de janela `other` (nem 5h nem 7d) pela duração real — o
+/// fallback forçado que escondia isso morreu na Task 3. "1h
+/// window"/"45m window"/"1h 30m window"; sem `window_minutes` (não
+/// deveria acontecer em dado real) → "window", nunca panic.
+fn other_window_label(minutes: Option<i64>) -> String {
+    match minutes {
+        Some(m) if m > 0 => {
+            let h = m / 60;
+            let mm = m % 60;
+            match (h, mm) {
+                (0, _) => format!("{mm}m window"),
+                (_, 0) => format!("{h}h window"),
+                _ => format!("{h}h {mm}m window"),
+            }
+        }
+        _ => "window".to_string(),
+    }
+}
+
+/// `other` que colide com five_hour/seven_day do mesmo model não deve
+/// aparecer de novo. Usa `is_duplicate_window` (kind setado) e, como
+/// fallback p/ fixtures/legacy com `window_kind: None`, remaining
+/// arredondado + resetsAt (mesmo critério do guard em codex_helpers).
+fn other_is_duplicate_of_slots(
+    w: &QuotaWindow,
+    five: Option<&QuotaWindow>,
+    seven: Option<&QuotaWindow>,
+) -> bool {
+    let matches = |slot: &QuotaWindow| {
+        is_duplicate_window(w, slot)
+            || (w.resets_at == slot.resets_at && w.remaining.round() == slot.remaining.round())
+    };
+    five.is_some_and(matches) || seven.is_some_and(matches)
+}
 
 pub fn build_codex(
     clock: &Clock,
@@ -113,6 +148,40 @@ pub fn build_codex(
                         ColorToken::Green,
                         Some("N/A"),
                     ));
+                }
+            }
+
+            // Janelas other (duração não-padrão, ou 2ª weekly sem slot).
+            // Sempre visíveis — não são FiveHour/SevenDay da policy.
+            // Dedup contra five_hour/seven_day do mesmo model: o helper
+            // codex_models_from_quota re-insere a primary em other no
+            // caso 2×weekly (p.models + models_detailed).
+            for model in models {
+                if let Some(others) = model.windows.other.as_ref() {
+                    for w in others {
+                        if other_is_duplicate_of_slots(
+                            w,
+                            model.windows.five_hour.as_ref(),
+                            model.windows.seven_day.as_ref(),
+                        ) {
+                            continue;
+                        }
+                        lines.push(vline(ColorToken::Green));
+                        lines.push(label_line(
+                            &other_window_label(w.window_minutes),
+                            options.label_color,
+                            ColorToken::Green,
+                        ));
+                        lines.push(model_line(
+                            clock,
+                            &model.name,
+                            Some(w),
+                            model_len,
+                            mode,
+                            ColorToken::Green,
+                            Some("N/A"),
+                        ));
+                    }
                 }
             }
         }
@@ -222,6 +291,7 @@ mod tests {
             window_minutes: None,
             used: None,
             severity: None,
+            window_kind: None,
         };
         CodexModelEntry {
             name: name.into(),
@@ -269,5 +339,90 @@ mod tests {
         let out = render_pango(&build_codex(&clk(), &quota(), &vm, &opts(None)));
         assert!(out.contains("Available Models"));
         assert!(out.contains("No models selected"));
+    }
+
+    fn entry_with_other(name: &str, other_minutes: i64, remaining: f64) -> CodexModelEntry {
+        CodexModelEntry {
+            name: name.into(),
+            windows: ModelWindows {
+                five_hour: None,
+                seven_day: None,
+                other: Some(vec![QuotaWindow {
+                    remaining,
+                    resets_at: Some("2026-06-19T14:00:00Z".into()),
+                    window_minutes: Some(other_minutes),
+                    used: None,
+                    severity: None,
+                    window_kind: Some(crate::providers::types::WindowKind::Other),
+                }]),
+            },
+            severity: remaining,
+        }
+    }
+
+    #[test]
+    fn other_window_renders_with_duration_label() {
+        let vm = CodexViewModel {
+            models: vec![entry_with_other("gpt-5", 60, 40.0)],
+            policy: WindowPolicy::Both,
+        };
+        let out = render_pango(&build_codex(&clk(), &quota(), &vm, &opts(None)));
+        assert!(out.contains("1h window"), "esperava rótulo de duração:\n{out}");
+        assert!(out.contains("40%"));
+    }
+
+    #[test]
+    fn other_window_label_formats_by_minutes() {
+        assert_eq!(other_window_label(Some(60)), "1h window");
+        assert_eq!(other_window_label(Some(90)), "1h 30m window");
+        assert_eq!(other_window_label(Some(45)), "45m window");
+        assert_eq!(other_window_label(None), "window");
+    }
+
+    #[test]
+    fn other_duplicate_of_seven_day_slot_is_hidden() {
+        // Simula o caso 2×weekly + re-inserção de p.models: seven_day
+        // preenchido e other com a MESMA janela (duplicata) + uma
+        // secondary distinta que deve continuar visível.
+        let reset = "2026-06-26T12:00:00Z";
+        let seven = QuotaWindow {
+            remaining: 90.0,
+            resets_at: Some(reset.into()),
+            window_minutes: Some(10080),
+            used: None,
+            severity: None,
+            window_kind: Some(crate::providers::types::WindowKind::SevenDay),
+        };
+        let dup_primary = seven.clone();
+        let real_secondary = QuotaWindow {
+            remaining: 80.0,
+            resets_at: Some(reset.into()),
+            window_minutes: Some(10080),
+            used: None,
+            severity: None,
+            window_kind: Some(crate::providers::types::WindowKind::SevenDay),
+        };
+        let entry = CodexModelEntry {
+            name: "Codex".into(),
+            windows: ModelWindows {
+                five_hour: None,
+                seven_day: Some(seven),
+                other: Some(vec![dup_primary, real_secondary]),
+            },
+            severity: 80.0,
+        };
+        let vm = CodexViewModel {
+            models: vec![entry],
+            policy: WindowPolicy::Both,
+        };
+        let out = render_pango(&build_codex(&clk(), &quota(), &vm, &opts(None)));
+        assert!(out.contains("7-day limit"));
+        assert!(out.contains("90%"), "slot seven_day continua:\n{out}");
+        assert!(out.contains("80%"), "secondary real em other:\n{out}");
+        // rótulo de duração da secondary (10080 min = 168h)
+        assert!(out.contains("168h window"), "secondary other renderiza:\n{out}");
+        // a duplicata (90%) não deve gerar segunda linha de 168h com 90%
+        let count_168 = out.matches("168h window").count();
+        assert_eq!(count_168, 1, "duplicata do slot não deve renderizar:\n{out}");
     }
 }

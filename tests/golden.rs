@@ -66,6 +66,7 @@ fn qw(remaining: f64, resets_at: &str, window_minutes: Option<i64>) -> QuotaWind
         window_minutes,
         used: None,
         severity: None,
+        window_kind: None,
     }
 }
 
