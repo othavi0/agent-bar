@@ -518,8 +518,10 @@ mod tests {
     }
 
     #[test]
-    fn unrecognized_window_uses_fallback_mapping() {
-        // 60 min = "other" from classify_window, but fallback: primary→fiveHour, secondary→sevenDay
+    fn unrecognized_window_stays_other_no_fallback() {
+        // 60 min = "other" via classify_window; SEM fallback, fica só
+        // em `other` (nunca forçado em fiveHour/sevenDay) — é o fix do
+        // bug de duplicação do Codex (auditoria 2026-07-21).
         let mut buckets = IndexMap::new();
         buckets.insert(
             "b1".to_string(),
@@ -537,13 +539,16 @@ mod tests {
         let q = build_codex_quota(&limits, base());
         let md = codex_extra(&q).models_detailed.as_ref().unwrap();
         let model = md.values().next().unwrap();
-        // primary (60 min → other → fallback fiveHour)
-        // secondary (60 min → other initially, but place_window already put it in other;
-        //   then fallback seven_day fills since five_hour was already filled by place_window fallback)
-        // Actually: place_window(primary, 60) → other; place_window(secondary, 60) → other
-        // then fallback: five_hour is None → fill from primary; seven_day is None → fill from secondary
-        assert!(model.five_hour.is_some());
-        assert!(model.seven_day.is_some());
+        assert!(model.five_hour.is_none(), "60min não deve ir pra fiveHour");
+        assert!(model.seven_day.is_none(), "60min não deve ir pra sevenDay");
+        let other = model.other.as_ref().expect("other deve ter as 2 janelas");
+        assert_eq!(other.len(), 2, "primary+secondary de 60min, ambas em other");
+        for w in other {
+            assert_eq!(
+                w.window_kind,
+                Some(crate::formatters::shared::WindowKind::Other)
+            );
+        }
     }
 
     // -----------------------------------------------------------------------
