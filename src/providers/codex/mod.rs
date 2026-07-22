@@ -551,6 +551,65 @@ mod tests {
         }
     }
 
+    #[test]
+    fn both_windows_weekly_primary_wins_seven_day_slot() {
+        // Payload real que gerava o bug: primary e secondary do MESMO
+        // bucket com window_minutes=10080 (7 dias) — o caso citado na
+        // auditoria 2026-07-21. O loop de build_model_windows itera
+        // [primary, secondary] nessa ordem, então primary preenche o
+        // slot seven_day primeiro; secondary chega com o slot já
+        // ocupado e cai em `other` (sem duplicação, sem fallback).
+        let mut buckets = IndexMap::new();
+        buckets.insert(
+            "b1".to_string(),
+            CodexLimitBucket {
+                limit_id: "b1".into(),
+                limit_name: None,
+                primary: Some(win(10.0, 10080, future_unix())),
+                secondary: Some(win(20.0, 10080, future_unix())),
+            },
+        );
+        let limits = CodexRateLimits {
+            buckets: Some(buckets),
+            ..Default::default()
+        };
+        let q = build_codex_quota(&limits, base());
+        let md = codex_extra(&q).models_detailed.as_ref().unwrap();
+        let model = md.values().next().unwrap();
+
+        assert!(
+            model.five_hour.is_none(),
+            "nada deve ser forçado no slot fiveHour"
+        );
+
+        let seven_day = model
+            .seven_day
+            .as_ref()
+            .expect("seven_day deve conter a primary (primeira a preencher o slot)");
+        assert_eq!(
+            seven_day.remaining, 90.0,
+            "seven_day deve ser a primary (used=10.0)"
+        );
+        assert_eq!(
+            seven_day.window_kind,
+            Some(crate::formatters::shared::WindowKind::SevenDay)
+        );
+
+        let other = model
+            .other
+            .as_ref()
+            .expect("other deve conter a secondary, sem slot livre");
+        assert_eq!(other.len(), 1, "só a secondary sobra pra other");
+        assert_eq!(
+            other[0].remaining, 80.0,
+            "other deve ser a secondary (used=20.0)"
+        );
+        assert_eq!(
+            other[0].window_kind,
+            Some(crate::formatters::shared::WindowKind::SevenDay)
+        );
+    }
+
     // -----------------------------------------------------------------------
     // Multiple buckets
     // -----------------------------------------------------------------------
