@@ -14,7 +14,7 @@ use time::{Date, OffsetDateTime, UtcOffset};
 use super::base::{base_get_quota, QuotaSource};
 use super::error::{GrokError, ProviderError};
 use super::grok_cli::find_grok_bin;
-use super::types::{GrokQuotaExtra, ProviderExtra, ProviderQuota, QuotaWindow};
+use super::types::{GrokQuotaExtra, ProviderExtra, ProviderQuota, QuotaWindow, WindowKind};
 use super::{Ctx, Provider};
 
 const MAX_WALK_DEPTH: u32 = 16;
@@ -303,7 +303,7 @@ fn build_primary_window(session: &SessionSnap) -> Option<QuotaWindow> {
         window_minutes: None,
         used: Some(used_pct.round()),
         severity: None,
-        window_kind: None,
+        window_kind: Some(WindowKind::Context),
     })
 }
 
@@ -665,6 +665,10 @@ mod tests {
         assert_eq!(primary.remaining, 90.0);
         assert!(primary.resets_at.is_none());
         assert_eq!(primary.used, Some(10.0));
+        assert_eq!(
+            primary.window_kind,
+            Some(crate::providers::types::WindowKind::Context)
+        );
         assert_eq!(q.plan.as_deref(), Some("Grok 4.5"));
         match q.extra.as_ref() {
             Some(ProviderExtra::Grok(e)) => {
