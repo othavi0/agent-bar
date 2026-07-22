@@ -97,3 +97,4 @@ them; it does not store provider tokens.
 | Claude | `~/.claude/.credentials.json` |
 | Codex | `~/.codex/auth.json`, recent `~/.codex/sessions/**` rate-limit events, or `codex app-server` |
 | Amp | official `amp` CLI |
+| Grok | `~/.grok/auth.json`; session `signals.json` under `~/.grok/sessions/**` (read-only, no network) |
