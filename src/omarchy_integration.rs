@@ -31,6 +31,17 @@ pub fn default_omarchy_plugins_dir(home: &Path) -> PathBuf {
     config_root.join("omarchy").join("plugins")
 }
 
+/// `${XDG_CONFIG_HOME:-<home>/.config}/omarchy/shell.json` — arquivo do
+/// omarchy-shell (schema não é nosso; usado só como leitura pelo `doctor`).
+/// NUNCA escrito por este binário (ADR-0002).
+pub fn default_omarchy_shell_json_path(home: &Path) -> PathBuf {
+    let config_root = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    config_root.join("omarchy").join("shell.json")
+}
+
 /// Sinal de omarchy-shell: raiz QML instalada E CLI `omarchy` no PATH.
 /// Ambos exigidos — só o dir pode ser resíduo de pacote; só a CLI pode
 /// ser um Omarchy < 4 sem shell.
@@ -141,6 +152,29 @@ pub fn run_omarchy_remove_commands() -> Vec<String> {
     .collect()
 }
 
+/// `true` se `OMARCHY_PLUGIN_ID` aparecer como valor de string em qualquer
+/// lugar da árvore JSON de `shell_json_path` — tolerante ao shape exato do
+/// `shell.json` (schema do omarchy-shell, não nosso). `false` se o arquivo
+/// não existir ou não parsear (silencioso — é só um sinal pro `doctor`).
+pub fn shell_json_has_plugin_entry(shell_json_path: &Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(shell_json_path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return false;
+    };
+    json_contains_string(&value, OMARCHY_PLUGIN_ID)
+}
+
+fn json_contains_string(value: &serde_json::Value, needle: &str) -> bool {
+    match value {
+        serde_json::Value::String(s) => s == needle,
+        serde_json::Value::Array(items) => items.iter().any(|v| json_contains_string(v, needle)),
+        serde_json::Value::Object(map) => map.values().any(|v| json_contains_string(v, needle)),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,6 +196,46 @@ mod tests {
         assert_eq!(
             dir,
             std::path::PathBuf::from("/home/u/.config/omarchy/plugins")
+        );
+        match prev {
+            Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+    }
+
+    #[test]
+    fn shell_json_has_plugin_entry_finds_nested_id() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("shell.json");
+        std::fs::write(&path, r#"{"bar":{"plugins":[{"id":"agent-bar.usage"}]}}"#).unwrap();
+        assert!(shell_json_has_plugin_entry(&path));
+    }
+
+    #[test]
+    fn shell_json_has_plugin_entry_false_when_absent_or_missing() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("shell.json");
+        assert!(!shell_json_has_plugin_entry(&path)); // arquivo nao existe
+
+        std::fs::write(&path, r#"{"bar":{"plugins":[]}}"#).unwrap();
+        assert!(!shell_json_has_plugin_entry(&path));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn default_shell_json_path_respects_xdg_config_home() {
+        let prev = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("XDG_CONFIG_HOME", "/tmp/xdg-test-shell-json");
+        let path = default_omarchy_shell_json_path(std::path::Path::new("/home/u"));
+        assert_eq!(
+            path,
+            std::path::PathBuf::from("/tmp/xdg-test-shell-json/omarchy/shell.json")
+        );
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let path = default_omarchy_shell_json_path(std::path::Path::new("/home/u"));
+        assert_eq!(
+            path,
+            std::path::PathBuf::from("/home/u/.config/omarchy/shell.json")
         );
         match prev {
             Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),

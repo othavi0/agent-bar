@@ -2,6 +2,11 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::app_identity::{APP_NAME, OMARCHY_PLUGIN_ID, VERSION};
+use crate::omarchy_integration::{
+    default_omarchy_plugins_dir, default_omarchy_shell_json_path, shell_json_has_plugin_entry,
+};
+
 const TARGET_PACKAGE: &str = "@noctuacore/agent-bar";
 const LOCKFILE_NAMES: &[&str] = &["bun.lock", "bun.lockb", "package-lock.json"];
 
@@ -27,6 +32,7 @@ pub struct DoctorResult {
     pub status: DoctorStatus,
     pub removed: Vec<PathBuf>,
     pub findings: DoctorFindings,
+    pub omarchy: OmarchyFindings,
 }
 
 pub struct DoctorOptions<'a> {
@@ -143,6 +149,78 @@ pub fn scan(home: &Path) -> DoctorFindings {
     }
 }
 
+/// Achados Omarchy do `doctor`: drift binário↔plugin e referências
+/// penduradas em `shell.json`. Leitura pura — NUNCA escreve nada, NUNCA
+/// falha o comando (viram avisos, spec 2026-07-21 §F).
+#[derive(Debug, Clone, Default)]
+pub struct OmarchyFindings {
+    /// `Some` quando o manifest instalado tem `version` diferente do binário.
+    pub manifest_version_mismatch: Option<String>,
+    /// `Some` quando o diretório do plugin existe mas `shell.json` não
+    /// referencia `agent-bar.usage`.
+    pub plugin_dir_without_shell_entry: Option<String>,
+    /// `Some` quando `shell.json` referencia `agent-bar.usage` mas o
+    /// diretório do plugin não existe.
+    pub shell_entry_without_plugin_dir: Option<String>,
+}
+
+impl OmarchyFindings {
+    /// Achados como mensagens prontas p/ `term_prompt::status("Aviso", ...)`.
+    pub fn warnings(&self) -> Vec<String> {
+        [
+            &self.manifest_version_mismatch,
+            &self.plugin_dir_without_shell_entry,
+            &self.shell_entry_without_plugin_dir,
+        ]
+        .into_iter()
+        .filter_map(|w| w.clone())
+        .collect()
+    }
+}
+
+pub fn scan_omarchy(home: &Path) -> OmarchyFindings {
+    let plugin_dir = default_omarchy_plugins_dir(home).join(OMARCHY_PLUGIN_ID);
+    let dir_exists = plugin_dir.is_dir();
+
+    let manifest_version_mismatch = if dir_exists {
+        read_json(&plugin_dir.join("manifest.json"))
+            .and_then(|v| v.get("version").and_then(|v| v.as_str()).map(str::to_string))
+            .filter(|installed| installed != VERSION)
+            .map(|installed| {
+                format!(
+                    "Plugin omarchy instalado (v{installed}) diverge do binário (v{VERSION}). Rode `{APP_NAME} setup` para atualizá-lo."
+                )
+            })
+    } else {
+        None
+    };
+
+    let shell_json_path = default_omarchy_shell_json_path(home);
+    let shell_has_entry = shell_json_has_plugin_entry(&shell_json_path);
+
+    let plugin_dir_without_shell_entry = (dir_exists && !shell_has_entry).then(|| {
+        format!(
+            "Diretório do plugin existe ({}) mas {} não referencia `{OMARCHY_PLUGIN_ID}`. Rode `omarchy bar plugin add {OMARCHY_PLUGIN_ID}`.",
+            plugin_dir.display(),
+            shell_json_path.display()
+        )
+    });
+
+    let shell_entry_without_plugin_dir = (!dir_exists && shell_has_entry).then(|| {
+        format!(
+            "{} referencia `{OMARCHY_PLUGIN_ID}` mas o diretório do plugin não existe ({}). Rode `{APP_NAME} setup`.",
+            shell_json_path.display(),
+            plugin_dir.display()
+        )
+    });
+
+    OmarchyFindings {
+        manifest_version_mismatch,
+        plugin_dir_without_shell_entry,
+        shell_entry_without_plugin_dir,
+    }
+}
+
 fn planned_removals(findings: &DoctorFindings) -> Vec<PathBuf> {
     let mut items = Vec::new();
     if findings.package_json_orphan {
@@ -161,6 +239,7 @@ fn planned_removals(findings: &DoctorFindings) -> Vec<PathBuf> {
 
 pub fn run_doctor(opts: DoctorOptions<'_>) -> DoctorResult {
     let findings = scan(opts.home);
+    let omarchy = scan_omarchy(opts.home);
 
     let nothing_to_do = !findings.package_json_orphan
         && !findings.package_json_mixed
@@ -172,6 +251,7 @@ pub fn run_doctor(opts: DoctorOptions<'_>) -> DoctorResult {
             status: DoctorStatus::Clean,
             removed: vec![],
             findings,
+            omarchy,
         };
     }
 
@@ -181,6 +261,7 @@ pub fn run_doctor(opts: DoctorOptions<'_>) -> DoctorResult {
             status: DoctorStatus::Cancelled,
             removed: vec![],
             findings,
+            omarchy,
         };
     }
 
@@ -206,6 +287,7 @@ pub fn run_doctor(opts: DoctorOptions<'_>) -> DoctorResult {
         status,
         removed: removals,
         findings,
+        omarchy,
     }
 }
 
@@ -313,6 +395,108 @@ mod tests {
         )
         .unwrap();
         assert!(scan(h.path()).package_json_orphan);
+    }
+
+    fn with_clean_xdg_config_home<T>(f: impl FnOnce() -> T) -> T {
+        let prev = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let result = f();
+        match prev {
+            Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+        result
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn scan_omarchy_clean_when_nothing_installed() {
+        with_clean_xdg_config_home(|| {
+            let h = tempdir().unwrap();
+            let f = scan_omarchy(h.path());
+            assert!(f.manifest_version_mismatch.is_none());
+            assert!(f.plugin_dir_without_shell_entry.is_none());
+            assert!(f.shell_entry_without_plugin_dir.is_none());
+            assert!(f.warnings().is_empty());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn scan_omarchy_flags_manifest_version_mismatch() {
+        with_clean_xdg_config_home(|| {
+            let h = tempdir().unwrap();
+            let plugin_dir = h
+                .path()
+                .join(".config")
+                .join("omarchy")
+                .join("plugins")
+                .join(crate::app_identity::OMARCHY_PLUGIN_ID);
+            std::fs::create_dir_all(&plugin_dir).unwrap();
+            std::fs::write(
+                plugin_dir.join("manifest.json"),
+                r#"{"id":"agent-bar.usage","version":"0.0.1-old"}"#,
+            )
+            .unwrap();
+
+            let f = scan_omarchy(h.path());
+            assert!(f.manifest_version_mismatch.is_some());
+            assert!(f
+                .manifest_version_mismatch
+                .as_ref()
+                .unwrap()
+                .contains("0.0.1-old"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn scan_omarchy_flags_plugin_dir_without_shell_entry() {
+        with_clean_xdg_config_home(|| {
+            let h = tempdir().unwrap();
+            let plugin_dir = h
+                .path()
+                .join(".config")
+                .join("omarchy")
+                .join("plugins")
+                .join(crate::app_identity::OMARCHY_PLUGIN_ID);
+            std::fs::create_dir_all(&plugin_dir).unwrap();
+            std::fs::write(
+                plugin_dir.join("manifest.json"),
+                format!(
+                    r#"{{"id":"agent-bar.usage","version":"{}"}}"#,
+                    crate::app_identity::VERSION
+                ),
+            )
+            .unwrap();
+            let shell_json = h.path().join(".config").join("omarchy").join("shell.json");
+            std::fs::create_dir_all(shell_json.parent().unwrap()).unwrap();
+            std::fs::write(&shell_json, r#"{"bar":{"plugins":[]}}"#).unwrap();
+
+            let f = scan_omarchy(h.path());
+            assert!(f.manifest_version_mismatch.is_none());
+            assert!(f.plugin_dir_without_shell_entry.is_some());
+            assert!(f.shell_entry_without_plugin_dir.is_none());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn scan_omarchy_flags_shell_entry_without_plugin_dir() {
+        with_clean_xdg_config_home(|| {
+            let h = tempdir().unwrap();
+            let shell_json = h.path().join(".config").join("omarchy").join("shell.json");
+            std::fs::create_dir_all(shell_json.parent().unwrap()).unwrap();
+            std::fs::write(
+                &shell_json,
+                r#"{"bar":{"plugins":[{"id":"agent-bar.usage"}]}}"#,
+            )
+            .unwrap();
+
+            let f = scan_omarchy(h.path());
+            assert!(f.shell_entry_without_plugin_dir.is_some());
+            assert!(f.plugin_dir_without_shell_entry.is_none());
+        });
     }
 
     #[test]

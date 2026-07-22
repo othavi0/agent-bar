@@ -402,6 +402,9 @@ async fn main() {
                     term_prompt::status("Cancelado", "Doctor não aplicou mudanças");
                 }
             }
+            for warning in result.omarchy.warnings() {
+                term_prompt::status("Aviso", &warning);
+            }
             std::process::exit(0);
         }
 
@@ -656,6 +659,8 @@ async fn main() {
                 &format!("{APP_NAME} uninstall"),
                 &ipaths,
                 &omarchy_integration::default_omarchy_plugins_dir(&home),
+                &omarchy_integration::omarchy_cli_available,
+                &omarchy_integration::run_omarchy_remove_commands,
             ) {
                 Ok(()) => std::process::exit(0),
                 Err(e) => {
