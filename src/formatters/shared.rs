@@ -53,6 +53,21 @@ pub fn classify_window(minutes: Option<i64>) -> WindowKind {
     }
 }
 
+/// Dedup display-level (TUI/QML): duas janelas são a "mesma" quando
+/// `windowKind`, `resetsAt` e `remaining` arredondado coincidem —
+/// mata o Weekly triplicado do Codex sem tocar no JSON (que continua
+/// emitindo primary/secondary/models cru, contrato intacto).
+/// `window_kind` ausente em qualquer lado nunca deduplica (dado
+/// incompleto não é assumido igual).
+pub fn is_duplicate_window(a: &QuotaWindow, b: &QuotaWindow) -> bool {
+    match (a.window_kind, b.window_kind) {
+        (Some(ka), Some(kb)) if ka == kb => {
+            a.resets_at == b.resets_at && a.remaining.round() == b.remaining.round()
+        }
+        _ => false,
+    }
+}
+
 /// Normaliza o nome do plano (mapa conhecido ou titlecase). None/vazio → None.
 pub fn normalize_plan(raw: Option<&str>) -> Option<String> {
     let raw = raw?;
@@ -320,5 +335,71 @@ mod tests {
             Some(30.0)
         );
         assert_eq!(to_window_display(None, DisplayMode::Remaining), None);
+    }
+
+    #[test]
+    fn is_duplicate_window_same_kind_reset_and_rounded_remaining() {
+        let a = QuotaWindow {
+            remaining: 60.4,
+            resets_at: Some("2026-06-26T12:00:00Z".into()),
+            window_minutes: Some(10080),
+            used: None,
+            severity: None,
+            window_kind: Some(WindowKind::SevenDay),
+        };
+        let b = QuotaWindow {
+            remaining: 59.6,
+            resets_at: Some("2026-06-26T12:00:00Z".into()),
+            window_minutes: Some(300),
+            used: None,
+            severity: None,
+            window_kind: Some(WindowKind::SevenDay),
+        };
+        // 60.4.round() == 59.6.round() == 60 — remaining "igual" mesmo
+        // vindo de fontes com precisão diferente.
+        assert!(is_duplicate_window(&a, &b));
+    }
+
+    #[test]
+    fn is_duplicate_window_different_kind_is_not_duplicate() {
+        let mut a = QuotaWindow {
+            remaining: 60.0,
+            resets_at: Some("2026-06-26T12:00:00Z".into()),
+            window_minutes: Some(300),
+            used: None,
+            severity: None,
+            window_kind: Some(WindowKind::FiveHour),
+        };
+        let b = QuotaWindow {
+            window_kind: Some(WindowKind::SevenDay),
+            ..a.clone()
+        };
+        assert!(!is_duplicate_window(&a, &b));
+        a.window_kind = None;
+        let c = QuotaWindow {
+            window_kind: None,
+            ..b.clone()
+        };
+        assert!(
+            !is_duplicate_window(&a, &c),
+            "window_kind None nunca duplica"
+        );
+    }
+
+    #[test]
+    fn is_duplicate_window_different_reset_is_not_duplicate() {
+        let a = QuotaWindow {
+            remaining: 60.0,
+            resets_at: Some("2026-06-26T12:00:00Z".into()),
+            window_minutes: Some(10080),
+            used: None,
+            severity: None,
+            window_kind: Some(WindowKind::SevenDay),
+        };
+        let b = QuotaWindow {
+            resets_at: Some("2026-06-27T12:00:00Z".into()),
+            ..a.clone()
+        };
+        assert!(!is_duplicate_window(&a, &b));
     }
 }
