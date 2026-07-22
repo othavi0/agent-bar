@@ -603,6 +603,13 @@ pub struct StandaloneUpdateOptions<'a> {
     pub waybar_dir: &'a Path,
     /// Destino do terminal helper (`~/.config/waybar/scripts` em produção).
     pub scripts_dir: &'a Path,
+    /// `true` quando Waybar está ausente do PATH — pula
+    /// `refresh_waybar_assets_from_extract` (spec E: zero escrita em
+    /// `~/.config/waybar/` sem Waybar).
+    pub skip_waybar: bool,
+    /// `Some(dir)` quando omarchy-shell foi detectado — reinstala o plugin
+    /// com o binário novo, matando o drift binário↔QML (spec F).
+    pub omarchy_plugins_dir: Option<&'a Path>,
     pub run_command: &'a dyn Fn(&str, &[String], &Path) -> CommandResult,
     pub http: &'a reqwest::Client,
     pub releases_api_url: String,
@@ -683,8 +690,13 @@ pub async fn run_standalone_update(
     }
     replace_binary_atomic(&new_binary, opts.exe_path)?;
     install_standalone_assets(tmp_path, opts.data_dir)?;
-    // Icons/helper que a Waybar lê em ~/.config — sem re-patchar modules/CSS.
-    refresh_waybar_assets_from_extract(tmp_path, opts.waybar_dir, opts.scripts_dir)?;
+    apply_standalone_platform_gates(
+        tmp_path,
+        opts.waybar_dir,
+        opts.scripts_dir,
+        opts.skip_waybar,
+        opts.omarchy_plugins_dir,
+    )?;
 
     Ok(StandaloneUpdateStatus::Updated {
         old_version: opts.current_version.to_string(),
@@ -701,6 +713,27 @@ fn refresh_waybar_assets_from_extract(
 ) -> anyhow::Result<()> {
     crate::waybar_contract::install_waybar_assets(waybar_dir, scripts_dir, Some(extracted_dir))
         .map(|_| ())
+}
+
+/// Pós-extração, gated por plataforma (spec E/F): icons/helper da Waybar só
+/// são re-copiados com Waybar no PATH; o plugin omarchy só é reinstalado
+/// quando detectado. Extraída p/ ser testável sem rodar download/checksum
+/// reais (mesmo motivo de `refresh_waybar_assets_from_extract` já ser uma
+/// função à parte).
+fn apply_standalone_platform_gates(
+    extracted_dir: &Path,
+    waybar_dir: &Path,
+    scripts_dir: &Path,
+    skip_waybar: bool,
+    omarchy_plugins_dir: Option<&Path>,
+) -> anyhow::Result<()> {
+    if !skip_waybar {
+        refresh_waybar_assets_from_extract(extracted_dir, waybar_dir, scripts_dir)?;
+    }
+    if let Some(plugins_dir) = omarchy_plugins_dir {
+        crate::omarchy_integration::install_omarchy_plugin(plugins_dir)?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1341,6 +1374,8 @@ mod tests {
             data_dir: &tmp.path().join("data"),
             waybar_dir: &tmp.path().join("waybar"),
             scripts_dir: &tmp.path().join("scripts"),
+            skip_waybar: false,
+            omarchy_plugins_dir: None,
             run_command: &|c, a, p| fake.run(c, a, p),
             http: &client,
             releases_api_url: format!("{}/releases/latest", server.uri()),
@@ -1377,6 +1412,8 @@ mod tests {
             data_dir: &tmp.path().join("data"),
             waybar_dir: &tmp.path().join("waybar"),
             scripts_dir: &tmp.path().join("scripts"),
+            skip_waybar: false,
+            omarchy_plugins_dir: None,
             run_command: &|c, a, p| fake.run(c, a, p),
             http: &client,
             releases_api_url: format!("{}/releases/latest", server.uri()),
@@ -1390,5 +1427,46 @@ mod tests {
         assert!(err.to_string().contains("sha256sum not found"));
         // Nunca chegou a rodar nenhum comando (nem tentou baixar).
         assert!(fake.commands.borrow().is_empty());
+    }
+
+    #[test]
+    fn apply_standalone_platform_gates_skips_waybar_when_absent() {
+        let tmp = tempdir().unwrap();
+        let extracted = tmp.path().join("extracted");
+        fs::create_dir_all(extracted.join("icons")).unwrap();
+        fs::write(extracted.join("icons").join("grok-icon.svg"), b"<svg/>").unwrap();
+
+        let waybar_dir = tmp.path().join("waybar-agent-bar");
+        let scripts_dir = tmp.path().join("waybar-scripts");
+
+        apply_standalone_platform_gates(&extracted, &waybar_dir, &scripts_dir, true, None).unwrap();
+
+        assert!(
+            !waybar_dir.exists(),
+            "waybar_dir não deve ser tocado quando skip_waybar=true"
+        );
+    }
+
+    #[test]
+    fn apply_standalone_platform_gates_reinstalls_omarchy_plugin_when_detected() {
+        let tmp = tempdir().unwrap();
+        let extracted = tmp.path().join("extracted-empty");
+        fs::create_dir_all(&extracted).unwrap();
+        let waybar_dir = tmp.path().join("waybar-agent-bar");
+        let scripts_dir = tmp.path().join("waybar-scripts");
+        let plugins_dir = tmp.path().join("omarchy-plugins");
+
+        apply_standalone_platform_gates(
+            &extracted,
+            &waybar_dir,
+            &scripts_dir,
+            true,
+            Some(plugins_dir.as_path()),
+        )
+        .unwrap();
+
+        let plugin_dir = plugins_dir.join(crate::app_identity::OMARCHY_PLUGIN_ID);
+        assert!(plugin_dir.join("manifest.json").exists());
+        assert!(plugin_dir.join("Widget.qml").exists());
     }
 }

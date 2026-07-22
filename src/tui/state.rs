@@ -102,6 +102,25 @@ impl ConfigField {
         ConfigField::FxRate,
     ];
 
+    /// Campos exibidos p/ a plataforma dada: esconde Separators/Signal/
+    /// Interval (só afetam o Waybar) quando `platform` é exatamente
+    /// Omarchy-only (`omarchy: true, waybar: false`) — spec 2026-07-21 §E.
+    /// Providers/ProviderOrder/DisplayMode continuam (o Widget.qml também
+    /// os lê) e FxRate continua (só afeta esta TUI).
+    pub fn visible(platform: crate::platform::Platform) -> Vec<ConfigField> {
+        let hide_waybar_only = platform.omarchy && !platform.waybar;
+        ConfigField::ALL
+            .into_iter()
+            .filter(|f| {
+                !hide_waybar_only
+                    || !matches!(
+                        f,
+                        ConfigField::Separators | ConfigField::Signal | ConfigField::Interval
+                    )
+            })
+            .collect()
+    }
+
     /// Rótulo humano na lista/título do painel Config (trilha C).
     /// Não é a chave do settings.json — só UI.
     pub fn label(self) -> &'static str {
@@ -259,6 +278,13 @@ pub struct AppState {
     /// `Effects::new(enabled)`, construído direto do settings no
     /// event_loop).
     pub animations: bool,
+    /// Plataforma detectada (Omarchy-shell / Waybar) — gate de campos
+    /// só-Waybar na aba Config (`ConfigField::visible`) e do Save
+    /// (`handle_save_config`). Default `{omarchy:false, waybar:true}`
+    /// (mantém testes/snapshots determinísticos com o comportamento
+    /// legado); `event_loop::run` sobrescreve com `platform::detect()`
+    /// no boot real — mesmo padrão de `local_offset`/`glyph_mode`.
+    pub platform: crate::platform::Platform,
 }
 
 impl AppState {
@@ -293,6 +319,10 @@ impl AppState {
             fx_queue: Vec::new(),
             display_cost: 0.0,
             animations: true,
+            platform: crate::platform::Platform {
+                omarchy: false,
+                waybar: true,
+            },
         }
     }
 }

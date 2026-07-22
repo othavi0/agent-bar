@@ -148,8 +148,8 @@ pub(super) fn config_up(state: &mut AppState) -> Vec<Action> {
 }
 
 pub(super) fn config_down(state: &mut AppState) -> Vec<Action> {
+    let max = ConfigField::visible(state.platform).len().saturating_sub(1);
     if let Some(cs) = state.config_state.as_mut() {
-        let max = ConfigField::ALL.len().saturating_sub(1);
         if !cs.editing && cs.selected_field < max {
             cs.selected_field += 1;
         }
@@ -158,9 +158,10 @@ pub(super) fn config_down(state: &mut AppState) -> Vec<Action> {
 }
 
 pub(super) fn config_enter_edit(state: &mut AppState) -> Vec<Action> {
+    let visible = ConfigField::visible(state.platform);
     if let Some(cs) = state.config_state.as_mut() {
         if !cs.editing {
-            let field = ConfigField::ALL[cs.selected_field];
+            let field = visible[cs.selected_field];
             let current = field_value_string(field, cs);
             cs.input = tui_input::Input::new(current);
             cs.editing = true;
@@ -179,9 +180,10 @@ pub(super) fn config_cancel_edit(state: &mut AppState) -> Vec<Action> {
 }
 
 pub(super) fn config_confirm_edit(state: &mut AppState) -> Vec<Action> {
+    let visible = ConfigField::visible(state.platform);
     if let Some(cs) = state.config_state.as_mut() {
         if cs.editing {
-            let field = ConfigField::ALL[cs.selected_field];
+            let field = visible[cs.selected_field];
             let value = cs.input.value().to_string();
             match apply_field_edit(field, &value, cs) {
                 Ok(()) => {

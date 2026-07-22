@@ -23,8 +23,8 @@ use agent_bar::settings::{self, Settings};
 use agent_bar::tui;
 use agent_bar::watch;
 use agent_bar::{
-    doctor, install, omarchy_integration, runtime, setup, term_prompt, uninstall, update,
-    waybar_contract, waybar_integration,
+    doctor, install, omarchy_integration, platform, runtime, setup, term_prompt, uninstall,
+    update, waybar_contract, waybar_integration,
 };
 
 // ---------------------------------------------------------------------------
@@ -51,6 +51,30 @@ fn should_notify(
 /// `format != Json && !settings.waybar.providers.contains(provider)`.
 fn is_hidden_module(provider: &str, format: Format, settings: &Settings) -> bool {
     format != Format::Json && !settings.waybar.providers.iter().any(|s| s == provider)
+}
+
+/// `SetupConfig` do update ManagedGit (spec E/F): reinstala o plugin omarchy
+/// quando `platform.omarchy` e só toca `~/.config/waybar/` quando
+/// `platform.waybar` — mesma composição de `platform::detect()` usada pelo
+/// Standalone e pelo Save da TUI.
+fn managed_update_setup_config(
+    platform: platform::Platform,
+    repo_root: PathBuf,
+    home: PathBuf,
+) -> setup::SetupConfig {
+    setup::SetupConfig {
+        asset_paths: Some(waybar_contract::get_default_waybar_asset_paths()),
+        integration_paths: Some(waybar_integration::get_default_waybar_integration_paths()),
+        repo_root: Some(repo_root),
+        home: home.clone(),
+        skip_reload: false,
+        system_install: runtime::is_system_install(),
+        omarchy: platform.omarchy.then(|| setup::OmarchySetupOptions {
+            plugins_dir: omarchy_integration::default_omarchy_plugins_dir(&home),
+            run_cli: true,
+        }),
+        skip_waybar: !platform.waybar,
+    }
 }
 
 /// Escreve o payload Waybar em stdout (stdout-limpo; nunca vazio em falha de serde).
@@ -378,6 +402,9 @@ async fn main() {
                     term_prompt::status("Cancelado", "Doctor não aplicou mudanças");
                 }
             }
+            for warning in result.omarchy.warnings() {
+                term_prompt::status("Aviso", &warning);
+            }
             std::process::exit(0);
         }
 
@@ -394,15 +421,21 @@ async fn main() {
                 .map(PathBuf::from)
                 .unwrap_or_default();
             let install_root = home.join(format!(".{APP_NAME}"));
+            let platform = platform::detect();
 
-            // O binário novo traz QML novo — o drop-in do omarchy-shell só
-            // atualiza via setup (o update não toca nele; ver setup::SetupConfig.omarchy).
-            let omarchy_setup_hint = |home: &Path| {
+            // O binário novo traz QML novo — update (T2/T3) já reinstala o
+            // drop-in quando `platform.omarchy`. O hint vira fallback só
+            // para quando a detecção falhar nesta rodada mas o diretório
+            // ainda existir (spec F).
+            let omarchy_setup_hint = |home: &Path, platform: platform::Platform| {
+                if platform.omarchy {
+                    return;
+                }
                 let plugin_dir = omarchy_integration::default_omarchy_plugins_dir(home)
                     .join(app_identity::OMARCHY_PLUGIN_ID);
                 if plugin_dir.exists() {
                     term_prompt::note(&format!(
-                        "Plugin omarchy-shell detectado. Rode `{} setup` para atualizá-lo.",
+                        "Plugin omarchy-shell detectado mas fora de sync (detecção falhou nesta rodada). Rode `{} setup` para atualizá-lo.",
                         app_identity::APP_NAME
                     ));
                 }
@@ -480,18 +513,11 @@ async fn main() {
                     let repo_root_for_setup = root.clone();
                     let home_for_setup = home.clone();
                     let run_setup = || {
-                        let asset_paths = waybar_contract::get_default_waybar_asset_paths();
-                        let ipaths = waybar_integration::get_default_waybar_integration_paths();
-                        let cfg = setup::SetupConfig {
-                            asset_paths: Some(asset_paths),
-                            integration_paths: Some(ipaths),
-                            repo_root: Some(repo_root_for_setup.clone()),
-                            home: home_for_setup.clone(),
-                            skip_reload: false,
-                            system_install: runtime::is_system_install(),
-                            omarchy: None,
-                            skip_waybar: false,
-                        };
+                        let cfg = managed_update_setup_config(
+                            platform,
+                            repo_root_for_setup.clone(),
+                            home_for_setup.clone(),
+                        );
                         if let Err(e) = setup::run_setup(&settings_for_setup, cfg, false, false) {
                             log::error!("Setup falhou após update: {e}");
                         }
@@ -516,7 +542,7 @@ async fn main() {
                             match r.status {
                                 update::ManagedUpdateStatus::Updated => {
                                     term_prompt::status("OK", "Update aplicado");
-                                    omarchy_setup_hint(&home);
+                                    omarchy_setup_hint(&home, platform);
                                 }
                                 update::ManagedUpdateStatus::UpToDate => {
                                     term_prompt::status("OK", "Já na versão mais recente");
@@ -552,12 +578,17 @@ async fn main() {
                     };
                     let data_dir = update::default_data_dir(&home);
                     let waybar_paths = waybar_contract::get_default_waybar_asset_paths();
+                    let omarchy_plugin_dir_for_update = platform
+                        .omarchy
+                        .then(|| omarchy_integration::default_omarchy_plugins_dir(&home));
                     let opts = update::StandaloneUpdateOptions {
                         current_version: app_identity::VERSION,
                         exe_path: &current_exe,
                         data_dir: &data_dir,
                         waybar_dir: &waybar_paths.waybar_dir,
                         scripts_dir: &waybar_paths.scripts_dir,
+                        skip_waybar: !platform.waybar,
+                        omarchy_plugins_dir: omarchy_plugin_dir_for_update.as_deref(),
                         run_command: &run_real_command,
                         http: &http,
                         releases_api_url: format!(
@@ -583,13 +614,17 @@ async fn main() {
                             old_version,
                             new_version,
                         }) => {
-                            term_prompt::status(
-                                "OK",
-                                &format!(
-                                    "agent-bar atualizado: v{old_version} -> v{new_version}. Icons e helper da Waybar atualizados."
-                                ),
+                            let mut msg = format!(
+                                "agent-bar atualizado: v{old_version} -> v{new_version}."
                             );
-                            omarchy_setup_hint(&home);
+                            if platform.waybar {
+                                msg.push_str(" Icons e helper da Waybar atualizados.");
+                            }
+                            if platform.omarchy {
+                                msg.push_str(" Plugin omarchy-shell reinstalado.");
+                            }
+                            term_prompt::status("OK", &msg);
+                            omarchy_setup_hint(&home, platform);
                             std::process::exit(0);
                         }
                         Err(e) => {
@@ -624,6 +659,8 @@ async fn main() {
                 &format!("{APP_NAME} uninstall"),
                 &ipaths,
                 &omarchy_integration::default_omarchy_plugins_dir(&home),
+                &omarchy_integration::omarchy_cli_available,
+                &omarchy_integration::run_omarchy_remove_commands,
             ) {
                 Ok(()) => std::process::exit(0),
                 Err(e) => {
@@ -837,6 +874,34 @@ mod tests {
         let mut s = default_settings();
         s.waybar.providers.retain(|p| p != provider);
         s
+    }
+
+    #[test]
+    fn managed_update_setup_config_gates_on_platform() {
+        let home = PathBuf::from("/tmp/agent-bar-test-managed-update-home");
+        let repo = PathBuf::from("/tmp/agent-bar-test-managed-update-repo");
+
+        let omarchy_only = managed_update_setup_config(
+            platform::Platform {
+                omarchy: true,
+                waybar: false,
+            },
+            repo.clone(),
+            home.clone(),
+        );
+        assert!(omarchy_only.omarchy.is_some());
+        assert!(omarchy_only.skip_waybar);
+
+        let waybar_only = managed_update_setup_config(
+            platform::Platform {
+                omarchy: false,
+                waybar: true,
+            },
+            repo,
+            home,
+        );
+        assert!(waybar_only.omarchy.is_none());
+        assert!(!waybar_only.skip_waybar);
     }
 
     // -----------------------------------------------------------------------

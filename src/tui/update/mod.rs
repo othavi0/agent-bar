@@ -781,6 +781,23 @@ mod tests {
     }
 
     #[test]
+    fn config_navigate_clamps_at_reduced_max_when_omarchy_only() {
+        let mut state = AppState::new();
+        state.platform = crate::platform::Platform {
+            omarchy: true,
+            waybar: false,
+        };
+        update(&mut state, Action::InitConfig(fake_settings()));
+
+        // Só Providers/ProviderOrder/DisplayMode/FxRate ficam visíveis (4
+        // campos, índices 0..=3) — Separators/Signal/Interval somem.
+        for _ in 0..10 {
+            update(&mut state, Action::ConfigDown);
+        }
+        assert_eq!(state.config_state.as_ref().unwrap().selected_field, 3);
+    }
+
+    #[test]
     fn config_enter_edit_sets_input_to_current_value() {
         let mut state = AppState::new();
         update(&mut state, Action::InitConfig(fake_settings()));
