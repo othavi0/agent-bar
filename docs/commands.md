@@ -39,7 +39,8 @@ Example envelope:
   "providers": ["claude", "codex", "amp", "grok"],
   "providerOrder": ["claude", "codex", "amp", "grok"],
   "displayMode": "remaining",
-  "notify": { "enabled": true }
+  "notify": { "enabled": true },
+  "menuAnimations": true
 }
 ```
 
@@ -50,6 +51,7 @@ Example envelope:
 | `providerOrder` | Effective order; unknown ids dropped. |
 | `displayMode` | `"remaining"` or `"used"`. |
 | `notify.enabled` | Desktop low/critical notifications. |
+| `menuAnimations` | Read-only; reflete `Settings.menu.animations`. Ignorado em `apply`. |
 
 Omitted fields on apply are left unchanged. Not included: separators, Waybar
 signal/interval, menu font, cache, glyphs, `refreshIntervalSec` (Omarchy

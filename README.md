@@ -4,7 +4,7 @@
   <img src="docs/assets/agent-bar-banner.png" alt="Banner do Agent Bar">
 </p>
 
-Monitor de quota de Claude Code, OpenAI Codex, Amp e Grok Build na Waybar. Quota de agente é aquele recurso que você só descobre que acabou quando acabou; aqui ela fica visível na barra o tempo todo. Um binário em Rust, sem daemon: a Waybar chama, ele imprime JSON e vai embora.
+Monitor de quota de Claude Code, OpenAI Codex, Amp e Grok Build — nativo no Omarchy 4 (omarchy-shell), com Waybar suportada como tier legado. Quota de agente é aquele recurso que você só descobre que acabou quando acabou; aqui ela fica visível na barra o tempo todo. Um binário em Rust, sem daemon: o shell chama, ele imprime JSON e vai embora.
 
 ## O que ele mostra
 
@@ -24,8 +24,8 @@ Tudo passa por um cache em disco (`~/.cache/agent-bar/`): 5 minutos pro Claude, 
 
 ## Requisitos
 
-- Linux x86_64 com Waybar. Uso no Hyprland, mas não tem nada específico dele aqui.
-- **Omarchy 4 (omarchy-shell)**: bar-widget plugin nativo com chips + popup — `agent-bar setup` detecta e instala. Waybar segue suportada.
+- Linux x86_64. **Omarchy 4 (omarchy-shell)** é o alvo principal: `agent-bar setup` detecta o omarchy-shell e instala o bar-widget plugin nativo (chips + popup) automaticamente.
+- **Waybar** — suportada como **tier legado**: funciona, recebe fix, não recebe feature nova. `agent-bar setup` integra com ela também, quando presente.
 - `curl`, `tar` e `sha256sum` pro instalador.
 - Um terminal que o helper reconheça: alacritty, kitty, foot, ghostty, wezterm, ou `xdg-terminal-exec`.
 - As CLIs que você quer monitorar, instaladas. O login dá pra fazer pela própria TUI.

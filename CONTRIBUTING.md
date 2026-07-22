@@ -6,7 +6,7 @@ Quick start for developers.
 
 | Tool | Minimum |
 |------|---------|
-| [Rust](https://rustup.rs) | stable (1.75+) |
+| [Rust](https://rustup.rs) | 1.88 (MSRV — `tachyonfx` via `anpa` requires it) |
 | Git | recent |
 
 Rust + Cargo is the only supported toolchain.

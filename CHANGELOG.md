@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.0.0] - 2026-07-21
+
+Redesign completo do popup (Omarchy-shell) + Waybar rebaixada a tier
+legado. Marco de produto — sem mudança de contrato JSON.
+
+### Added
+- **Widget.qml redesenhado**: hero % por provider igual ao chip, título
+  `agent-bar` + "há Xm" relativo, ações de topo viram botões Unicode
+  reais (↻ refresh, ⚙︎ settings, ❯ abrir TUI) em vez de texto/link. Um
+  cartão por provider, grade de colunas fixas (rótulo · barra · % ·
+  reset), countdown (`1h 46m · 18:30` / `7d 0h · seg 16:43`) em toda
+  janela. Largura `540` (antes `370`), igual nos dois modos.
+- **`extra` visível no popup**: créditos do Amp (`$X · replenish`),
+  sessões/turnos/modelo do Grok, extra usage do Claude quando existir —
+  antes só existiam no `--format json`, nunca chegavam à tela.
+- **Motion no popup**: barras preenchem na abertura (M1, stagger),
+  `↻` gira durante o fetch (M2), hover nos botões (M4) — gated por
+  `menu.animations` (exposto read-only em `config show` como
+  `menuAnimations`).
+- **`windowKind`** (`"fiveHour" | "sevenDay" | "daily" | "context" |
+  "other"`) em `QuotaWindow`, decidido uma vez no Rust por cada
+  provider; dedup display-level (`(windowKind, resetsAt, remaining)`)
+  consumido pela TUI e por Widget.qml — some o "Weekly" triplicado do
+  Codex no plano Plus.
+- **Countdown e fuso local na TUI**: `fmt_reset` do Detail passa a usar
+  `format_reset_time`/`format_eta` (antes fatiava o ISO em UTC cru, sem
+  contagem regressiva).
+- Settings do popup ganham Providers (toggle + reordenar), Exibição
+  (segmentado remaining/used + prévia ao vivo da barra) e Alertas &
+  atualização (notify + intervalo) como painéis próprios.
+- **`platform::detect()`** (`src/platform.rs`) único ponto de decisão
+  Omarchy/Waybar, usado por `setup`, `update` (os dois ramos) e pelo Save
+  da TUI Config — nenhum dos três cria mais `~/.config/waybar/` do zero
+  numa máquina Omarchy-only.
+- **`agent-bar update` reinstala o plugin Omarchy** quando o shell é
+  detectado, eliminando o drift binário↔QML que antes exigia rodar
+  `setup` manualmente. `doctor` ganhou checagem de versão do manifest
+  instalado vs binário.
+- Módulo `src/waybar/` agrupando o contrato Waybar (antigo
+  `waybar_contract.rs`/`waybar_integration.rs`) como tier legado isolado.
+
+### Changed
+- **Fix do mislabeling do Codex**: `build_model_windows` não força mais
+  `primary→fiveHour`/`secondary→sevenDay` quando a classificação diverge
+  — uma janela fora de tolerância vira `other` com rótulo pela duração
+  real (ex.: "1h window").
+- **Settings mode do popup**: salvar passa a ser **só pelo botão** — o
+  atalho de teclado `s` para salvar foi removido; o rodapé de dicas em
+  texto vira botões clicáveis de verdade.
+- Migração de settings **v2 → v3**: `waybar.show_percentage` é dropada
+  silenciosamente e o arquivo é regravado na versão nova.
+- TUI Config esconde os campos exclusivos de Waybar (separadores,
+  signal, intervalo do Waybar) quando `platform::detect()` reporta
+  Omarchy-only.
+- `docs/waybar-contract.md` e `README.md` marcam Waybar como **tier
+  legado**: funciona, recebe fix, não recebe feature nova.
+
+### Removed
+- Legado morto: variante `Command::Terminal`,
+  `waybar_contract::get_all_provider_ids`, `install::ensure_amp_cli`,
+  `amp_cli::AMP_INSTALL_COMMAND` duplicada, dependência `tokio-util`,
+  `ConfigField::settings_key()`, 7 variantes órfãs de `Icon`.
+
+### Breaking
+- Nenhuma no contrato `--format json` — `windowKind` é aditivo,
+  `schemaVersion` continua `1`.
+
 ## [8.5.0] - 2026-07-21
 
 ### Added

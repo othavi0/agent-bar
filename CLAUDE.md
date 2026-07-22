@@ -47,6 +47,7 @@ pode não aparecer. Use apenas um filtro posicional por invocação de `cargo te
 | Update flow | `cargo test update` |
 | Theme / colors / identity | `cargo test theme && cargo test app_identity` |
 | CLI locators (Amp CLI) | `cargo test providers::amp_cli` |
+| CLI locators (Grok CLI) | `cargo test providers::grok_cli` |
 | Contratos Rust | `cargo clippy --all-targets -- -D warnings` |
 | Mudanças amplas antes de handoff | `cargo test && cargo clippy --all-targets -- -D warnings` |
 
@@ -69,6 +70,12 @@ pode não aparecer. Use apenas um filtro posicional por invocação de `cargo te
 - **Nunca round-trip live Waybar config via `serde_json`.**
   Os `.jsonc` têm comentários e ordem que precisam sobreviver.
   `waybar_integration.rs` patcha in-place.
+- **Módulo `src/waybar/` agrupa o tier legado** (`src/waybar/contract.rs`,
+  `src/waybar/integration.rs`), com re-exports em `lib.rs` para
+  `crate::waybar_contract`/`crate::waybar_integration`. Os filtros
+  `cargo test waybar_contract`/`cargo test waybar_integration` da matriz
+  (§2) seguem em vigor — se um teste for movido pro módulo interno,
+  confira que o filtro ainda casa antes de commitar.
 
 ## 4. Testing Patterns
 
