@@ -695,7 +695,7 @@ mod tests {
         use crate::settings::*;
         use std::collections::BTreeMap;
         Settings {
-            version: 2,
+            version: CURRENT_VERSION,
             waybar: Waybar {
                 providers: vec!["claude".to_string(), "codex".to_string()],
                 separators: SeparatorStyle::Gap,

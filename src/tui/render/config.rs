@@ -275,7 +275,7 @@ mod tests {
 
     fn fake_settings() -> Settings {
         Settings {
-            version: 2,
+            version: crate::settings::CURRENT_VERSION,
             waybar: Waybar {
                 providers: vec!["claude".to_string(), "codex".to_string()],
                 separators: SeparatorStyle::Gap,

@@ -42,7 +42,7 @@ reads assets from `/usr/share/agent-bar/`.
 
 ## Settings
 
-Settings schema version: `2`.
+Settings schema version: `3`.
 
 Defaults:
 
@@ -50,7 +50,6 @@ Defaults:
 - provider order: `claude`, `codex`, `amp`, `grok`
 - separator style: `gap`
 - display mode: `remaining`
-- show percentage: `true`
 - Codex window policy: `both`
 - menu animations: `true`
 - menu font family: `IBM Plex Mono`
