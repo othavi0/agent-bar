@@ -23,8 +23,8 @@ use agent_bar::settings::{self, Settings};
 use agent_bar::tui;
 use agent_bar::watch;
 use agent_bar::{
-    doctor, install, omarchy_integration, runtime, setup, term_prompt, uninstall, update,
-    waybar_contract, waybar_integration,
+    doctor, install, omarchy_integration, platform, runtime, setup, term_prompt, uninstall,
+    update, waybar_contract, waybar_integration,
 };
 
 // ---------------------------------------------------------------------------
@@ -51,6 +51,30 @@ fn should_notify(
 /// `format != Json && !settings.waybar.providers.contains(provider)`.
 fn is_hidden_module(provider: &str, format: Format, settings: &Settings) -> bool {
     format != Format::Json && !settings.waybar.providers.iter().any(|s| s == provider)
+}
+
+/// `SetupConfig` do update ManagedGit (spec E/F): reinstala o plugin omarchy
+/// quando `platform.omarchy` e só toca `~/.config/waybar/` quando
+/// `platform.waybar` — mesma composição de `platform::detect()` usada pelo
+/// Standalone e pelo Save da TUI.
+fn managed_update_setup_config(
+    platform: platform::Platform,
+    repo_root: PathBuf,
+    home: PathBuf,
+) -> setup::SetupConfig {
+    setup::SetupConfig {
+        asset_paths: Some(waybar_contract::get_default_waybar_asset_paths()),
+        integration_paths: Some(waybar_integration::get_default_waybar_integration_paths()),
+        repo_root: Some(repo_root),
+        home: home.clone(),
+        skip_reload: false,
+        system_install: runtime::is_system_install(),
+        omarchy: platform.omarchy.then(|| setup::OmarchySetupOptions {
+            plugins_dir: omarchy_integration::default_omarchy_plugins_dir(&home),
+            run_cli: true,
+        }),
+        skip_waybar: !platform.waybar,
+    }
 }
 
 /// Escreve o payload Waybar em stdout (stdout-limpo; nunca vazio em falha de serde).
@@ -394,6 +418,7 @@ async fn main() {
                 .map(PathBuf::from)
                 .unwrap_or_default();
             let install_root = home.join(format!(".{APP_NAME}"));
+            let platform = platform::detect();
 
             // O binário novo traz QML novo — o drop-in do omarchy-shell só
             // atualiza via setup (o update não toca nele; ver setup::SetupConfig.omarchy).
@@ -480,18 +505,11 @@ async fn main() {
                     let repo_root_for_setup = root.clone();
                     let home_for_setup = home.clone();
                     let run_setup = || {
-                        let asset_paths = waybar_contract::get_default_waybar_asset_paths();
-                        let ipaths = waybar_integration::get_default_waybar_integration_paths();
-                        let cfg = setup::SetupConfig {
-                            asset_paths: Some(asset_paths),
-                            integration_paths: Some(ipaths),
-                            repo_root: Some(repo_root_for_setup.clone()),
-                            home: home_for_setup.clone(),
-                            skip_reload: false,
-                            system_install: runtime::is_system_install(),
-                            omarchy: None,
-                            skip_waybar: false,
-                        };
+                        let cfg = managed_update_setup_config(
+                            platform,
+                            repo_root_for_setup.clone(),
+                            home_for_setup.clone(),
+                        );
                         if let Err(e) = setup::run_setup(&settings_for_setup, cfg, false, false) {
                             log::error!("Setup falhou após update: {e}");
                         }
@@ -837,6 +855,34 @@ mod tests {
         let mut s = default_settings();
         s.waybar.providers.retain(|p| p != provider);
         s
+    }
+
+    #[test]
+    fn managed_update_setup_config_gates_on_platform() {
+        let home = PathBuf::from("/tmp/agent-bar-test-managed-update-home");
+        let repo = PathBuf::from("/tmp/agent-bar-test-managed-update-repo");
+
+        let omarchy_only = managed_update_setup_config(
+            platform::Platform {
+                omarchy: true,
+                waybar: false,
+            },
+            repo.clone(),
+            home.clone(),
+        );
+        assert!(omarchy_only.omarchy.is_some());
+        assert!(omarchy_only.skip_waybar);
+
+        let waybar_only = managed_update_setup_config(
+            platform::Platform {
+                omarchy: false,
+                waybar: true,
+            },
+            repo,
+            home,
+        );
+        assert!(waybar_only.omarchy.is_none());
+        assert!(!waybar_only.skip_waybar);
     }
 
     // -----------------------------------------------------------------------
