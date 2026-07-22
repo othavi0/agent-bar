@@ -1,5 +1,10 @@
 # Waybar Contract
 
+> **Waybar é tier legado** a partir da 9.0.0: funciona, recebe fix, não
+> recebe feature nova. O alvo atual é o Omarchy 4 (omarchy-shell) — ver
+> [`omarchy-shell.md`](omarchy-shell.md). Este documento descreve o
+> contrato Waybar como está, para quem ainda depende dele.
+
 This is the generated contract used by setup and by the export commands.
 
 ## Providers
@@ -9,12 +14,14 @@ Built-in Waybar providers:
 - `claude`
 - `codex`
 - `amp`
+- `grok`
 
 Generated module IDs:
 
 - `custom/agent-bar-claude`
 - `custom/agent-bar-codex`
 - `custom/agent-bar-amp`
+- `custom/agent-bar-grok`
 
 CSS selectors use:
 
