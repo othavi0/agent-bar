@@ -420,14 +420,19 @@ async fn main() {
             let install_root = home.join(format!(".{APP_NAME}"));
             let platform = platform::detect();
 
-            // O binário novo traz QML novo — o drop-in do omarchy-shell só
-            // atualiza via setup (o update não toca nele; ver setup::SetupConfig.omarchy).
-            let omarchy_setup_hint = |home: &Path| {
+            // O binário novo traz QML novo — update (T2/T3) já reinstala o
+            // drop-in quando `platform.omarchy`. O hint vira fallback só
+            // para quando a detecção falhar nesta rodada mas o diretório
+            // ainda existir (spec F).
+            let omarchy_setup_hint = |home: &Path, platform: platform::Platform| {
+                if platform.omarchy {
+                    return;
+                }
                 let plugin_dir = omarchy_integration::default_omarchy_plugins_dir(home)
                     .join(app_identity::OMARCHY_PLUGIN_ID);
                 if plugin_dir.exists() {
                     term_prompt::note(&format!(
-                        "Plugin omarchy-shell detectado. Rode `{} setup` para atualizá-lo.",
+                        "Plugin omarchy-shell detectado mas fora de sync (detecção falhou nesta rodada). Rode `{} setup` para atualizá-lo.",
                         app_identity::APP_NAME
                     ));
                 }
@@ -534,7 +539,7 @@ async fn main() {
                             match r.status {
                                 update::ManagedUpdateStatus::Updated => {
                                     term_prompt::status("OK", "Update aplicado");
-                                    omarchy_setup_hint(&home);
+                                    omarchy_setup_hint(&home, platform);
                                 }
                                 update::ManagedUpdateStatus::UpToDate => {
                                     term_prompt::status("OK", "Já na versão mais recente");
@@ -570,12 +575,17 @@ async fn main() {
                     };
                     let data_dir = update::default_data_dir(&home);
                     let waybar_paths = waybar_contract::get_default_waybar_asset_paths();
+                    let omarchy_plugin_dir_for_update = platform
+                        .omarchy
+                        .then(|| omarchy_integration::default_omarchy_plugins_dir(&home));
                     let opts = update::StandaloneUpdateOptions {
                         current_version: app_identity::VERSION,
                         exe_path: &current_exe,
                         data_dir: &data_dir,
                         waybar_dir: &waybar_paths.waybar_dir,
                         scripts_dir: &waybar_paths.scripts_dir,
+                        skip_waybar: !platform.waybar,
+                        omarchy_plugins_dir: omarchy_plugin_dir_for_update.as_deref(),
                         run_command: &run_real_command,
                         http: &http,
                         releases_api_url: format!(
@@ -601,13 +611,17 @@ async fn main() {
                             old_version,
                             new_version,
                         }) => {
-                            term_prompt::status(
-                                "OK",
-                                &format!(
-                                    "agent-bar atualizado: v{old_version} -> v{new_version}. Icons e helper da Waybar atualizados."
-                                ),
+                            let mut msg = format!(
+                                "agent-bar atualizado: v{old_version} -> v{new_version}."
                             );
-                            omarchy_setup_hint(&home);
+                            if platform.waybar {
+                                msg.push_str(" Icons e helper da Waybar atualizados.");
+                            }
+                            if platform.omarchy {
+                                msg.push_str(" Plugin omarchy-shell reinstalado.");
+                            }
+                            term_prompt::status("OK", &msg);
+                            omarchy_setup_hint(&home, platform);
                             std::process::exit(0);
                         }
                         Err(e) => {
