@@ -27,5 +27,6 @@ pub mod uninstall;
 pub mod update;
 pub mod usage;
 pub mod watch;
-pub mod waybar_contract;
-pub mod waybar_integration;
+pub mod waybar;
+pub use waybar::waybar_contract;
+pub use waybar::waybar_integration;
