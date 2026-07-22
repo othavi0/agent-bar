@@ -16,11 +16,20 @@ pub struct CodexModelEntry {
 }
 
 /// Coloca `window` no bucket certo de `mw` seguindo a regra do TS:
-/// fiveHour/sevenDay só se ainda vazio; senão cai em `other`.
+/// fiveHour/sevenDay só se ainda vazio; senão cai em `other` — exceto
+/// quando a janela já ocupa o slot (mesmo remaining arredondado +
+/// resetsAt). Isso mata a re-inserção de `p.models` que
+/// `flatten_models` tirou de `models_detailed` e que, sem este guard,
+/// virava duplicata em `other` (caso 2×weekly e o golden healthy).
 fn place_window(mw: &mut ModelWindows, window: &QuotaWindow) {
+    let same_slot = |slot: &QuotaWindow| {
+        slot.resets_at == window.resets_at && slot.remaining.round() == window.remaining.round()
+    };
     match classify_window(window.window_minutes) {
         WindowKind::FiveHour if mw.five_hour.is_none() => mw.five_hour = Some(window.clone()),
         WindowKind::SevenDay if mw.seven_day.is_none() => mw.seven_day = Some(window.clone()),
+        WindowKind::FiveHour if mw.five_hour.as_ref().is_some_and(same_slot) => {}
+        WindowKind::SevenDay if mw.seven_day.as_ref().is_some_and(same_slot) => {}
         _ => mw.other.get_or_insert_with(Vec::new).push(window.clone()),
     }
 }
@@ -203,6 +212,39 @@ mod tests {
         assert_eq!(w.other.as_ref().unwrap()[0].remaining, 40.0);
         // severity = min(90, 40) = 40
         assert_eq!(entries[0].severity, 40.0);
+    }
+
+    #[test]
+    fn same_five_hour_from_models_does_not_duplicate_other() {
+        // modelsDetailed + p.models com a MESMA fiveHour (caminho real do
+        // golden/flatten_models): sem re-inserir em other.
+        let detailed = {
+            let mut md = BTreeMap::new();
+            let mw = crate::providers::types::ModelWindows {
+                five_hour: Some(win(60.0, Some(300))),
+                seven_day: Some(win(85.0, Some(10080))),
+                ..Default::default()
+            };
+            md.insert("Codex".to_string(), mw);
+            md
+        };
+        let mut q = quota_with_models({
+            let mut m = IndexMap::new();
+            m.insert("Codex".to_string(), win(60.0, Some(300)));
+            m
+        });
+        q.extra = Some(ProviderExtra::Codex(CodexQuotaExtra {
+            models_detailed: Some(detailed),
+            extra_usage: None,
+        }));
+        let entries = codex_models_from_quota(&q);
+        let w = &entries[0].windows;
+        assert_eq!(w.five_hour.as_ref().unwrap().remaining, 60.0);
+        assert_eq!(w.seven_day.as_ref().unwrap().remaining, 85.0);
+        assert!(
+            w.other.as_ref().map(Vec::is_empty).unwrap_or(true),
+            "re-inserção idêntica de p.models não deve ir pra other: {w:?}"
+        );
     }
 
     #[test]
