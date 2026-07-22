@@ -85,6 +85,20 @@ Then run:
 amp login
 ```
 
+### Grok
+
+Grok Build CLI uses OAuth in `~/.grok/auth.json`; the provider itself
+makes zero network calls — it reads session `signals.json` files under
+`~/.grok/sessions/**` for context-window data. Log in with:
+
+```bash
+grok login
+```
+
+An access token past its `expires_at` does **not** log you out: the Grok
+CLI renews it via refresh token, and agent-bar only checks for a
+non-empty `key` in `auth.json`.
+
 ## Reset Managed Waybar Entries
 
 For a normal reset:
