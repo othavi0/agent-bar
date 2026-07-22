@@ -1209,9 +1209,11 @@ BarWidget {
   // (ex. "\uf021") — o bar.fontFamily no Omarchy é monoespaçado Nerd e
   // renderiza esses com fidelidade; Unicode "decorativo" (↻ ⚙︎ ❯) quebra.
   // Reusado para ↑/↓/−/+ (ASCII, estáveis em mono).
-  // Centralização ótica: FA glyphs têm bounding box assimétrico; `anchors.centerIn`
-  // alinha a linha tipográfica, não a tinta. Usamos TextMetrics.tightBoundingRect
-  // (mesmo princípio do OpticalGlyph do Omarchy) pra centrar a tinta no botão.
+  //
+  // Centralização: Text preenche o botão + AlignHCenter/VCenter (padrão do
+  // PanelActionButton do Omarchy). NÃO usar TextMetrics.tightBoundingRect —
+  // com FA no PUA o tight rect às vezes vem vazio/errado e o glifo some
+  // pra fora do botão.
   component IconButton: Item {
     id: btn
     property string glyph: ""
@@ -1219,11 +1221,10 @@ BarWidget {
     property bool spinning: false
     signal clicked()
 
-    // Quadrado: altura ≠ largura desloca o centro visual do glifo.
     readonly property int side: 28
-    readonly property int glyphPx: (typeof Style !== "undefined" && Style.font && Style.font.icon)
-      ? Style.font.icon
-      : 13
+    // 12px cabe limpo no 28×28 com padding visual; Style.font.icon (≈14)
+    // fica apertado e parece desalinhado.
+    readonly property int glyphPx: 12
 
     implicitWidth: side
     implicitHeight: side
@@ -1244,41 +1245,27 @@ BarWidget {
       Behavior on border.color { enabled: root.menuAnimationsEnabled; ColorAnimation { duration: 160 } }
     }
 
-    TextMetrics {
-      id: glyphMetrics
+    Text {
+      id: glyphText
+      anchors.fill: parent
+      text: btn.glyph
+      color: mouse.containsMouse && btn.enabled ? Color.accent : root.fg
       font.family: root.fontFamily
       font.pixelSize: btn.glyphPx
-      text: btn.glyph
-    }
-
-    // Caixa = tinta real do glifo; o Text fica offset pra o tight rect
-    // coincidir com a caixa, e a caixa é centrada no botão.
-    Item {
-      id: glyphHost
-      anchors.centerIn: parent
-      width: Math.max(1, glyphMetrics.tightBoundingRect.width)
-      height: Math.max(1, glyphMetrics.tightBoundingRect.height)
+      horizontalAlignment: Text.AlignHCenter
+      verticalAlignment: Text.AlignVCenter
+      renderType: Text.NativeRendering
+      // Origem no centro do botão — spin do refresh não “órbita” o glifo.
       transformOrigin: Item.Center
 
-      Text {
-        id: glyphText
-        x: -glyphMetrics.tightBoundingRect.x
-        y: -glyphMetrics.tightBoundingRect.y
-        text: btn.glyph
-        color: mouse.containsMouse && btn.enabled ? Color.accent : root.fg
-        font.family: root.fontFamily
-        font.pixelSize: btn.glyphPx
-        renderType: Text.NativeRendering
-      }
-
       RotationAnimation {
-        target: glyphHost
+        target: glyphText
         property: "rotation"
         running: btn.spinning && root.menuAnimationsEnabled
         from: 0; to: 360
         duration: 900
         loops: Animation.Infinite
-        onRunningChanged: if (!running) glyphHost.rotation = 0
+        onRunningChanged: if (!running) glyphText.rotation = 0
       }
     }
 
