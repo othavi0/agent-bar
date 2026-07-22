@@ -757,19 +757,22 @@ BarWidget {
 
           Item { Layout.fillWidth: true }
 
+          // Glifos Nerd Font / Font Awesome (PUA) — o bar.fontFamily resolve
+          // pra JetBrainsMono Nerd Font no Omarchy; Unicode "bonito" (↻ ⚙︎ ❯)
+          // cai em glyphs quebrados/incompletos nessa família monoespaçada.
           IconButton {
-            glyph: "↻"
+            glyph: "\uf021" // fa-refresh
             tooltip: "Atualizar"
             spinning: fetchProc.running
             onClicked: root.refresh(true)
           }
           IconButton {
-            glyph: "⚙︎"
+            glyph: "\uf013" // fa-cog
             tooltip: "Settings"
             onClicked: root.openSettings()
           }
           IconButton {
-            glyph: "❯"
+            glyph: "\uf054" // fa-chevron-right
             tooltip: "Abrir TUI"
             onClicked: root.openTui()
           }
@@ -1202,8 +1205,10 @@ BarWidget {
     } // PanelKeyCatcher
   }
 
-  // Botão quadrado só-ícone (↻ ⚙︎ ❯, e reusado para ↑/↓/−/+).
-  // Unicode puro — sem dependência de Nerd Font (spec).
+  // Botão quadrado só-ícone. Preferir glifos Nerd Font/Font Awesome no PUA
+  // (ex. "\uf021") — o bar.fontFamily no Omarchy é monoespaçado Nerd e
+  // renderiza esses com fidelidade; Unicode "decorativo" (↻ ⚙︎ ❯) quebra.
+  // Reusado para ↑/↓/−/+ (ASCII, estáveis em mono).
   component IconButton: Item {
     id: btn
     property string glyph: ""
@@ -1236,7 +1241,13 @@ BarWidget {
       text: btn.glyph
       color: mouse.containsMouse && btn.enabled ? Color.accent : root.fg
       font.family: root.fontFamily
-      font.pixelSize: 13
+      // Style.font.icon = title-sized int no Omarchy (≈14); fallback 13.
+      font.pixelSize: typeof Style !== "undefined" && Style.font && Style.font.icon
+        ? Style.font.icon
+        : 13
+      renderType: Text.NativeRendering
+      horizontalAlignment: Text.AlignHCenter
+      verticalAlignment: Text.AlignVCenter
 
       RotationAnimation {
         target: glyphText
