@@ -255,10 +255,50 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
         ),
         Command::Config(config) => dispatch_config(config),
         Command::Login(provider) => dispatch_login(provider),
-        Command::Status(_) | Command::Uninstall { .. } | Command::Doctor(_) => {
+        Command::Status(opts) => dispatch_status(opts),
+        Command::Uninstall { .. } | Command::Doctor(_) => {
             Err(CliFailure::internal("command is not implemented yet"))
         }
     }
+}
+
+fn dispatch_status(opts: StatusOptions) -> Result<(), CliFailure> {
+    use crate::settings::default_maintenance_lock_path;
+    use crate::status::{format_human, CollectRequest, StatusCoordinator};
+    use crate::support::maintenance_gate::shared_gate;
+
+    let gate = shared_gate(default_maintenance_lock_path())
+        .map_err(|err| CliFailure::internal(err.to_string()))?;
+    let coordinator = StatusCoordinator::production(gate).map_err(CliFailure::internal)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| CliFailure::internal(err.to_string()))?;
+    let envelope = runtime
+        .block_on(coordinator.collect(CollectRequest {
+            format: opts.format,
+            provider: opts.provider,
+            cache: opts.cache,
+            notifications: opts.notifications,
+        }))
+        .map_err(|err| CliFailure {
+            message: err.to_string(),
+            exit_code: SERIALIZATION,
+        })?;
+
+    match opts.format {
+        StatusFormat::Json => {
+            let line = envelope.to_json_line().map_err(|err| CliFailure {
+                message: err.message().to_owned(),
+                exit_code: err.exit_code(),
+            })?;
+            print!("{line}");
+        }
+        StatusFormat::Human => {
+            print!("{}", format_human(&envelope));
+        }
+    }
+    Ok(())
 }
 
 fn dispatch_login(provider: ProviderId) -> Result<(), CliFailure> {

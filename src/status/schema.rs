@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::{OffsetDateTime, UtcOffset};
 
@@ -85,7 +85,7 @@ impl From<SchemaError> for StatusOutputError {
 }
 
 /// Completed provider state (helper response; never `loading`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderState {
     Ready,
@@ -112,7 +112,7 @@ impl ProviderState {
 }
 
 /// Provenance of retained provider data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DataSource {
     Live,
@@ -129,7 +129,7 @@ impl DataSource {
 }
 
 /// Closed error codes for provider failures.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
     CliNotFound,
@@ -152,7 +152,7 @@ impl ErrorCode {
 }
 
 /// Closed action kinds for QML service methods.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActionKind {
     Retry,
@@ -171,7 +171,7 @@ impl ActionKind {
 }
 
 /// Typed provider error payload.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderError {
     pub code: ErrorCode,
@@ -190,7 +190,7 @@ impl ProviderError {
 }
 
 /// Typed provider action payload.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderAction {
     pub kind: ActionKind,
@@ -234,7 +234,7 @@ impl ProviderAction {
 }
 
 /// Plan identity shown in the UI.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Plan {
     pub id: String,
@@ -242,14 +242,14 @@ pub struct Plan {
 }
 
 /// Account label (sanitized; never credentials).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub label: String,
 }
 
 /// One percentage quota window with validated percentages.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageWindow {
     id: String,
@@ -319,7 +319,7 @@ impl UsageWindow {
 }
 
 /// One provider row in a status envelope.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderStatus {
     id: ProviderIdSerde,
@@ -345,6 +345,18 @@ impl Serialize for ProviderIdSerde {
         S: serde::Serializer,
     {
         serializer.serialize_str(self.0.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ProviderIdSerde {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        ProviderId::parse_word(&raw)
+            .map(ProviderIdSerde)
+            .ok_or_else(|| serde::de::Error::custom(format!("unknown provider id '{raw}'")))
     }
 }
 
@@ -561,7 +573,7 @@ impl ProviderStatus {
         })
     }
 
-    fn validate_state_shape(&self) -> Result<(), SchemaError> {
+    pub fn validate_state_shape(&self) -> Result<(), SchemaError> {
         match self.state {
             ProviderState::Ready => {
                 if self.source.is_none() {
