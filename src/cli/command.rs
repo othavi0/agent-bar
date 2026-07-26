@@ -88,14 +88,17 @@ impl Default for StatusOptions {
     }
 }
 
-/// Config subcommands.
+/// Config subcommands backed by the canonical settings store (schema v1).
+///
+/// `show` is read-only. `apply` accepts exactly one complete document, validates
+/// before taking the shared maintenance lock, and returns the stored JSON.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigCommand {
     Show,
     Apply(ConfigInput),
 }
 
-/// Input source for `config apply`.
+/// Input source for `config apply` (complete-document only).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigInput {
     Stdin,

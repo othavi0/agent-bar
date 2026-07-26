@@ -255,11 +255,57 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
         Command::Update(UpdateCommand::Check) | Command::Update(UpdateCommand::Apply(_)) => Err(
             CliFailure::internal("update check/apply is not implemented yet (later bundle task)"),
         ),
-        Command::Status(_)
-        | Command::Login(_)
-        | Command::Config(_)
-        | Command::Uninstall { .. }
-        | Command::Doctor(_) => Err(CliFailure::internal("command is not implemented yet")),
+        Command::Config(config) => dispatch_config(config),
+        Command::Status(_) | Command::Login(_) | Command::Uninstall { .. } | Command::Doctor(_) => {
+            Err(CliFailure::internal("command is not implemented yet"))
+        }
+    }
+}
+
+fn dispatch_config(command: ConfigCommand) -> Result<(), CliFailure> {
+    use crate::settings::{SettingsStore, StoreError};
+    use std::io::Read;
+
+    let store = SettingsStore::with_paths(
+        crate::settings::store::default_settings_path(),
+        crate::settings::store::default_maintenance_lock_path(),
+    )
+    .map_err(|err| CliFailure::validation(err.to_string()))?;
+
+    let map_store_err = |err: StoreError| match err {
+        StoreError::Validation(v) => CliFailure::validation(v.message().to_owned()),
+        StoreError::Io(io_err) => CliFailure::validation(io_err.to_string()),
+    };
+
+    match command {
+        ConfigCommand::Show => {
+            let doc = store.show().map_err(map_store_err)?;
+            let line = doc
+                .to_canonical_json_line()
+                .map_err(|err| CliFailure::validation(err.message().to_owned()))?;
+            print!("{line}");
+            Ok(())
+        }
+        ConfigCommand::Apply(input) => {
+            let raw = match input {
+                ConfigInput::Stdin => {
+                    let mut buf = String::new();
+                    io::stdin()
+                        .read_to_string(&mut buf)
+                        .map_err(|err| CliFailure::validation(err.to_string()))?;
+                    buf
+                }
+                ConfigInput::File(path) => std::fs::read_to_string(&path)
+                    .map_err(|err| CliFailure::validation(err.to_string()))?,
+                ConfigInput::Json(value) => value,
+            };
+            let stored = store.apply_raw(raw.as_bytes()).map_err(map_store_err)?;
+            let line = stored
+                .to_canonical_json_line()
+                .map_err(|err| CliFailure::validation(err.message().to_owned()))?;
+            print!("{line}");
+            Ok(())
+        }
     }
 }
 
