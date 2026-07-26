@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": null,
+    "cache": "use"
+  },
+  "providers": []
+}

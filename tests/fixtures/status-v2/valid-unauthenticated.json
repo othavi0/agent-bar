@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": "claude",
+    "cache": "use"
+  },
+  "providers": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "state": "unauthenticated",
+      "source": null,
+      "plan": null,
+      "account": null,
+      "windows": [],
+      "lastSuccessAt": null,
+      "error": {
+        "code": "authentication_required",
+        "message": "Claude is not authenticated.",
+        "retryable": false
+      },
+      "action": {
+        "kind": "login",
+        "label": "Log in",
+        "target": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": "amp",
+    "cache": "use"
+  },
+  "providers": [
+    {
+      "id": "amp",
+      "name": "Amp",
+      "state": "provider_error",
+      "source": null,
+      "plan": null,
+      "account": null,
+      "windows": [],
+      "lastSuccessAt": null,
+      "error": {
+        "code": "provider_error",
+        "message": "Amp returned an invalid usage payload.",
+        "retryable": false
+      },
+      "action": {
+        "kind": "retry",
+        "label": "Retry",
+        "target": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,435 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/othavi0/agent-bar/schemas/status-v2.schema.json",
+  "title": "Agent Bar status schema v2",
+  "description": "Structural contract for agent-bar status format json. Cross-field semantic checks (percentage sum, unique IDs, request order, helperVersion equality, completed-envelope loading ban) are enforced in Rust Task 3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "helperVersion",
+    "generatedAt",
+    "request",
+    "providers"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 2
+    },
+    "helperVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "request": {
+      "$ref": "#/$defs/request"
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/provider"
+      }
+    }
+  },
+  "$defs": {
+    "providerId": {
+      "type": "string",
+      "enum": ["claude", "codex", "amp", "grok"]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "cache"],
+      "properties": {
+        "provider": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/providerId" }
+          ]
+        },
+        "cache": {
+          "type": "string",
+          "enum": ["use", "bypass"]
+        }
+      }
+    },
+    "percent": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "not": {
+        "enum": [null]
+      }
+    },
+    "rfc3339OrNull": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "format": "date-time"
+        }
+      ]
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 }
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "usedPercent",
+        "remainingPercent",
+        "resetsAt"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "usedPercent": { "$ref": "#/$defs/percent" },
+        "remainingPercent": { "$ref": "#/$defs/percent" },
+        "resetsAt": { "$ref": "#/$defs/rfc3339OrNull" }
+      }
+    },
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "cli_not_found",
+        "authentication_required",
+        "rate_limited",
+        "network_error",
+        "provider_error"
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "$ref": "#/$defs/errorCode" },
+        "message": { "type": "string", "minLength": 1 },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "actionKind": {
+      "type": "string",
+      "enum": ["retry", "login", "view_installation"]
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label", "target"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/actionKind" },
+        "label": { "type": "string", "minLength": 1 },
+        "target": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^https://"
+            }
+          ]
+        }
+      }
+    },
+    "sourceLiveOrCache": {
+      "type": "string",
+      "enum": ["live", "cache"]
+    },
+    "providerBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "state",
+        "source",
+        "plan",
+        "account",
+        "windows",
+        "lastSuccessAt",
+        "error",
+        "action"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/providerId" },
+        "name": { "type": "string", "minLength": 1 },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "stale",
+            "cli_missing",
+            "unauthenticated",
+            "rate_limited",
+            "network_error",
+            "provider_error"
+          ]
+        },
+        "source": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sourceLiveOrCache" }
+          ]
+        },
+        "plan": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/plan" }]
+        },
+        "account": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/account" }]
+        },
+        "windows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/window" }
+        },
+        "lastSuccessAt": { "$ref": "#/$defs/rfc3339OrNull" },
+        "error": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/error" }]
+        },
+        "action": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/action" }]
+        }
+      }
+    },
+    "provider": {
+      "allOf": [
+        { "$ref": "#/$defs/providerBase" },
+        {
+          "if": {
+            "properties": { "state": { "const": "ready" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "source": { "$ref": "#/$defs/sourceLiveOrCache" },
+              "lastSuccessAt": { "type": "string", "format": "date-time" },
+              "error": { "type": "null" },
+              "action": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "state": { "const": "stale" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "source": { "const": "cache" },
+              "lastSuccessAt": { "type": "string", "format": "date-time" },
+              "error": { "$ref": "#/$defs/error" },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "label", "target"],
+                "properties": {
+                  "kind": { "const": "retry" },
+                  "label": { "type": "string", "minLength": 1 },
+                  "target": { "type": "null" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "state": { "const": "cli_missing" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "source": { "type": "null" },
+              "windows": { "type": "array", "maxItems": 0 },
+              "lastSuccessAt": { "type": "null" },
+              "error": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "message", "retryable"],
+                "properties": {
+                  "code": { "const": "cli_not_found" },
+                  "message": { "type": "string", "minLength": 1 },
+                  "retryable": { "const": false }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "label", "target"],
+                "properties": {
+                  "kind": { "const": "view_installation" },
+                  "label": { "type": "string", "minLength": 1 },
+                  "target": {
+                    "type": "string",
+                    "pattern": "^https://"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "state": { "const": "unauthenticated" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "source": { "type": "null" },
+              "windows": { "type": "array", "maxItems": 0 },
+              "lastSuccessAt": { "type": "null" },
+              "error": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "message", "retryable"],
+                "properties": {
+                  "code": { "const": "authentication_required" },
+                  "message": { "type": "string", "minLength": 1 },
+                  "retryable": { "type": "boolean" }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "label", "target"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["login", "view_installation"]
+                  },
+                  "label": { "type": "string", "minLength": 1 },
+                  "target": {
+                    "oneOf": [
+                      { "type": "null" },
+                      {
+                        "type": "string",
+                        "pattern": "^https://"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "state": { "const": "rate_limited" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "source": { "type": "null" },
+              "windows": { "type": "array", "maxItems": 0 },
+              "lastSuccessAt": { "type": "null" },
+              "error": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "message", "retryable"],
+                "properties": {
+                  "code": { "const": "rate_limited" },
+                  "message": { "type": "string", "minLength": 1 },
+                  "retryable": { "const": true }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "label", "target"],
+                "properties": {
+                  "kind": { "const": "retry" },
+                  "label": { "type": "string", "minLength": 1 },
+                  "target": { "type": "null" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "state": { "const": "network_error" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "source": { "type": "null" },
+              "windows": { "type": "array", "maxItems": 0 },
+              "lastSuccessAt": { "type": "null" },
+              "error": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "message", "retryable"],
+                "properties": {
+                  "code": { "const": "network_error" },
+                  "message": { "type": "string", "minLength": 1 },
+                  "retryable": { "const": true }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "label", "target"],
+                "properties": {
+                  "kind": { "const": "retry" },
+                  "label": { "type": "string", "minLength": 1 },
+                  "target": { "type": "null" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "state": { "const": "provider_error" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "source": { "type": "null" },
+              "windows": { "type": "array", "maxItems": 0 },
+              "lastSuccessAt": { "type": "null" },
+              "error": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "message", "retryable"],
+                "properties": {
+                  "code": { "const": "provider_error" },
+                  "message": { "type": "string", "minLength": 1 },
+                  "retryable": { "type": "boolean" }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "label", "target"],
+                "properties": {
+                  "kind": { "const": "retry" },
+                  "label": { "type": "string", "minLength": 1 },
+                  "target": { "type": "null" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

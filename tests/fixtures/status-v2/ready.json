@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": null,
+    "cache": "use"
+  },
+  "providers": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "state": "ready",
+      "source": "live",
+      "plan": {
+        "id": "max",
+        "label": "Max"
+      },
+      "account": {
+        "label": "Personal"
+      },
+      "windows": [
+        {
+          "id": "session",
+          "label": "Session",
+          "usedPercent": 42.0,
+          "remainingPercent": 58.0,
+          "resetsAt": "2026-07-26T22:00:00Z"
+        }
+      ],
+      "lastSuccessAt": "2026-07-26T18:42:00Z",
+      "error": null,
+      "action": null
+    }
+  ]
+}

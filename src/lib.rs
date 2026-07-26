@@ -18,6 +18,7 @@ pub mod providers;
 pub mod runtime;
 pub mod settings;
 pub mod setup;
+pub mod support;
 pub mod term_prompt;
 #[cfg(test)]
 pub mod test_support;

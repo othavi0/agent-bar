@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": null,
+    "cache": "use"
+  },
+  "providers": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "state": "ready",
+      "source": null,
+      "plan": null,
+      "account": null,
+      "windows": [],
+      "lastSuccessAt": "2026-07-26T18:42:00Z",
+      "error": null,
+      "action": null
+    }
+  ]
+}

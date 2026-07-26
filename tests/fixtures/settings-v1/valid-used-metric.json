@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "providers": [
+    { "id": "claude", "enabled": false },
+    { "id": "codex", "enabled": true },
+    { "id": "amp", "enabled": false },
+    { "id": "grok", "enabled": true }
+  ],
+  "display": {
+    "metric": "used"
+  },
+  "refreshIntervalSeconds": 30,
+  "notifications": {
+    "enabled": false
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": "amp",
+    "cache": "use"
+  },
+  "providers": [
+    {
+      "id": "amp",
+      "name": "Amp",
+      "state": "cli_missing",
+      "source": null,
+      "plan": null,
+      "account": null,
+      "windows": [],
+      "lastSuccessAt": null,
+      "error": {
+        "code": "cli_not_found",
+        "message": "Amp CLI was not found.",
+        "retryable": false
+      },
+      "action": {
+        "kind": "view_installation",
+        "label": "View installation",
+        "target": "https://ampcode.com/manual"
+      }
+    }
+  ]
+}
