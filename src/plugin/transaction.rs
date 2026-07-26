@@ -10,7 +10,7 @@ use thiserror::Error;
 use crate::plugin::ownership::{capture_evidence, OwnershipClass, OwnershipEvidence};
 use crate::plugin::paths::{
     ensure_not_symlink, same_filesystem, validate_archive_entry_path, validate_txid, PathError,
-    PluginPaths,
+    PluginPaths, PLUGIN_ID,
 };
 use crate::support::{ExclusiveMaintenanceGuard, MaintenanceGate};
 
@@ -434,6 +434,101 @@ impl TransactionPlan {
     }
 }
 
+/// Remove every shell.json layout object whose `id` is exactly `agent-bar.usage`.
+///
+/// Other plugins, sections, and non-entry objects are preserved. Serialization is
+/// pretty JSON with a trailing newline (byte-for-byte restore uses the pre-mutation
+/// backup, not this output).
+pub fn remove_exact_plugin_entries(shell_bytes: &[u8]) -> Result<Vec<u8>, TransactionError> {
+    use serde_json::Value;
+    let mut value: Value = serde_json::from_slice(shell_bytes)
+        .map_err(|e| TransactionError::msg(format!("invalid shell.json: {e}")))?;
+    remove_plugin_entries_in_value(&mut value);
+    let mut out = serde_json::to_vec_pretty(&value)
+        .map_err(|e| TransactionError::msg(format!("serialize shell.json: {e}")))?;
+    if !out.ends_with(b"\n") {
+        out.push(b'\n');
+    }
+    Ok(out)
+}
+
+fn remove_plugin_entries_in_value(value: &mut serde_json::Value) {
+    use serde_json::Value;
+    match value {
+        Value::Array(items) => {
+            items.retain(|item| {
+                item.get("id")
+                    .and_then(|v| v.as_str())
+                    .is_none_or(|id| id != PLUGIN_ID)
+            });
+            for item in items.iter_mut() {
+                remove_plugin_entries_in_value(item);
+            }
+        }
+        Value::Object(map) => {
+            for v in map.values_mut() {
+                remove_plugin_entries_in_value(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Same-filesystem rename for destination-local quarantine (MIG-002A).
+///
+/// Refuses cross-filesystem moves before any mutation of `src`.
+pub fn quarantine_rename(src: &Path, dest: &Path) -> Result<(), TransactionError> {
+    if !src.exists() {
+        return Err(TransactionError::msg(format!(
+            "quarantine source missing: {}",
+            src.display()
+        )));
+    }
+    let dest_parent = dest
+        .parent()
+        .ok_or_else(|| TransactionError::msg("quarantine dest has no parent"))?;
+    fs::create_dir_all(dest_parent)?;
+    ensure_not_symlink(dest_parent)?;
+    // Compare devices using the live source and the destination parent.
+    if !same_filesystem(src, dest_parent)? {
+        return Err(TransactionError::msg(
+            "cross-filesystem quarantine rename rejected before mutation",
+        ));
+    }
+    if dest.exists() {
+        if dest.is_dir() {
+            fs::remove_dir_all(dest)?;
+        } else {
+            fs::remove_file(dest)?;
+        }
+    }
+    fs::rename(src, dest)?;
+    Ok(())
+}
+
+/// Write `bytes` to `path` via a same-directory temp + rename (atomic replace).
+pub fn atomic_write_bytes(path: &Path, bytes: &[u8]) -> Result<(), TransactionError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| TransactionError::msg("atomic write path has no parent"))?;
+    fs::create_dir_all(parent)?;
+    let tmp = parent.join(format!(".agent-bar-shell-{}.tmp", std::process::id()));
+    {
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+    }
+    fs::rename(&tmp, path)?;
+    if let Ok(dir) = File::open(parent) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
+}
+
 /// Recursive regular-file directory copy (refuses special files).
 pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
     fs::create_dir_all(dst)?;
@@ -634,5 +729,41 @@ mod tests {
         let _tx = Transaction::begin(&paths, &gate, &txid, "update", "t6").unwrap();
         // Simulate cache writer needing shared lock: must not acquire.
         assert!(gate.try_lock_shared().unwrap().is_none());
+    }
+
+    #[test]
+    fn remove_exact_plugin_entries_preserves_neighbors() {
+        let shell = br#"{
+  "bar": {
+    "left": [
+      {"id": "omarchy.menu"},
+      {"id": "agent-bar.usage", "refreshIntervalSec": 60},
+      {"id": "omarchy.workspaces"}
+    ]
+  }
+}"#;
+        let out = remove_exact_plugin_entries(shell).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        let left = v["bar"]["left"].as_array().unwrap();
+        assert_eq!(left.len(), 2);
+        assert_eq!(left[0]["id"], "omarchy.menu");
+        assert_eq!(left[1]["id"], "omarchy.workspaces");
+        assert!(!out
+            .windows(PLUGIN_ID.len())
+            .any(|w| w == PLUGIN_ID.as_bytes()));
+    }
+
+    #[test]
+    fn quarantine_rename_moves_same_fs_sibling() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("agent-bar.usage");
+        let dest = dir
+            .path()
+            .join(".agent-bar.usage.quarantine-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("manifest.json"), b"{}").unwrap();
+        quarantine_rename(&src, &dest).unwrap();
+        assert!(!src.exists());
+        assert!(dest.join("manifest.json").is_file());
     }
 }

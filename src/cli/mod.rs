@@ -236,10 +236,192 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
         Command::Config(config) => dispatch_config(config),
         Command::Login(provider) => dispatch_login(provider),
         Command::Status(opts) => dispatch_status(opts),
-        Command::Uninstall { .. } | Command::Doctor(_) => {
-            Err(CliFailure::internal("command is not implemented yet"))
-        }
+        Command::Uninstall { purge } => dispatch_uninstall(purge),
+        Command::Doctor(_) => Err(CliFailure::internal("command is not implemented yet")),
     }
+}
+
+/// Pure uninstall confirmation gate (TTY phrase or non-TTY structured JSON).
+///
+/// Standard uninstall does not read stdin until preflight has already succeeded
+/// (caller responsibility). Exit code 3 on any confirmation failure; zero mutation
+/// happens inside this function.
+pub fn confirm_uninstall<R, E>(
+    is_tty: bool,
+    purge: bool,
+    stdin: &mut R,
+    stderr: &mut E,
+) -> Result<(), CliFailure>
+where
+    R: BufRead,
+    E: Write,
+{
+    use crate::plugin::{UninstallConfirmation, UNINSTALL_TTY_PHRASE, UNINSTALL_TTY_PROMPT};
+
+    if is_tty {
+        write!(stderr, "{UNINSTALL_TTY_PROMPT}")
+            .map_err(|err| CliFailure::internal(err.to_string()))?;
+        let _ = stderr.flush();
+        let mut line = String::new();
+        match stdin.read_line(&mut line) {
+            Ok(0) => Err(CliFailure::validation("uninstall confirmation aborted")),
+            Ok(_) => {
+                let trimmed = line.trim_end_matches(['\r', '\n']);
+                if trimmed == UNINSTALL_TTY_PHRASE {
+                    Ok(())
+                } else {
+                    Err(CliFailure::validation("uninstall confirmation rejected"))
+                }
+            }
+            Err(err) => Err(CliFailure::internal(err.to_string())),
+        }
+    } else {
+        let mut buf = Vec::new();
+        stdin
+            .read_to_end(&mut buf)
+            .map_err(|err| CliFailure::internal(err.to_string()))?;
+        UninstallConfirmation::parse_strict(&buf, purge)
+            .map_err(|err| CliFailure::validation(err.to_string()))?;
+        Ok(())
+    }
+}
+
+fn dispatch_uninstall(purge: bool) -> Result<(), CliFailure> {
+    use crate::plugin::maintenance::{
+        resolve_absolute_executable, MaintenanceJournalPayload, MaintenanceOp, MaintenanceWorker,
+    };
+    use crate::plugin::{
+        collect_worker_env, txid_from_bytes, PluginPaths, ProcessCommandRunner,
+        WORKER_ENV_ALLOWLIST,
+    };
+    use crate::settings::default_settings_path;
+    use crate::support::Clock;
+    use crate::support::SystemClock;
+
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| CliFailure::plugin("HOME is required for uninstall".to_string()))?;
+    let home = PathBuf::from(home);
+    let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let paths = PluginPaths::production(home.clone(), xdg_state);
+
+    let omarchy_bin =
+        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let omarchy_shell_bin = resolve_absolute_executable("omarchy-shell")
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let systemd_run = resolve_absolute_executable("systemd-run")
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let systemctl =
+        resolve_absolute_executable("systemctl").map_err(|e| CliFailure::plugin(e.to_string()))?;
+
+    let runner = ProcessCommandRunner;
+    let clock = SystemClock;
+    let txid = txid_from_bytes(
+        format!(
+            "uninstall:{}:{}",
+            if purge { "purge" } else { "standard" },
+            Clock::now_utc(&clock)
+        )
+        .as_bytes(),
+    );
+
+    // Preflight absolute tools + shell ping + user manager before confirmation
+    // (CLI: standard uninstall does not consume stdin until preflight succeeds).
+    require_tools_reachable(&runner, &omarchy_shell_bin, &systemctl)?;
+
+    let shell_json = home.join(".config/omarchy/shell.json");
+    let settings_path = default_settings_path();
+    let cache_root = {
+        let base = std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".cache"));
+        base.join("agent-bar")
+    };
+
+    // Read previous version from live manifest when present (rollback health).
+    let previous_version = read_plugin_version(&paths.plugin_root);
+
+    let is_tty = io::stdin().is_terminal();
+    let stdin = io::stdin();
+    let mut locked_in = stdin.lock();
+    let stderr = io::stderr();
+    let mut locked_err = stderr.lock();
+    confirm_uninstall(is_tty, purge, &mut locked_in, &mut locked_err)?;
+
+    let payload = MaintenanceJournalPayload {
+        txid: txid.clone(),
+        operation: MaintenanceOp::Uninstall,
+        expected_version: None,
+        previous_version,
+        stage_path: String::new(),
+        plugin_root: paths.plugin_root.display().to_string(),
+        quarantine_path: paths
+            .quarantine_dir(&txid)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?
+            .display()
+            .to_string(),
+        selected: None,
+        omarchy_bin,
+        omarchy_shell_bin,
+        is_fresh_install: false,
+        is_v9_rollback: false,
+        purge_settings_and_backups: purge,
+        shell_json_path: shell_json.display().to_string(),
+        settings_path: settings_path.display().to_string(),
+        cache_root: cache_root.display().to_string(),
+        backups_dir: paths.backups_dir.display().to_string(),
+    };
+
+    let current_exe =
+        std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
+    let env_pairs = collect_worker_env(
+        std::env::vars().filter(|(k, _)| WORKER_ENV_ALLOWLIST.contains(&k.as_str())),
+    );
+    let unit = MaintenanceWorker::handoff_uninstall(
+        &paths,
+        &runner,
+        &current_exe,
+        &txid,
+        &payload,
+        &env_pairs,
+        &systemd_run,
+        &systemctl,
+    )
+    .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    eprintln!("maintenance handoff accepted: {unit}");
+    Ok(())
+}
+
+fn require_tools_reachable(
+    runner: &crate::plugin::ProcessCommandRunner,
+    omarchy_shell_bin: &str,
+    systemctl: &str,
+) -> Result<(), CliFailure> {
+    use crate::plugin::CommandRunner;
+    let ping = runner
+        .run(omarchy_shell_bin, &["shell", "ping"])
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    if ping.code != 0 {
+        return Err(CliFailure::plugin(
+            "shell ping failed during uninstall preflight",
+        ));
+    }
+    let user = runner
+        .run(systemctl, &["--user", "is-system-running"])
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let state = user.stdout.trim();
+    if user.code != 0 && state != "running" && state != "degraded" && state != "starting" {
+        return Err(CliFailure::plugin("user systemd manager is not reachable"));
+    }
+    Ok(())
+}
+
+fn read_plugin_version(plugin_root: &Path) -> Option<String> {
+    let path = plugin_root.join("manifest.json");
+    let bytes = std::fs::read(path).ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("version")
+        .and_then(|x| x.as_str())
+        .map(str::to_string)
 }
 
 fn dispatch_update_check() -> Result<(), CliFailure> {
@@ -372,6 +554,11 @@ fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
         omarchy_shell_bin,
         is_fresh_install: local_prep.is_fresh_install,
         is_v9_rollback: local_prep.is_v9_rollback,
+        purge_settings_and_backups: false,
+        shell_json_path: String::new(),
+        settings_path: String::new(),
+        cache_root: String::new(),
+        backups_dir: String::new(),
     };
 
     let env_pairs = collect_worker_env(
@@ -686,6 +873,58 @@ mod tests {
         let path = dir.path().canonicalize().unwrap();
         let got = validate_plugins_dir(&path).unwrap();
         assert_eq!(got, path);
+    }
+
+    #[test]
+    fn uninstall_tty_accepts_exact_phrase() {
+        let mut stdin = Cursor::new(b"uninstall agent-bar\n".as_slice());
+        let mut stderr = Vec::new();
+        confirm_uninstall(true, false, &mut stdin, &mut stderr).unwrap();
+        assert!(String::from_utf8_lossy(&stderr).contains("Type uninstall agent-bar to continue:"));
+    }
+
+    #[test]
+    fn uninstall_tty_rejects_wrong_phrase_and_eof() {
+        let mut stdin = Cursor::new(b"nope\n".as_slice());
+        let mut stderr = Vec::new();
+        let err = confirm_uninstall(true, false, &mut stdin, &mut stderr).unwrap_err();
+        assert_eq!(err.exit_code, VALIDATION);
+
+        let mut stdin = Cursor::new(Vec::new());
+        let err = confirm_uninstall(true, true, &mut stdin, &mut stderr).unwrap_err();
+        assert_eq!(err.exit_code, VALIDATION);
+    }
+
+    #[test]
+    fn uninstall_json_confirmation_matrix() {
+        let good = br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":false}"#;
+        let mut stdin = Cursor::new(good.as_slice());
+        let mut stderr = Vec::new();
+        confirm_uninstall(false, false, &mut stdin, &mut stderr).unwrap();
+
+        // command/purge mismatch
+        let mut stdin = Cursor::new(good.as_slice());
+        let err = confirm_uninstall(false, true, &mut stdin, &mut stderr).unwrap_err();
+        assert_eq!(err.exit_code, VALIDATION);
+
+        // false confirmation
+        let bad = br#"{"schemaVersion":1,"operation":"uninstall","confirmed":false,"purgeSettingsAndBackups":false}"#;
+        let mut stdin = Cursor::new(bad.as_slice());
+        let err = confirm_uninstall(false, false, &mut stdin, &mut stderr).unwrap_err();
+        assert_eq!(err.exit_code, VALIDATION);
+
+        // malformed
+        let mut stdin = Cursor::new(b"{not-json".as_slice());
+        let err = confirm_uninstall(false, false, &mut stdin, &mut stderr).unwrap_err();
+        assert_eq!(err.exit_code, VALIDATION);
+
+        // trailing garbage
+        let mut stdin = Cursor::new(
+            br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":false}{}"#
+                .as_slice(),
+        );
+        let err = confirm_uninstall(false, false, &mut stdin, &mut stderr).unwrap_err();
+        assert_eq!(err.exit_code, VALIDATION);
     }
 
     #[test]

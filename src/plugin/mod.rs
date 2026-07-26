@@ -15,11 +15,12 @@ pub use bundle::{
 pub use doctor::{doctor_clean, doctor_scan, DoctorError, DoctorReport};
 pub use maintenance::{
     apply_version_allowed, classify_local_plugin, collect_worker_env, download_with_policy,
-    is_maintenance_worker_exe, preflight_existing_health, prepare_local_plugin_for_update,
-    require_absolute_executable, resolve_absolute_executable, stage_update_bundle,
-    LocalPluginClass, LocalPluginPrep, MaintenanceError, MaintenanceJournalPayload, MaintenanceOp,
-    MaintenanceWorker, RealSleeper, ReqwestReleaseHttp, UpdateCheck, UpdateCheckDocument,
-    UpdateCheckProbe, MAINTENANCE_WORKER_NAME, WORKER_ENV_ALLOWLIST,
+    is_maintenance_worker_exe, notify_uninstall_complete, poll_uninstall_absence,
+    preflight_existing_health, prepare_local_plugin_for_update, require_absolute_executable,
+    resolve_absolute_executable, stage_update_bundle, LocalPluginClass, LocalPluginPrep,
+    MaintenanceError, MaintenanceJournalPayload, MaintenanceOp, MaintenanceWorker, RealSleeper,
+    ReqwestReleaseHttp, UninstallConfirmation, UpdateCheck, UpdateCheckDocument, UpdateCheckProbe,
+    MAINTENANCE_WORKER_NAME, UNINSTALL_TTY_PHRASE, UNINSTALL_TTY_PROMPT, WORKER_ENV_ALLOWLIST,
 };
 pub use omarchy::{
     argv_is_approved, enable_argv, rescan_argv, CommandOutput, CommandRunner, OmarchyClient,
@@ -37,6 +38,7 @@ pub use paths::{
     PathError, PluginPaths, PLUGIN_ID,
 };
 pub use transaction::{
-    exchange_paths, inspect_tar_zst_entries, JournalEntry, Transaction, TransactionError,
-    TransactionJournal, TransactionPlan, TxFailPoint, TxReport, TxStep,
+    atomic_write_bytes, exchange_paths, inspect_tar_zst_entries, quarantine_rename,
+    remove_exact_plugin_entries, JournalEntry, Transaction, TransactionError, TransactionJournal,
+    TransactionPlan, TxFailPoint, TxReport, TxStep,
 };

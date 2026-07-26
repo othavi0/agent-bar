@@ -19,7 +19,8 @@ use crate::plugin::omarchy::{CommandOutput, CommandRunner, OmarchyError};
 use crate::plugin::ownership::hash_bytes;
 use crate::plugin::paths::{validate_txid, PathError, PluginPaths, PLUGIN_ID};
 use crate::plugin::transaction::{
-    copy_dir_all, exchange_paths, TransactionError, TransactionJournal, TxStep,
+    atomic_write_bytes, copy_dir_all, exchange_paths, quarantine_rename,
+    remove_exact_plugin_entries, TransactionError, TransactionJournal, TxStep,
 };
 use crate::providers::amp_cli::which_in_path;
 use crate::support::maintenance_gate::MaintenanceGate;
@@ -844,7 +845,112 @@ pub struct MaintenanceJournalPayload {
     pub omarchy_shell_bin: String,
     pub is_fresh_install: bool,
     pub is_v9_rollback: bool,
+    /// Uninstall: when true, also quarantine settings and owned backups.
+    #[serde(default)]
+    pub purge_settings_and_backups: bool,
+    /// Absolute path to Omarchy `shell.json` (literal `$HOME/.config/omarchy/...`).
+    #[serde(default)]
+    pub shell_json_path: String,
+    /// Absolute path to product `settings.json` (may be purged).
+    #[serde(default)]
+    pub settings_path: String,
+    /// Absolute `$XDG_CACHE_HOME/agent-bar` cache root (quarantined by both forms).
+    #[serde(default)]
+    pub cache_root: String,
+    /// Absolute migration backups directory (purged only with purge=true).
+    #[serde(default)]
+    pub backups_dir: String,
 }
+
+/// Non-TTY structured uninstall confirmation (CLI-036 / BUNDLE-036).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UninstallConfirmation {
+    pub schema_version: u32,
+    pub operation: String,
+    pub confirmed: bool,
+    pub purge_settings_and_backups: bool,
+}
+
+impl UninstallConfirmation {
+    pub fn expected(purge: bool) -> Self {
+        Self {
+            schema_version: 1,
+            operation: "uninstall".into(),
+            confirmed: true,
+            purge_settings_and_backups: purge,
+        }
+    }
+
+    /// Parse exactly one JSON object followed by optional whitespace and EOF.
+    pub fn parse_strict(bytes: &[u8], expect_purge: bool) -> Result<Self, MaintenanceError> {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| MaintenanceError::msg("uninstall confirmation is not valid UTF-8"))?;
+        let trimmed = text.trim();
+        // Reject concatenated second values / trailing garbage by requiring the
+        // entire trimmed buffer to be exactly one JSON value.
+        let doc: Self = serde_json::from_str(trimmed)
+            .map_err(|e| MaintenanceError::msg(format!("malformed uninstall confirmation: {e}")))?;
+        // `from_str` tolerates trailing whitespace only; re-check by round-trip
+        // stream: if a second value exists, Value::deserialize from remaining fails
+        // the "exactly one object" rule via trailing non-ws after first value.
+        let mut stream =
+            serde_json::Deserializer::from_str(trimmed).into_iter::<serde_json::Value>();
+        let first = stream
+            .next()
+            .transpose()
+            .map_err(|e| MaintenanceError::msg(format!("malformed uninstall confirmation: {e}")))?;
+        if first.is_none() {
+            return Err(MaintenanceError::msg("empty uninstall confirmation"));
+        }
+        if let Some(extra) = stream.next() {
+            match extra {
+                Ok(_) => {
+                    return Err(MaintenanceError::msg(
+                        "uninstall confirmation has trailing non-whitespace content",
+                    ));
+                }
+                Err(e) => {
+                    return Err(MaintenanceError::msg(format!(
+                        "uninstall confirmation has trailing non-whitespace content: {e}"
+                    )));
+                }
+            }
+        }
+        doc.validate(expect_purge)?;
+        Ok(doc)
+    }
+
+    pub fn validate(&self, expect_purge: bool) -> Result<(), MaintenanceError> {
+        if self.schema_version != 1 {
+            return Err(MaintenanceError::msg(
+                "uninstall confirmation schemaVersion must be 1",
+            ));
+        }
+        if self.operation != "uninstall" {
+            return Err(MaintenanceError::msg(
+                "uninstall confirmation operation must be \"uninstall\"",
+            ));
+        }
+        if !self.confirmed {
+            return Err(MaintenanceError::msg(
+                "uninstall confirmation requires confirmed: true",
+            ));
+        }
+        if self.purge_settings_and_backups != expect_purge {
+            return Err(MaintenanceError::msg(
+                "uninstall confirmation purgeSettingsAndBackups does not match command",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Exact TTY phrase required for interactive uninstall.
+pub const UNINSTALL_TTY_PHRASE: &str = "uninstall agent-bar";
+
+/// TTY prompt text written to stderr (no trailing newline required by contract).
+pub const UNINSTALL_TTY_PROMPT: &str = "Type uninstall agent-bar to continue:";
 
 /// Build the exact transient unit name.
 pub fn maintenance_unit_name(txid: &str) -> Result<String, MaintenanceError> {
@@ -1257,13 +1363,88 @@ impl MaintenanceWorker {
                 now,
                 fail,
             ),
-            MaintenanceOp::Uninstall => {
-                // Full uninstall matrix is Task 18; provide structural hook.
-                Err(MaintenanceError::msg(
-                    "uninstall worker path is implemented in the uninstall task",
-                ))
-            }
+            MaintenanceOp::Uninstall => Self::worker_uninstall(
+                paths,
+                runner,
+                &payload,
+                &journal_path,
+                sleeper,
+                &deadlines,
+                now,
+                fail,
+            ),
         }
+    }
+
+    /// Preflight + handoff for uninstall (standard or purge).
+    ///
+    /// Holds exclusive maintenance gate for preflight, journal write, and unit start.
+    #[allow(clippy::too_many_arguments)]
+    pub fn handoff_uninstall<R: CommandRunner>(
+        paths: &PluginPaths,
+        runner: &R,
+        current_exe: &Path,
+        txid: &str,
+        payload: &MaintenanceJournalPayload,
+        env_pairs: &[(String, String)],
+        systemd_program: &str,
+        systemctl_program: &str,
+    ) -> Result<String, MaintenanceError> {
+        validate_txid(txid)?;
+        if payload.txid != txid {
+            return Err(MaintenanceError::msg("payload txid mismatch"));
+        }
+        if payload.operation != MaintenanceOp::Uninstall {
+            return Err(MaintenanceError::msg(
+                "handoff_uninstall requires uninstall operation",
+            ));
+        }
+
+        let gate = MaintenanceGate::open(&paths.maintenance_lock)
+            .map_err(|e| MaintenanceError::msg(format!("open maintenance lock: {e}")))?;
+        let _exclusive = gate
+            .lock_exclusive()
+            .map_err(|e| MaintenanceError::msg(format!("exclusive maintenance lock: {e}")))?;
+
+        require_absolute_executable(&payload.omarchy_bin)?;
+        require_absolute_executable(&payload.omarchy_shell_bin)?;
+        require_absolute_executable(systemd_program)?;
+        require_absolute_executable(systemctl_program)?;
+
+        let ping = runner.run(&payload.omarchy_shell_bin, &["shell", "ping"])?;
+        if ping.code != 0 {
+            return Err(MaintenanceError::msg("shell ping failed during preflight"));
+        }
+        let user = runner.run(systemctl_program, &["--user", "is-system-running"])?;
+        let state = user.stdout.trim();
+        if user.code != 0 && state != "running" && state != "degraded" && state != "starting" {
+            return Err(MaintenanceError::msg(
+                "user systemd manager is not reachable",
+            ));
+        }
+
+        fs::create_dir_all(&paths.transactions_dir)?;
+        fs::create_dir_all(&paths.reports_dir)?;
+
+        let worker = install_worker_copy(current_exe, &paths.transactions_dir)?;
+        let journal_path = paths.journal_path(txid)?;
+        let mut journal = TransactionJournal::new(txid, "uninstall");
+        journal.record(TxStep::Preflight, "worker copy verified; shell ping ok");
+        let payload_json = serde_json::to_string(payload)?;
+        journal.record(TxStep::Stage, payload_json);
+        journal.write_to(&journal_path)?;
+
+        let unit = maintenance_unit_name(txid)?;
+        let argv = systemd_run_argv(&unit, &worker, txid, env_pairs);
+        let arg_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
+        let out = runner.run(systemd_program, &arg_refs)?;
+        if out.code != 0 {
+            return Err(MaintenanceError::msg(format!(
+                "failed to start maintenance unit: {}",
+                out.stderr.trim()
+            )));
+        }
+        Ok(unit)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1487,6 +1668,515 @@ impl MaintenanceWorker {
         }
         Ok(())
     }
+
+    /// Uninstall worker: quarantine-first removal, shell exact-ID strip, absence
+    /// poll, fsynced commit, post-commit GC (BUNDLE-033..038C).
+    #[allow(clippy::too_many_arguments)]
+    fn worker_uninstall<R: CommandRunner, S: Sleeper>(
+        paths: &PluginPaths,
+        runner: &R,
+        payload: &MaintenanceJournalPayload,
+        journal_path: &Path,
+        sleeper: &S,
+        deadlines: &WorkerDeadlines,
+        now: &dyn Fn() -> Duration,
+        fail: Option<WorkerFailPoint>,
+    ) -> Result<(), MaintenanceError> {
+        let shell_program = payload.omarchy_shell_bin.as_str();
+        let mut journal = TransactionJournal::read_from(journal_path)?;
+        let mut residual: Vec<String> = Vec::new();
+        let mut retained_ambiguous: Vec<String> = Vec::new();
+
+        // Track quarantine destinations for rollback / GC.
+        let mut state = UninstallQuarantineState::default();
+
+        deadlines.may_begin_mutation(now())?;
+
+        // --- Reversible phase ---
+        if let Err(err) = Self::uninstall_reversible(
+            paths,
+            runner,
+            payload,
+            journal_path,
+            &mut journal,
+            sleeper,
+            now,
+            fail,
+            &mut state,
+            &mut retained_ambiguous,
+        ) {
+            let rb = Self::rollback_uninstall(
+                paths,
+                runner,
+                shell_program,
+                payload,
+                journal_path,
+                &mut journal,
+                sleeper,
+                now,
+                &state,
+            );
+            residual.extend(retained_ambiguous);
+            let report = DurableReport {
+                txid: payload.txid.clone(),
+                ok: false,
+                rolled_back: rb.is_ok(),
+                residual_paths: residual,
+                message: format!("uninstall rolled back: {err}"),
+            };
+            let _ = write_durable_report(paths, &report);
+            return Err(err);
+        }
+
+        // --- Irreversible commit boundary (BUNDLE-038B) ---
+        if let Some(WorkerFailPoint::AtCommitFsync) = fail {
+            let rb = Self::rollback_uninstall(
+                paths,
+                runner,
+                shell_program,
+                payload,
+                journal_path,
+                &mut journal,
+                sleeper,
+                now,
+                &state,
+            );
+            let report = DurableReport {
+                txid: payload.txid.clone(),
+                ok: false,
+                rolled_back: rb.is_ok(),
+                residual_paths: retained_ambiguous,
+                message: "injected failure at commit fsync".into(),
+            };
+            let _ = write_durable_report(paths, &report);
+            return Err(MaintenanceError::msg("injected failure at commit fsync"));
+        }
+
+        journal.record(TxStep::Commit, "uninstall committed");
+        journal.write_to(journal_path)?;
+
+        // Post-commit GC — never claims rollback (BUNDLE-038B/C).
+        let mut gc_residual = Self::uninstall_post_commit_gc(paths, payload, &state, fail);
+        residual.append(&mut gc_residual);
+        residual.extend(retained_ambiguous);
+
+        // Successful cleanup removes worker copy + journal last (BUNDLE-038C).
+        if residual.is_empty() {
+            let worker = paths.transactions_dir.join(MAINTENANCE_WORKER_NAME);
+            let _ = fs::remove_file(&worker);
+            let _ = fs::remove_file(journal_path);
+        }
+
+        let message = if residual.is_empty() {
+            "uninstall committed".to_string()
+        } else {
+            format!(
+                "uninstall committed with residual paths: {}",
+                residual.join(", ")
+            )
+        };
+        let report = DurableReport {
+            txid: payload.txid.clone(),
+            ok: true,
+            rolled_back: false,
+            residual_paths: residual,
+            message: message.clone(),
+        };
+        write_durable_report(paths, &report)?;
+
+        // Desktop notification after UI is gone (BUNDLE-038) — best-effort.
+        let _ = notify_uninstall_complete(payload.purge_settings_and_backups, &message);
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn uninstall_reversible<R: CommandRunner, S: Sleeper>(
+        paths: &PluginPaths,
+        runner: &R,
+        payload: &MaintenanceJournalPayload,
+        journal_path: &Path,
+        journal: &mut TransactionJournal,
+        sleeper: &S,
+        now: &dyn Fn() -> Duration,
+        fail: Option<WorkerFailPoint>,
+        state: &mut UninstallQuarantineState,
+        retained_ambiguous: &mut Vec<String>,
+    ) -> Result<(), MaintenanceError> {
+        let shell_path = PathBuf::from(&payload.shell_json_path);
+        let plugin_root = PathBuf::from(&payload.plugin_root);
+        let quarantine = PathBuf::from(&payload.quarantine_path);
+        let cache_root = PathBuf::from(&payload.cache_root);
+        let settings_path = PathBuf::from(&payload.settings_path);
+        let backups_dir = PathBuf::from(&payload.backups_dir);
+
+        if let Some(WorkerFailPoint::BeforeShellBackup) = fail {
+            return Err(MaintenanceError::msg(
+                "injected failure before shell backup",
+            ));
+        }
+        if let Some(WorkerFailPoint::BeforeMutation) = fail {
+            return Err(MaintenanceError::msg("injected failure before mutation"));
+        }
+
+        // 1) Backup exact shell bytes.
+        let shell_bak = paths
+            .transactions_dir
+            .join(format!("{}.shell.json.bak", payload.txid));
+        if shell_path.is_file() {
+            let bytes = fs::read(&shell_path)?;
+            fs::write(&shell_bak, &bytes)?;
+            if let Ok(f) = OpenOptions::new().write(true).open(&shell_bak) {
+                let _ = f.sync_all();
+            }
+            state.shell_backup = Some(shell_bak.clone());
+            state.shell_before = Some(bytes);
+            journal.record(
+                TxStep::Backup,
+                format!("shell backup at {}", shell_bak.display()),
+            );
+        } else {
+            journal.record(TxStep::Backup, "shell.json absent before uninstall");
+        }
+        journal.write_to(journal_path)?;
+
+        if let Some(WorkerFailPoint::AfterShellBackup) = fail {
+            return Err(MaintenanceError::msg("injected failure after shell backup"));
+        }
+
+        // 2) Quarantine bundle (same-filesystem rename) — BUNDLE-038A.
+        if let Some(WorkerFailPoint::AtQuarantineRename) = fail {
+            return Err(MaintenanceError::msg(
+                "injected failure at quarantine rename",
+            ));
+        }
+        if plugin_root.exists() {
+            quarantine_rename(&plugin_root, &quarantine)?;
+            state.plugin_quarantine = Some(quarantine.clone());
+            journal.record(
+                TxStep::Exchange,
+                format!("plugin quarantined at {}", quarantine.display()),
+            );
+            journal.write_to(journal_path)?;
+        }
+
+        // 3) Quarantine cache (both standard and purge).
+        if !payload.cache_root.is_empty() && cache_root.exists() {
+            let dest = PluginPaths::cache_quarantine(&cache_root, &payload.txid)?;
+            quarantine_rename(&cache_root, &dest)?;
+            state.cache_quarantine = Some(dest);
+        }
+
+        // 4) Confirmed owned legacy → quarantine under transactions (never auto-delete
+        // ambiguous/modified). Paths retained appear in the completion report.
+        let rules = crate::plugin::doctor::default_ownership_rules(&paths.home);
+        let legacy_scan = crate::plugin::doctor::doctor_scan(&paths.home, &[], &rules);
+        for path in legacy_scan.retained {
+            retained_ambiguous.push(path.display().to_string());
+        }
+        for path in legacy_scan.removable {
+            if !path.exists() {
+                continue;
+            }
+            let dest = paths.transactions_dir.join(format!(
+                "{}.legacy-{}",
+                payload.txid,
+                path.file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("artifact")
+            ));
+            if let Err(err) = quarantine_rename(&path, &dest) {
+                // Best-effort: leave residual note; do not abort if single legacy fails
+                // after bundle quarantine — treat as reversible-phase error.
+                return Err(MaintenanceError::msg(format!(
+                    "legacy quarantine failed for {}: {err}",
+                    path.display()
+                )));
+            }
+            state.legacy_quarantines.push((path, dest));
+        }
+
+        // 5) Purge paths (settings + backups) — destination-local quarantine only.
+        if payload.purge_settings_and_backups {
+            if let Some(WorkerFailPoint::AtSettingsPurgeQuarantine) = fail {
+                return Err(MaintenanceError::msg(
+                    "injected failure at settings purge quarantine",
+                ));
+            }
+            if !payload.settings_path.is_empty() && settings_path.exists() {
+                let dest = PluginPaths::settings_quarantine(&settings_path, &payload.txid)?;
+                quarantine_rename(&settings_path, &dest)?;
+                state.settings_quarantine = Some((settings_path.clone(), dest));
+            }
+            if let Some(WorkerFailPoint::AtBackupsPurgeQuarantine) = fail {
+                return Err(MaintenanceError::msg(
+                    "injected failure at backups purge quarantine",
+                ));
+            }
+            if !payload.backups_dir.is_empty() && backups_dir.exists() {
+                let dest = PluginPaths::backups_quarantine(&backups_dir, &payload.txid)?;
+                quarantine_rename(&backups_dir, &dest)?;
+                state.backups_quarantine = Some((backups_dir.clone(), dest));
+            }
+        }
+
+        // 6) Exact-ID shell entry removal.
+        if let Some(WorkerFailPoint::AtExactIdRemoval) = fail {
+            return Err(MaintenanceError::msg(
+                "injected failure at exact-ID removal",
+            ));
+        }
+        if shell_path.is_file() {
+            let current = fs::read(&shell_path)?;
+            let stripped = remove_exact_plugin_entries(&current)?;
+            atomic_write_bytes(&shell_path, &stripped)?;
+            journal.record(TxStep::Stage, "exact agent-bar.usage shell entries removed");
+            journal.write_to(journal_path)?;
+        }
+
+        // 7) Rescan.
+        if let Some(WorkerFailPoint::AtRescan) = fail {
+            return Err(MaintenanceError::msg("injected failure at rescan"));
+        }
+        let rescan = runner.run(&payload.omarchy_bin, &["plugin", "rescan"])?;
+        if rescan.code != 0 {
+            return Err(MaintenanceError::msg("rescan exit non-zero"));
+        }
+        journal.record(TxStep::Rescan, "plugin rescan issued");
+        journal.write_to(journal_path)?;
+
+        // 8) Absence poll (listPlugins + old health failure).
+        if let Some(WorkerFailPoint::AtAbsenceCheck) = fail {
+            return Err(MaintenanceError::msg("injected failure at absence check"));
+        }
+        if let Some(WorkerFailPoint::AtHealth) = fail {
+            return Err(MaintenanceError::msg("injected health/absence failure"));
+        }
+        poll_uninstall_absence(
+            runner,
+            payload.omarchy_shell_bin.as_str(),
+            payload.previous_version.as_deref(),
+            sleeper,
+            now(),
+            now,
+        )?;
+        journal.record(TxStep::Health, "listPlugins absence verified");
+        journal.write_to(journal_path)?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn rollback_uninstall<R: CommandRunner, S: Sleeper>(
+        paths: &PluginPaths,
+        runner: &R,
+        shell_program: &str,
+        payload: &MaintenanceJournalPayload,
+        journal_path: &Path,
+        journal: &mut TransactionJournal,
+        sleeper: &S,
+        now: &dyn Fn() -> Duration,
+        state: &UninstallQuarantineState,
+    ) -> Result<(), MaintenanceError> {
+        // Restore shell bytes first (exact previous).
+        if let (Some(before), true) = (
+            state.shell_before.as_ref(),
+            !payload.shell_json_path.is_empty(),
+        ) {
+            let shell_path = PathBuf::from(&payload.shell_json_path);
+            if let Some(parent) = shell_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            atomic_write_bytes(&shell_path, before)?;
+        }
+
+        // Restore plugin bundle from quarantine.
+        if let Some(q) = state.plugin_quarantine.as_ref() {
+            let target = PathBuf::from(&payload.plugin_root);
+            if target.exists() {
+                let _ = fs::remove_dir_all(&target);
+            }
+            if q.exists() {
+                quarantine_rename(q, &target)?;
+            }
+        }
+
+        // Restore cache.
+        if let Some(q) = state.cache_quarantine.as_ref() {
+            let target = PathBuf::from(&payload.cache_root);
+            if q.exists() {
+                if target.exists() {
+                    let _ = fs::remove_dir_all(&target);
+                }
+                let _ = quarantine_rename(q, &target);
+            }
+        }
+
+        // Restore purge quarantines.
+        if let Some((orig, q)) = state.settings_quarantine.as_ref() {
+            if q.exists() {
+                let _ = quarantine_rename(q, orig);
+            }
+        }
+        if let Some((orig, q)) = state.backups_quarantine.as_ref() {
+            if q.exists() {
+                let _ = quarantine_rename(q, orig);
+            }
+        }
+        for (orig, q) in &state.legacy_quarantines {
+            if q.exists() {
+                let _ = quarantine_rename(q, orig);
+            }
+        }
+
+        journal.record(TxStep::Rollback, "restored quarantines and shell bytes");
+        let _ = journal.write_to(journal_path);
+
+        let _ = runner.run(&payload.omarchy_bin, &["plugin", "rescan"]);
+        // Verify old service health when previous version known.
+        if let Some(prev) = payload.previous_version.as_deref() {
+            poll_update_health(runner, shell_program, prev, sleeper, now(), now)?;
+        }
+        let _ = paths;
+        Ok(())
+    }
+
+    fn uninstall_post_commit_gc(
+        paths: &PluginPaths,
+        payload: &MaintenanceJournalPayload,
+        state: &UninstallQuarantineState,
+        fail: Option<WorkerFailPoint>,
+    ) -> Vec<String> {
+        let mut residual = Vec::new();
+        if let Some(WorkerFailPoint::AtPostCommitGc) = fail {
+            if let Some(q) = state.plugin_quarantine.as_ref() {
+                residual.push(q.display().to_string());
+            }
+            residual.push("injected post-commit GC failure".into());
+            return residual;
+        }
+
+        let try_rm = |p: &Path, residual: &mut Vec<String>| {
+            if !p.exists() {
+                return;
+            }
+            let result = if p.is_dir() {
+                fs::remove_dir_all(p)
+            } else {
+                fs::remove_file(p)
+            };
+            if result.is_err() {
+                residual.push(p.display().to_string());
+            }
+        };
+
+        if let Some(q) = state.plugin_quarantine.as_ref() {
+            try_rm(q, &mut residual);
+        }
+        if let Some(q) = state.cache_quarantine.as_ref() {
+            try_rm(q, &mut residual);
+        }
+        if let Some((_, q)) = state.settings_quarantine.as_ref() {
+            try_rm(q, &mut residual);
+        }
+        if let Some((_, q)) = state.backups_quarantine.as_ref() {
+            try_rm(q, &mut residual);
+        }
+        for (_, q) in &state.legacy_quarantines {
+            try_rm(q, &mut residual);
+        }
+        if let Some(bak) = state.shell_backup.as_ref() {
+            try_rm(bak, &mut residual);
+        }
+        let _ = (paths, payload);
+        residual
+    }
+}
+
+#[derive(Debug, Default)]
+struct UninstallQuarantineState {
+    shell_backup: Option<PathBuf>,
+    shell_before: Option<Vec<u8>>,
+    plugin_quarantine: Option<PathBuf>,
+    cache_quarantine: Option<PathBuf>,
+    settings_quarantine: Option<(PathBuf, PathBuf)>,
+    backups_quarantine: Option<(PathBuf, PathBuf)>,
+    legacy_quarantines: Vec<(PathBuf, PathBuf)>,
+}
+
+/// Poll until `listPlugins` shows absence of `agent-bar.usage` and the previous
+/// service health endpoint fails/is absent (BUNDLE-032F / 032G uninstall path).
+pub fn poll_uninstall_absence<R: CommandRunner, S: Sleeper>(
+    runner: &R,
+    shell_program: &str,
+    previous_version: Option<&str>,
+    sleeper: &S,
+    start: Duration,
+    now: &dyn Fn() -> Duration,
+) -> Result<(), MaintenanceError> {
+    let deadline = start + RESCAN_POLL_DEADLINE;
+    let mut delays = rescan_poll_delays();
+    loop {
+        let list = runner.run(shell_program, &["shell", "listPlugins"])?;
+        if list.code != 0 {
+            let t = now();
+            if t >= deadline {
+                return Err(MaintenanceError::msg(format!(
+                    "listPlugins failed during absence poll: code={}",
+                    list.code
+                )));
+            }
+        } else {
+            let absent = list_plugins_absent(&list.stdout)?;
+            let health_gone = match previous_version {
+                Some(ver) => {
+                    let args = health_argv(ver);
+                    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+                    match runner.run(shell_program, &arg_refs) {
+                        Ok(out) => !health_is_ok(&out),
+                        Err(_) => true,
+                    }
+                }
+                None => true,
+            };
+            if absent && health_gone {
+                return Ok(());
+            }
+        }
+        let t = now();
+        if t >= deadline {
+            return Err(MaintenanceError::msg(
+                "absence poll timeout: plugin still present or health still ok",
+            ));
+        }
+        let delay = delays.next().unwrap_or(Duration::from_millis(500));
+        let remaining = deadline.saturating_sub(t);
+        sleeper.sleep(delay.min(remaining));
+    }
+}
+
+/// Best-effort desktop notification after successful uninstall (BUNDLE-038).
+pub fn notify_uninstall_complete(purged: bool, detail: &str) -> Result<(), MaintenanceError> {
+    let body = if purged {
+        format!("Agent Bar uninstalled (settings and backups removed). {detail}")
+    } else {
+        format!("Agent Bar uninstalled (settings preserved). {detail}")
+    };
+    let body = crate::support::redact::strip_ansi_and_controls(&body);
+    let status = std::process::Command::new("notify-send")
+        .args([
+            "--app-name=Agent Bar",
+            "--urgency=normal",
+            "Agent Bar uninstalled",
+            &body,
+        ])
+        .status()
+        .map_err(|e| MaintenanceError::msg(format!("notify-send spawn failed: {e}")))?;
+    if !status.success() {
+        return Err(MaintenanceError::msg(format!(
+            "notify-send exited {:?}",
+            status.code()
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1496,6 +2186,18 @@ pub enum WorkerFailPoint {
     AtExchange,
     AfterExchange,
     AtHealth,
+    // --- Uninstall fault matrix (BUNDLE-037 / 038A–C) ---
+    BeforeShellBackup,
+    AfterShellBackup,
+    AtQuarantineRename,
+    AtExactIdRemoval,
+    AtRescan,
+    AtAbsenceCheck,
+    AtCommitFsync,
+    AtSettingsPurgeQuarantine,
+    AtBackupsPurgeQuarantine,
+    /// Post-commit GC: durable residual, never rollback.
+    AtPostCommitGc,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2052,7 +2754,64 @@ mod tests {
             omarchy_shell_bin: fake_abs_bin(tools, "omarchy-shell"),
             is_fresh_install: false,
             is_v9_rollback: false,
+            purge_settings_and_backups: false,
+            shell_json_path: String::new(),
+            settings_path: String::new(),
+            cache_root: String::new(),
+            backups_dir: String::new(),
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn sample_uninstall_payload(
+        paths: &PluginPaths,
+        txid: &str,
+        previous: &str,
+        tools: &Path,
+        purge: bool,
+        shell_json: &Path,
+        settings: &Path,
+        cache_root: &Path,
+    ) -> MaintenanceJournalPayload {
+        MaintenanceJournalPayload {
+            txid: txid.into(),
+            operation: MaintenanceOp::Uninstall,
+            expected_version: None,
+            previous_version: Some(previous.into()),
+            stage_path: String::new(),
+            plugin_root: paths.plugin_root.display().to_string(),
+            quarantine_path: paths.quarantine_dir(txid).unwrap().display().to_string(),
+            selected: None,
+            omarchy_bin: fake_abs_bin(tools, "omarchy"),
+            omarchy_shell_bin: fake_abs_bin(tools, "omarchy-shell"),
+            is_fresh_install: false,
+            is_v9_rollback: false,
+            purge_settings_and_backups: purge,
+            shell_json_path: shell_json.display().to_string(),
+            settings_path: settings.display().to_string(),
+            cache_root: cache_root.display().to_string(),
+            backups_dir: paths.backups_dir.display().to_string(),
+        }
+    }
+
+    fn write_shell_with_plugin(path: &Path) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(
+            path,
+            r#"{
+  "bar": {
+    "left": [
+      {"id": "omarchy.menu"},
+      {"id": "agent-bar.usage"},
+      {"id": "omarchy.workspaces"}
+    ]
+  }
+}
+"#,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -2704,5 +3463,471 @@ mod tests {
         drop(exclusive);
         // After release, try_lock succeeds (worker path can acquire).
         assert!(worker_gate.try_lock_exclusive().unwrap().is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // Uninstall confirmation + fault matrix (Task 18 / BUNDLE-033..038C)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn uninstall_confirmation_accepts_exact_document() {
+        let raw = br#"{
+  "schemaVersion": 1,
+  "operation": "uninstall",
+  "confirmed": true,
+  "purgeSettingsAndBackups": false
+}"#;
+        UninstallConfirmation::parse_strict(raw, false).unwrap();
+        let purge = br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":true}"#;
+        UninstallConfirmation::parse_strict(purge, true).unwrap();
+    }
+
+    #[test]
+    fn uninstall_confirmation_rejects_false_mismatch_extra_and_malformed() {
+        // confirmed: false
+        let err = UninstallConfirmation::parse_strict(
+            br#"{"schemaVersion":1,"operation":"uninstall","confirmed":false,"purgeSettingsAndBackups":false}"#,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("confirmed"));
+
+        // purge mismatch
+        let err = UninstallConfirmation::parse_strict(
+            br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":true}"#,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("purge"));
+
+        // trailing non-whitespace
+        let err = UninstallConfirmation::parse_strict(
+            br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":false} extra"#,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("trailing") || err.to_string().contains("malformed"));
+
+        // unknown field
+        let err = UninstallConfirmation::parse_strict(
+            br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":false,"extra":1}"#,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("malformed") || err.to_string().contains("unknown"));
+
+        // wrong operation
+        let err = UninstallConfirmation::parse_strict(
+            br#"{"schemaVersion":1,"operation":"update","confirmed":true,"purgeSettingsAndBackups":false}"#,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("operation"));
+    }
+
+    fn seed_uninstall_layout(
+        dir: &Path,
+        paths: &PluginPaths,
+        version: &str,
+    ) -> (PathBuf, PathBuf, PathBuf) {
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        fs::create_dir_all(&paths.transactions_dir).unwrap();
+        fs::create_dir_all(&paths.reports_dir).unwrap();
+        fs::create_dir_all(&paths.backups_dir).unwrap();
+        write_min_plugin(&paths.plugin_root, version);
+        write_receipt(&paths.plugin_root, version);
+
+        let shell = dir.join("config/omarchy/shell.json");
+        write_shell_with_plugin(&shell);
+
+        let settings = dir.join("config/agent-bar/settings.json");
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        fs::write(&settings, br#"{"schemaVersion":1}"#).unwrap();
+
+        let cache = dir.join("cache/agent-bar");
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join("status-v2.json"), b"{}").unwrap();
+        fs::write(cache.join("notification-state-v1.json"), b"{}").unwrap();
+
+        let bak = paths.backups_dir.join("old/plugin/marker");
+        fs::create_dir_all(bak.parent().unwrap()).unwrap();
+        fs::write(&bak, b"bak").unwrap();
+        (shell, settings, cache)
+    }
+
+    fn run_uninstall_worker(
+        paths: &PluginPaths,
+        payload: &MaintenanceJournalPayload,
+        runner: &RecordingRunner,
+        fail: Option<WorkerFailPoint>,
+    ) -> Result<(), MaintenanceError> {
+        let mut journal = TransactionJournal::new(&payload.txid, "uninstall");
+        journal.record(TxStep::Preflight, "ok");
+        journal.record(TxStep::Stage, serde_json::to_string(payload).unwrap());
+        journal
+            .write_to(&paths.journal_path(&payload.txid).unwrap())
+            .unwrap();
+        struct NoopSleeper;
+        impl Sleeper for NoopSleeper {
+            fn sleep(&self, _: Duration) {}
+        }
+        MaintenanceWorker::run_worker_from_journal(
+            paths,
+            runner,
+            &payload.txid,
+            &NoopSleeper,
+            Duration::ZERO,
+            &|| Duration::from_secs(1),
+            fail,
+        )
+    }
+
+    fn push_uninstall_success_ipc(runner: &RecordingRunner) {
+        let mut q = runner.responses.lock().unwrap();
+        q.push(Ok(CommandOutput {
+            code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        })); // rescan
+        q.push(Ok(CommandOutput {
+            code: 0,
+            stdout: r#"[{"id":"omarchy.menu"}]"#.into(),
+            stderr: String::new(),
+        })); // listPlugins absent
+        q.push(Ok(CommandOutput {
+            code: 1,
+            stdout: "unknown\n".into(),
+            stderr: String::new(),
+        })); // health gone
+    }
+
+    fn push_uninstall_rollback_ipc(runner: &RecordingRunner) {
+        let mut q = runner.responses.lock().unwrap();
+        // rollback rescan + health ok for previous
+        q.push(Ok(CommandOutput {
+            code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        }));
+        q.push(Ok(CommandOutput {
+            code: 0,
+            stdout: "ok\n".into(),
+            stderr: String::new(),
+        }));
+    }
+
+    #[test]
+    fn uninstall_standard_commits_preserves_settings_and_backups() {
+        let dir = tempdir().unwrap();
+        let home = dir.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            &home,
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let (shell, settings, cache) = seed_uninstall_layout(dir.path(), &paths, "10.0.0");
+        let settings_before = fs::read(&settings).unwrap();
+        let backups_marker = paths.backups_dir.join("old/plugin/marker");
+        assert!(backups_marker.is_file());
+
+        let txid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let payload = sample_uninstall_payload(
+            &paths, txid, "10.0.0", &tools, false, &shell, &settings, &cache,
+        );
+        let runner = RecordingRunner::default();
+        push_uninstall_success_ipc(&runner);
+        run_uninstall_worker(&paths, &payload, &runner, None).unwrap();
+
+        assert!(!paths.plugin_root.exists(), "plugin root removed");
+        assert!(!cache.exists(), "cache quarantined/GC'd");
+        assert_eq!(
+            fs::read(&settings).unwrap(),
+            settings_before,
+            "settings preserved"
+        );
+        assert!(
+            backups_marker.is_file(),
+            "migration backups preserved on standard uninstall"
+        );
+        let shell_after = fs::read_to_string(&shell).unwrap();
+        assert!(!shell_after.contains("agent-bar.usage"));
+        assert!(shell_after.contains("omarchy.menu"));
+        let report: DurableReport = serde_json::from_slice(
+            &fs::read(paths.reports_dir.join(format!("{txid}.json"))).unwrap(),
+        )
+        .unwrap();
+        assert!(report.ok);
+        assert!(!report.rolled_back);
+    }
+
+    #[test]
+    fn uninstall_purge_quarantines_settings_and_backups() {
+        let dir = tempdir().unwrap();
+        let home = dir.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            &home,
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let (shell, settings, cache) = seed_uninstall_layout(dir.path(), &paths, "10.0.0");
+        let txid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let payload = sample_uninstall_payload(
+            &paths, txid, "10.0.0", &tools, true, &shell, &settings, &cache,
+        );
+        let runner = RecordingRunner::default();
+        push_uninstall_success_ipc(&runner);
+        run_uninstall_worker(&paths, &payload, &runner, None).unwrap();
+        assert!(!settings.exists(), "settings purged");
+        assert!(!paths.backups_dir.exists(), "backups purged");
+        assert!(!paths.plugin_root.exists());
+    }
+
+    #[test]
+    fn uninstall_pre_commit_failures_roll_back_and_verify_service() {
+        let cases = [
+            WorkerFailPoint::BeforeShellBackup,
+            WorkerFailPoint::AfterShellBackup,
+            WorkerFailPoint::AtQuarantineRename,
+            WorkerFailPoint::AtExactIdRemoval,
+            WorkerFailPoint::AtRescan,
+            WorkerFailPoint::AtAbsenceCheck,
+            WorkerFailPoint::AtCommitFsync,
+            WorkerFailPoint::AtSettingsPurgeQuarantine,
+            WorkerFailPoint::AtBackupsPurgeQuarantine,
+        ];
+        for (i, point) in cases.into_iter().enumerate() {
+            let dir = tempdir().unwrap();
+            let home = dir.path().join("home");
+            fs::create_dir_all(&home).unwrap();
+            let paths = PluginPaths::with_plugins_dir(
+                &home,
+                dir.path().join("plugins"),
+                dir.path().join("state"),
+            );
+            let tools = dir.path().join("tools");
+            fs::create_dir_all(&tools).unwrap();
+            let (shell, settings, cache) = seed_uninstall_layout(dir.path(), &paths, "10.0.0");
+            let shell_before = fs::read(&shell).unwrap();
+            let plugin_before = fs::read(paths.plugin_root.join("Service.qml")).unwrap();
+            let settings_before = fs::read(&settings).unwrap();
+            let txid = format!("{:032x}", i + 1);
+            let purge = matches!(
+                point,
+                WorkerFailPoint::AtSettingsPurgeQuarantine
+                    | WorkerFailPoint::AtBackupsPurgeQuarantine
+            );
+            let payload = sample_uninstall_payload(
+                &paths, &txid, "10.0.0", &tools, purge, &shell, &settings, &cache,
+            );
+            let runner = RecordingRunner::default();
+            // Some fail points happen after rescan is issued.
+            match point {
+                WorkerFailPoint::AtRescan
+                | WorkerFailPoint::AtAbsenceCheck
+                | WorkerFailPoint::AtCommitFsync => {
+                    // rescan may run; for AtAbsenceCheck inject before success
+                    if matches!(point, WorkerFailPoint::AtCommitFsync) {
+                        push_uninstall_success_ipc(&runner);
+                    } else if matches!(point, WorkerFailPoint::AtRescan) {
+                        // fail inject before run — no ipc needed before fail
+                    } else if matches!(point, WorkerFailPoint::AtAbsenceCheck) {
+                        let mut q = runner.responses.lock().unwrap();
+                        q.push(Ok(CommandOutput {
+                            code: 0,
+                            stdout: String::new(),
+                            stderr: String::new(),
+                        })); // rescan ok then inject
+                    }
+                    push_uninstall_rollback_ipc(&runner);
+                }
+                WorkerFailPoint::AtExactIdRemoval => {
+                    // quarantine done; fail before shell strip — rollback needs rescan+health
+                    push_uninstall_rollback_ipc(&runner);
+                }
+                WorkerFailPoint::AtQuarantineRename
+                | WorkerFailPoint::BeforeShellBackup
+                | WorkerFailPoint::AfterShellBackup
+                | WorkerFailPoint::AtSettingsPurgeQuarantine
+                | WorkerFailPoint::AtBackupsPurgeQuarantine => {
+                    push_uninstall_rollback_ipc(&runner);
+                }
+                _ => {}
+            }
+            let err = run_uninstall_worker(&paths, &payload, &runner, Some(point)).unwrap_err();
+            assert!(
+                err.to_string().contains("injected")
+                    || err.to_string().contains("rescan")
+                    || err.to_string().contains("absence"),
+                "point={point:?} err={err}"
+            );
+            // Pre-commit: plugin + shell restored, settings untouched for standard.
+            assert_eq!(
+                fs::read(paths.plugin_root.join("Service.qml")).unwrap(),
+                plugin_before,
+                "point={point:?} plugin restored"
+            );
+            assert_eq!(
+                fs::read(&shell).unwrap(),
+                shell_before,
+                "point={point:?} shell exact bytes restored"
+            );
+            if !purge {
+                assert_eq!(
+                    fs::read(&settings).unwrap(),
+                    settings_before,
+                    "point={point:?} settings untouched"
+                );
+            }
+            // No successful commit report claiming ok without rollback.
+            let report_path = paths.reports_dir.join(format!("{txid}.json"));
+            if report_path.is_file() {
+                let report: DurableReport =
+                    serde_json::from_slice(&fs::read(&report_path).unwrap()).unwrap();
+                assert!(!report.ok || report.rolled_back, "point={point:?}");
+                if report.rolled_back {
+                    assert!(!report.ok || !report.message.contains("committed without"));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn uninstall_post_commit_gc_failure_leaves_residual_without_rollback() {
+        let dir = tempdir().unwrap();
+        let home = dir.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            &home,
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let (shell, settings, cache) = seed_uninstall_layout(dir.path(), &paths, "10.0.0");
+        let settings_before = fs::read(&settings).unwrap();
+        let txid = "cccccccccccccccccccccccccccccccc";
+        let payload = sample_uninstall_payload(
+            &paths, txid, "10.0.0", &tools, false, &shell, &settings, &cache,
+        );
+        let runner = RecordingRunner::default();
+        push_uninstall_success_ipc(&runner);
+        // Should succeed overall with residual — not an Err for post-commit GC.
+        run_uninstall_worker(
+            &paths,
+            &payload,
+            &runner,
+            Some(WorkerFailPoint::AtPostCommitGc),
+        )
+        .unwrap();
+        assert!(!paths.plugin_root.exists());
+        assert_eq!(fs::read(&settings).unwrap(), settings_before);
+        let report: DurableReport = serde_json::from_slice(
+            &fs::read(paths.reports_dir.join(format!("{txid}.json"))).unwrap(),
+        )
+        .unwrap();
+        assert!(report.ok);
+        assert!(!report.rolled_back, "post-commit must never claim rollback");
+        assert!(!report.residual_paths.is_empty());
+    }
+
+    #[test]
+    fn uninstall_standard_leaves_ambiguous_legacy_untouched() {
+        let dir = tempdir().unwrap();
+        let home = dir.path().join("home");
+        fs::create_dir_all(&home).unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            &home,
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let (shell, settings, cache) = seed_uninstall_layout(dir.path(), &paths, "10.0.0");
+        // Ambiguous/modified legacy path: known location but non-marker content.
+        let ambiguous = home.join(".config/waybar/agent-bar");
+        fs::create_dir_all(ambiguous.parent().unwrap()).unwrap();
+        fs::write(&ambiguous, b"user-edited content without markers").unwrap();
+        let txid = "dddddddddddddddddddddddddddddddd";
+        let payload = sample_uninstall_payload(
+            &paths, txid, "10.0.0", &tools, false, &shell, &settings, &cache,
+        );
+        let runner = RecordingRunner::default();
+        push_uninstall_success_ipc(&runner);
+        run_uninstall_worker(&paths, &payload, &runner, None).unwrap();
+        assert!(
+            ambiguous.is_file(),
+            "ambiguous legacy must remain after standard uninstall"
+        );
+        let report: DurableReport = serde_json::from_slice(
+            &fs::read(paths.reports_dir.join(format!("{txid}.json"))).unwrap(),
+        )
+        .unwrap();
+        // Residual/report may list the retained path.
+        assert!(report.residual_paths.iter().any(|p| p.contains("waybar")) || ambiguous.is_file());
+    }
+
+    #[test]
+    fn uninstall_exclusive_gate_blocks_shared_status_lane() {
+        let dir = tempdir().unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            dir.path(),
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        fs::create_dir_all(&paths.transactions_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let shell = dir.path().join("shell.json");
+        write_shell_with_plugin(&shell);
+        write_min_plugin(&paths.plugin_root, "10.0.0");
+        write_receipt(&paths.plugin_root, "10.0.0");
+        let settings = dir.path().join("settings.json");
+        fs::write(&settings, b"{}").unwrap();
+        let cache = dir.path().join("cache");
+        fs::create_dir_all(&cache).unwrap();
+        let txid = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+        let payload = sample_uninstall_payload(
+            &paths, txid, "10.0.0", &tools, false, &shell, &settings, &cache,
+        );
+        let mut journal = TransactionJournal::new(txid, "uninstall");
+        journal.record(TxStep::Preflight, "ok");
+        journal.record(TxStep::Stage, serde_json::to_string(&payload).unwrap());
+        journal
+            .write_to(&paths.journal_path(txid).unwrap())
+            .unwrap();
+
+        // Shared holder (status) must not recreate lanes while exclusive is held by worker.
+        // Simulate: exclusive held by handoff barrier — shared try fails.
+        let gate = MaintenanceGate::open(&paths.maintenance_lock).unwrap();
+        let exclusive = gate.lock_exclusive().unwrap();
+        assert!(gate.try_lock_shared().unwrap().is_none());
+        drop(exclusive);
+
+        let runner = RecordingRunner::default();
+        push_uninstall_success_ipc(&runner);
+        struct NoopSleeper;
+        impl Sleeper for NoopSleeper {
+            fn sleep(&self, _: Duration) {}
+        }
+        MaintenanceWorker::run_worker_from_journal(
+            &paths,
+            &runner,
+            txid,
+            &NoopSleeper,
+            Duration::ZERO,
+            &|| Duration::from_secs(1),
+            None,
+        )
+        .unwrap();
+        // Cache was removed and must not reappear from the worker.
+        assert!(!cache.exists());
+        assert!(!paths.plugin_root.exists());
     }
 }

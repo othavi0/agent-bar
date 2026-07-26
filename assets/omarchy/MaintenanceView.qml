@@ -184,7 +184,9 @@ Item {
     opened: !!ui.uninstallConfirmOpen
     title: "Uninstall agent-bar"
     message: ui.uninstallArmed
-        ? "Final confirmation: uninstall will remove the plugin bundle. Click Uninstall again."
+        ? (ui.purgeSettings
+            ? "Final confirmation: uninstall will remove the plugin, settings, and backups. Click Uninstall again."
+            : "Final confirmation: uninstall will remove the plugin bundle. Settings stay. Click Uninstall again.")
         : "This removes the Agent Bar plugin bundle. Settings are preserved by default."
     cancelText: "Cancel"
     confirmText: ui.uninstallArmed ? "Uninstall now" : "Uninstall"

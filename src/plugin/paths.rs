@@ -107,6 +107,26 @@ impl PluginPaths {
             .ok_or_else(|| PathError::msg("settings path has no file name"))?;
         Ok(parent.join(format!(".{name}.agent-bar-quarantine-{txid}")))
     }
+
+    /// Cache-root quarantine sibling (MIG-002A):
+    /// `<cache-parent>/.agent-bar-cache-quarantine-<txid>/`.
+    pub fn cache_quarantine(cache_root: &Path, txid: &str) -> Result<PathBuf, PathError> {
+        validate_txid(txid)?;
+        let parent = cache_root
+            .parent()
+            .ok_or_else(|| PathError::msg("cache root has no parent"))?;
+        Ok(parent.join(format!(".agent-bar-cache-quarantine-{txid}")))
+    }
+
+    /// Backups-dir quarantine sibling (MIG-002A):
+    /// `<backup-parent>/.agent-bar-backups-quarantine-<txid>/`.
+    pub fn backups_quarantine(backups_dir: &Path, txid: &str) -> Result<PathBuf, PathError> {
+        validate_txid(txid)?;
+        let parent = backups_dir
+            .parent()
+            .ok_or_else(|| PathError::msg("backups dir has no parent"))?;
+        Ok(parent.join(format!(".agent-bar-backups-quarantine-{txid}")))
+    }
 }
 
 /// Transaction IDs are exactly 32 lowercase hex characters.
@@ -322,6 +342,27 @@ mod tests {
             q,
             PathBuf::from(
                 "/home/u/.config/agent-bar/.settings.json.agent-bar-quarantine-0123456789abcdef0123456789abcdef"
+            )
+        );
+    }
+
+    #[test]
+    fn cache_and_backups_quarantine_are_destination_local() {
+        let tx = "0123456789abcdef0123456789abcdef";
+        let cache = PathBuf::from("/home/u/.cache/agent-bar");
+        let q = PluginPaths::cache_quarantine(&cache, tx).unwrap();
+        assert_eq!(
+            q,
+            PathBuf::from(
+                "/home/u/.cache/.agent-bar-cache-quarantine-0123456789abcdef0123456789abcdef"
+            )
+        );
+        let backups = PathBuf::from("/home/u/.local/state/agent-bar/backups");
+        let bq = PluginPaths::backups_quarantine(&backups, tx).unwrap();
+        assert_eq!(
+            bq,
+            PathBuf::from(
+                "/home/u/.local/state/agent-bar/.agent-bar-backups-quarantine-0123456789abcdef0123456789abcdef"
             )
         );
     }

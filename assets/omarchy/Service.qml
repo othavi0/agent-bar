@@ -639,7 +639,7 @@ Item {
       maintenanceHandoffBusy = false
       return
     }
-    // Full transaction worker lands in CP3; argv shape is fixed here.
+    // Uninstall confirmation document is written on stdin (BUNDLE-036).
     if (intention && intention.kind === "uninstall" && pendingMaintenancePayload.length) {
       maintenanceHandoffProcess.stdinEnabled = true
     } else {
