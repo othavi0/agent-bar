@@ -15,6 +15,7 @@ pub mod notifications;
 pub mod notify;
 pub mod omarchy_integration;
 pub mod platform;
+pub mod plugin;
 pub mod providers;
 pub mod runtime;
 pub mod settings;

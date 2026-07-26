@@ -459,6 +459,8 @@ impl FileSystem for MapFileSystem {
         Ok(crate::support::FileMetadata {
             len: bytes.len() as u64,
             modified: None,
+            is_dir: false,
+            is_symlink: false,
         })
     }
 }

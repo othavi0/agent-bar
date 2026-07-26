@@ -36,6 +36,10 @@ throbber-widgets-tui = "0.11.1"
 tachyonfx = "0.25"
 semver = "1.0.28"
 fs2 = "0.4.3"
+rustix = { version = "1.1.4", features = ["fs"] }
+sha2 = "0.11.0"
+tar = "0.4.46"
+zstd = "0.13.3"
 
 [dev-dependencies]
 assert_cmd = "2"

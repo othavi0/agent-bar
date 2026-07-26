@@ -252,10 +252,7 @@ fn apply_stale_retention(
     let Some(prior) = prior else {
         return Ok(live);
     };
-    if !matches!(
-        prior.state(),
-        ProviderState::Ready | ProviderState::Stale
-    ) {
+    if !matches!(prior.state(), ProviderState::Ready | ProviderState::Stale) {
         return Ok(live);
     }
     let error = live.error().cloned().unwrap_or_else(|| {
@@ -378,6 +375,8 @@ mod tests {
             Ok(crate::support::FileMetadata {
                 len: b.len() as u64,
                 modified: None,
+                is_dir: false,
+                is_symlink: false,
             })
         }
     }
@@ -421,9 +420,7 @@ mod tests {
     ) -> StatusCoordinator<FixedClock, MapFs, NoopProcess, NoopHttp> {
         let gate = Arc::new(MaintenanceGate::open(dir.join("m.lock")).unwrap());
         let settings_store = SettingsStore::new(dir.join("settings.json"), gate.clone());
-        settings_store
-            .apply(&SettingsDocument::defaults())
-            .unwrap();
+        settings_store.apply(&SettingsDocument::defaults()).unwrap();
         StatusCoordinator {
             clock: FixedClock(now),
             fs: MapFs::default(),
@@ -551,11 +548,7 @@ mod tests {
         let live = ProviderStatus::unauthenticated(
             ProviderId::Claude,
             "Claude",
-            ProviderError::new(
-                ErrorCode::AuthenticationRequired,
-                "auth",
-                false,
-            ),
+            ProviderError::new(ErrorCode::AuthenticationRequired, "auth", false),
             ProviderAction::login("Log in"),
         )
         .unwrap();
