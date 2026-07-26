@@ -393,6 +393,67 @@ impl ProviderStatus {
         self.action.as_ref()
     }
 
+    pub fn plan(&self) -> Option<&Plan> {
+        self.plan.as_ref()
+    }
+
+    pub fn account(&self) -> Option<&Account> {
+        self.account.as_ref()
+    }
+
+    /// When serving a previously live ready row from cache, label source as `cache`.
+    pub fn for_cache_hit(&self) -> Result<Self, SchemaError> {
+        match self.state {
+            ProviderState::Ready => {
+                let last = self.last_success_at.ok_or_else(|| {
+                    SchemaError::new("ready row missing lastSuccessAt for cache hit")
+                })?;
+                Self::ready(
+                    self.id(),
+                    self.name.clone(),
+                    DataSource::Cache,
+                    self.plan.clone(),
+                    self.account.clone(),
+                    self.windows.clone(),
+                    last,
+                )
+            }
+            // Stale already uses source=cache; other states keep their shape.
+            _ => Ok(self.clone()),
+        }
+    }
+
+    /// Retain last good connected data after a temporary refresh failure (CACHE-022).
+    pub fn retain_as_stale(&self, error: ProviderError) -> Result<Self, SchemaError> {
+        let last = self.last_success_at.ok_or_else(|| {
+            SchemaError::new("cannot retain stale without lastSuccessAt")
+        })?;
+        if !matches!(self.state, ProviderState::Ready | ProviderState::Stale) {
+            return Err(SchemaError::new(
+                "only ready/stale rows can be retained as stale",
+            ));
+        }
+        Self::stale(
+            self.id(),
+            self.name.clone(),
+            self.plan.clone(),
+            self.account.clone(),
+            self.windows.clone(),
+            last,
+            error,
+            ProviderAction::retry("Retry"),
+        )
+    }
+
+    /// Temporary failures eligible for stale retention (not auth / missing CLI).
+    pub fn is_temporary_failure(&self) -> bool {
+        match self.state {
+            ProviderState::NetworkError | ProviderState::RateLimited => true,
+            ProviderState::ProviderError => self.error.as_ref().is_some_and(|e| e.retryable),
+            _ => false,
+        }
+    }
+
     pub fn ready(
         id: ProviderId,
         name: impl Into<String>,
