@@ -158,7 +158,7 @@ KeyboardPanel {
           Loader {
             id: contentLoader
             width: contentFlick.width
-            sourceComponent: root.view === "settings" ? settingsStub : providerContent
+            sourceComponent: root.view === "settings" ? settingsContent : providerContent
           }
         }
       }
@@ -180,28 +180,13 @@ KeyboardPanel {
   }
 
   Component {
-    id: settingsStub
-    // Placeholder until Task 12 SettingsView lands.
-    Column {
+    id: settingsContent
+    SettingsView {
       width: contentFlick.width
-      spacing: Style.space(8)
-      Text {
-        text: "Settings"
-        color: Color.foreground
-        font.family: Style.font.family
-        font.pixelSize: Style.font.body
-        font.bold: true
-        textFormat: Text.PlainText
-      }
-      Text {
-        width: parent.width
-        text: "Settings controls will appear here."
-        color: Qt.darker(Color.foreground, 1.3)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        wrapMode: Text.WordWrap
-        textFormat: Text.PlainText
-      }
+      agentService: root.agentService
+      foreground: Color.foreground
+      fontFamily: Style.font.family
+      iconBase: Qt.resolvedUrl("icons/")
     }
   }
 }

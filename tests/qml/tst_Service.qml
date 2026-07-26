@@ -118,8 +118,14 @@ TestCase {
     function openSettings(owner) {
       if (maintenanceState.blocked) return
       requestPopup(owner, selectedProviderId || null, "settings")
-      settingsState = Core.settingsOpen(settingsState, snapshot || { schemaVersion: 1 }, ++settingsGen)
-      settingsDraft = settingsState.draft
+      if (!settingsState || settingsState.phase === "closed") {
+        settingsGen++
+        settingsState = Core.settingsBeginLoad(settingsGen)
+        settingsDraft = null
+        // Harness completes load immediately with defaults (production uses config show).
+        settingsState = Core.settingsFinishLoad(settingsState, settingsGen, Core.defaultSettings())
+        settingsDraft = settingsState.draft
+      }
     }
     property int settingsGen: 0
     function beginMaintenance() {

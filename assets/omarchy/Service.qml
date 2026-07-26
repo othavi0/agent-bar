@@ -60,12 +60,16 @@ Item {
   property int statusGeneration: 0
   property int settingsGeneration: 0
   property int activeStatusGeneration: 0
+  property int activeSettingsReadGeneration: 0
   property int activeSettingsWriteGeneration: 0
+  // Immutable captured JSON for the in-flight config apply (SET-018).
+  property string pendingSettingsPayload: ""
 
   // Bookkeeping
   property int refreshRequestCount: 0
   property string lastRefreshProviderId: ""
   property int statusStartCount: 0
+  property int settingsSaveCount: 0
   property bool pollEnabled: true
 
   readonly property string manifestVersion: manifest && manifest.version
@@ -129,23 +133,118 @@ Item {
 
   function closePopup(owner) {
     popupOwner = Core.closePopup(popupOwner, owner)
+    // SET-019: closing never fabricates load/save completion.
+    if (!popupOwner && !Core.settingsShouldRetainOnClose(settingsState)) {
+      settingsState = Core.settingsClosed()
+      settingsDraft = null
+    }
   }
 
   function openSettings(owner) {
     if (maintenanceState.blocked)
       return
     requestPopup(owner, selectedProviderId || null, "settings")
-    // Capture immutable snapshot when settings open (Task 12 expands apply).
-    if (settingsState.phase === "closed") {
+    // SET-014/020: only start a new load when closed; reopen during save keeps busy.
+    if (!settingsState || settingsState.phase === "closed") {
       settingsGeneration++
-      var snap = snapshot ? JSON.parse(JSON.stringify(snapshot)) : ({
-        schemaVersion: 1,
-        providers: []
-      })
-      settingsState = Core.settingsOpen(settingsState, snap, settingsGeneration)
-      settingsDraft = settingsState.draft
+      activeSettingsReadGeneration = settingsGeneration
+      settingsState = Core.settingsBeginLoad(settingsGeneration)
+      settingsDraft = null
       kickSettingsRead()
     }
+  }
+
+  // ---- Draft mutations (dirty only when unlocked) ----
+
+  function settingsLocked() {
+    return Core.settingsControlsLocked(settingsState)
+  }
+
+  function mutateSettingsDraft(mutator) {
+    if (settingsLocked())
+      return
+    if (!settingsDraft)
+      return
+    settingsDraft = mutator(settingsDraft)
+    settingsState = Core.settingsMarkDirty(settingsState)
+    // Keep draft pointer on state for consumers that read settingsState.draft.
+    if (settingsState && settingsState.phase !== "closed") {
+      var next = Core.cloneState(settingsState)
+      next.draft = settingsDraft
+      settingsState = next
+    }
+  }
+
+  function setProviderEnabled(providerId, enabled) {
+    mutateSettingsDraft(function (d) {
+      return Core.setProviderEnabled(d, providerId, enabled)
+    })
+  }
+
+  function moveProvider(providerId, delta) {
+    mutateSettingsDraft(function (d) {
+      return Core.moveProvider(d, providerId, delta)
+    })
+  }
+
+  function setDisplayMetric(metric) {
+    mutateSettingsDraft(function (d) {
+      return Core.setDisplayMetric(d, metric)
+    })
+  }
+
+  function setRefreshInterval(seconds) {
+    mutateSettingsDraft(function (d) {
+      return Core.setRefreshInterval(d, seconds)
+    })
+  }
+
+  function setNotificationsEnabled(enabled) {
+    mutateSettingsDraft(function (d) {
+      return Core.setNotificationsEnabled(d, enabled)
+    })
+  }
+
+  function restoreSettingsDefaults() {
+    if (settingsLocked())
+      return
+    settingsState = Core.settingsRestoreDefaults(settingsState)
+    settingsDraft = settingsState ? settingsState.draft : null
+  }
+
+  function cancelSettings() {
+    if (settingsLocked() && settingsState && settingsState.phase === "saving")
+      return
+    settingsState = Core.settingsCancel(settingsState)
+    settingsDraft = settingsState ? settingsState.draft : null
+  }
+
+  function canSaveSettings() {
+    return Core.settingsCanSave(settingsState, settingsDraft)
+  }
+
+  function saveSettings() {
+    if (maintenanceState.blocked)
+      return false
+    if (!canSaveSettings())
+      return false
+    if (!Core.canStartLane(settingsWriteBusy))
+      return false
+    // SET-018: capture immutable payload before process start.
+    var payloadObj = JSON.parse(JSON.stringify(settingsDraft))
+    var validation = Core.validateSettingsDraft(payloadObj)
+    if (!validation.ok)
+      return false
+    // SET-016: every save gets a new generation id.
+    settingsGeneration++
+    var gen = settingsGeneration
+    pendingSettingsPayload = JSON.stringify(payloadObj)
+    settingsState = Core.settingsBeginSave(settingsState, gen, payloadObj)
+    settingsDraft = settingsState.draft
+    activeSettingsWriteGeneration = gen
+    settingsSaveCount++
+    kickSettingsWrite()
+    return true
   }
 
   // JSON-025: map closed action kinds to typed service methods.
@@ -327,7 +426,7 @@ Item {
   }
 
   // -------------------------------------------------------------------------
-  // Settings lanes (read / write) — skeleton; full store in Task 12
+  // Settings lanes (read / write)
   // -------------------------------------------------------------------------
 
   function kickSettingsRead() {
@@ -340,26 +439,48 @@ Item {
     settingsReadBusy = true
     if (testMode)
       return
-    settingsReadProcess.command = [helper, "config", "show"]
+    settingsReadProcess.command = Core.settingsArgvShow(helper)
     settingsReadProcess.running = true
   }
 
-  function applySettingsReadResult(stdout, exitCode) {
+  function applySettingsReadResult(generation, stdout, exitCode) {
+    if (!Core.shouldApplyGeneration(activeSettingsReadGeneration, generation))
+      return
     settingsReadBusy = false
     if (exitCode !== 0 || !settingsState || settingsState.phase === "closed")
       return
     try {
       var doc = JSON.parse(String(stdout || "").trim())
-      settingsState = Core.settingsOpen(settingsState, doc, settingsState.generation)
+      if (!Core.validateSettingsDraft(doc).ok)
+        return
+      settingsState = Core.settingsFinishLoad(settingsState, generation, doc)
       settingsDraft = settingsState.draft
       appliedSettings = doc
     } catch (e) {
-      // keep existing draft
+      // keep loading/locked; user can close and reopen
     }
   }
 
+  function kickSettingsWrite() {
+    if (!Core.canStartLane(settingsWriteBusy))
+      return
+    if (maintenanceState.blocked)
+      return
+    var helper = resolvedHelperPath()
+    if (!helper.length)
+      return
+    settingsWriteBusy = true
+    if (testMode)
+      return
+    settingsWriteProcess.command = Core.settingsArgvApplyStdin(helper)
+    settingsWriteProcess.running = true
+  }
+
   function applySettingsWriteResult(generation, ok, canonical) {
+    if (!Core.shouldApplyGeneration(activeSettingsWriteGeneration, generation))
+      return
     settingsWriteBusy = false
+    pendingSettingsPayload = ""
     settingsState = Core.settingsFinishSave(settingsState, generation, ok, canonical)
     settingsDraft = settingsState ? settingsState.draft : null
     if (ok && canonical)
@@ -428,19 +549,35 @@ Item {
     stdout: StdioCollector { id: settingsReadOut; waitForEnd: true }
     stderr: StdioCollector { id: settingsReadErr; waitForEnd: true }
     onExited: function (exitCode) {
-      root.applySettingsReadResult(settingsReadOut.text || "", exitCode)
+      root.applySettingsReadResult(
+        root.activeSettingsReadGeneration,
+        settingsReadOut.text || "",
+        exitCode
+      )
     }
   }
 
   Process {
     id: settingsWriteProcess
+    stdinEnabled: true
     stdout: StdioCollector { id: settingsWriteOut; waitForEnd: true }
     stderr: StdioCollector { id: settingsWriteErr; waitForEnd: true }
+    onStarted: {
+      // Write the immutable captured payload; never re-read live draft (SET-018).
+      if (root.pendingSettingsPayload && root.pendingSettingsPayload.length)
+        write(root.pendingSettingsPayload + "\n")
+    }
     onExited: function (exitCode) {
       var ok = exitCode === 0
       var canonical = null
       if (ok) {
-        try { canonical = JSON.parse(String(settingsWriteOut.text || "").trim()) } catch (e) { ok = false }
+        try {
+          canonical = JSON.parse(String(settingsWriteOut.text || "").trim())
+          if (!Core.validateSettingsDraft(canonical).ok)
+            ok = false
+        } catch (e) {
+          ok = false
+        }
       }
       root.applySettingsWriteResult(root.activeSettingsWriteGeneration, ok, canonical)
     }
