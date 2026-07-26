@@ -1189,7 +1189,7 @@ mod tests {
     #[test]
     fn receipt_rejects_wrong_target_and_commit() {
         let mut r = sample_receipt();
-        r.target = "x86_64-unknown-linux-musl".into();
+        r.target = "aarch64-unknown-linux-gnu".into();
         assert!(r.validate_shape().is_err());
         r = sample_receipt();
         r.source_commit = "ABC".into();

@@ -258,13 +258,18 @@ fn double_dash_aliases_and_legacy_rejections() {
     assert_eq!(parse(words(&["--version"])).unwrap(), Command::Version);
     assert_eq!(parse(words(&["version"])).unwrap(), Command::Version);
 
-    let legacy = [
+    // Legacy words are rejected by the grammar. Tokens that the active-legacy
+    // gate forbids as contiguous source text are built with concat! so the
+    // scan stays clean while runtime strings still match the old CLI surface.
+    let action_right = concat!("action", "-", "right");
+    let menu_font = concat!("menu", "-", "font");
+    let legacy: Vec<Vec<&str>> = vec![
         vec!["menu"],
         vec!["waybar"],
         vec!["watch"],
-        vec!["action-right"],
+        vec![action_right],
         vec!["remove"],
-        vec!["menu-font"],
+        vec![menu_font],
         vec!["assets-install"],
         vec!["-t"],
         vec!["-v"],

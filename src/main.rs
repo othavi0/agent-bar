@@ -12,8 +12,11 @@ use agent_bar::plugin::{
 };
 
 fn main() {
-    // RUST_LOG controls diagnostics (CLI-008); no verbose flag.
-    agent_bar::logger::init(false);
+    // RUST_LOG controls diagnostics (CLI-008); no verbose flag. Stderr only.
+    let _ = env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Warn)
+        .target(env_logger::Target::Stderr)
+        .try_init();
 
     // Worker mode is selected by the copied executable basename before public
     // CLI parsing (BUNDLE-032C).

@@ -22,7 +22,6 @@ use crate::plugin::transaction::{
     atomic_write_bytes, copy_dir_all, exchange_paths, quarantine_rename,
     remove_exact_plugin_entries, TransactionError, TransactionJournal, TxStep,
 };
-use crate::providers::amp_cli::which_in_path;
 use crate::support::maintenance_gate::MaintenanceGate;
 use crate::support::Clock;
 
@@ -1068,6 +1067,14 @@ impl WorkerDeadlines {
         }
         Ok(())
     }
+}
+
+/// Locate `cmd` on `$PATH` (first regular file hit).
+fn which_in_path(cmd: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(cmd))
+        .find(|p| p.is_file())
 }
 
 /// Resolve a bare tool name (or absolute path) to an absolute executable path
@@ -4030,8 +4037,7 @@ mod tests {
         }
         impl Sleeper for DelaySleeperTick<'_> {
             fn sleep(&self, d: Duration) {
-                self.tick
-                    .fetch_add(d.as_millis() as u64, Ordering::SeqCst);
+                self.tick.fetch_add(d.as_millis() as u64, Ordering::SeqCst);
                 thread::sleep(Duration::from_millis(40));
             }
         }
@@ -4055,7 +4061,10 @@ mod tests {
             "shared status lane must observe exclusive block during uninstall worker"
         );
         assert!(!cache.exists(), "cache removed and not recreated");
-        assert!(!notif.exists(), "notification path removed and not recreated");
+        assert!(
+            !notif.exists(),
+            "notification path removed and not recreated"
+        );
         assert!(!paths.plugin_root.exists());
     }
 }

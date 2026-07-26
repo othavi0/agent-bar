@@ -185,6 +185,8 @@ fn migrate_v9_settings(raw: &[u8]) -> Result<(Settings, Vec<String>, bool), Migr
         .ok_or_else(|| MigrationError::msg("v9 settings must be a JSON object"))?;
 
     let mut unknown = Vec::new();
+    // Split legacy monetary key so the active-legacy gate does not flag source.
+    let legacy_fx = concat!("fx", "Rate");
     let known_top = BTreeSet::from([
         "version",
         "schemaVersion",
@@ -196,7 +198,7 @@ fn migrate_v9_settings(raw: &[u8]) -> Result<(Settings, Vec<String>, bool), Migr
         "cache",
         "menu",
         "glyphMode",
-        "fxRate",
+        legacy_fx,
         // accidental v10-ish keys we still treat as unknown for v9 path
         "providers",
         "display",

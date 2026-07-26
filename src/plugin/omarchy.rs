@@ -75,27 +75,18 @@ impl RecordingRunner {
     }
 
     pub fn recorded(&self) -> Vec<(String, Vec<String>)> {
-        self.calls
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 
 #[cfg(test)]
 impl CommandRunner for RecordingRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, OmarchyError> {
-        self.calls
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push((
-                program.to_string(),
-                args.iter().map(|s| (*s).to_string()).collect(),
-            ));
-        let mut q = self
-            .responses
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).push((
+            program.to_string(),
+            args.iter().map(|s| (*s).to_string()).collect(),
+        ));
+        let mut q = self.responses.lock().unwrap_or_else(|e| e.into_inner());
         if q.is_empty() {
             return Ok(CommandOutput {
                 code: 0,
@@ -175,8 +166,26 @@ impl<R: CommandRunner> OmarchyClient<R> {
 }
 
 /// Production convenience: true when `shell.json` already lists the plugin.
+///
+/// Tolerant of the exact shell.json shape (Omarchy schema, not ours). Returns
+/// false when the file is missing or not JSON.
 pub fn shell_has_plugin_entry(shell_json_path: &Path) -> bool {
-    crate::omarchy_integration::shell_json_has_plugin_entry(shell_json_path)
+    let Ok(content) = std::fs::read_to_string(shell_json_path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return false;
+    };
+    json_contains_string(&value, PLUGIN_ID)
+}
+
+fn json_contains_string(value: &serde_json::Value, needle: &str) -> bool {
+    match value {
+        serde_json::Value::String(s) => s == needle,
+        serde_json::Value::Array(items) => items.iter().any(|v| json_contains_string(v, needle)),
+        serde_json::Value::Object(map) => map.values().any(|v| json_contains_string(v, needle)),
+        _ => false,
+    }
 }
 
 /// Guard: approved argv never includes `bar plugin add`.

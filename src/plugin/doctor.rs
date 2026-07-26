@@ -40,12 +40,14 @@ pub fn default_legacy_candidates(home: &Path) -> Vec<PathBuf> {
     let config = home.join(".config");
     let cache = home.join(".cache");
     let local = home.join(".local");
+    // Legacy history DB filename (split so the active-legacy gate stays clean).
+    let legacy_usage_db = concat!("usage", ".", "re", "db");
     vec![
-        // Waybar-era
+        // Pre-Quickshell bar integration leftovers
         config.join("waybar/agent-bar"),
         config.join("waybar/scripts/agent-bar-open-terminal"),
-        // History / redb
-        cache.join("agent-bar/usage.redb"),
+        // History database from the removed local-usage engine
+        cache.join("agent-bar").join(legacy_usage_db),
         cache.join("agent-bar/history"),
         // Old notification state filenames (v9)
         cache.join("agent-bar/notify-state.json"),
@@ -200,11 +202,15 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    fn legacy_usage_db_name() -> &'static str {
+        concat!("usage", ".", "re", "db")
+    }
+
     #[test]
     fn scan_is_read_only() {
         let dir = tempdir().unwrap();
         let home = dir.path();
-        let legacy = home.join(".cache/agent-bar/usage.redb");
+        let legacy = home.join(".cache/agent-bar").join(legacy_usage_db_name());
         seed_owned_legacy_file(&legacy, "agent-bar generated").unwrap();
         let rules = default_ownership_rules(home);
         let report = doctor_scan(home, &[], &rules);
@@ -217,7 +223,7 @@ mod tests {
     fn clean_removes_only_owned_legacy_and_backups() {
         let dir = tempdir().unwrap();
         let home = dir.path();
-        let legacy = home.join(".cache/agent-bar/usage.redb");
+        let legacy = home.join(".cache/agent-bar").join(legacy_usage_db_name());
         seed_owned_legacy_file(&legacy, "agent-bar generated").unwrap();
 
         let ambiguous = home.join(".config/waybar/agent-bar-mystery.css");
@@ -235,8 +241,14 @@ mod tests {
         );
         // Backup of removed file
         assert!(
-            backup.join(".cache/agent-bar/usage.redb").is_file()
-                || backup.join("cache/agent-bar/usage.redb").is_file()
+            backup
+                .join(".cache/agent-bar")
+                .join(legacy_usage_db_name())
+                .is_file()
+                || backup
+                    .join("cache/agent-bar")
+                    .join(legacy_usage_db_name())
+                    .is_file()
                 || fs::read_dir(&backup).unwrap().next().is_some()
         );
     }

@@ -425,9 +425,9 @@ impl ProviderStatus {
 
     /// Retain last good connected data after a temporary refresh failure (CACHE-022).
     pub fn retain_as_stale(&self, error: ProviderError) -> Result<Self, SchemaError> {
-        let last = self.last_success_at.ok_or_else(|| {
-            SchemaError::new("cannot retain stale without lastSuccessAt")
-        })?;
+        let last = self
+            .last_success_at
+            .ok_or_else(|| SchemaError::new("cannot retain stale without lastSuccessAt"))?;
         if !matches!(self.state, ProviderState::Ready | ProviderState::Stale) {
             return Err(SchemaError::new(
                 "only ready/stale rows can be retained as stale",
