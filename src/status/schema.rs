@@ -1278,8 +1278,9 @@ mod tests {
 
     #[test]
     fn helper_version_must_equal_package_version() {
+        // Deliberately wrong helperVersion — must never equal CARGO_PKG_VERSION.
         let err = StatusEnvelope::try_new(
-            "10.0.0",
+            "0.0.0-not-package",
             ts(),
             StatusRequest {
                 provider: None,
