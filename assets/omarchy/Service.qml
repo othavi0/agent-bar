@@ -26,13 +26,15 @@ Item {
   property int pollIntervalMs: 60000
   property int collectionDelayMs: 0
 
-  // --- Public service surface (Task 9) ---
+  // --- Public service surface (Task 9 / Task 10) ---
   property var snapshot: null
   property bool refreshing: false
   property string selectedProviderId: ""
   property var popupOwner: null // { owner, providerId, view } or null
   property var settingsState: Core.settingsClosed()
   property var settingsDraft: null
+  // Applied product settings for bar chips (order / metric). Null → defaults.
+  property var appliedSettings: null
   property var maintenanceState: Core.maintenanceIdle()
   property var pendingForcedTargets: Core.emptyPending()
 
@@ -302,6 +304,7 @@ Item {
       var doc = JSON.parse(String(stdout || "").trim())
       settingsState = Core.settingsOpen(settingsState, doc, settingsState.generation)
       settingsDraft = settingsState.draft
+      appliedSettings = doc
     } catch (e) {
       // keep existing draft
     }
@@ -311,6 +314,8 @@ Item {
     settingsWriteBusy = false
     settingsState = Core.settingsFinishSave(settingsState, generation, ok, canonical)
     settingsDraft = settingsState ? settingsState.draft : null
+    if (ok && canonical)
+      appliedSettings = canonical
     tryMaintenanceDetach()
   }
 

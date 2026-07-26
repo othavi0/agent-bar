@@ -347,3 +347,194 @@ function maintenanceCanDetach(maint, statusBusy, settingsWriteBusy) {
 function canStartLane(laneBusy) {
   return !laneBusy
 }
+
+// ---------------------------------------------------------------------------
+// Bar chips (UX-001..012) — pure model helpers for BarWidget / ProviderChip
+// ---------------------------------------------------------------------------
+
+function defaultSettings() {
+  return {
+    schemaVersion: 1,
+    providers: [
+      { id: "claude", enabled: true },
+      { id: "codex", enabled: true },
+      { id: "amp", enabled: true },
+      { id: "grok", enabled: true }
+    ],
+    display: { metric: "remaining" },
+    refreshIntervalSeconds: 60,
+    notifications: { enabled: true }
+  }
+}
+
+function displayMetric(settings) {
+  if (settings && settings.display && settings.display.metric === "used")
+    return "used"
+  return "remaining"
+}
+
+function providerDisplayName(id) {
+  var key = String(id || "")
+  if (key === "claude")
+    return "Claude"
+  if (key === "codex")
+    return "Codex"
+  if (key === "amp")
+    return "Amp"
+  if (key === "grok")
+    return "Grok"
+  return key
+}
+
+function iconFileName(id) {
+  var key = String(id || "")
+  if (key === "claude")
+    return "claude.png"
+  if (key === "codex")
+    return "codex.png"
+  if (key === "amp")
+    return "amp.svg"
+  if (key === "grok")
+    return "grok.svg"
+  return ""
+}
+
+function placeholderProvider(id) {
+  var key = String(id || "")
+  return {
+    id: key,
+    name: providerDisplayName(key),
+    state: "loading",
+    source: null,
+    plan: null,
+    account: null,
+    windows: [],
+    lastSuccessAt: null,
+    error: null,
+    action: null
+  }
+}
+
+// Enabled providers in settings order, joined with snapshot data.
+// Without settings, uses snapshot order (helper already filters/orders).
+function visibleProviders(snapshot, settings) {
+  var byId = {}
+  if (snapshot && Array.isArray(snapshot.providers)) {
+    for (var i = 0; i < snapshot.providers.length; i++) {
+      var p = snapshot.providers[i]
+      if (p && p.id)
+        byId[String(p.id)] = p
+    }
+  }
+
+  var cfg = settings && Array.isArray(settings.providers) ? settings.providers : null
+  if (!cfg) {
+    var fromSnap = []
+    if (snapshot && Array.isArray(snapshot.providers)) {
+      for (var s = 0; s < snapshot.providers.length; s++)
+        fromSnap.push(snapshot.providers[s])
+    }
+    return fromSnap
+  }
+
+  var out = []
+  for (var j = 0; j < cfg.length; j++) {
+    var item = cfg[j]
+    if (!item || !item.enabled)
+      continue
+    var id = String(item.id || "")
+    if (!CLOSED_PROVIDERS[id])
+      continue
+    if (byId[id])
+      out.push(byId[id])
+    else
+      out.push(placeholderProvider(id))
+  }
+  return out
+}
+
+function primaryWindow(provider) {
+  if (!provider || !Array.isArray(provider.windows) || provider.windows.length === 0)
+    return null
+  return provider.windows[0]
+}
+
+// UX-002 / UX-032A: used|remaining percent, or em-dash when empty.
+function chipPercentText(provider, metric) {
+  var w = primaryWindow(provider)
+  if (!w)
+    return "\u2014"
+  var mode = metric === "used" ? "used" : "remaining"
+  var v = mode === "used" ? Number(w.usedPercent) : Number(w.remainingPercent)
+  if (!isFinite(v))
+    return "\u2014"
+  return Math.round(v) + "%"
+}
+
+// UX-012: text cue beyond color for stale/error/loading.
+function chipStateCue(provider) {
+  if (!provider)
+    return ""
+  var state = String(provider.state || "")
+  if (state === "stale")
+    return " stale"
+  if (state === "loading")
+    return "\u2026"
+  if (state === "cli_missing" || state === "unauthenticated" || state === "rate_limited"
+      || state === "network_error" || state === "provider_error")
+    return " !"
+  return ""
+}
+
+function chipDimmed(provider) {
+  if (!provider)
+    return true
+  var state = String(provider.state || "")
+  return state !== "ready"
+}
+
+// UX-011: provider, displayed percentage, state, reset summary.
+function chipTooltip(provider, metric) {
+  if (!provider)
+    return ""
+  var name = provider.name ? String(provider.name) : providerDisplayName(provider.id)
+  var pct = chipPercentText(provider, metric)
+  var state = provider.state ? String(provider.state) : "unknown"
+  var parts = [name, pct, state]
+  var w = primaryWindow(provider)
+  if (w && w.resetsAt) {
+    var label = w.label ? String(w.label) : String(w.id || "window")
+    parts.push("resets " + label + " " + String(w.resetsAt))
+  }
+  return parts.join(" \u00b7 ")
+}
+
+// Map mouse button to typed service intention (UX-004..009).
+// button: Qt.LeftButton(1) | RightButton(2) | MiddleButton(4) or string.
+function routeChipClick(button, owner, providerId, popupOwner) {
+  var b = button
+  var isLeft = b === 1 || b === "left" || b === "LeftButton"
+  var isRight = b === 2 || b === "right" || b === "RightButton"
+  var isMiddle = b === 4 || b === "middle" || b === "MiddleButton"
+
+  if (isMiddle)
+    return { action: "refreshAll", force: true }
+  if (isRight)
+    return { action: "openSettings", owner: owner }
+  if (isLeft) {
+    var pid = String(providerId || "")
+    if (popupOwner
+        && popupOwner.owner === owner
+        && String(popupOwner.providerId || "") === pid
+        && (!popupOwner.view || popupOwner.view === "usage")) {
+      return { action: "closePopup", owner: owner }
+    }
+    return {
+      action: "requestPopup",
+      owner: owner,
+      providerId: pid,
+      view: "usage"
+    }
+  }
+  return { action: "noop" }
+}
