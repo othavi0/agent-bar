@@ -27,10 +27,10 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
         None => {
             let mut out = String::new();
             out.push_str("Agent Bar — Omarchy Quattro plugin helper\n");
-            out.push_str("\n");
+            out.push('\n');
             out.push_str("The normal interface is the agent-bar.usage Quickshell plugin.\n");
             out.push_str("This private helper is for diagnostics, recovery, and tests.\n");
-            out.push_str("\n");
+            out.push('\n');
             out.push_str("Usage:\n");
             out.push_str("  agent-bar\n");
             out.push_str("  agent-bar status [format human|json] [provider <id>]\n");
@@ -44,7 +44,7 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
             out.push_str("  agent-bar doctor scan|clean\n");
             out.push_str("  agent-bar help [<command>]\n");
             out.push_str("  agent-bar version\n");
-            out.push_str("\n");
+            out.push('\n');
             out.push_str("Providers: claude, codex, amp, grok\n");
             out
         }
@@ -193,9 +193,7 @@ where
             let _ = stderr.flush();
             let mut line = String::new();
             match stdin.read_line(&mut line) {
-                Ok(0) => {
-                    return Err(CliFailure::validation("update confirmation aborted"));
-                }
+                Ok(0) => Err(CliFailure::validation("update confirmation aborted")),
                 Ok(_) => {
                     let trimmed = line.trim_end_matches(['\r', '\n']);
                     if trimmed == "update agent-bar" {

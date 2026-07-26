@@ -406,6 +406,7 @@ impl ProviderStatus {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn stale(
         id: ProviderId,
         name: impl Into<String>,

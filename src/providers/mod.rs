@@ -1,13 +1,24 @@
 pub mod amp;
 pub mod amp_cli;
 pub mod base;
+pub mod catalog;
 pub mod claude;
 pub mod codex;
 pub mod error;
 pub mod extras;
 pub mod grok;
 pub mod grok_cli;
+pub mod process;
 pub mod types;
+
+pub use catalog::{
+    descriptor, discover, login_process_argv, CatalogError, CollectionAvailability, Discovery,
+    ExecutablePath, ExecutionEnvironment, LoginAvailability, PathRoot, ProviderDescriptor,
+    RetryPolicy, AMP, CLAUDE, CODEX, GROK, PROVIDERS,
+};
+pub use process::{
+    run_process, ProcessError, ProcessOutput, ProcessRunner, ProcessSpec, TokioProcessRunner,
+};
 
 use std::time::Duration;
 
