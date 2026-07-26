@@ -1,150 +1,148 @@
-# agent-bar — Agent Instructions
+# Agent Bar Engineering Contract
 
-Monitor de quotas LLM (Claude, Codex, Amp, Grok) — Omarchy 4 first,
-Waybar como tier legado.
-`AGENTS.md` é shim de compat Codex. **O código em `src/` é a fonte da verdade.**
+> This branch specifies the v10 target. Until implementation completes, v9
+> code may still contradict this file. The canonical transition contract is
+> `docs/specs/v10/`.
 
-## 1. Hard Rules
+`AGENTS.md` is the Codex adapter. This file is the repository's canonical agent
+contract. Source and executable tests win over ordinary documentation; the
+approved v10 specification wins when replacing v9 behavior.
 
-Quebrar qualquer uma quebra build, desktop do usuário, ou contrato de produto.
+## Hard rules
 
-- **Rust/cargo only.** Toolchain via rustup. Sem Node, npm, bun, pnpm, yarn,
-  ts-node, Deno em runtime ou testes.
-- **Nunca converter `scripts/agent-bar-open-terminal` para Rust.** É helper
-  Bash que abre terminal externo; permanece como script.
-- **Não mutar desktop ao vivo como verificação.** Não rodar `agent-bar setup`/
-  `update`/`uninstall`/`remove` sem aprovação explícita. `assets install`
-  apenas em paths injetados (temp dirs, `--waybar-dir`, `XDG_*`).
-- **Não hand-edit `~/.config/waybar` ou `~/.config/agent-bar` em testes.** Use
-  temp dirs + flags de path + env `XDG_*`.
-- **stdout limpo.** Waybar parseia stdout como JSON; logs vão para stderr
-  (`logger` já faz isso). Só comandos terminal/TUI escrevem texto rico.
-- **Legacy permanece morto.** Nomes `qbar`, `agent-bar-omarchy`, providers
-  `antigravity` e `llm-usage`, dependência de theme-repo externo, e coupling
-  com tema Omarchy foram removidos em 4.0.0. Não reintroduzir como comando,
-  module ID, seletor CSS, settings key, symlink ou cache key. Menções em
-  `CHANGELOG.md` são históricas e podem ficar.
+- Rust/Cargo and QML only. No Node, npm, Bun, pnpm, Yarn, ts-node, or Deno.
+- Product artifact is only the Omarchy Quattro plugin `agent-bar.usage`.
+- The Rust helper is private at plugin path `bin/agent-bar`.
+- Do not create a global executable, standalone application, AUR package, or
+  cargo-binstall product.
+- Keep `scripts/agent-bar-open-terminal` as Bash. Rewrite it argv-safe; never
+  use `sh -c`, `bash -lc`, `eval`, or `cmd="$*"`.
+- No production `unwrap()` or `expect()`.
+- Status JSON stdout is exactly one schema-v2 object plus newline. Settings and
+  update commands use their separately documented JSON contracts. Logs use
+  stderr.
+- Provider operational failures are typed data, not process failures.
+- QML never parses raw provider output or human error messages.
+- Render external strings as plain text.
+- Settings reads never write. Explicit apply/migration uses lock and atomic
+  replacement.
+- Do not install provider CLIs or handle credentials.
+- Do not edit `/usr/share/omarchy`.
+- Do not mutate live Omarchy/Hyprland/config paths outside the final authorized
+  QA gate.
+- Preserve unrelated worktree changes.
+- Never bypass hooks, force-push, merge, tag, or publish without explicit
+  authorization.
 
-## 2. Verification Matrix
+## Product boundaries
 
-Use a verificação mais estreita; só amplie se contrato compartilhado se moveu.
+v10 includes:
 
-**Gotcha RTK:** o hook RTK reformata output do cargo — a string `test result:`
-pode não aparecer. Use apenas um filtro posicional por invocação de `cargo test`.
+- Claude, Codex, Amp, and Grok percentage quota windows.
+- One shared Quickshell service and monitor-local bar widgets.
+- Consolidated popup, Settings, login delegation, update, and uninstall.
+- Typed status JSON, cache, notifications, migration, backup, and rollback.
 
-| Área da mudança | Comando |
-| --- | --- |
-| Docs / instruções de agente | `git diff --check` |
-| CLI parsing / help | `cargo test cli` |
-| Cache | `cargo test cache` |
-| Settings | `cargo test settings` |
-| Config / paths | `cargo test config` |
-| Um provider | `cargo test providers::<provider>` (ex: `providers::claude`) |
-| `BaseProvider` orchestration | `cargo test providers::base` |
-| Formatters / tooltips / segments | `cargo test formatters` |
-| Golden / Waybar export contract | `cargo test --test golden` |
-| Waybar contract (módulos/CSS) | `cargo test waybar_contract` |
-| Waybar integration | `cargo test waybar_integration` |
-| Update flow | `cargo test update` |
-| Theme / colors / identity | `cargo test theme && cargo test app_identity` |
-| CLI locators (Amp CLI) | `cargo test providers::amp_cli` |
-| CLI locators (Grok CLI) | `cargo test providers::grok_cli` |
-| Contratos Rust | `cargo clippy --all-targets -- -D warnings` |
-| Mudanças amplas antes de handoff | `cargo test && cargo clippy --all-targets -- -D warnings` |
+v10 removes:
 
-## 3. Project-Specific Rules
+- TUI and terminal dashboard.
+- Waybar and Pango output.
+- Session history and charts.
+- Local or provider-reported monetary data.
+- Schema-v1 status compatibility.
+- Permanent daemon and global installation.
 
-- **Use as constantes de identidade** (`APP_NAME`, `WAYBAR_*`,
-  `TERMINAL_HELPER_NAME`, `BACKUP_SUFFIX` em `src/app_identity.rs`) em vez de
-  hardcoded strings.
-- **Provider error strings são contrato.** Testes assertam strings verbatim;
-  alterar uma é mudança de contrato. Mantenha úteis e estáveis.
-- **Nunca `unwrap()`/`expect()` em código de produção.** Estreite com guard
-  explícito que propaga erro (`?` ou `anyhow::bail!`). `unwrap` esconde panics
-  que precisam virar erros explícitos.
-- **`ClaudeProvider` implementa `Provider` direto, não estende `BaseProvider`.**
-  Codex/Amp estendem. Não force Claude no template — ele gerencia
-  cache inline porque o fluxo não cabe.
-- **XML-escape acontece SÓ em `render_pango.rs`.** Builders nunca escapam;
-  segments `raw` bulam color-wrap E escape. Romper isso vira XSS no tooltip
-  ou texto literal quebrado.
-- **Nunca round-trip live Waybar config via `serde_json`.**
-  Os `.jsonc` têm comentários e ordem que precisam sobreviver.
-  `waybar_integration.rs` patcha in-place.
-- **Módulo `src/waybar/` agrupa o tier legado** (`src/waybar/contract.rs`,
-  `src/waybar/integration.rs`), com re-exports em `lib.rs` para
-  `crate::waybar_contract`/`crate::waybar_integration`. Os filtros
-  `cargo test waybar_contract`/`cargo test waybar_integration` da matriz
-  (§2) seguem em vigor — se um teste for movido pro módulo interno,
-  confira que o filtro ainda casa antes de commitar.
+Do not retain removed behavior behind features, aliases, stubs, or dormant
+dependencies.
 
-## 4. Testing Patterns
+## Quattro contract
 
-- `#[tokio::test]` para async; `#[test]` para sync. Sem credenciais reais,
-  sem CLIs vivas, sem rede, sem Waybar real. Mock via seams (traits/fn
-  pointers); snapshots via `insta`.
-- **Set `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` ANTES de qualquer import que
-  leia `src/config.rs`.** Config lê env no carregamento; setar depois não
-  tem efeito.
-- Restaure env e global state em `drop`/`after_each`.
-- Snapshot terminal é sanitized (ANSI strip); Waybar é byte-for-byte (Pango
-  importa). Atualize snapshots só quando o display contract mudar de propósito.
+- Plugin root is literal
+  `$HOME/.config/omarchy/plugins/agent-bar.usage`.
+- Agent Bar settings/cache/state follow XDG.
+- Manifest schema remains 1 with kinds `service` and `bar-widget`.
+- `Service.qml` is the sole polling/process owner.
+- `BarWidget.qml` resolves the service through
+  `bar.shell.serviceFor(moduleName)`.
+- Fresh setup uses `omarchy plugin enable agent-bar.usage`.
+- Existing setup/update uses `omarchy plugin rescan`.
+- Never run an unconditional `omarchy bar plugin add`.
+- Update never edits `shell.json`.
 
-## 5. Workflow de Edição
+## Provider rules
 
-1. `git status` — não toque em mudanças não-relacionadas.
-2. Leia o mínimo pra entender o contrato que muda.
-3. Edits focados, respeitando boundaries de módulo.
-4. Verificação focada (tabela §2); amplie só se contrato se moveu.
-5. Reporte o que mudou, o que verificou, e risco não-verificado.
+- One catalog owns ID, name, icon, order, official URL, TTL, and timeout.
+- Collection availability and login availability are distinct.
+- Providers normalize into typed domain results; `status::schema` alone
+  serializes JSON.
+- Single-provider and all-provider paths share timeout, retry, cache, and
+  normalization.
+- Raw output, credentials, tokens, account identifiers, and headers never enter
+  logs, cache, screenshots, or UI.
+- A connected provider without a percentage window is valid and renders `—`.
+- Do not reintroduce spend, balance, credits, currency, or arbitrary extras.
 
-## 6. Conventions
+## Verification
 
-- Rust strict + `cargo clippy -D warnings`. `cargo fmt` aplica formatting
-  (4 espaços, Rust style guide). Unused imports = erro de clippy.
-- Identificadores e nomes de arquivo em inglês (snake_case). Comunicação de
-  repo e commits em português. Conventional Commits, subject ≤ 50 chars.
+Focused checks are allowed while developing. Every checkpoint runs:
 
-## 7. Adicionar provider
+```bash
+cargo fmt --check
+cargo test
+cargo clippy --all-targets -- -D warnings
+git diff --check
+```
 
-Veja [`docs/new-provider.md`](docs/new-provider.md) para o checklist completo.
-**Estenda `BaseProvider`** salvo se não couber (como Claude). Mensagem padrão
-de não-logado: `` Not logged in. Open `agent-bar menu` and choose Provider login. ``
+QML/plugin changes also run:
 
-## 8. Release
+```bash
+find assets/omarchy -type f -name '*.qml' -exec \
+  qmllint -I /usr/share/omarchy/shell {} +
+omarchy plugin validate assets/omarchy
+QT_QPA_PLATFORM=offscreen qmltestrunner \
+  -input tests/qml \
+  -import /usr/share/omarchy/shell \
+  -import assets/omarchy \
+  -o -,txt
+```
 
-Workflow `.github/workflows/publish.yml` dispara em `release: published` e
-builda binário musl via `cargo-zigbuild`. Versão vem de `Cargo.toml`
-(`CARGO_PKG_VERSION`). Sem `NPM_TOKEN` — distribuição via `install.sh`,
-AUR e `cargo binstall`.
+Shell changes run ShellCheck. Bundle changes run the complete archive,
+inventory, mode, architecture, version, traversal, and rollback matrix in the
+v10 specification.
 
-Para cortar release: bumpar `version` em `Cargo.toml`, atualizar
-`CHANGELOG.md`, commitar, criar GitHub Release com tag `v<version>`.
-**Runbook completo (passo a passo, incl. preenchimento do sha256 e push pro AUR):
-[`docs/releasing.md`](docs/releasing.md).**
+Tests use fake providers, fake clock/process/HTTP/filesystem seams, temporary
+plugin roots, and isolated XDG directories. No live network or credentials.
 
-## 9. Pointers
+## Workflow
 
-- `README.md`, `CONTRIBUTING.md` — quick start e contributor workflow.
-- `docs/commands.md`, `docs/runtime.md`, `docs/integration.md`,
-  `docs/waybar-contract.md`, `docs/new-provider.md`, `docs/troubleshooting.md`.
-- `docs/superpowers/plans/`, `docs/superpowers/specs/` — histórico de refactors
-  fase 1-3 e publicação automática (contexto, não regras vigentes).
-- `CHANGELOG.md` — histórico; só editar ao cortar release.
+1. Check `git status`.
+2. Read this file and the relevant v10 spec.
+3. Write a failing test.
+4. Run it and confirm the intended failure.
+5. Implement the smallest contract-complete change.
+6. Run focused verification.
+7. Review for secrets, shell construction, legacy leakage, and unrelated diff.
+8. Commit with an English Conventional Commit subject of at most 50
+   characters.
+9. Stop at the mandatory Grok/Codex checkpoint.
 
-## Agent skills
+The implementation branch is `feat/quickshell-native-v10`, created from the
+exact `spec/quickshell-native-v10` commit. Grok may push and open the final
+ready PR. Grok may not merge.
 
-### Issue tracker
+## Documentation
 
-Issues vivem no GitHub Issues de `othavi0/agent-bar` (via `gh` CLI). PRs
-externos não são superfície de triage. Ver `docs/agents/issue-tracker.md`.
+Active docs and public copy are English. Historical changelog entries, ADR
+bodies 0001–0003, and `docs/superpowers/**` remain historical and are excluded
+from active legacy/language scans.
 
-### Triage labels
+## Pointers
 
-Vocabulário canônico, sem overrides: `needs-triage`, `needs-info`,
-`ready-for-agent`, `ready-for-human`, `wontfix`. Ver `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `CONTEXT.md` + `docs/adr/` na raiz (criados lazy). Ver
-`docs/agents/domain.md`.
+- `docs/specs/v10/README.md` — canonical v10 reading order.
+- `docs/specs/v10/09-implementation-plan.md` — executable plan.
+- `docs/specs/v10/10-grok-execution-runbook.md` — permissions and checkpoints.
+- `README.md` — product overview.
+- `docs/architecture.md` — runtime data flow.
+- `docs/commands.md` — private helper contract.
+- `docs/runtime.md` — paths, settings, cache, and privacy.
+- `docs/new-provider.md` — provider adapter checklist.

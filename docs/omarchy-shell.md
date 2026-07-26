@@ -1,85 +1,126 @@
-# Omarchy-shell plugin (Omarchy 4+)
+# Omarchy Quattro Plugin Contract
 
-Omarchy 4 replaced Waybar with `omarchy-shell` (Quickshell). agent-bar
-integrates as a third-party bar-widget plugin.
+> Target v10 integration for the locally verified Quattro plugin registry; not
+> yet implemented on the specification branch.
 
-## What setup installs
+## Installed path
 
-`agent-bar setup` detects omarchy-shell (`omarchy` CLI on PATH +
-`/usr/share/omarchy/shell/`) and writes the drop-in:
+Quattro discovers user plugins at the literal path:
 
-```
-~/.config/omarchy/plugins/agent-bar.usage/
-  manifest.json          # id agent-bar.usage, version = binary version
-  Widget.qml             # chips + popup (consumes `agent-bar --format json`)
-  icons/                 # provider icons
-  scripts/agent-bar-open-terminal
+```text
+$HOME/.config/omarchy/plugins/agent-bar.usage/
 ```
 
-It then runs `omarchy plugin rescan`, `omarchy plugin enable agent-bar.usage`
-and `omarchy bar plugin add agent-bar.usage` (best-effort: failures become
-warnings and the commands can be run manually).
+It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
 
-If Waybar is also installed, the classic Waybar flow runs alongside.
+## Manifest
 
-## Widget
+```json
+{
+  "schemaVersion": 1,
+  "id": "agent-bar.usage",
+  "name": "Agent Bar",
+  "version": "10.0.0",
+  "author": "othavi0",
+  "license": "MIT",
+  "description": "LLM quota monitor for Claude, Codex, Amp, and Grok.",
+  "kinds": ["service", "bar-widget"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Bar",
+    "description": "Shows normalized provider quota and reset information.",
+    "category": "AI",
+    "aliases": ["agent-bar"],
+    "allowMultiple": false,
+    "defaults": {},
+    "schema": []
+  }
+}
+```
 
-- One chip per **enabled** provider (icon + % of the primary limit), shell
-  theme colors, severity mirroring the TUI (≥60 ok / 30-59 / 10-29 / <10).
-  Enabled set and order come from `waybar.providers` /
-  `waybar.provider_order` in `~/.config/agent-bar/settings.json` (same
-  keys the TUI Config editor uses). The quota poll
-  (`agent-bar --format json`) still returns the full envelope; the QML
-  filters chips and usage sections client-side.
-- **Left click:** native usage popup (primary/secondary windows, per-model
-  breakdown, reset times, plan/account). Footer has a link
-  **Abrir menu (TUI)** that launches `agent-bar menu` via the terminal
-  helper.
-- **Right click:** same popup in **settings mode** (`settingsMode`) —
-  providers on/off and order, display remaining/used, desktop notify
-  toggle, refresh interval. Not the full TUI.
-- **Middle click:** forced refresh (`--refresh`).
-- `refreshIntervalSec` (default 60, min 30, max 3600) lives on the plugin
-  entry in Omarchy `shell.json`, not in agent-bar `settings.json`.
+Do not add `activation`, `keepLoaded`, or inline Agent Bar settings.
 
-### Settings save (dual-write)
+## Service injection
 
-One Save button, two writers:
+`Service.qml` declares:
 
-| Field | Written by | Where |
-| --- | --- | --- |
-| `providers`, `providerOrder`, `displayMode`, `notify.enabled` | `agent-bar config apply` | `~/.config/agent-bar/settings.json` |
-| `refreshIntervalSec` | `bar.shell.updateEntryInline` | plugin entry in Omarchy `shell.json` |
+```qml
+property string omarchyPath: ""
+property var shell: null
+property var manifest: null
+property var barWidgetRegistry: null
+property var pluginRegistry: null
+```
 
-If `config apply` fails, the interval is **not** written. If apply succeeds
-but inline fails, settings are saved and the UI reports that the interval
-was not persisted.
+The absolute discovered plugin root is `manifest.__sourceDir`.
 
-### `config apply` does not reload Waybar
+## Widget injection
 
-`agent-bar config apply` only patches and saves the settings subset. It does
-**not** call `apply_waybar_integration` or reload Waybar. On a mixed
-desktop (Waybar + Omarchy), enabled providers in `settings.json` stay
-aligned for both; Waybar module layout only updates on the next TUI Config
-save or `agent-bar setup`.
+`BarWidget.qml` receives `bar`, `moduleName`, and `settings`. It resolves the
+singleton:
 
-## Data
+```qml
+readonly property var agentService:
+    bar && bar.shell ? bar.shell.serviceFor(moduleName) : null
+```
 
-The QML runs `agent-bar --format json` (contract in
-[`json-output.md`](json-output.md)). Editable settings for the popup come
-from `agent-bar config show` / stdout of `config apply` (contract in
-[`commands.md`](commands.md)). The QML files are embedded in the binary —
-version-locked with the schema. After `agent-bar update`, re-run
-`agent-bar setup` to refresh the drop-in (the update prints this hint).
+`Service.qml` owns one `IpcHandler` target `agent-bar.usage`. Its closed
+surface is `health(expectedVersion)` for maintenance and `refresh(providerId)`
+for successful interactive login. The target architecture fixes the exact
+return values and validation.
 
-## Removal
+Service startup verifies the private helper with a dedicated two-second
+`version` process before provider polling. Health therefore depends on
+manifest/helper equality, not provider network latency.
 
-`agent-bar uninstall`/`remove` unregisters the widget
-(`omarchy bar plugin remove` + `omarchy plugin remove`, best-effort) and
-deletes the plugin directory.
+Each chip registers with `bar.registerClickTarget()`, implements
+`triggerPress(button)`, and unregisters on destruction.
 
-## Testing
+## Popup
 
-The flow is covered by `cargo test omarchy_integration` and
-`cargo test setup` with temp dirs (`--omarchy-plugins-dir`). The QML has no
-automated harness: visual changes require manual verification on a desktop.
+Use `KeyboardPanel` for reliable layer-shell keyboard focus. The shared service
+tracks the popup owner across monitor-local bar instances because
+`activePopout` is local to each bar.
+
+`contentWidth` follows the viewport and `contentHeight` follows the content.
+The fitted panel clips a vertical native `Flickable`, uses `StopAtBounds`, and
+shows an as-needed scrollbar. Do not add custom wheel handling.
+
+## Commands
+
+Fresh entry:
+
+```bash
+omarchy plugin enable agent-bar.usage
+```
+
+Reload existing code:
+
+```bash
+omarchy plugin rescan
+```
+
+Do not run `omarchy bar plugin add agent-bar.usage` over an existing entry.
+
+## Interactive login
+
+QML invokes the bundled Bash launcher with an argv array. The launcher resolves
+the private helper from `manifest.__sourceDir`, delegates the configured
+terminal choice to `xdg-terminal-exec`, and runs the helper by bundle path. It
+does not assume a global executable, construct a shell string, or maintain its
+own terminal-emulator fallback list.
+
+## Validation
+
+```bash
+omarchy plugin validate /path/to/agent-bar.usage
+find /path/to/agent-bar.usage -type f -name '*.qml' -exec \
+  qmllint -I /usr/share/omarchy/shell {} +
+```
+
+Omarchy validation does not verify the Rust target, executable modes, bundle
+hashes, version equality, or full inventory. Agent Bar's bundle validator owns
+those checks.

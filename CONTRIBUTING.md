@@ -1,120 +1,94 @@
 # Contributing
 
-Quick start for developers.
+> v10 implementation follows the canonical plan in
+> [docs/specs/v10/09-implementation-plan.md](docs/specs/v10/09-implementation-plan.md).
 
 ## Prerequisites
 
-| Tool | Minimum |
-|------|---------|
-| [Rust](https://rustup.rs) | 1.88 (MSRV — `tachyonfx` via `anpa` requires it) |
-| Git | recent |
+- Current stable Rust toolchain through rustup.
+- Git.
+- Omarchy Quattro and Quickshell development files for QML validation.
+- Qt Quick Test tools (`qmltestrunner`, `qmllint`).
+- ShellCheck for the retained Bash helper.
 
-Rust + Cargo is the only supported toolchain.
+Rust/Cargo is the application toolchain. Do not add Node, npm, Bun, pnpm, Yarn,
+Deno, or JavaScript build tooling.
 
-## Dev install (build from source → live Waybar)
+## Safe development
 
-Wire your local checkout straight into Waybar so every build shows up on the
-next poll:
+Do not install a work-in-progress build into the live desktop. Use:
 
-```bash
-git clone git@github.com:othavi0/agent-bar.git
-cd agent-bar
-cargo build
-./target/debug/agent-bar setup
-```
+- isolated Git worktrees;
+- temporary plugin roots;
+- `setup plugins-dir <path>`;
+- isolated `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_STATE_HOME`;
+- fake provider executables and fixture data;
+- offscreen QML tests.
 
-`setup` symlinks `~/.local/bin/agent-bar` to the debug binary inside this
-checkout. Rebuild with `cargo build`; the next Waybar tick picks it up.
+The live `$HOME/.config/omarchy/plugins` and `shell.json` are reserved for the
+explicit final QA gate.
 
-If you already have a non-dev install, wipe it first to avoid the symlink
-fighting your changes:
-
-```bash
-unlink ~/.local/bin/agent-bar 2>/dev/null
-rm -rf ~/.agent-bar ~/.config/agent-bar ~/.cache/agent-bar
-rm -rf ~/.config/waybar/agent-bar
-```
-
-`agent-bar update` refuses to run from a dev checkout. Use `git pull` instead.
-
-## Useful commands
+## Standard verification
 
 ```bash
-cargo build                                      # Debug build
-cargo build --release                            # Release build
-cargo run -- status                              # Run from source
-cargo test                                       # Full test suite
-cargo clippy --all-targets -- -D warnings        # Lint (must pass clean)
-cargo fmt                                        # Format
+cargo fmt --check
+cargo test
+cargo clippy --all-targets -- -D warnings
 ```
 
-## Conventional Commits (in Portuguese)
-
-Commit messages use [Conventional Commits](https://www.conventionalcommits.org/)
-written in **Portuguese**, subject ≤ 50 chars:
-
-| Prefix      | Use for                                |
-|-------------|----------------------------------------|
-| `feat:`     | New functionality                      |
-| `fix:`      | Bug fix                                |
-| `refactor:` | Refactor without behavior change       |
-| `test:`     | Tests added or changed                 |
-| `docs:`     | Documentation                          |
-| `chore:`    | Maintenance (deps, CI, configs)        |
-| `perf:`     | Performance                            |
-| `style:`    | Formatting only                        |
-| `build:`    | Build system or dependencies           |
-| `ci:`       | CI configuration                       |
-
-Examples:
-
-```
-feat: adiciona provider para Gemini
-fix: corrige parsing do reset time no Amp
-test: cobre cenários de cache expirado
-```
-
-## Code style
-
-- Rust stable. No `unsafe` without explicit justification. No `unwrap()` in
-  production paths — use explicit error handling that produces user-facing
-  messages.
-- Identifiers and file names in English, `snake_case`. Repo communication and
-  commits in Portuguese.
-- `cargo fmt` for formatting. `cargo clippy --all-targets -- -D warnings` must
-  pass clean.
-
-## Tests
-
-Tests live in `tests/`. No real credentials, no live CLIs, no network, no real
-Waybar — mock filesystem, fetch, spawn, and app-server data.
+QML/plugin verification:
 
 ```bash
-cargo test                        # All
-cargo test cache                  # Filter by name
+find assets/omarchy -type f -name '*.qml' -exec \
+  qmllint -I /usr/share/omarchy/shell {} +
+
+omarchy plugin validate assets/omarchy
+
+QT_QPA_PLATFORM=offscreen qmltestrunner \
+  -input tests/qml \
+  -import /usr/share/omarchy/shell \
+  -import assets/omarchy \
+  -o -,txt
 ```
 
-When using `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` in a test, set them **before**
-any code that reads config paths, since config resolves paths at initialization.
+Shell helper:
 
-Restore env and global state after each test.
+```bash
+shellcheck scripts/agent-bar-open-terminal
+```
 
-## Releasing
+## Test rules
 
-Releases are cut by bumping `version` in `Cargo.toml`, updating `CHANGELOG.md`,
-committing, and creating a GitHub Release with tag `v<version>`. The
-`publish.yml` workflow triggers on `release: published`.
+- Write the failing test before behavior.
+- Never use live provider credentials or provider network in tests.
+- Inject clock, filesystem, process runner, HTTP, and XDG roots.
+- Test single-provider and all-provider paths through the same policy.
+- Treat QML behavior, accessibility, scrolling, and screenshots as release
+  gates.
+- Do not update snapshots merely to silence an unexpected change.
 
-## Adding a provider
+## Provider changes
 
-See [`docs/new-provider.md`](docs/new-provider.md) for the full checklist.
-Short version: implement the `Provider` trait from `src/providers/types.rs`,
-register it in `src/providers/mod.rs`, add tests under `tests/`, drop an icon
-in `icons/`.
+Read [docs/new-provider.md](docs/new-provider.md). Provider-specific behavior
+stays behind the adapter. QML receives schema-v2 normalized data only.
 
-## Links
+## Commits and checkpoints
 
-- [README](README.md)
-- [Docs index](docs/README.md)
-- [Waybar contract](docs/waybar-contract.md)
-- [Troubleshooting](docs/troubleshooting.md)
+- Use English Conventional Commit subjects of at most 50 characters.
+- Keep one reviewable behavior per commit.
+- Do not bypass hooks or signatures.
+- Stop at the mandatory checkpoints in the implementation plan.
+- Record exact commands, results, screenshots, and deviations.
+
+## Documentation
+
+Active documentation is English and must match executable contracts.
+Changelog release sections 9.0.0 and older, ADR bodies 0001–0003, and
+`docs/superpowers/**` remain historical. Unreleased, the ADR index, and ADR
+0004 are active.
+
+## Release
+
+Implementation may prepare a release candidate and open a ready PR. Merge,
+tag, GitHub Release publication, and distribution require separate explicit
+authorization. See [docs/releasing.md](docs/releasing.md).

@@ -1,58 +1,76 @@
 # Product
 
-## Register
-
-product
+> **Target product contract for v10.** v9 remains the current release until the
+> v10 acceptance matrix passes.
 
 ## Users
 
-Usuários de Waybar em Linux (Hyprland/Omarchy e afins) que trabalham com CLIs de
-agentes LLM (Claude Code, Codex, Amp) o dia inteiro. Vivem no terminal, leem a
-barra de relance dezenas de vezes por dia e abrem o menu TUI quando precisam de
-mais contexto: "quanto me resta, quando reseta, quanto gastei". A janela do menu
-é um terminal flutuante de tamanho variável — o layout precisa ser responsivo a
-larguras de ~80 a 200+ colunas.
+Omarchy Quattro users who work with Claude, Codex, Amp, or Grok and need a
+reliable glanceable answer to:
 
-## Product Purpose
+- How much percentage quota remains?
+- When does the relevant window reset?
+- Is the provider connected and fresh?
+- What action is required when data is unavailable?
 
-Monitor de quotas LLM para Waybar. O módulo da barra responde "posso usar
-agora?" em um piscar; o menu TUI (`agent-bar menu`) é o dashboard completo:
-quota por janela (sessão/semana/por-modelo), custo, histórico de uso, estado de
-login por provider e configuração do módulo Waybar. Sucesso = o usuário confia
-nos números (dado real, nunca placeholder), entende severidade sem ler texto, e
-nunca vê a UI congelar.
+## Product purpose
 
-## Brand Personality
+Agent Bar is a Quickshell plugin, not a general terminal application. The bar
+provides the glanceable state. The consolidated popup provides quota details,
+provider actions, Settings, update, and uninstall without requiring the user to
+learn a CLI.
 
-Vibrante, hacker, expressivo. Densidade de informação estilo btop com
-personalidade: cor semântica viva, gráficos braille densos, números hero com
-peso visual. A energia vem dos dados reais se movendo — não de decoração.
+Success means:
 
-## Anti-references
+- every visible value comes from normalized provider data;
+- all monitors share one state and polling source;
+- stale and partial failures remain understandable;
+- Settings and maintenance are recoverable and transactional;
+- pointer, keyboard, focus, scrolling, themes, and absence of Agent
+  Bar-authored motion work as native Quattro behavior;
+- the plugin never leaks credentials or raw provider output.
 
-- A TUI atual (pré-redesign): 60–80% da tela vazia, barras binárias sem
-  gradação, sparkline placeholder hardcoded, status de login contraditório.
-- Dashboards SaaS genéricos: hero-metric + cards idênticos + neutralidade cinza.
-- TUIs "form-like" (dialog/whiptail): telas que parecem instalador dos anos 90.
+## Product personality
 
-## Design Principles
+Quiet, compact, and native to Omarchy. Provider identity comes from official
+icons. Severity is visible but not theatrical. The UI prefers clear labels
+over decorative or ambiguous controls.
 
-1. **Dado real ou nada.** Nenhum elemento visual sem dado por trás; estado
-   vazio/carregando é desenhado de propósito, nunca placeholder fingindo dado.
-2. **Severidade pela cor, identidade pelo provider.** Verde→âmbar→vermelho
-   comunica urgência; laranja/verde/magenta identificam Claude/Codex/Amp.
-   Nunca cor arbitrária.
-3. **Denso por padrão, responsivo por contrato.** Cada célula da janela
-   trabalha; mais largura = mais resolução de dado (não bordas esticadas).
-4. **A barra ensina, o menu aprofunda.** O menu nunca contradiz a barra
-   (mesma fonte de dados, mesma severidade, mesmos números).
-5. **Feedback em todo IO.** Fetch, login e save sempre têm estado visível
-   (spinner/skeleton) — a TUI nunca congela sem explicação.
+## Design principles
 
-## Accessibility & Inclusion
+1. **Real data or an explicit unavailable state.**
+2. **One source of truth per concept.**
+3. **Typed states instead of human-message parsing.**
+4. **Last good data remains visible when it is honestly stale.**
+5. **No color-only meaning.**
+6. **No custom theme system over Quattro.**
+7. **Destructive maintenance is explicit and recoverable.**
+8. **No credentials, monetary data, or local history.**
 
-- Contraste ≥4.5:1 dos textos sobre o fundo do terminal (One Dark evoluído).
-- Severidade nunca só por cor: acompanha símbolo/percentual textual.
-- `NO_COLOR` respeitado (contrato existente do render_ansi).
-- Terminal do usuário controla a fonte; nada depende de nerd-font além dos
-  glifos já usados pelo contrato Waybar.
+## Scope
+
+Included:
+
+- Claude, Codex, Amp, and Grok.
+- Provider percentage windows and reset times.
+- Plan and connection state.
+- Typed missing/auth/network/rate/provider states.
+- Provider login delegation through the official CLI.
+- Provider enablement/order, used/remaining, interval, and notifications.
+- Plugin update, uninstall, migration, backup, and rollback.
+
+Removed:
+
+- TUI.
+- Waybar.
+- Session history.
+- Charts.
+- Local costs and BRL conversion.
+- Provider spend, balance, and credits.
+- Standalone/AUR/cargo-binstall distribution.
+- Permanent daemon.
+
+## Canonical specification
+
+[docs/specs/v10/README.md](docs/specs/v10/README.md) contains the approved
+requirements and implementation plan.

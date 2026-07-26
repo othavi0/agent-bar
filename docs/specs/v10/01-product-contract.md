@@ -1,0 +1,123 @@
+# Product Contract
+
+## Purpose
+
+Agent Bar shows normalized quota and reset information for Claude, Codex, Amp,
+and Grok in Omarchy Quattro. It provides one compact bar chip per enabled
+provider and one consolidated Quickshell popup for details, settings,
+connection actions, update, and uninstall.
+
+## Goals
+
+- `PROD-001`: Make `agent-bar.usage` the only graphical Agent Bar surface.
+- `PROD-002`: Use Omarchy Quattro and Quickshell native patterns.
+- `PROD-003`: Keep provider-specific logic in a testable private Rust helper.
+- `PROD-004`: Share provider state and polling across all monitors.
+- `PROD-005`: Preserve valid v9 user settings and bar placement.
+- `PROD-006`: Remove TUI, Waybar, history, local cost, BRL conversion, and
+  chart complexity rather than hiding them.
+- `PROD-007`: Give normal users complete configuration, update, and uninstall
+  flows in the plugin UI.
+- `PROD-008`: Expose typed, safe, partial provider failures without parsing
+  human error strings in QML.
+- `PROD-009`: Treat keyboard navigation, scrolling, focus, themes, and absence
+  of Agent Bar-authored motion as release gates.
+- `PROD-010`: Ship the QML, icons, scripts, and matching Rust helper as one
+  versioned plugin bundle.
+
+## Non-goals
+
+- `PROD-011`: No TUI or terminal dashboard.
+- `PROD-012`: No Waybar formatter, module, CSS, setup, or compatibility mode.
+- `PROD-013`: No detailed session history or local usage scan.
+- `PROD-014`: No local token-cost engine, currency conversion, or charts.
+- `PROD-015`: No permanent Rust daemon.
+- `PROD-016`: No credential form, credential proxy, or automatic provider CLI
+  installation.
+- `PROD-017`: No schema-v1 compatibility decoder or legacy feature flag.
+- `PROD-018`: No standalone application, AUR package, cargo-binstall product,
+  or global `agent-bar` executable.
+- `PROD-019`: No custom theme editor or v10 internationalization layer.
+- `PROD-019A`: No monetary values are displayed or serialized, including
+  provider-reported spend, dollar balance, and credits.
+
+## Supported providers and defaults
+
+Fresh installations use:
+
+```text
+Provider order: Claude, Codex, Amp, Grok
+Enabled providers: all
+Display metric: remaining
+Refresh interval: 60 seconds
+Notifications: enabled
+```
+
+- `PROD-020`: The provider rail and bar follow the settings order.
+- `PROD-021`: Enabled providers remain visible when their CLI is missing.
+- `PROD-022`: Missing-CLI providers use a dimmed icon and an installation
+  action; Agent Bar never installs the provider CLI.
+- `PROD-023`: Disabled providers disappear from the bar and provider rail but
+  remain available in Settings.
+- `PROD-024`: Migration preserves valid user choices instead of applying fresh
+  defaults.
+
+## Primary user journeys
+
+### Read quota
+
+1. The bar shows one compact chip per enabled provider.
+2. Left-clicking a chip opens that provider in the consolidated popup.
+3. The popup shows plan, connection state, usage windows, reset times, update
+   age, and typed error/action state.
+4. Clicking the same chip closes the popup; clicking another chip switches
+   provider without closing it.
+
+### Refresh
+
+1. The service polls automatically using provider cache policy.
+2. The provider-header refresh action bypasses cache for that provider once.
+3. Middle-clicking any bar chip bypasses cache for all enabled providers once.
+4. Concurrent forced requests are coalesced without being discarded.
+
+### Connect
+
+1. A detected but unauthenticated provider shows `Connect` when login
+   discovery succeeds; otherwise it shows `View installation`.
+2. The action opens the configured terminal through the bundled Bash helper.
+3. The private Rust helper delegates to the provider's official login command.
+4. Success preserves the provider command's meaningful status and forces a
+   provider refresh.
+5. Agent Bar never receives credentials.
+
+### Configure
+
+1. Right-clicking a chip opens Settings.
+2. The user can enable and order providers, choose used/remaining, set the
+   interval, and toggle notifications.
+3. Edits remain a draft until `Save changes`.
+4. `Restore defaults` resets only the draft; `Cancel` discards it.
+
+### Maintain
+
+1. Settings shows installed plugin version and `Check for updates`.
+2. An available release requires explicit confirmation before download.
+3. Update validates and atomically replaces one complete plugin bundle.
+4. `Uninstall agent-bar` requires confirmation.
+5. Settings are preserved by default; deleting settings requires an additional
+   explicit selection.
+
+## Public state principles
+
+- `PROD-025`: The complete last good result remains visible as stale after a
+  temporary failure, including a valid ready result with zero windows.
+- `PROD-026`: Missing CLI, unauthenticated, rate-limited, network, and provider
+  failures are distinct states.
+- `PROD-027`: State is never communicated by color alone.
+- `PROD-028`: Raw provider output, HTML, secrets, and credentials never become
+  UI copy.
+- `PROD-029`: Partial provider failure does not hide successful providers.
+- `PROD-030`: The plugin must never display an empty or silently malformed
+  status result.
+- `PROD-031`: A connected provider with no percentage window shows `—` in its
+  chip and `Percentage usage is not available for this account` in its popup.

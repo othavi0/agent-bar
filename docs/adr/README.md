@@ -1,15 +1,13 @@
 # Architecture Decision Records
 
-Decisões difíceis de reverter e surpreendentes sem contexto. Formato curto
-(ver skill domain-modeling). Numeração sequencial.
+ADRs preserve durable decisions and their historical context.
 
-| ADR | Título |
-| --- | --- |
-| [0001](0001-omarchy-right-click-settings.md) | Right-click Omarchy = settings nativo |
-| [0002](0002-config-cli-dual-write.md) | settings.json via CLI; interval no shell |
-| [0003](0003-cli-help-hide-internals.md) | Help enxuto; internos parseáveis |
+| ADR | Title | Status |
+| --- | --- | --- |
+| [0001](0001-omarchy-right-click-settings.md) | Native Settings on Omarchy right click | Superseded by 0004 |
+| [0002](0002-config-cli-dual-write.md) | Settings CLI with shell interval | Superseded by 0004 |
+| [0003](0003-cli-help-hide-internals.md) | Small help with parseable internals | Superseded by 0004 |
+| [0004](0004-quickshell-only-v10.md) | Quickshell-only v10 plugin | Accepted |
 
-Spec e plano detalhados do trabalho 8.5.0:
-
-- `docs/superpowers/specs/2026-07-21-omarchy-settings-and-cli-simplify-design.md`
-- `docs/superpowers/plans/2026-07-21-omarchy-settings-and-cli-simplify.md`
+Existing ADR bodies remain historical and are not rewritten to resemble the
+current decision.

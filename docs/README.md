@@ -1,35 +1,36 @@
 # Documentation
 
-Operational docs for `agent-bar`.
+> These files describe the approved v10 target. v9 remains the current release
+> until the implementation and acceptance plan completes.
 
-## User Docs
+## User and operator documentation
 
-- [Commands](commands.md) — public CLI surface and flags.
-- [Runtime](runtime.md) — files, settings, cache, provider credentials.
-- [Integration](integration.md) — setup, update, removal, and Waybar ownership.
-- [Omarchy shell](omarchy-shell.md) — plugin `agent-bar.usage` (Omarchy 4+).
-- [Troubleshooting](troubleshooting.md) — common runtime and Waybar failures.
+- [Commands](commands.md) — private helper diagnostics and recovery grammar.
+- [Runtime](runtime.md) — owned paths, settings, cache, privacy, and state.
+- [Omarchy integration](omarchy-shell.md) — Quattro plugin contract.
+- [Integration](integration.md) — install, migration, update, uninstall,
+  ownership, and rollback.
+- [Troubleshooting](troubleshooting.md) — typed provider and plugin failures.
 
-## Developer Docs
+## Engineering documentation
 
-- [Architecture](architecture.md) — data flow, provider layer, the two caches, formatters.
-- [Waybar contract](waybar-contract.md) — generated modules, CSS, assets, and classes.
-- [New provider guide](new-provider.md) — provider implementation checklist.
-- [JSON output](json-output.md) — `--format json` / `--watch` contract for non-Waybar bars (Quickshell, Eww).
-- [ADRs](adr/README.md) — decisões de arquitetura (settings Omarchy, dual-write, CLI).
-- [`CONTEXT.md`](../CONTEXT.md) (raiz) — glossário do domínio.
+- [Architecture](architecture.md) — shared service, Rust helper, and data flow.
+- [JSON output](json-output.md) — status schema v2.
+- [New provider](new-provider.md) — adapter and fixture checklist.
+- [Releasing](releasing.md) — plugin-bundle release boundary.
+- [ADRs](adr/README.md) — durable architectural decisions.
+- [Domain vocabulary](../CONTEXT.md) — canonical terms.
 
-## Superpowers (spec / plano / notas de entrega)
+## Canonical v10 package
 
-Não são contrato operacional do dia a dia; servem a agentes e a histórico de
-design. A fonte de verdade do runtime continua em `src/` + docs acima.
+- [Specification index](specs/v10/README.md)
+- [Implementation plan](specs/v10/09-implementation-plan.md)
+- [Grok runbook](specs/v10/10-grok-execution-runbook.md)
+- [Requirements matrix](specs/v10/REQUIREMENTS_MATRIX.md)
 
-- Spec 8.5.0: `superpowers/specs/2026-07-21-omarchy-settings-and-cli-simplify-design.md`
-- Plano 8.5.0: `superpowers/plans/2026-07-21-omarchy-settings-and-cli-simplify.md`
-- Nota de entrega: `superpowers/notes/2026-07-21-omarchy-settings-entrega.md`
+## Historical records
 
-## Source Of Truth
-
-Runtime behavior lives in `src/`. Operational docs describe the current
-contract. Specs/plans under `superpowers/` record how features were designed;
-ADRs record why hard choices stuck.
+`CHANGELOG.md` release sections 9.0.0 and older, ADR bodies 0001–0003, and
+`docs/superpowers/**` preserve earlier design and delivery history and are
+excluded from active language/legacy scans. The Unreleased changelog section,
+ADR index, and ADR 0004 remain active.

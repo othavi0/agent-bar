@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planned for 10.0.0
+
+- Replace all graphical surfaces with one Omarchy Quattro Quickshell plugin.
+- Bundle the Rust backend as a private plugin helper.
+- Add one shared shell service, monitor-local chips, a consolidated popup,
+  native Settings, provider login actions, update, and uninstall.
+- Introduce strict word-based helper commands and status JSON schema v2.
+- Add transactional v9 migration, ownership checks, backups, atomic bundle
+  replacement, health verification, and rollback.
+- Remove the TUI, Waybar, session history, charts, monetary data, standalone
+  installation, AUR, cargo-binstall, and schema-v1 status compatibility.
+
+This entry describes the approved target. It moves to a dated release section
+only after implementation, final review, live QA, and explicit release
+authorization.
+
 ## [9.0.0] - 2026-07-21
 
 Redesign completo do popup (Omarchy-shell) + Waybar rebaixada a tier
