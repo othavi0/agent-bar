@@ -286,6 +286,7 @@ fn dispatch_setup(options: SetupOptions) -> Result<(), CliFailure> {
         resolve_absolute_executable, shell_has_plugin_entry, txid_from_bytes, OmarchyClient,
         PluginPaths, ProcessCommandRunner, Transaction,
     };
+    use crate::settings::{default_settings_path, migrate_live_paths};
     use crate::support::maintenance_gate::MaintenanceGate;
     use crate::support::{Clock, SystemClock};
 
@@ -308,15 +309,48 @@ fn dispatch_setup(options: SetupOptions) -> Result<(), CliFailure> {
         }
     };
 
+    let clock = SystemClock;
+    let stamp = format!("{}", Clock::now_utc(&clock));
+    let backup_stamp = stamp.replace(':', "-");
+
+    // MIG-007..016: explicit settings/shell migration under exclusive gate before
+    // plugin swap. Reads never write; setup is the authorized apply path.
+    {
+        let gate = MaintenanceGate::open(&paths.maintenance_lock)
+            .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
+        let _exclusive = gate
+            .lock_exclusive()
+            .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
+        let settings_path = default_settings_path();
+        let shell_path = home.join(".config/omarchy/shell.json");
+        let migrate_backup = paths.backup_root(&format!("setup-migrate-{backup_stamp}"));
+        let report = migrate_live_paths(&settings_path, &shell_path, &migrate_backup)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        if report.already_migrated {
+            eprintln!("settings already at v10; migration skipped");
+        } else if report.settings_written {
+            eprintln!(
+                "migrated settings to v10 (shell_written={})",
+                report.shell_written
+            );
+            if !report.unknown_keys.is_empty() {
+                eprintln!(
+                    "legacy keys retained in backup only: {}",
+                    report.unknown_keys.join(", ")
+                );
+            }
+            if let Some(root) = report.backup_root {
+                eprintln!("migration backup: {}", root.display());
+            }
+        }
+    }
+
     let source = resolve_plugin_source_root()?;
     if !paths_equal(&source, &paths.plugin_root) {
         std::fs::create_dir_all(&paths.plugins_dir)
             .map_err(|e| CliFailure::plugin(format!("create plugins dir: {e}")))?;
         let gate = MaintenanceGate::open(&paths.maintenance_lock)
             .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
-        let clock = SystemClock;
-        let stamp = format!("{}", Clock::now_utc(&clock));
-        let backup_stamp = stamp.replace(':', "-");
         let txid = txid_from_bytes(format!("setup:{stamp}").as_bytes());
         let mut tx = Transaction::begin(&paths, &gate, &txid, "setup", &backup_stamp)
             .map_err(|e| CliFailure::plugin(e.to_string()))?;

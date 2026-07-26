@@ -1,6 +1,8 @@
 //! v9 → v10 data migration for settings and shell.json inline keys (MIG-007..016).
 
 use std::collections::{BTreeSet, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -10,6 +12,7 @@ use super::schema::{
 };
 use crate::cli::ProviderId;
 use crate::plugin::paths::PLUGIN_ID;
+use crate::support::atomic_file::replace_atomically;
 
 /// Keys that Agent Bar previously stored inline on the shell entry.
 /// Only these are stripped after successful settings migration (MIG-011).
@@ -118,6 +121,130 @@ impl MigrationPlan {
             shell_changed,
         })
     }
+}
+
+/// Report from applying a planned migration to disk (setup / install path).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationApplyReport {
+    pub already_migrated: bool,
+    pub settings_written: bool,
+    pub shell_written: bool,
+    pub unknown_keys: Vec<String>,
+    pub backup_root: Option<PathBuf>,
+}
+
+/// Apply a [`MigrationPlan`] under an already-held exclusive maintenance gate.
+///
+/// - When `already_migrated`, no files are written (MIG-016).
+/// - Otherwise writes canonical settings, backs up the previous document under
+///   `backup_root/settings/`, and rewrites `shell.json` only when Agent Bar
+///   inline keys were stripped (MIG-010/011).
+/// - Callers must not hold a concurrent settings/store shared lock.
+pub fn apply_migration_plan(
+    plan: &MigrationPlan,
+    settings_path: &Path,
+    shell_path: &Path,
+    backup_root: &Path,
+) -> Result<MigrationApplyReport, MigrationError> {
+    if plan.already_migrated {
+        return Ok(MigrationApplyReport {
+            already_migrated: true,
+            settings_written: false,
+            shell_written: false,
+            unknown_keys: plan.unknown_keys.clone(),
+            backup_root: None,
+        });
+    }
+
+    fs::create_dir_all(backup_root.join("settings"))
+        .map_err(|e| MigrationError::msg(format!("create settings backup dir: {e}")))?;
+
+    // Preserve exact pre-migration settings bytes when present (MIG-014 report path).
+    if settings_path.is_file() {
+        let prev = fs::read(settings_path)
+            .map_err(|e| MigrationError::msg(format!("read settings for backup: {e}")))?;
+        fs::write(backup_root.join("settings").join("settings.json"), prev)
+            .map_err(|e| MigrationError::msg(format!("write settings backup: {e}")))?;
+    }
+
+    let settings_line = plan
+        .settings
+        .to_canonical_json_line()
+        .map_err(|e| MigrationError::msg(e.message().to_string()))?;
+    if let Some(parent) = settings_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| MigrationError::msg(format!("create settings parent: {e}")))?;
+    }
+    replace_atomically(settings_path, settings_line.as_bytes(), 0o600)
+        .map_err(|e| MigrationError::msg(format!("write migrated settings: {e}")))?;
+
+    let mut shell_written = false;
+    if plan.shell_changed {
+        let before = plan
+            .shell_before
+            .as_ref()
+            .ok_or_else(|| MigrationError::msg("shell_changed without shell_before"))?;
+        let after = plan
+            .shell_after
+            .as_ref()
+            .ok_or_else(|| MigrationError::msg("shell_changed without shell_after"))?;
+        fs::create_dir_all(backup_root.join("shell"))
+            .map_err(|e| MigrationError::msg(format!("create shell backup dir: {e}")))?;
+        fs::write(backup_root.join("shell").join("shell.json"), before)
+            .map_err(|e| MigrationError::msg(format!("write shell backup: {e}")))?;
+        if let Some(parent) = shell_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| MigrationError::msg(format!("create shell parent: {e}")))?;
+        }
+        replace_atomically(shell_path, after, 0o600)
+            .map_err(|e| MigrationError::msg(format!("write migrated shell.json: {e}")))?;
+        shell_written = true;
+    }
+
+    // Lightweight operation record for operators (not a full transaction journal).
+    let manifest = serde_json::json!({
+        "operation": "v9-settings-migration",
+        "settingsWritten": true,
+        "shellWritten": shell_written,
+        "unknownKeys": plan.unknown_keys,
+    });
+    fs::write(
+        backup_root.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest).unwrap_or_else(|_| b"{}".to_vec()),
+    )
+    .map_err(|e| MigrationError::msg(format!("write migration manifest: {e}")))?;
+
+    Ok(MigrationApplyReport {
+        already_migrated: false,
+        settings_written: true,
+        shell_written,
+        unknown_keys: plan.unknown_keys.clone(),
+        backup_root: Some(backup_root.to_path_buf()),
+    })
+}
+
+/// Plan and apply v9→v10 migration from live paths (used by `setup`).
+pub fn migrate_live_paths(
+    settings_path: &Path,
+    shell_path: &Path,
+    backup_root: &Path,
+) -> Result<MigrationApplyReport, MigrationError> {
+    let settings_raw = match fs::read(settings_path) {
+        Ok(bytes) => Some(bytes),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => {
+            return Err(MigrationError::msg(format!("read settings.json: {err}")));
+        }
+    };
+    let shell_raw = match fs::read(shell_path) {
+        Ok(bytes) => Some(bytes),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => {
+            return Err(MigrationError::msg(format!("read shell.json: {err}")));
+        }
+    };
+    let plan = MigrationPlan::from_v9(settings_raw.as_deref(), shell_raw.as_deref())?;
+    apply_migration_plan(&plan, settings_path, shell_path, backup_root)
 }
 
 fn waybar_interval_present(raw: &[u8]) -> bool {

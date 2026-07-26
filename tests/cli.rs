@@ -466,6 +466,150 @@ fn binary_setup_plugins_dir_installs_from_local_plugin_tree() {
     );
 }
 
+/// Live QA regression (Task 22): setup must apply v9→v10 settings migration so
+/// `config show` / status can read the strict document. Reproduction of the
+/// failure where leftover v9 `settings.json` caused `unknown settings key`.
+#[test]
+fn binary_setup_migrates_v9_settings_to_strict_v10() {
+    let dir = tempdir().unwrap();
+    let home = dir.path().join("home");
+    let config = home.join("config");
+    let state = home.join("state");
+    let cache = home.join("cache");
+    std::fs::create_dir_all(config.join("agent-bar")).unwrap();
+    std::fs::create_dir_all(home.join(".config/omarchy")).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::create_dir_all(&cache).unwrap();
+
+    // Live-shaped v9 settings (unknown keys include `cache`, `waybar`, …).
+    let v9 = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/migration/v9/settings-valid.json"),
+    )
+    .unwrap();
+    let settings_path = config.join("agent-bar/settings.json");
+    std::fs::write(&settings_path, &v9).unwrap();
+
+    // Clean shell entry (existing layout; no Agent Bar inline keys).
+    let shell_path = home.join(".config/omarchy/shell.json");
+    std::fs::write(
+        &shell_path,
+        std::fs::read(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/migration/v9/shell-clean.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let shell_before = std::fs::read(&shell_path).unwrap();
+
+    // Source plugin tree with helper under bin/.
+    let source_plugins = dir.path().join("source-plugins");
+    let source_root = source_plugins.join("agent-bar.usage");
+    let source_bin = source_root.join("bin");
+    std::fs::create_dir_all(&source_bin).unwrap();
+    std::fs::write(
+        source_root.join("manifest.json"),
+        r#"{"id":"agent-bar.usage","version":"10.0.0"}"#,
+    )
+    .unwrap();
+    let cargo_bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let helper = source_bin.join("agent-bar");
+    std::fs::copy(&cargo_bin, &helper).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&helper).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&helper, perms).unwrap();
+    }
+
+    let target_plugins = dir.path().join("target-plugins");
+    std::fs::create_dir_all(&target_plugins).unwrap();
+
+    let out = StdCommand::new(&helper)
+        .args(["setup", "plugins-dir", target_plugins.to_str().unwrap()])
+        .env("HOME", &home)
+        .env("XDG_STATE_HOME", &state)
+        .env("XDG_CACHE_HOME", &cache)
+        .env("XDG_CONFIG_HOME", &config)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "setup failed: status={:?} stderr={}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // Settings must be strict v10 (no unknown keys); fixture migrated interval 120.
+    let show = StdCommand::new(&helper)
+        .args(["config", "show"])
+        .env("HOME", &home)
+        .env("XDG_STATE_HOME", &state)
+        .env("XDG_CACHE_HOME", &cache)
+        .env("XDG_CONFIG_HOME", &config)
+        .output()
+        .unwrap();
+    assert!(
+        show.status.success(),
+        "config show must succeed after setup migration: status={:?} stderr={}",
+        show.status.code(),
+        String::from_utf8_lossy(&show.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&show.stdout);
+    assert!(
+        stdout.contains("\"schemaVersion\": 1") || stdout.contains("\"schemaVersion\":1"),
+        "expected v10 schemaVersion in config show: {stdout}"
+    );
+    assert!(
+        stdout.contains("120"),
+        "expected migrated refresh interval 120: {stdout}"
+    );
+    assert!(
+        !stdout.contains("waybar") && !stdout.contains("\"cache\""),
+        "v9 keys must not remain in config show: {stdout}"
+    );
+
+    // On-disk document must parse as strict v10.
+    let stored = std::fs::read(&settings_path).unwrap();
+    assert!(
+        agent_bar::settings::schema::Settings::parse_strict(&stored).is_ok(),
+        "stored settings must be strict v10 after setup"
+    );
+
+    // shell.json without Agent Bar inline keys must remain byte-identical.
+    let shell_after = std::fs::read(&shell_path).unwrap();
+    assert_eq!(
+        shell_before, shell_after,
+        "setup must not rewrite clean shell.json bytes"
+    );
+
+    // Pre-migration settings must be backed up under XDG state.
+    let backups = state.join("agent-bar/backups");
+    assert!(
+        backups.is_dir(),
+        "setup migration must create a backup root under XDG state"
+    );
+    let mut found_v9_backup = false;
+    if let Ok(entries) = std::fs::read_dir(&backups) {
+        for entry in entries.flatten() {
+            let candidate = entry.path().join("settings/settings.json");
+            if candidate.is_file() {
+                let bak = std::fs::read(&candidate).unwrap();
+                if bak == v9 {
+                    found_v9_backup = true;
+                    break;
+                }
+            }
+        }
+    }
+    assert!(
+        found_v9_backup,
+        "v9 settings bytes must be preserved under backups/*/settings/settings.json"
+    );
+}
+
 #[test]
 fn binary_doctor_scan_is_read_only_and_exits_zero() {
     let dir = tempdir().unwrap();
