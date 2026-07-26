@@ -50,12 +50,14 @@ impl CommandRunner for ProcessCommandRunner {
 }
 
 /// Recording runner for tests.
+#[cfg(test)]
 #[derive(Debug, Default)]
 pub struct RecordingRunner {
     pub calls: std::sync::Mutex<Vec<(String, Vec<String>)>>,
     pub responses: std::sync::Mutex<Vec<Result<CommandOutput, OmarchyError>>>,
 }
 
+#[cfg(test)]
 impl RecordingRunner {
     pub fn with_ok_responses(n: usize) -> Self {
         let mut responses = Vec::new();
@@ -73,17 +75,27 @@ impl RecordingRunner {
     }
 
     pub fn recorded(&self) -> Vec<(String, Vec<String>)> {
-        self.calls.lock().expect("lock").clone()
+        self.calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
+#[cfg(test)]
 impl CommandRunner for RecordingRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, OmarchyError> {
-        self.calls.lock().expect("lock").push((
-            program.to_string(),
-            args.iter().map(|s| (*s).to_string()).collect(),
-        ));
-        let mut q = self.responses.lock().expect("lock");
+        self.calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((
+                program.to_string(),
+                args.iter().map(|s| (*s).to_string()).collect(),
+            ));
+        let mut q = self
+            .responses
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if q.is_empty() {
             return Ok(CommandOutput {
                 code: 0,
@@ -183,6 +195,7 @@ pub fn argv_is_approved(args: &[&str]) -> bool {
 }
 
 // Allow RecordingRunner to be used behind reference for tests.
+#[cfg(test)]
 impl CommandRunner for &RecordingRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, OmarchyError> {
         (*self).run(program, args)
