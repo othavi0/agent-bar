@@ -41,6 +41,14 @@ function isClosedProvider(providerId) {
   return !!CLOSED_PROVIDERS[String(providerId || "")]
 }
 
+// QML property-var interop: nested arrays become array-like QVariantList where
+// Array.isArray is false but .length and numeric keys still work.
+function isArrayLike(value) {
+  if (Array.isArray(value))
+    return true
+  return !!(value && typeof value === "object" && typeof value.length === "number")
+}
+
 function refreshResult(providerId) {
   if (!isClosedProvider(providerId))
     return "unknown"
@@ -885,7 +893,7 @@ function visibleProviders(snapshot, settings) {
 }
 
 function primaryWindow(provider) {
-  if (!provider || !Array.isArray(provider.windows) || provider.windows.length === 0)
+  if (!provider || !isArrayLike(provider.windows) || provider.windows.length === 0)
     return null
   return provider.windows[0]
 }
@@ -1178,7 +1186,7 @@ function mapActionKind(kind) {
 
 function windowDisplayLines(provider, metric) {
   var lines = []
-  if (!provider || !Array.isArray(provider.windows))
+  if (!provider || !isArrayLike(provider.windows))
     return lines
   var mode = metric === "used" ? "used" : "remaining"
   for (var i = 0; i < provider.windows.length; i++) {

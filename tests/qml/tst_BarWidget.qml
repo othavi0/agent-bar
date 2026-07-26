@@ -223,6 +223,26 @@ TestCase {
     compare(Core.displayMetric(null), "remaining")
   }
 
+  // Live Quattro: snapshot windows arrive as array-like QVariantList where
+  // Array.isArray is false but .length / [0] still work (chips stuck on "—").
+  function test_array_like_windows_render_percent() {
+    var p = {
+      id: "amp",
+      name: "Amp",
+      state: "ready",
+      windows: {
+        length: 1,
+        0: { id: "daily", label: "Daily", usedPercent: 0, remainingPercent: 100 }
+      }
+    }
+    verify(!Array.isArray(p.windows))
+    compare(Core.chipPercentText(p, "remaining"), "100%")
+    compare(Core.chipPercentText(p, "used"), "0%")
+    var lines = Core.windowDisplayLines(p, "remaining")
+    compare(lines.length, 1)
+    compare(lines[0].percentText, "100%")
+  }
+
   function test_state_cues_for_stale_error_loading() {
     compare(Core.chipStateCue(makeProvider("claude", "ready", 1, 99)), "")
     compare(Core.chipStateCue(makeProvider("claude", "stale", 1, 99)), " stale")
