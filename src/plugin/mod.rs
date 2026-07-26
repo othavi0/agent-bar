@@ -14,8 +14,10 @@ pub use bundle::{
 };
 pub use doctor::{doctor_clean, doctor_scan, DoctorError, DoctorReport};
 pub use maintenance::{
-    apply_version_allowed, collect_worker_env, download_with_policy, is_maintenance_worker_exe,
-    stage_update_bundle, MaintenanceError, MaintenanceJournalPayload, MaintenanceOp,
+    apply_version_allowed, classify_local_plugin, collect_worker_env, download_with_policy,
+    is_maintenance_worker_exe, preflight_existing_health, prepare_local_plugin_for_update,
+    require_absolute_executable, resolve_absolute_executable, stage_update_bundle,
+    LocalPluginClass, LocalPluginPrep, MaintenanceError, MaintenanceJournalPayload, MaintenanceOp,
     MaintenanceWorker, RealSleeper, ReqwestReleaseHttp, UpdateCheck, UpdateCheckDocument,
     UpdateCheckProbe, MAINTENANCE_WORKER_NAME, WORKER_ENV_ALLOWLIST,
 };

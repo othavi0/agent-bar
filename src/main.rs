@@ -73,10 +73,10 @@ fn run_maintenance_worker() -> i32 {
     // (systemd also enforces RuntimeMaxSec).
     let start_instant = std::time::Instant::now();
 
+    // Absolute tool paths come from the journal payload (BUNDLE-032H), not bare names.
     match MaintenanceWorker::run_worker_from_journal(
         &paths,
         &runner,
-        "omarchy-shell",
         &txid,
         &sleeper,
         start,

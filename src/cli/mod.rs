@@ -260,12 +260,17 @@ fn dispatch_update_check() -> Result<(), CliFailure> {
 }
 
 fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
+    use crate::plugin::maintenance::{
+        preflight_existing_health, prepare_local_plugin_for_update, resolve_absolute_executable,
+        LocalPluginPrep,
+    };
     use crate::plugin::{
         apply_version_allowed, collect_worker_env, download_with_policy, stage_update_bundle,
         txid_from_bytes, MaintenanceJournalPayload, MaintenanceOp, MaintenanceWorker, PluginPaths,
         ProcessCommandRunner, ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe,
         WORKER_ENV_ALLOWLIST,
     };
+    use crate::support::maintenance_gate::MaintenanceGate;
     use crate::support::{Clock, SystemClock};
 
     let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
@@ -292,31 +297,64 @@ fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
         .as_bytes(),
     );
 
-    let archive =
-        UpdateCheck::download_archive(&http, &selected.archive_url, &selected.archive_sha256)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    // Corroborating checksum sidecar (not a substitute for the pinned hash).
-    if let Ok(side) = download_with_policy(&http, &selected.checksum_url) {
-        let text = String::from_utf8_lossy(&side);
-        if !text.contains(&selected.archive_sha256) {
-            return Err(CliFailure::plugin(
-                "checksum sidecar does not corroborate pinned archive hash",
-            ));
-        }
-    }
-
-    let (stage, receipt) = stage_update_bundle(&paths, &txid, &archive)
+    // Preflight absolute tool paths (BUNDLE-032H).
+    let omarchy_bin =
+        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let omarchy_shell_bin = resolve_absolute_executable("omarchy-shell")
         .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    if receipt.version != version {
-        return Err(CliFailure::plugin(format!(
-            "staged version {} does not equal requested {version}",
-            receipt.version
-        )));
-    }
+    let systemd_run = resolve_absolute_executable("systemd-run")
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let systemctl =
+        resolve_absolute_executable("systemctl").map_err(|e| CliFailure::plugin(e.to_string()))?;
+
+    let runner = ProcessCommandRunner;
+
+    // Exclusive barrier for classify + existing health + download + stage.
+    // Released before handoff so the worker unit can take its own exclusive lock.
+    let (local_prep, stage): (LocalPluginPrep, PathBuf) = {
+        let gate = MaintenanceGate::open(&paths.maintenance_lock)
+            .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
+        let _exclusive = gate
+            .lock_exclusive()
+            .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
+
+        let prep = prepare_local_plugin_for_update(&paths, &txid)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+
+        // Existing v10 update requires old Agent Bar health before any download/swap.
+        if !prep.is_fresh_install && !prep.is_v9_rollback {
+            preflight_existing_health(&runner, &omarchy_shell_bin, &probe.current_version)
+                .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        }
+
+        let archive =
+            UpdateCheck::download_archive(&http, &selected.archive_url, &selected.archive_sha256)
+                .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        // Corroborating checksum sidecar (not a substitute for the pinned hash).
+        if let Ok(side) = download_with_policy(&http, &selected.checksum_url) {
+            let text = String::from_utf8_lossy(&side);
+            if !text.contains(&selected.archive_sha256) {
+                return Err(CliFailure::plugin(
+                    "checksum sidecar does not corroborate pinned archive hash",
+                ));
+            }
+        }
+
+        let (stage, receipt) = stage_update_bundle(&paths, &txid, &archive)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        if receipt.version != version {
+            return Err(CliFailure::plugin(format!(
+                "staged version {} does not equal requested {version}",
+                receipt.version
+            )));
+        }
+        (prep, stage)
+    };
 
     let current_exe =
         std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
     let previous = probe.current_version.clone();
+
     let payload = MaintenanceJournalPayload {
         txid: txid.clone(),
         operation: MaintenanceOp::Update,
@@ -330,16 +368,15 @@ fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
             .display()
             .to_string(),
         selected: Some(selected),
-        omarchy_bin: "omarchy".into(),
-        omarchy_shell_bin: "omarchy-shell".into(),
-        is_fresh_install: !paths.plugin_root.exists(),
-        is_v9_rollback: false,
+        omarchy_bin,
+        omarchy_shell_bin,
+        is_fresh_install: local_prep.is_fresh_install,
+        is_v9_rollback: local_prep.is_v9_rollback,
     };
 
     let env_pairs = collect_worker_env(
         std::env::vars().filter(|(k, _)| WORKER_ENV_ALLOWLIST.contains(&k.as_str())),
     );
-    let runner = ProcessCommandRunner;
     let unit = MaintenanceWorker::handoff_update(
         &paths,
         &runner,
@@ -347,9 +384,16 @@ fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
         &txid,
         &payload,
         &env_pairs,
-        "systemd-run",
+        &systemd_run,
+        &systemctl,
     )
     .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    if let Some(backup) = local_prep.modified_backup {
+        eprintln!(
+            "modified local bundle preserved at {} before update",
+            backup.display()
+        );
+    }
     eprintln!("maintenance handoff accepted: {unit}");
     Ok(())
 }

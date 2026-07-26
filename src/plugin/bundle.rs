@@ -466,24 +466,31 @@ impl BundleValidator {
         }
 
         validate_manifest_matches(&plugin_root.join("manifest.json"), &receipt.version)?;
-        // Helper version must match (run only when helper is executable for this host).
+        // Helper version must match manifest/receipt exactly (BUNDLE-006 / BUNDLE-027).
         let helper = plugin_root.join("bin/agent-bar");
-        if helper.is_file() {
-            // Mode must be executable.
-            let mode = mode_string_of(&helper)?;
-            if mode != EXEC_MODE {
+        if !helper.is_file() {
+            return Err(BundleError::msg("bin/agent-bar is missing"));
+        }
+        let mode = mode_string_of(&helper)?;
+        if mode != EXEC_MODE {
+            return Err(BundleError::msg(format!(
+                "bin/agent-bar mode must be {EXEC_MODE}, got {mode}"
+            )));
+        }
+        let helper_version = read_helper_version(&helper)?;
+        if helper_version != receipt.version {
+            return Err(BundleError::msg(format!(
+                "helper version {helper_version} does not match receipt version {}",
+                receipt.version
+            )));
+        }
+        let term = plugin_root.join("scripts/agent-bar-open-terminal");
+        if term.is_file() {
+            let tm = mode_string_of(&term)?;
+            if tm != EXEC_MODE {
                 return Err(BundleError::msg(format!(
-                    "bin/agent-bar mode must be {EXEC_MODE}, got {mode}"
+                    "scripts/agent-bar-open-terminal mode must be {EXEC_MODE}, got {tm}"
                 )));
-            }
-            let term = plugin_root.join("scripts/agent-bar-open-terminal");
-            if term.is_file() {
-                let tm = mode_string_of(&term)?;
-                if tm != EXEC_MODE {
-                    return Err(BundleError::msg(format!(
-                        "scripts/agent-bar-open-terminal mode must be {EXEC_MODE}, got {tm}"
-                    )));
-                }
             }
         }
 
@@ -796,6 +803,29 @@ fn validate_manifest_matches(manifest_path: &Path, version: &str) -> Result<(), 
         return Err(BundleError::msg("manifest schemaVersion must be 1"));
     }
     Ok(())
+}
+
+/// Run `bin/agent-bar version` and return the trimmed first line (BUNDLE-006).
+fn read_helper_version(helper: &Path) -> Result<String, BundleError> {
+    let output = Command::new(helper)
+        .arg("version")
+        .output()
+        .map_err(|e| BundleError::msg(format!("failed to execute helper version: {e}")))?;
+    if !output.status.success() {
+        return Err(BundleError::msg(format!(
+            "helper version exited {}: {}",
+            output.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().next().unwrap_or("").trim().to_string();
+    if line.is_empty() {
+        return Err(BundleError::msg(
+            "helper version produced empty stdout; expected exact semver",
+        ));
+    }
+    Ok(line)
 }
 
 fn copy_asset_tree(assets: &Path, output: &Path, version: &str) -> Result<(), BundleError> {
@@ -1245,7 +1275,14 @@ mod tests {
         .unwrap();
         fs::write(root.join("Service.qml"), b"// service\n").unwrap();
         fs::write(root.join("BarWidget.qml"), b"// bar\n").unwrap();
-        fs::write(root.join("bin/agent-bar"), b"#!/bin/true\n").unwrap();
+        // Fake helper that answers `version` with the staged receipt version.
+        fs::write(
+            root.join("bin/agent-bar"),
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = version ] || [ \"$1\" = --version ]; then echo {version}; fi\n"
+            ),
+        )
+        .unwrap();
         fs::set_permissions(
             root.join("bin/agent-bar"),
             fs::Permissions::from_mode(0o755),
@@ -1451,12 +1488,18 @@ mod tests {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let dir = tempdir().unwrap();
         let helper = dir.path().join("agent-bar");
-        // Use a tiny stand-in binary so we do not depend on a release build.
-        fs::write(&helper, b"#!/bin/true\nplaceholder-helper\n").unwrap();
+        let version = env!("CARGO_PKG_VERSION");
+        // Stand-in helper that reports the package version for BUNDLE-006.
+        fs::write(
+            &helper,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = version ] || [ \"$1\" = --version ]; then echo {version}; fi\n"
+            ),
+        )
+        .unwrap();
         fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
 
         let out = dir.path().join("agent-bar.usage");
-        let version = env!("CARGO_PKG_VERSION");
         let builder = BundleBuilder::new(version, ZERO_COMMIT).unwrap();
         let receipt = builder.assemble(&out, &repo, &helper).unwrap();
         assert_eq!(receipt.version, version);
@@ -1470,6 +1513,84 @@ mod tests {
         // No global executable at install root.
         assert!(!out.join("agent-bar").exists());
         BundleValidator::validate_tree(&out).unwrap();
+    }
+
+    #[test]
+    fn validate_tree_rejects_helper_version_mismatch() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("agent-bar.usage");
+        write_minimal_plugin(&root, "10.0.0");
+        // Helper reports a different version than the receipt/manifest.
+        fs::write(
+            root.join("bin/agent-bar"),
+            "#!/bin/sh\nif [ \"$1\" = version ] || [ \"$1\" = --version ]; then echo 9.9.9; fi\n",
+        )
+        .unwrap();
+        fs::set_permissions(
+            root.join("bin/agent-bar"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
+        let receipt = BundleValidator::build_receipt(&builder, &root).unwrap();
+        fs::write(root.join("bundle.json"), receipt.to_pretty_json().unwrap()).unwrap();
+        let err = BundleValidator::validate_tree(&root).unwrap_err();
+        assert!(
+            err.to_string().contains("helper version"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn release_refuses_dirty_or_wrong_head() {
+        let dir = tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        fs::create_dir_all(&repo).unwrap();
+        // Minimal git repo with a known HEAD and a dirty worktree.
+        let init = Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        assert!(init.status.success(), "git init failed");
+        let _ = Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(&repo)
+            .status();
+        let _ = Command::new("git")
+            .args(["config", "user.name", "test"])
+            .current_dir(&repo)
+            .status();
+        fs::write(repo.join("README"), b"x\n").unwrap();
+        assert!(Command::new("git")
+            .args(["add", "README"])
+            .current_dir(&repo)
+            .status()
+            .unwrap()
+            .success());
+        assert!(Command::new("git")
+            .args(["commit", "-m", "init"])
+            .current_dir(&repo)
+            .status()
+            .unwrap()
+            .success());
+        let head = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        let head_s = String::from_utf8_lossy(&head.stdout).trim().to_string();
+        // Dirty worktree rejects.
+        fs::write(repo.join("dirty"), b"y\n").unwrap();
+        let rb = ReleaseBuilder::new(head_s.clone()).unwrap();
+        assert!(rb.assert_clean_head_equals(&repo).is_err());
+        // Clean but wrong source-commit rejects.
+        fs::remove_file(repo.join("dirty")).unwrap();
+        let wrong = ReleaseBuilder::new("0123456789abcdef0123456789abcdef01234567").unwrap();
+        let err = wrong.assert_clean_head_equals(&repo).unwrap_err();
+        assert!(err.to_string().contains("does not equal source-commit"));
+        // Clean matching HEAD accepts.
+        rb.assert_clean_head_equals(&repo).unwrap();
     }
 
     #[test]

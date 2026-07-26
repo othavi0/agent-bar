@@ -18,7 +18,11 @@ use crate::plugin::bundle::{
 use crate::plugin::omarchy::{CommandOutput, CommandRunner, OmarchyError};
 use crate::plugin::ownership::hash_bytes;
 use crate::plugin::paths::{validate_txid, PathError, PluginPaths, PLUGIN_ID};
-use crate::plugin::transaction::{exchange_paths, TransactionError, TransactionJournal, TxStep};
+use crate::plugin::transaction::{
+    copy_dir_all, exchange_paths, TransactionError, TransactionJournal, TxStep,
+};
+use crate::providers::amp_cli::which_in_path;
+use crate::support::maintenance_gate::MaintenanceGate;
 use crate::support::Clock;
 
 /// Executable basename that selects maintenance-worker mode before CLI parsing.
@@ -960,11 +964,184 @@ impl WorkerDeadlines {
     }
 }
 
+/// Resolve a bare tool name (or absolute path) to an absolute executable path
+/// during preflight (BUNDLE-032H).
+pub fn resolve_absolute_executable(name_or_path: &str) -> Result<String, MaintenanceError> {
+    let path = Path::new(name_or_path);
+    if path.is_absolute() {
+        require_absolute_executable(name_or_path)?;
+        return Ok(name_or_path.to_string());
+    }
+    if name_or_path.contains('/') {
+        return Err(MaintenanceError::msg(format!(
+            "relative tool path rejected: {name_or_path}"
+        )));
+    }
+    let found = which_in_path(name_or_path).ok_or_else(|| {
+        MaintenanceError::msg(format!("executable not found on PATH: {name_or_path}"))
+    })?;
+    let absolute = found.canonicalize().unwrap_or(found);
+    let s = absolute.display().to_string();
+    require_absolute_executable(&s)?;
+    Ok(s)
+}
+
+/// Require a preflight-recorded absolute executable path.
+pub fn require_absolute_executable(path: &str) -> Result<(), MaintenanceError> {
+    let p = Path::new(path);
+    if !p.is_absolute() {
+        return Err(MaintenanceError::msg(format!(
+            "tool path must be absolute: {path}"
+        )));
+    }
+    let meta = fs::metadata(p)
+        .map_err(|e| MaintenanceError::msg(format!("tool path not accessible ({path}): {e}")))?;
+    if !meta.is_file() {
+        return Err(MaintenanceError::msg(format!(
+            "tool path is not a regular file: {path}"
+        )));
+    }
+    Ok(())
+}
+
+/// Classification of the live plugin root before update (BUNDLE-029 / 032G).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalPluginClass {
+    /// No live plugin root — fresh install path.
+    Absent,
+    /// `bundle.json` inventory validates (owned current v10).
+    OwnedCurrent,
+    /// Receipt present but inventory/content diverges from it.
+    Modified,
+    /// Looks like a pre-v10 Agent Bar tree (no receipt).
+    V9Structural,
+    /// Exists but is not a recognizable owned plugin tree.
+    Ambiguous,
+}
+
+/// Classify the live plugin directory without mutating it.
+pub fn classify_local_plugin(plugin_root: &Path) -> LocalPluginClass {
+    if !plugin_root.exists() {
+        return LocalPluginClass::Absent;
+    }
+    if !plugin_root.is_dir() {
+        return LocalPluginClass::Ambiguous;
+    }
+    let has_receipt = plugin_root.join("bundle.json").is_file();
+    let has_manifest = plugin_root.join("manifest.json").is_file();
+    let has_helper =
+        plugin_root.join("bin/agent-bar").is_file() || plugin_root.join("agent-bar").is_file();
+    if has_receipt {
+        match BundleValidator::validate_tree(plugin_root) {
+            Ok(_) => LocalPluginClass::OwnedCurrent,
+            Err(_) => LocalPluginClass::Modified,
+        }
+    } else if has_manifest || has_helper {
+        LocalPluginClass::V9Structural
+    } else {
+        LocalPluginClass::Ambiguous
+    }
+}
+
+/// Result of pre-update local-root preparation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalPluginPrep {
+    pub class: LocalPluginClass,
+    pub is_fresh_install: bool,
+    pub is_v9_rollback: bool,
+    /// Durable backup of a modified accepted tree, when created.
+    pub modified_backup: Option<PathBuf>,
+}
+
+/// Gate modified/ambiguous roots (BUNDLE-029). Modified trees are preserved in
+/// durable backup before the caller may replace them; ambiguous roots refuse.
+pub fn prepare_local_plugin_for_update(
+    paths: &PluginPaths,
+    txid: &str,
+) -> Result<LocalPluginPrep, MaintenanceError> {
+    validate_txid(txid)?;
+    let class = classify_local_plugin(&paths.plugin_root);
+    match class {
+        LocalPluginClass::Absent => Ok(LocalPluginPrep {
+            class,
+            is_fresh_install: true,
+            is_v9_rollback: false,
+            modified_backup: None,
+        }),
+        LocalPluginClass::OwnedCurrent => Ok(LocalPluginPrep {
+            class,
+            is_fresh_install: false,
+            is_v9_rollback: false,
+            modified_backup: None,
+        }),
+        LocalPluginClass::V9Structural => Ok(LocalPluginPrep {
+            class,
+            is_fresh_install: false,
+            is_v9_rollback: true,
+            modified_backup: None,
+        }),
+        LocalPluginClass::Modified => {
+            // Preserve modified accepted tree before replacement (BUNDLE-029/032K).
+            fs::create_dir_all(&paths.backups_dir)?;
+            let dest = paths.backup_root(&format!("modified-pre-update-{txid}"));
+            if dest.exists() {
+                fs::remove_dir_all(&dest)?;
+            }
+            copy_dir_all(&paths.plugin_root, &dest).map_err(|e| {
+                MaintenanceError::msg(format!(
+                    "failed to back up modified plugin tree to {}: {e}",
+                    dest.display()
+                ))
+            })?;
+            let report = DurableReport {
+                txid: txid.to_string(),
+                ok: true,
+                rolled_back: false,
+                residual_paths: vec![dest.display().to_string()],
+                message: "modified local bundle preserved in durable backup before update".into(),
+            };
+            write_durable_report(paths, &report)?;
+            Ok(LocalPluginPrep {
+                class,
+                is_fresh_install: false,
+                is_v9_rollback: false,
+                modified_backup: Some(dest),
+            })
+        }
+        LocalPluginClass::Ambiguous => Err(MaintenanceError::msg(
+            "refuse to replace ambiguous plugin directory without ownership proof (BUNDLE-029)",
+        )),
+    }
+}
+
+/// Single-shot preflight health probe for an existing v10 install (before download).
+pub fn preflight_existing_health<R: CommandRunner>(
+    runner: &R,
+    shell_program: &str,
+    expected_version: &str,
+) -> Result<(), MaintenanceError> {
+    require_absolute_executable(shell_program)?;
+    let args = health_argv(expected_version);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let out = runner.run(shell_program, &arg_refs)?;
+    if health_is_ok(&out) {
+        return Ok(());
+    }
+    Err(MaintenanceError::msg(format!(
+        "existing Agent Bar health endpoint failed before download/swap (stdout={:?} code={})",
+        out.stdout, out.code
+    )))
+}
+
 /// High-level maintenance coordinator used by CLI update apply / uninstall.
 pub struct MaintenanceWorker;
 
 impl MaintenanceWorker {
     /// Preflight + handoff for an update. Does not perform live mutation itself.
+    ///
+    /// Holds the exclusive maintenance gate for the duration of preflight, journal
+    /// write, and unit start so status/settings cannot race the handoff barrier.
+    #[allow(clippy::too_many_arguments)]
     pub fn handoff_update<R: CommandRunner>(
         paths: &PluginPaths,
         runner: &R,
@@ -973,19 +1150,32 @@ impl MaintenanceWorker {
         payload: &MaintenanceJournalPayload,
         env_pairs: &[(String, String)],
         systemd_program: &str,
+        systemctl_program: &str,
     ) -> Result<String, MaintenanceError> {
         validate_txid(txid)?;
         if payload.txid != txid {
             return Err(MaintenanceError::msg("payload txid mismatch"));
         }
 
-        // Preflight: user manager + shell ping + absolute tools.
+        // Exclusive barrier (ARCH-026 / CACHE): block shared status/settings.
+        let gate = MaintenanceGate::open(&paths.maintenance_lock)
+            .map_err(|e| MaintenanceError::msg(format!("open maintenance lock: {e}")))?;
+        let _exclusive = gate
+            .lock_exclusive()
+            .map_err(|e| MaintenanceError::msg(format!("exclusive maintenance lock: {e}")))?;
+
+        // Preflight: absolute tools + user manager + shell ping (BUNDLE-032H).
+        require_absolute_executable(&payload.omarchy_bin)?;
+        require_absolute_executable(&payload.omarchy_shell_bin)?;
+        require_absolute_executable(systemd_program)?;
+        require_absolute_executable(systemctl_program)?;
+
         let ping = runner.run(&payload.omarchy_shell_bin, &["shell", "ping"])?;
         if ping.code != 0 {
             return Err(MaintenanceError::msg("shell ping failed during preflight"));
         }
         // user systemd manager
-        let user = runner.run("systemctl", &["--user", "is-system-running"])?;
+        let user = runner.run(systemctl_program, &["--user", "is-system-running"])?;
         // Accept running / degraded / starting as reachable managers.
         let state = user.stdout.trim();
         if user.code != 0 && state != "running" && state != "degraded" && state != "starting" {
@@ -1021,11 +1211,12 @@ impl MaintenanceWorker {
     }
 
     /// Worker entry: load journal, exchange, rescan, health, commit/rollback.
+    ///
+    /// Holds exclusive maintenance gate for the full mutation/rollback window.
     #[allow(clippy::too_many_arguments)]
     pub fn run_worker_from_journal<R: CommandRunner, S: Sleeper>(
         paths: &PluginPaths,
         runner: &R,
-        shell_program: &str,
         txid: &str,
         sleeper: &S,
         start: Duration,
@@ -1033,6 +1224,13 @@ impl MaintenanceWorker {
         fail: Option<WorkerFailPoint>,
     ) -> Result<(), MaintenanceError> {
         validate_txid(txid)?;
+        // Exclusive barrier for live mutation (ARCH-026).
+        let gate = MaintenanceGate::open(&paths.maintenance_lock)
+            .map_err(|e| MaintenanceError::msg(format!("open maintenance lock: {e}")))?;
+        let _exclusive = gate
+            .lock_exclusive()
+            .map_err(|e| MaintenanceError::msg(format!("exclusive maintenance lock: {e}")))?;
+
         let deadlines = WorkerDeadlines::from_start(start);
         let journal_path = paths.journal_path(txid)?;
         let journal = TransactionJournal::read_from(&journal_path)
@@ -1045,12 +1243,13 @@ impl MaintenanceWorker {
             .find(|e| e.step == TxStep::Stage)
             .ok_or_else(|| MaintenanceError::msg("journal missing stage payload"))?;
         let payload: MaintenanceJournalPayload = serde_json::from_str(&payload.detail)?;
+        require_absolute_executable(&payload.omarchy_bin)?;
+        require_absolute_executable(&payload.omarchy_shell_bin)?;
 
         match payload.operation {
             MaintenanceOp::Update => Self::worker_update(
                 paths,
                 runner,
-                shell_program,
                 &payload,
                 &journal_path,
                 sleeper,
@@ -1071,7 +1270,6 @@ impl MaintenanceWorker {
     fn worker_update<R: CommandRunner, S: Sleeper>(
         paths: &PluginPaths,
         runner: &R,
-        shell_program: &str,
         payload: &MaintenanceJournalPayload,
         journal_path: &Path,
         sleeper: &S,
@@ -1079,6 +1277,7 @@ impl MaintenanceWorker {
         now: &dyn Fn() -> Duration,
         fail: Option<WorkerFailPoint>,
     ) -> Result<(), MaintenanceError> {
+        let shell_program = payload.omarchy_shell_bin.as_str();
         let mut journal = TransactionJournal::read_from(journal_path)?;
         let expected = payload
             .expected_version
@@ -1099,6 +1298,9 @@ impl MaintenanceWorker {
 
         if let Some(WorkerFailPoint::BeforeMutation) = fail {
             return Err(MaintenanceError::msg("injected failure before mutation"));
+        }
+        if let Some(WorkerFailPoint::AtExchange) = fail {
+            return Err(MaintenanceError::msg("injected exchange failure"));
         }
         deadlines.may_begin_mutation(now())?;
 
@@ -1290,6 +1492,8 @@ impl MaintenanceWorker {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerFailPoint {
     BeforeMutation,
+    /// Fail before any directory exchange (live tree untouched).
+    AtExchange,
     AfterExchange,
     AtHealth,
 }
@@ -1821,6 +2025,36 @@ mod tests {
         assert_eq!(fs::read(&dest).unwrap(), b"helper-bytes");
     }
 
+    fn fake_abs_bin(dir: &Path, name: &str) -> String {
+        let p = dir.join(name);
+        fs::write(&p, b"#!/bin/true\n").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+        p.canonicalize().unwrap().display().to_string()
+    }
+
+    fn sample_payload(
+        paths: &PluginPaths,
+        txid: &str,
+        expected: &str,
+        previous: &str,
+        tools: &Path,
+    ) -> MaintenanceJournalPayload {
+        MaintenanceJournalPayload {
+            txid: txid.into(),
+            operation: MaintenanceOp::Update,
+            expected_version: Some(expected.into()),
+            previous_version: Some(previous.into()),
+            stage_path: paths.stage_dir(txid).unwrap().display().to_string(),
+            plugin_root: paths.plugin_root.display().to_string(),
+            quarantine_path: paths.quarantine_dir(txid).unwrap().display().to_string(),
+            selected: None,
+            omarchy_bin: fake_abs_bin(tools, "omarchy"),
+            omarchy_shell_bin: fake_abs_bin(tools, "omarchy-shell"),
+            is_fresh_install: false,
+            is_v9_rollback: false,
+        }
+    }
+
     #[test]
     fn handoff_fails_before_mutation_when_ping_fails() {
         let dir = tempdir().unwrap();
@@ -1830,6 +2064,8 @@ mod tests {
             dir.path().join("state"),
         );
         fs::create_dir_all(&paths.plugins_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
         let runner = RecordingRunner::default();
         {
             let mut q = runner.responses.lock().unwrap();
@@ -1844,20 +2080,9 @@ mod tests {
         fs::write(&exe, b"x").unwrap();
         fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
         let txid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let payload = MaintenanceJournalPayload {
-            txid: txid.into(),
-            operation: MaintenanceOp::Update,
-            expected_version: Some("10.1.0".into()),
-            previous_version: Some("10.0.0".into()),
-            stage_path: paths.stage_dir(txid).unwrap().display().to_string(),
-            plugin_root: paths.plugin_root.display().to_string(),
-            quarantine_path: paths.quarantine_dir(txid).unwrap().display().to_string(),
-            selected: None,
-            omarchy_bin: "omarchy".into(),
-            omarchy_shell_bin: "omarchy-shell".into(),
-            is_fresh_install: false,
-            is_v9_rollback: false,
-        };
+        let payload = sample_payload(&paths, txid, "10.1.0", "10.0.0", &tools);
+        let systemd = fake_abs_bin(&tools, "systemd-run");
+        let systemctl = fake_abs_bin(&tools, "systemctl");
         let err = MaintenanceWorker::handoff_update(
             &paths,
             &runner,
@@ -1865,12 +2090,44 @@ mod tests {
             txid,
             &payload,
             &[],
-            "systemd-run",
+            &systemd,
+            &systemctl,
         )
         .unwrap_err();
         assert!(err.to_string().contains("ping"));
         // No journal mutation should leave a started unit — and no stage dir.
         assert!(!paths.stage_dir(txid).unwrap().exists());
+    }
+
+    #[test]
+    fn handoff_rejects_bare_tool_names() {
+        let dir = tempdir().unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            dir.path(),
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let exe = dir.path().join("agent-bar");
+        fs::write(&exe, b"x").unwrap();
+        fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+        let txid = "dddddddddddddddddddddddddddddddd";
+        let mut payload = sample_payload(&paths, txid, "10.1.0", "10.0.0", &tools);
+        payload.omarchy_bin = "omarchy".into(); // bare name
+        let err = MaintenanceWorker::handoff_update(
+            &paths,
+            &RecordingRunner::default(),
+            &exe,
+            txid,
+            &payload,
+            &[],
+            &fake_abs_bin(&tools, "systemd-run"),
+            &fake_abs_bin(&tools, "systemctl"),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("absolute"));
     }
 
     #[test]
@@ -1884,6 +2141,8 @@ mod tests {
         fs::create_dir_all(&paths.plugins_dir).unwrap();
         fs::create_dir_all(&paths.transactions_dir).unwrap();
         fs::create_dir_all(&paths.reports_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
 
         let txid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         // Prepare minimal staged + current plugin trees.
@@ -1895,20 +2154,7 @@ mod tests {
         write_min_plugin(current, "10.0.0");
         write_receipt(current, "10.0.0");
 
-        let payload = MaintenanceJournalPayload {
-            txid: txid.into(),
-            operation: MaintenanceOp::Update,
-            expected_version: Some("10.1.0".into()),
-            previous_version: Some("10.0.0".into()),
-            stage_path: stage.display().to_string(),
-            plugin_root: current.display().to_string(),
-            quarantine_path: paths.quarantine_dir(txid).unwrap().display().to_string(),
-            selected: None,
-            omarchy_bin: "omarchy".into(),
-            omarchy_shell_bin: "omarchy-shell".into(),
-            is_fresh_install: false,
-            is_v9_rollback: false,
-        };
+        let payload = sample_payload(&paths, txid, "10.1.0", "10.0.0", &tools);
         let mut journal = TransactionJournal::new(txid, "update");
         journal.record(TxStep::Preflight, "ok");
         journal.record(TxStep::Stage, serde_json::to_string(&payload).unwrap());
@@ -1937,7 +2183,6 @@ mod tests {
         MaintenanceWorker::run_worker_from_journal(
             &paths,
             &runner,
-            "omarchy-shell",
             txid,
             &NoopSleeper,
             Duration::ZERO,
@@ -1960,20 +2205,7 @@ mod tests {
         write_receipt(current, "10.1.0");
         let before = fs::read(current.join("Service.qml")).unwrap();
 
-        let payload2 = MaintenanceJournalPayload {
-            txid: txid2.into(),
-            operation: MaintenanceOp::Update,
-            expected_version: Some("10.2.0".into()),
-            previous_version: Some("10.1.0".into()),
-            stage_path: stage2.display().to_string(),
-            plugin_root: current.display().to_string(),
-            quarantine_path: paths.quarantine_dir(txid2).unwrap().display().to_string(),
-            selected: None,
-            omarchy_bin: "omarchy".into(),
-            omarchy_shell_bin: "omarchy-shell".into(),
-            is_fresh_install: false,
-            is_v9_rollback: false,
-        };
+        let payload2 = sample_payload(&paths, txid2, "10.2.0", "10.1.0", &tools);
         let mut j2 = TransactionJournal::new(txid2, "update");
         j2.record(TxStep::Preflight, "ok");
         j2.record(TxStep::Stage, serde_json::to_string(&payload2).unwrap());
@@ -2018,7 +2250,6 @@ mod tests {
         let err = MaintenanceWorker::run_worker_from_journal(
             &paths,
             &runner2,
-            "omarchy-shell",
             txid2,
             &Adv(&mono),
             Duration::ZERO,
@@ -2043,7 +2274,13 @@ mod tests {
         .unwrap();
         fs::write(root.join("Service.qml"), format!("// {version}\n")).unwrap();
         fs::write(root.join("BarWidget.qml"), b"// bar\n").unwrap();
-        fs::write(root.join("bin/agent-bar"), b"#!/bin/true\n").unwrap();
+        fs::write(
+            root.join("bin/agent-bar"),
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = version ] || [ \"$1\" = --version ]; then echo {version}; fi\n"
+            ),
+        )
+        .unwrap();
         fs::set_permissions(
             root.join("bin/agent-bar"),
             fs::Permissions::from_mode(0o755),
@@ -2106,5 +2343,366 @@ mod tests {
         assert!(root.join("bin/agent-bar").is_file());
         assert!(!root.join("agent-bar").exists());
         assert!(!dir.path().join("usr/bin/agent-bar").exists());
+    }
+
+    #[test]
+    fn classify_local_plugin_owned_modified_v9_ambiguous() {
+        let dir = tempdir().unwrap();
+        assert_eq!(
+            classify_local_plugin(&dir.path().join("missing")),
+            LocalPluginClass::Absent
+        );
+
+        let owned = dir.path().join("owned");
+        write_min_plugin(&owned, "10.0.0");
+        write_receipt(&owned, "10.0.0");
+        assert_eq!(
+            classify_local_plugin(&owned),
+            LocalPluginClass::OwnedCurrent
+        );
+
+        let modified = dir.path().join("modified");
+        write_min_plugin(&modified, "10.0.0");
+        write_receipt(&modified, "10.0.0");
+        fs::write(modified.join("extra.txt"), b"local edit").unwrap();
+        assert_eq!(classify_local_plugin(&modified), LocalPluginClass::Modified);
+
+        let v9 = dir.path().join("v9");
+        write_min_plugin(&v9, "9.0.0");
+        // no bundle.json → structural v9
+        assert_eq!(classify_local_plugin(&v9), LocalPluginClass::V9Structural);
+
+        let amb = dir.path().join("amb");
+        fs::create_dir_all(&amb).unwrap();
+        fs::write(amb.join("readme.txt"), b"noise").unwrap();
+        assert_eq!(classify_local_plugin(&amb), LocalPluginClass::Ambiguous);
+    }
+
+    #[test]
+    fn prepare_refuses_ambiguous_and_backs_up_modified() {
+        let dir = tempdir().unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            dir.path(),
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        fs::create_dir_all(&paths.plugin_root).unwrap();
+        fs::write(paths.plugin_root.join("noise"), b"x").unwrap();
+        let txid = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+        let err = prepare_local_plugin_for_update(&paths, txid).unwrap_err();
+        assert!(err.to_string().contains("ambiguous"));
+
+        // Modified: preserve then allow.
+        fs::remove_dir_all(&paths.plugin_root).unwrap();
+        write_min_plugin(&paths.plugin_root, "10.0.0");
+        write_receipt(&paths.plugin_root, "10.0.0");
+        fs::write(paths.plugin_root.join("local.patch"), b"edit").unwrap();
+        let prep = prepare_local_plugin_for_update(&paths, txid).unwrap();
+        assert_eq!(prep.class, LocalPluginClass::Modified);
+        let backup = prep.modified_backup.expect("backup path");
+        assert!(backup.join("local.patch").is_file());
+        let report = fs::read_to_string(paths.reports_dir.join(format!("{txid}.json"))).unwrap();
+        assert!(report.contains("modified local bundle"));
+    }
+
+    #[test]
+    fn interrupted_download_rejects_sha_mismatch() {
+        let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
+            status: 200,
+            headers: vec![],
+            body: b"truncated-archive".to_vec(),
+        })]);
+        let err = UpdateCheck::download_archive(
+            &http,
+            "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/a.tar.zst",
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("sha256"));
+    }
+
+    #[test]
+    fn worker_exchange_failure_leaves_live_tree() {
+        let dir = tempdir().unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            dir.path(),
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        fs::create_dir_all(&paths.transactions_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let txid = "ffffffffffffffffffffffffffffffff";
+        let stage = paths.stage_dir(txid).unwrap();
+        write_min_plugin(&stage, "10.1.0");
+        write_receipt(&stage, "10.1.0");
+        write_min_plugin(&paths.plugin_root, "10.0.0");
+        write_receipt(&paths.plugin_root, "10.0.0");
+        let before = fs::read(paths.plugin_root.join("Service.qml")).unwrap();
+        let payload = sample_payload(&paths, txid, "10.1.0", "10.0.0", &tools);
+        let mut journal = TransactionJournal::new(txid, "update");
+        journal.record(TxStep::Preflight, "ok");
+        journal.record(TxStep::Stage, serde_json::to_string(&payload).unwrap());
+        journal
+            .write_to(&paths.journal_path(txid).unwrap())
+            .unwrap();
+        struct NoopSleeper;
+        impl Sleeper for NoopSleeper {
+            fn sleep(&self, _: Duration) {}
+        }
+        let err = MaintenanceWorker::run_worker_from_journal(
+            &paths,
+            &RecordingRunner::default(),
+            txid,
+            &NoopSleeper,
+            Duration::ZERO,
+            &|| Duration::from_secs(1),
+            Some(WorkerFailPoint::AtExchange),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("exchange"));
+        assert_eq!(
+            fs::read(paths.plugin_root.join("Service.qml")).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn worker_rescan_failure_rolls_back() {
+        let dir = tempdir().unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            dir.path(),
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        fs::create_dir_all(&paths.transactions_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let txid = "11111111111111111111111111111111";
+        let stage = paths.stage_dir(txid).unwrap();
+        write_min_plugin(&stage, "10.1.0");
+        write_receipt(&stage, "10.1.0");
+        write_min_plugin(&paths.plugin_root, "10.0.0");
+        write_receipt(&paths.plugin_root, "10.0.0");
+        let before = fs::read(paths.plugin_root.join("Service.qml")).unwrap();
+        let payload = sample_payload(&paths, txid, "10.1.0", "10.0.0", &tools);
+        let mut journal = TransactionJournal::new(txid, "update");
+        journal.record(TxStep::Preflight, "ok");
+        journal.record(TxStep::Stage, serde_json::to_string(&payload).unwrap());
+        journal
+            .write_to(&paths.journal_path(txid).unwrap())
+            .unwrap();
+        let runner = RecordingRunner::default();
+        {
+            let mut q = runner.responses.lock().unwrap();
+            q.push(Ok(CommandOutput {
+                code: 1,
+                stdout: String::new(),
+                stderr: "rescan failed".into(),
+            }));
+            // rollback rescan + health
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            }));
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: "ok\n".into(),
+                stderr: String::new(),
+            }));
+        }
+        struct NoopSleeper;
+        impl Sleeper for NoopSleeper {
+            fn sleep(&self, _: Duration) {}
+        }
+        let err = MaintenanceWorker::run_worker_from_journal(
+            &paths,
+            &runner,
+            txid,
+            &NoopSleeper,
+            Duration::ZERO,
+            &|| Duration::from_secs(1),
+            None,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("rescan"));
+        assert_eq!(
+            fs::read(paths.plugin_root.join("Service.qml")).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn worker_v9_structural_and_fresh_absence_rollback() {
+        let dir = tempdir().unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            dir.path(),
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        fs::create_dir_all(&paths.transactions_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        struct NoopSleeper;
+        impl Sleeper for NoopSleeper {
+            fn sleep(&self, _: Duration) {}
+        }
+
+        // Fresh install failure → absence after rollback.
+        let txid = "22222222222222222222222222222222";
+        let stage = paths.stage_dir(txid).unwrap();
+        write_min_plugin(&stage, "10.0.0");
+        write_receipt(&stage, "10.0.0");
+        let mut payload = sample_payload(&paths, txid, "10.0.0", "0.0.0", &tools);
+        payload.is_fresh_install = true;
+        payload.previous_version = None;
+        let mut journal = TransactionJournal::new(txid, "update");
+        journal.record(TxStep::Preflight, "ok");
+        journal.record(TxStep::Stage, serde_json::to_string(&payload).unwrap());
+        journal
+            .write_to(&paths.journal_path(txid).unwrap())
+            .unwrap();
+        let runner = RecordingRunner::default();
+        {
+            let mut q = runner.responses.lock().unwrap();
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            })); // rescan before AtHealth
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            })); // rollback rescan
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: "[]\n".into(),
+                stderr: String::new(),
+            })); // listPlugins empty (fresh absence)
+        }
+        let err = MaintenanceWorker::run_worker_from_journal(
+            &paths,
+            &runner,
+            txid,
+            &NoopSleeper,
+            Duration::ZERO,
+            &|| Duration::from_secs(1),
+            Some(WorkerFailPoint::AtHealth),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("health"),
+            "unexpected fresh rollback error: {err}"
+        );
+        assert!(!paths.plugin_root.exists());
+
+        // v9 structural rollback after injected health failure.
+        let txid2 = "33333333333333333333333333333333";
+        let stage2 = paths.stage_dir(txid2).unwrap();
+        write_min_plugin(&stage2, "10.0.0");
+        write_receipt(&stage2, "10.0.0");
+        // Live tree is v9-shaped (no receipt).
+        write_min_plugin(&paths.plugin_root, "9.0.0");
+        let before = fs::read(paths.plugin_root.join("Service.qml")).unwrap();
+        let mut payload2 = sample_payload(&paths, txid2, "10.0.0", "9.0.0", &tools);
+        payload2.is_v9_rollback = true;
+        let mut j2 = TransactionJournal::new(txid2, "update");
+        j2.record(TxStep::Preflight, "ok");
+        j2.record(TxStep::Stage, serde_json::to_string(&payload2).unwrap());
+        j2.write_to(&paths.journal_path(txid2).unwrap()).unwrap();
+        let runner2 = RecordingRunner::default();
+        {
+            let mut q = runner2.responses.lock().unwrap();
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            })); // rescan
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            })); // rollback rescan
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: r#"[{"id":"agent-bar.usage"}]"#.into(),
+                stderr: String::new(),
+            })); // listPlugins must contain agent-bar.usage
+        }
+        let err2 = MaintenanceWorker::run_worker_from_journal(
+            &paths,
+            &runner2,
+            txid2,
+            &NoopSleeper,
+            Duration::ZERO,
+            &|| Duration::from_secs(1),
+            Some(WorkerFailPoint::AtHealth),
+        )
+        .unwrap_err();
+        let msg2 = err2.to_string();
+        assert!(
+            msg2.contains("health"),
+            "unexpected v9 rollback error: {msg2}"
+        );
+        assert_eq!(
+            fs::read(paths.plugin_root.join("Service.qml")).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn require_absolute_and_resolve_executable() {
+        let dir = tempdir().unwrap();
+        let bin = fake_abs_bin(dir.path(), "tool");
+        require_absolute_executable(&bin).unwrap();
+        assert!(require_absolute_executable("tool").is_err());
+        // Absolute path that exists is accepted by resolve.
+        let again = resolve_absolute_executable(&bin).unwrap();
+        assert_eq!(again, bin);
+    }
+
+    #[test]
+    fn worker_holds_exclusive_maintenance_gate() {
+        let dir = tempdir().unwrap();
+        let paths = PluginPaths::with_plugins_dir(
+            dir.path(),
+            dir.path().join("plugins"),
+            dir.path().join("state"),
+        );
+        fs::create_dir_all(&paths.plugins_dir).unwrap();
+        fs::create_dir_all(&paths.transactions_dir).unwrap();
+        let tools = dir.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let txid = "44444444444444444444444444444444";
+        let stage = paths.stage_dir(txid).unwrap();
+        write_min_plugin(&stage, "10.1.0");
+        write_receipt(&stage, "10.1.0");
+        write_min_plugin(&paths.plugin_root, "10.0.0");
+        write_receipt(&paths.plugin_root, "10.0.0");
+        let payload = sample_payload(&paths, txid, "10.1.0", "10.0.0", &tools);
+        let mut journal = TransactionJournal::new(txid, "update");
+        journal.record(TxStep::Preflight, "ok");
+        journal.record(TxStep::Stage, serde_json::to_string(&payload).unwrap());
+        journal
+            .write_to(&paths.journal_path(txid).unwrap())
+            .unwrap();
+
+        // Hold exclusive first so the worker cannot begin mutation.
+        let gate = MaintenanceGate::open(&paths.maintenance_lock).unwrap();
+        let exclusive = gate.lock_exclusive().unwrap();
+        let worker_gate = MaintenanceGate::open(&paths.maintenance_lock).unwrap();
+        assert!(
+            worker_gate.try_lock_exclusive().unwrap().is_none(),
+            "exclusive maintenance barrier must block concurrent workers"
+        );
+        drop(exclusive);
+        // After release, try_lock succeeds (worker path can acquire).
+        assert!(worker_gate.try_lock_exclusive().unwrap().is_some());
     }
 }

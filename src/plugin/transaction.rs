@@ -434,7 +434,8 @@ impl TransactionPlan {
     }
 }
 
-fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
+/// Recursive regular-file directory copy (refuses special files).
+pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;

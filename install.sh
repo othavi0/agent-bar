@@ -85,6 +85,62 @@ existing_version() {
   fi
 }
 
+# Validate staged plugin tree inventory/receipt before live swap (BUNDLE-013).
+validate_staged_bundle() {
+  local stage="$1"
+  local expected_version="$2"
+  local receipt="${stage}/bundle.json"
+  local manifest="${stage}/manifest.json"
+
+  [[ -f "$receipt" ]] || die "Staged bundle missing bundle.json receipt"
+  [[ -f "$manifest" ]] || die "Staged bundle missing manifest.json"
+  [[ -f "${stage}/Service.qml" ]] || die "Staged bundle missing Service.qml"
+  [[ -f "${stage}/BarWidget.qml" ]] || die "Staged bundle missing BarWidget.qml"
+  [[ -x "${stage}/bin/agent-bar" ]] || die "Staged helper bin/agent-bar missing or not executable"
+  [[ -x "${stage}/scripts/agent-bar-open-terminal" ]] \
+    || die "Staged terminal helper missing or not executable"
+
+  # Receipt pluginId + version must match expected install target.
+  grep -q '"pluginId"[[:space:]]*:[[:space:]]*"'"${PLUGIN_ID}"'"' "$receipt" \
+    || die "bundle.json pluginId is not ${PLUGIN_ID}"
+  local receipt_version
+  receipt_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$receipt" \
+    | head -1 \
+    | sed 's/.*"\([^"]*\)"$/\1/')
+  [[ -n "$receipt_version" ]] || die "bundle.json missing version"
+  [[ "$receipt_version" == "$expected_version" ]] \
+    || die "bundle.json version ${receipt_version} != expected ${expected_version}"
+
+  local man_version
+  man_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" \
+    | head -1 \
+    | sed 's/.*"\([^"]*\)"$/\1/')
+  [[ "$man_version" == "$expected_version" ]] \
+    || die "manifest version ${man_version} != expected ${expected_version}"
+
+  # Inventory paths listed in the receipt must exist on disk.
+  # bundle.json is not listed in its own files array.
+  local missing=0
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if [[ ! -e "${stage}/${path}" ]]; then
+      warn "Receipt path missing on disk: ${path}"
+      missing=1
+    fi
+  done < <(grep -o '"path"[[:space:]]*:[[:space:]]*"[^"]*"' "$receipt" \
+    | sed 's/.*"\([^"]*\)"$/\1/')
+  [[ "$missing" -eq 0 ]] || die "Staged inventory does not match bundle.json"
+
+  # Helper version must match receipt (BUNDLE-006).
+  local helper_version
+  helper_version=$("${stage}/bin/agent-bar" version 2>/dev/null | head -1 | tr -d '[:space:]' || true)
+  [[ -n "$helper_version" ]] || die "Staged helper did not print a version"
+  [[ "$helper_version" == "$expected_version" ]] \
+    || die "Helper version ${helper_version} != expected ${expected_version}"
+
+  ok "Staged bundle inventory/receipt validated (${expected_version})"
+}
+
 install_plugin() {
   local version="$1"
   local asset="${PLUGIN_ID}-${version}-${TARGET}.tar.zst"
@@ -119,6 +175,9 @@ install_plugin() {
   local stage="${PLUGINS_DIR}/.${PLUGIN_ID}.stage-install"
   rm -rf "${stage}"
   cp -a "${tmpdir}/extract/${PLUGIN_ID}" "${stage}"
+
+  # BUNDLE-013: validate staged inventory/receipt before install swap.
+  validate_staged_bundle "${stage}" "${version}"
 
   # Atomic-ish swap: move old aside, move stage into place.
   if [[ -e "${PLUGIN_ROOT}" ]]; then
