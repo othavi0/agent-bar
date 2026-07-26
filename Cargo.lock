@@ -23,6 +23,7 @@ dependencies = [
  "redb",
  "regex",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "serial_test",
