@@ -58,7 +58,9 @@ impl MigrationPlan {
         settings_raw: Option<&[u8]>,
         shell_raw: Option<&[u8]>,
     ) -> Result<Self, MigrationError> {
-        let (settings, unknown_keys, already_settings) = match settings_raw {
+        // Track whether refresh came from an explicit settings/waybar value.
+        let mut refresh_from_settings = false;
+        let (mut settings, unknown_keys, already_settings) = match settings_raw {
             None => (Settings::defaults(), Vec::new(), false),
             Some(raw) if raw.iter().all(|b| b.is_ascii_whitespace()) => {
                 (Settings::defaults(), Vec::new(), false)
@@ -66,12 +68,34 @@ impl MigrationPlan {
             Some(raw) => {
                 // Already strict v10?
                 if let Ok(v10) = Settings::parse_strict(raw) {
+                    refresh_from_settings = true;
                     (v10, Vec::new(), true)
                 } else {
-                    migrate_v9_settings(raw)?
+                    let (s, unk, _) = migrate_v9_settings(raw)?;
+                    // migrate_v9_settings always sets a concrete interval (default 60
+                    // or waybar.interval). Mark explicit when waybar.interval present.
+                    refresh_from_settings = waybar_interval_present(raw);
+                    (s, unk, false)
                 }
             }
         };
+
+        // MIG-010/015: validate and store shell inline refresh BEFORE strip.
+        let inline_refresh = match shell_raw {
+            Some(raw) => extract_inline_refresh_seconds(raw)?,
+            None => None,
+        };
+        if let Some(n) = inline_refresh {
+            if !refresh_from_settings {
+                settings.refresh_interval_seconds = n;
+            }
+            // If settings already supplied interval, keep it; inline still must
+            // have been valid (extract already aborted on invalid).
+        }
+
+        settings
+            .validate()
+            .map_err(|e| MigrationError::msg(e.message().to_string()))?;
 
         let (shell_before, shell_after, shell_changed) = match shell_raw {
             None => (None, None, false),
@@ -94,6 +118,63 @@ impl MigrationPlan {
             shell_changed,
         })
     }
+}
+
+fn waybar_interval_present(raw: &[u8]) -> bool {
+    let Ok(value) = serde_json::from_slice::<Value>(raw) else {
+        return false;
+    };
+    value
+        .get("waybar")
+        .and_then(|w| w.get("interval"))
+        .and_then(|v| v.as_u64())
+        .is_some()
+}
+
+/// Read Agent Bar inline refresh from shell entry; abort if present but invalid.
+fn extract_inline_refresh_seconds(raw: &[u8]) -> Result<Option<u32>, MigrationError> {
+    let value: Value = serde_json::from_slice(raw)
+        .map_err(|e| MigrationError::msg(format!("invalid shell.json: {e}")))?;
+    let mut found: Option<u32> = None;
+    fn walk(value: &Value, found: &mut Option<u32>) -> Result<(), MigrationError> {
+        match value {
+            Value::Array(items) => {
+                for item in items {
+                    walk(item, found)?;
+                }
+            }
+            Value::Object(map) => {
+                let is_entry = map
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|id| id == PLUGIN_ID);
+                if is_entry {
+                    for key in AGENT_BAR_INLINE_KEYS {
+                        if let Some(v) = map.get(*key) {
+                            let n = v.as_u64().ok_or_else(|| {
+                                MigrationError::msg(format!(
+                                    "invalid recognized inline {key} (must be integer)"
+                                ))
+                            })?;
+                            if !(30..=3600).contains(&n) {
+                                return Err(MigrationError::msg(format!(
+                                    "invalid recognized inline {key} {n} (must be 30..=3600)"
+                                )));
+                            }
+                            *found = Some(n as u32);
+                        }
+                    }
+                }
+                for v in map.values() {
+                    walk(v, found)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    walk(&value, &mut found)?;
+    Ok(found)
 }
 
 fn migrate_v9_settings(raw: &[u8]) -> Result<(Settings, Vec<String>, bool), MigrationError> {
@@ -489,6 +570,8 @@ mod tests {
         let shell = read_fixture("shell-left-index1.json");
         let plan = MigrationPlan::from_v9(None, Some(&shell)).unwrap();
         assert!(plan.shell_changed);
+        // MIG-010: inline 90 stored into settings before strip
+        assert_eq!(plan.settings.refresh_interval_seconds, 90);
         let after = plan.shell_after.as_ref().unwrap();
         assert!(remaining_inline_keys(after).unwrap().is_empty());
         let value: Value = serde_json::from_slice(after).unwrap();
@@ -501,6 +584,25 @@ mod tests {
         assert!(left[1].get("refreshIntervalSec").is_none());
         // Unrelated plugins untouched
         assert_eq!(left[0]["id"], "omarchy.menu");
+    }
+
+    #[test]
+    fn invalid_inline_refresh_aborts() {
+        let shell = br#"{
+          "bar": { "left": [{ "id": "agent-bar.usage", "refreshIntervalSec": 10 }] }
+        }"#;
+        let err = MigrationPlan::from_v9(None, Some(shell)).unwrap_err();
+        assert!(err.to_string().contains("inline"));
+        assert!(err.to_string().contains("10") || err.to_string().contains("30"));
+    }
+
+    #[test]
+    fn settings_interval_wins_over_inline() {
+        let settings = read_fixture("settings-valid.json"); // interval 120
+        let shell = read_fixture("shell-left-index1.json"); // inline 90
+        let plan = MigrationPlan::from_v9(Some(&settings), Some(&shell)).unwrap();
+        assert_eq!(plan.settings.refresh_interval_seconds, 120);
+        assert!(plan.shell_changed);
     }
 
     #[test]
