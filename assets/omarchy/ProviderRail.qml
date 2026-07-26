@@ -19,11 +19,41 @@ Item {
   implicitWidth: Style.space(44)
   implicitHeight: railCol.implicitHeight
 
+  // Focus ring: provider buttons then Settings (visual order).
+  property var _railFocusItems: []
+
   function iconUrl(id) {
     var name = Core.iconFileName(id)
     if (!name.length)
       return ""
     return String(root.iconBase) + name
+  }
+
+  function collectFocusTargets() {
+    var out = []
+    for (var i = 0; i < _railFocusItems.length; i++) {
+      if (_railFocusItems[i])
+        out.push(_railFocusItems[i])
+    }
+    if (settingsBtn)
+      out.push(settingsBtn)
+    return out
+  }
+
+  function registerRailItem(item) {
+    var next = _railFocusItems.slice()
+    if (next.indexOf(item) < 0)
+      next.push(item)
+    _railFocusItems = next
+  }
+
+  function unregisterRailItem(item) {
+    var next = []
+    for (var i = 0; i < _railFocusItems.length; i++) {
+      if (_railFocusItems[i] !== item)
+        next.push(_railFocusItems[i])
+    }
+    _railFocusItems = next
   }
 
   Column {
@@ -43,11 +73,21 @@ Item {
         required property var modelData
         width: parent.width
         height: Style.space(32)
+        activeFocusOnTab: true
+        enabled: true
 
         readonly property string pid: modelData && modelData.id ? String(modelData.id) : ""
         readonly property bool selected: pid.length > 0 && pid === root.selectedProviderId
         readonly property bool dimmed: modelData ? Core.chipDimmed(modelData) : true
 
+        function focusActivate() {
+          root.providerSelected(railItem.pid)
+        }
+
+        Component.onCompleted: root.registerRailItem(railItem)
+        Component.onDestruction: root.unregisterRailItem(railItem)
+
+        // A11Y-009 visible focus ring
         Rectangle {
           anchors.centerIn: parent
           width: Style.space(28)
@@ -56,8 +96,10 @@ Item {
           color: railItem.selected
               ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
               : "transparent"
-          border.width: railItem.selected ? 1 : 0
-          border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.28)
+          border.width: (railItem.selected || railItem.activeFocus) ? 1 : 0
+          border.color: railItem.activeFocus
+              ? Color.accent
+              : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.28)
         }
 
         Image {
@@ -75,17 +117,21 @@ Item {
           anchors.fill: parent
           hoverEnabled: true
           cursorShape: Qt.PointingHandCursor
-          onClicked: root.providerSelected(railItem.pid)
-          onEntered: {
-            // Tooltip via Accessible; bar-level tooltips optional for rail.
+          onClicked: {
+            railItem.forceActiveFocus()
+            root.providerSelected(railItem.pid)
           }
         }
+
+        Keys.onReturnPressed: railItem.focusActivate()
+        Keys.onEnterPressed: railItem.focusActivate()
+        Keys.onSpacePressed: railItem.focusActivate()
 
         Accessible.name: modelData && modelData.name
             ? String(modelData.name)
             : Core.providerDisplayName(railItem.pid)
         Accessible.role: Accessible.Button
-        Accessible.onPressAction: root.providerSelected(railItem.pid)
+        Accessible.onPressAction: railItem.focusActivate()
       }
     }
   }
@@ -101,5 +147,9 @@ Item {
     focusable: true
     Accessible.name: "Settings"
     onClicked: root.settingsClicked()
+    // typed activation for FocusController
+    function focusActivate() {
+      root.settingsClicked()
+    }
   }
 }

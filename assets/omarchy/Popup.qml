@@ -1,9 +1,11 @@
 import QtQuick
+import QtQuick.Controls
 import qs.Ui
 import qs.Commons
 import "ServiceCore.js" as Core
+import "components"
 
-// Monitor-local consolidated popup (UX-013..025). Hosted by BarWidget.
+// Monitor-local consolidated popup (UX-013..025, A11Y-001..023).
 KeyboardPanel {
   id: root
 
@@ -12,9 +14,14 @@ KeyboardPanel {
   property var owner: null
   property var agentService: null
 
-  // Maximum intentions; KeyboardPanel fitting clamps to screen (UX-020).
   property int maxContentWidth: Style.space(540)
   property int maxContentHeight: Style.space(560)
+  property int contentLineHeight: Style.font.body + Style.space(8)
+
+  // A11Y-008: Settings/NumberField can raise this while editing.
+  property bool editorActive: contentLoader.item && contentLoader.item.editorOwnsFocus
+      ? !!contentLoader.item.editorOwnsFocus
+      : false
 
   readonly property var appliedSettings: {
     if (agentService && agentService.appliedSettings)
@@ -68,12 +75,14 @@ KeyboardPanel {
     if (!agentService)
       return
     agentService.requestPopup(owner, providerId, "usage")
+    contentFlick.contentY = 0
   }
 
   function openSettings() {
     if (!agentService)
       return
     agentService.openSettings(owner)
+    contentFlick.contentY = 0
   }
 
   function onRefresh(providerId) {
@@ -92,32 +101,105 @@ KeyboardPanel {
     })
   }
 
+  function providerIds() {
+    var ids = []
+    for (var i = 0; i < railProviders.length; i++) {
+      if (railProviders[i] && railProviders[i].id)
+        ids.push(String(railProviders[i].id))
+    }
+    return ids
+  }
+
+  function stepProvider(delta) {
+    var next = Core.routeProviderDelta(providerIds(), root.selectedId, delta)
+    if (next)
+      root.selectProvider(next)
+  }
+
+  function handleTextKey(text) {
+    var route = Core.routePanelTextKey(text, keyCatcher.blocked)
+    if (route.action === "openSettings") {
+      root.openSettings()
+      return
+    }
+    if (route.action === "refresh") {
+      if (root.selectedId.length)
+        root.onRefresh(root.selectedId)
+      return
+    }
+    if (route.action === "providerDelta")
+      root.stepProvider(route.delta)
+  }
+
+  function rebuildFocusTargets() {
+    var list = []
+    if (rail && typeof rail.collectFocusTargets === "function")
+      list = list.concat(rail.collectFocusTargets())
+    if (contentLoader.item && typeof contentLoader.item.collectFocusTargets === "function")
+      list = list.concat(contentLoader.item.collectFocusTargets())
+    focusController.setTargets(list)
+  }
+
+  onViewChanged: {
+    contentFlick.contentY = 0
+    Qt.callLater(rebuildFocusTargets)
+  }
+  onSelectedIdChanged: Qt.callLater(function () {
+    focusController.clampScroll()
+    rebuildFocusTargets()
+  })
+
+  FocusController {
+    id: focusController
+    flickable: contentFlick
+    lineHeight: root.contentLineHeight
+  }
+
+  // A11Y-023: page/home/end when panel shortcuts are live
+  Shortcut {
+    sequences: ["PgDown", "Page Down"]
+    enabled: root.isOpen && !keyCatcher.blocked
+    onActivated: focusController.scrollPage(1)
+  }
+  Shortcut {
+    sequences: ["PgUp", "Page Up"]
+    enabled: root.isOpen && !keyCatcher.blocked
+    onActivated: focusController.scrollPage(-1)
+  }
+  Shortcut {
+    sequence: "Home"
+    enabled: root.isOpen && !keyCatcher.blocked
+    onActivated: focusController.scrollHome()
+  }
+  Shortcut {
+    sequence: "End"
+    enabled: root.isOpen && !keyCatcher.blocked
+    onActivated: focusController.scrollEnd()
+  }
+
   PanelKeyCatcher {
     id: keyCatcher
     anchors.fill: parent
+    blocked: root.editorActive
 
-    // A11Y-007 Escape closes
-    Keys.onEscapePressed: root.close()
-
-    // A11Y-006 s opens Settings (suspended later when editors own focus)
-    Keys.onPressed: function (event) {
-      if (event.key === Qt.Key_S && !(event.modifiers & Qt.ControlModifier)) {
-        root.openSettings()
-        event.accepted = true
-      } else if (event.key === Qt.Key_R && !(event.modifiers & Qt.ControlModifier)) {
-        if (root.selectedId.length)
-          root.onRefresh(root.selectedId)
-        event.accepted = true
-      }
+    onCloseRequested: root.close()
+    onMoveRequested: function (dx, dy) {
+      if (dy !== 0)
+        root.stepProvider(dy)
+    }
+    onTabRequested: function (direction) {
+      focusController.move(direction)
+    }
+    onActivateRequested: focusController.activate()
+    onTextKey: function (text) {
+      root.handleTextKey(text)
     }
 
     Row {
       id: panelBody
       anchors.fill: parent
-      anchors.margins: 0
       spacing: 0
 
-      // Icon-only rail
       ProviderRail {
         id: rail
         width: Style.space(48)
@@ -131,34 +213,40 @@ KeyboardPanel {
         onSettingsClicked: root.openSettings()
       }
 
-      // Visual separation for the rail
       Rectangle {
         width: 1
         height: parent.height
         color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.12)
       }
 
-      // Content column
       Item {
         width: parent.width - rail.width - 1
         height: parent.height
 
-        // Usage view (Task 11). Settings replaced in Task 12.
         Flickable {
           id: contentFlick
           anchors.fill: parent
           anchors.margins: Style.space(14)
           contentWidth: width
-          contentHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
+          contentHeight: contentColumn.implicitHeight
           clip: true
           boundsBehavior: Flickable.StopAtBounds
-          // UX-024/025: scroll position resets when selection changes on new open.
-          // Selection persistence while open is service-owned selectedProviderId.
+          flickableDirection: Flickable.VerticalFlick
+          ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-          Loader {
-            id: contentLoader
+          onContentHeightChanged: focusController.clampScroll()
+          onHeightChanged: focusController.clampScroll()
+
+          Column {
+            id: contentColumn
             width: contentFlick.width
-            sourceComponent: root.view === "settings" ? settingsContent : providerContent
+
+            Loader {
+              id: contentLoader
+              width: parent.width
+              sourceComponent: root.view === "settings" ? settingsContent : providerContent
+              onLoaded: Qt.callLater(rebuildFocusTargets)
+            }
           }
         }
       }
@@ -168,7 +256,7 @@ KeyboardPanel {
   Component {
     id: providerContent
     ProviderView {
-      width: contentFlick.width
+      width: contentColumn.width
       provider: root.selectedProvider
       displayMetric: root.displayMetric
       refreshing: agentService ? !!agentService.refreshing : false
@@ -182,7 +270,7 @@ KeyboardPanel {
   Component {
     id: settingsContent
     SettingsView {
-      width: contentFlick.width
+      width: contentColumn.width
       agentService: root.agentService
       foreground: Color.foreground
       fontFamily: Style.font.family

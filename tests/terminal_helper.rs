@@ -152,8 +152,14 @@ fn helper_execs_exact_xdg_terminal_argv() {
     let plugin_root = fs::canonicalize(&plugin).unwrap();
     let expected_helper = plugin_root.join("bin/agent-bar");
 
-    assert_eq!(argv.get(0).map(String::as_str), Some("--app-id=org.omarchy.terminal"));
-    assert_eq!(argv.get(1).map(String::as_str), Some("--title=Agent Bar Login"));
+    assert_eq!(
+        argv.first().map(String::as_str),
+        Some("--app-id=org.omarchy.terminal")
+    );
+    assert_eq!(
+        argv.get(1).map(String::as_str),
+        Some("--title=Agent Bar Login")
+    );
     assert_eq!(argv.get(2).map(String::as_str), Some("--"));
     assert_eq!(
         argv.get(3).map(String::as_str),

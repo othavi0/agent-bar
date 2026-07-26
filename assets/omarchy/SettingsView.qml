@@ -12,6 +12,10 @@ Item {
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   property url iconBase: Qt.resolvedUrl("icons/")
+  // A11Y-008: true while NumberField (or other editor) owns focus.
+  property bool editorOwnsFocus: intervalField && intervalField.field
+      ? !!intervalField.field.activeFocus
+      : false
 
   readonly property var state: agentService ? agentService.settingsState : null
   readonly property var draft: agentService ? agentService.settingsDraft : null
@@ -203,6 +207,7 @@ Item {
       enabled: !root.locked
 
       NumberField {
+        id: intervalField
         label: "Refresh interval (seconds)"
         value: root.intervalSec
         from: 30

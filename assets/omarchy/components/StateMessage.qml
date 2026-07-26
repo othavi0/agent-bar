@@ -18,7 +18,7 @@ Column {
   width: parent ? parent.width : implicitWidth
   spacing: Style.space(10)
 
-  // UX-026 skeleton placeholders (no Behavior/animation of our own).
+  // UX-026 skeleton placeholders (no plugin-authored motion).
   Column {
     visible: root.skeleton
     width: parent.width
