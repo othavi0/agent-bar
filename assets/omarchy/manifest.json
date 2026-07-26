@@ -1,27 +1,23 @@
 {
   "schemaVersion": 1,
   "id": "agent-bar.usage",
-  "name": "agent-bar",
+  "name": "Agent Bar",
   "version": "__AGENT_BAR_VERSION__",
   "author": "othavi0",
   "license": "MIT",
-  "description": "LLM quota monitor (Claude, Codex, Amp, Grok) as native bar chips with a popup panel.",
-  "kinds": ["bar-widget"],
-  "activation": "on-demand",
+  "description": "LLM quota monitor for Claude, Codex, Amp, and Grok.",
+  "kinds": ["service", "bar-widget"],
   "entryPoints": {
-    "barWidget": "Widget.qml"
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "agent-bar",
-    "description": "Quota chips per provider; left = usage, right = settings, middle = refresh.",
+    "displayName": "Agent Bar",
+    "description": "Shows normalized provider quota and reset information.",
     "category": "AI",
     "aliases": ["agent-bar"],
     "allowMultiple": false,
-    "defaults": {
-      "refreshIntervalSec": 60
-    },
-    "schema": [
-      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 30, "max": 3600, "step": 30, "defaultValue": 60 }
-    ]
+    "defaults": {},
+    "schema": []
   }
 }

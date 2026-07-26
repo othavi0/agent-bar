@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Test-only private helper. Mimics agent-bar version (and optional slow status).
+set -euo pipefail
+
+cmd="${1:-}"
+
+case "$cmd" in
+  version)
+    # Exact package-style semver + newline; no stderr.
+    printf '%s\n' "${FAKE_AGENT_BAR_VERSION:-10.0.0}"
+    exit 0
+    ;;
+  status)
+    # Optional deliberate slowness for cold-start ordering tests.
+    sleep "${FAKE_AGENT_BAR_STATUS_SLEEP:-0}"
+    printf '%s\n' '{"schemaVersion":2,"helperVersion":"10.0.0","generatedAt":"2026-07-26T18:42:00Z","request":{"provider":null,"cache":"use"},"providers":[]}'
+    exit 0
+    ;;
+  *)
+    printf 'unknown command\n' >&2
+    exit 2
+    ;;
+esac

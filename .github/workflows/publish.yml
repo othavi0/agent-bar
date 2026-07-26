@@ -47,16 +47,29 @@ jobs:
       - name: Build static musl binary
         run: cargo zigbuild --release --target x86_64-unknown-linux-musl
 
-      - name: Package tarball + sha256
+      # v10 product is the Omarchy plugin agent-bar.usage (private bin/agent-bar).
+      # Full gnu target + bundle.json inventory land in later tasks; this step
+      # ships the Quickshell skeleton + helper layout.
+      - name: Package plugin tarball + sha256
         id: pkg
         run: |
           VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
-          mkdir -p pkg/scripts pkg/icons
-          cp target/x86_64-unknown-linux-musl/release/agent-bar pkg/
-          cp -r icons/. pkg/icons/
-          cp scripts/agent-bar-open-terminal pkg/scripts/
-          cp LICENSE pkg/
-          tar czf "agent-bar-${VERSION}-x86_64.tar.gz" -C pkg .
+          PLUGIN="pkg/agent-bar.usage"
+          mkdir -p "${PLUGIN}/bin" "${PLUGIN}/scripts" "${PLUGIN}/icons" "${PLUGIN}/components"
+          cp target/x86_64-unknown-linux-musl/release/agent-bar "${PLUGIN}/bin/agent-bar"
+          chmod 755 "${PLUGIN}/bin/agent-bar"
+          # Manifest version must equal helper version (BUNDLE-006).
+          sed "s/__AGENT_BAR_VERSION__/${VERSION}/g" assets/omarchy/manifest.json \
+            > "${PLUGIN}/manifest.json"
+          cp assets/omarchy/Service.qml assets/omarchy/BarWidget.qml "${PLUGIN}/"
+          cp assets/omarchy/ServiceCore.js "${PLUGIN}/" 2>/dev/null || true
+          cp scripts/agent-bar-open-terminal "${PLUGIN}/scripts/"
+          chmod 755 "${PLUGIN}/scripts/agent-bar-open-terminal"
+          if [ -d icons ]; then cp -r icons/. "${PLUGIN}/icons/"; fi
+          cp LICENSE "${PLUGIN}/" 2>/dev/null || true
+          tar czf "agent-bar.usage-${VERSION}-x86_64.tar.gz" -C pkg agent-bar.usage
+          # Keep legacy tarball name for transition; content is the plugin tree.
+          cp "agent-bar.usage-${VERSION}-x86_64.tar.gz" "agent-bar-${VERSION}-x86_64.tar.gz"
           sha256sum "agent-bar-${VERSION}-x86_64.tar.gz" | tee "agent-bar-${VERSION}-x86_64.tar.gz.sha256"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cut -d' ' -f1 "agent-bar-${VERSION}-x86_64.tar.gz.sha256")" >> "$GITHUB_OUTPUT"
