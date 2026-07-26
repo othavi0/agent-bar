@@ -456,8 +456,7 @@ Item {
     }
     versionProbeRunning = true
     versionFailed = false
-    versionOut.text = ""
-    versionErr.text = ""
+    // StdioCollector.text is read-only; waitForEnd replaces content per run.
     versionProbe.command = [helper, "version"]
     versionProbe.running = true
     versionTimeout.restart()
@@ -522,8 +521,7 @@ Item {
     statusBusy = true
     refreshing = true
     statusStartCount++
-    statusOut.text = ""
-    statusErr.text = ""
+    // StdioCollector.text is read-only; waitForEnd replaces content per run.
     if (testMode) {
       // Tests call applyStatusResult(gen, stdout, stderr, code)
       return

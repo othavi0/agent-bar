@@ -403,6 +403,19 @@ TestCase {
     verify(src.indexOf("syncMaintenanceVersion") >= 0)
   }
 
+  // Quickshell StdioCollector.text is read-only; assigning throws TypeError and
+  // aborts the version probe before Process.running is set (live bar stuck loading).
+  function test_service_qml_does_not_assign_stdio_collector_text() {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", serviceUrl, false)
+    xhr.send()
+    var src = String(xhr.responseText)
+    verify(src.indexOf("versionOut.text =") < 0)
+    verify(src.indexOf("versionErr.text =") < 0)
+    verify(src.indexOf("statusOut.text =") < 0)
+    verify(src.indexOf("statusErr.text =") < 0)
+  }
+
   // Live Quattro createObject sets manifest after construction completes.
   // Service must retry production start when helper path appears, and must not
   // mark versionFailed merely because the path was empty on first attempt.
