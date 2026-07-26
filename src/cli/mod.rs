@@ -221,15 +221,7 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
             print!("{}", help_text(topic));
             Ok(())
         }
-        Command::Setup(SetupOptions::PluginsDir(path)) => {
-            validate_plugins_dir(&path)?;
-            Err(CliFailure::internal(
-                "setup is not implemented yet (later plugin transaction task)",
-            ))
-        }
-        Command::Setup(SetupOptions::Production) => Err(CliFailure::internal(
-            "setup is not implemented yet (later plugin transaction task)",
-        )),
+        Command::Setup(options) => dispatch_setup(options),
         Command::Update(UpdateCommand::Interactive) => dispatch_update_interactive(),
         Command::Update(UpdateCommand::Check) => dispatch_update_check(),
         Command::Update(UpdateCommand::Apply(version)) => dispatch_update_apply(&version.as_str()),
@@ -237,7 +229,192 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
         Command::Login(provider) => dispatch_login(provider),
         Command::Status(opts) => dispatch_status(opts),
         Command::Uninstall { purge } => dispatch_uninstall(purge),
-        Command::Doctor(_) => Err(CliFailure::internal("command is not implemented yet")),
+        Command::Doctor(cmd) => dispatch_doctor(cmd),
+    }
+}
+
+/// Resolve the complete plugin tree that contains this helper binary.
+///
+/// Expects the installed layout `<plugin-root>/bin/agent-bar`. First bootstrap
+/// from a release archive remains `install.sh` when no local tree exists.
+fn resolve_plugin_source_root() -> Result<PathBuf, CliFailure> {
+    use crate::plugin::BundleValidator;
+
+    let exe =
+        std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
+    let exe = fs_canonicalize(&exe);
+    let Some(bin_dir) = exe.parent() else {
+        return Err(CliFailure::plugin(
+            "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; use install.sh for first bootstrap from a release archive",
+        ));
+    };
+    if bin_dir
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_none_or(|n| n != "bin")
+    {
+        return Err(CliFailure::plugin(
+            "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; use install.sh for first bootstrap from a release archive",
+        ));
+    }
+    let Some(root) = bin_dir.parent() else {
+        return Err(CliFailure::plugin(
+            "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; use install.sh for first bootstrap from a release archive",
+        ));
+    };
+    if !root.join("manifest.json").is_file() {
+        return Err(CliFailure::plugin(
+            "setup source tree is missing manifest.json",
+        ));
+    }
+    if root.join("bundle.json").is_file() {
+        BundleValidator::validate_tree(root).map_err(|e| CliFailure::plugin(e.to_string()))?;
+    }
+    Ok(root.to_path_buf())
+}
+
+fn fs_canonicalize(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn paths_equal(a: &Path, b: &Path) -> bool {
+    fs_canonicalize(a) == fs_canonicalize(b)
+}
+
+fn dispatch_setup(options: SetupOptions) -> Result<(), CliFailure> {
+    use crate::plugin::{
+        resolve_absolute_executable, shell_has_plugin_entry, txid_from_bytes, OmarchyClient,
+        PluginPaths, ProcessCommandRunner, Transaction,
+    };
+    use crate::support::maintenance_gate::MaintenanceGate;
+    use crate::support::{Clock, SystemClock};
+
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| CliFailure::plugin("HOME is required for setup".to_string()))?;
+    let home = PathBuf::from(home);
+    let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+
+    let (paths, is_production) = match options {
+        SetupOptions::Production => (PluginPaths::production(home.clone(), xdg_state), true),
+        SetupOptions::PluginsDir(path) => {
+            let parent = validate_plugins_dir(&path)?;
+            let state = std::env::var_os("XDG_STATE_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".local/state"));
+            (
+                PluginPaths::with_plugins_dir(home.clone(), parent, state),
+                false,
+            )
+        }
+    };
+
+    let source = resolve_plugin_source_root()?;
+    if !paths_equal(&source, &paths.plugin_root) {
+        std::fs::create_dir_all(&paths.plugins_dir)
+            .map_err(|e| CliFailure::plugin(format!("create plugins dir: {e}")))?;
+        let gate = MaintenanceGate::open(&paths.maintenance_lock)
+            .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
+        let clock = SystemClock;
+        let stamp = format!("{}", Clock::now_utc(&clock));
+        let backup_stamp = stamp.replace(':', "-");
+        let txid = txid_from_bytes(format!("setup:{stamp}").as_bytes());
+        let mut tx = Transaction::begin(&paths, &gate, &txid, "setup", &backup_stamp)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        let report = tx
+            .replace_plugin_dir(&source)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        if !report.ok {
+            return Err(CliFailure::plugin(report.message));
+        }
+        eprintln!("plugin installed at {}", paths.plugin_root.display());
+    } else {
+        eprintln!("plugin already present at {}", paths.plugin_root.display());
+    }
+
+    // Production setup activates Quattro placement. Injected plugins-dir is
+    // tree-only (CLI-009 isolated testing) and never runs omarchy.
+    if is_production {
+        let omarchy_bin = resolve_absolute_executable("omarchy")
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        let client = OmarchyClient::new(ProcessCommandRunner).with_program(omarchy_bin);
+        let shell_json = home.join(".config/omarchy/shell.json");
+        let has_entry = shell_has_plugin_entry(&shell_json);
+        client
+            .activate(has_entry)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+        if has_entry {
+            eprintln!("omarchy plugin rescan completed");
+        } else {
+            eprintln!("omarchy plugin enable agent-bar.usage completed");
+        }
+    }
+    Ok(())
+}
+
+fn dispatch_doctor(cmd: DoctorCommand) -> Result<(), CliFailure> {
+    use crate::plugin::{default_ownership_rules, doctor_clean, doctor_scan, PluginPaths};
+    use crate::support::{Clock, SystemClock};
+
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| CliFailure::plugin("HOME is required for doctor".to_string()))?;
+    let home = PathBuf::from(home);
+    let rules = default_ownership_rules(&home);
+
+    match cmd {
+        DoctorCommand::Scan => {
+            let report = doctor_scan(&home, &[], &rules);
+            print_doctor_report("scan", &report);
+            Ok(())
+        }
+        DoctorCommand::Clean => {
+            let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+            let paths = PluginPaths::production(home.clone(), xdg_state);
+            let clock = SystemClock;
+            let stamp = format!("{}", Clock::now_utc(&clock)).replace(':', "-");
+            let backup = paths.backup_root(&format!("doctor-clean-{stamp}"));
+            let report = doctor_clean(&home, &[], &rules, &backup)
+                .map_err(|e| CliFailure::plugin(e.to_string()))?;
+            print_doctor_report("clean", &report);
+            Ok(())
+        }
+    }
+}
+
+fn print_doctor_report(mode: &str, report: &crate::plugin::DoctorReport) {
+    println!("Agent Bar doctor {mode}");
+    println!(
+        "mode: {}",
+        if report.read_only {
+            "read-only"
+        } else {
+            "clean"
+        }
+    );
+    println!("findings: {}", report.findings.len());
+    for ev in &report.findings {
+        println!(
+            "  [{}] {} — {}",
+            ev.class.as_str(),
+            ev.path.display(),
+            ev.reason
+        );
+    }
+    println!("removable (owned/legacy): {}", report.removable.len());
+    for path in &report.removable {
+        println!("  {}", path.display());
+    }
+    println!("retained (modified/ambiguous): {}", report.retained.len());
+    for path in &report.retained {
+        println!("  {}", path.display());
+    }
+    if !report.read_only {
+        println!("removed: {}", report.removed.len());
+        for path in &report.removed {
+            println!("  {}", path.display());
+        }
+        if let Some(backup) = &report.backup_root {
+            println!("backup: {}", backup.display());
+        }
     }
 }
 

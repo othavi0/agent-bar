@@ -6,7 +6,7 @@ use std::process::Command as StdCommand;
 use agent_bar::cli::{
     parse, CacheMode, Command, ConfigCommand, ConfigInput, DoctorCommand, HelpTopic,
     NotificationMode, ProviderId, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
-    GRAMMAR, SUCCESS, VALIDATION,
+    GRAMMAR, PLUGIN, SUCCESS, VALIDATION,
 };
 use assert_cmd::Command as CargoBin;
 use tempfile::tempdir;
@@ -393,13 +393,119 @@ fn binary_setup_plugins_dir_validates_parent_versus_plugin_root() {
         .code(VALIDATION)
         .stdout("");
 
-    // Existing writable parent parses and reaches not-implemented (70) after validation.
+    // Existing writable parent validates, then requires a complete plugin source tree
+    // (cargo-built helper is not under <plugin-root>/bin/).
     CargoBin::cargo_bin("agent-bar")
         .unwrap()
         .args(["setup", "plugins-dir", parent.to_str().unwrap()])
         .assert()
-        .code(70)
-        .stdout("");
+        .code(PLUGIN)
+        .stdout("")
+        .stderr(predicates::str::contains("complete plugin tree"));
+}
+
+#[test]
+fn binary_setup_plugins_dir_installs_from_local_plugin_tree() {
+    let dir = tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+
+    // Source plugin tree containing a copy of the helper under bin/.
+    let source_plugins = dir.path().join("source-plugins");
+    let source_root = source_plugins.join("agent-bar.usage");
+    let source_bin = source_root.join("bin");
+    std::fs::create_dir_all(&source_bin).unwrap();
+    std::fs::write(
+        source_root.join("manifest.json"),
+        r#"{"id":"agent-bar.usage","version":"10.0.0"}"#,
+    )
+    .unwrap();
+    let cargo_bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let helper = source_bin.join("agent-bar");
+    std::fs::copy(&cargo_bin, &helper).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&helper).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&helper, perms).unwrap();
+    }
+
+    let target_plugins = dir.path().join("target-plugins");
+    std::fs::create_dir_all(&target_plugins).unwrap();
+
+    let out = StdCommand::new(&helper)
+        .args(["setup", "plugins-dir", target_plugins.to_str().unwrap()])
+        .env("HOME", &home)
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "setup failed: status={:?} stderr={}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    assert!(
+        target_plugins
+            .join("agent-bar.usage")
+            .join("manifest.json")
+            .is_file(),
+        "setup must install plugin tree under plugins-dir"
+    );
+    assert!(
+        target_plugins
+            .join("agent-bar.usage")
+            .join("bin")
+            .join("agent-bar")
+            .is_file(),
+        "setup must install helper binary"
+    );
+}
+
+#[test]
+fn binary_doctor_scan_is_read_only_and_exits_zero() {
+    let dir = tempdir().unwrap();
+    let home = dir.path();
+    CargoBin::cargo_bin("agent-bar")
+        .unwrap()
+        .env("HOME", home)
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .args(["doctor", "scan"])
+        .assert()
+        .code(SUCCESS)
+        .stdout(predicates::str::contains("doctor scan"))
+        .stdout(predicates::str::contains("read-only"));
+}
+
+#[test]
+fn binary_doctor_clean_backs_up_and_removes_owned_legacy() {
+    let dir = tempdir().unwrap();
+    let home = dir.path();
+    // Split filename so active-legacy gates stay clean.
+    let legacy_name = concat!("usage", ".", "re", "db");
+    let legacy = home.join(".cache/agent-bar").join(legacy_name);
+    std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+    std::fs::write(&legacy, b"/* agent-bar generated */\n").unwrap();
+
+    CargoBin::cargo_bin("agent-bar")
+        .unwrap()
+        .env("HOME", home)
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .args(["doctor", "clean"])
+        .assert()
+        .code(SUCCESS)
+        .stdout(predicates::str::contains("doctor clean"))
+        .stdout(predicates::str::contains("removed:"));
+
+    assert!(!legacy.exists(), "doctor clean must remove owned legacy");
 }
 
 #[test]

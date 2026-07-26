@@ -12,7 +12,7 @@ pub use bundle::{
     BundleBuilder, BundleError, BundleFileEntry, BundleReceipt, BundleValidator, ReleaseBuilder,
     ReleaseMetadata, MINIMUM_QUICKSHELL_VERSION, OFFICIAL_TARGET, OMARCHY_CONTRACT,
 };
-pub use doctor::{doctor_clean, doctor_scan, DoctorError, DoctorReport};
+pub use doctor::{default_ownership_rules, doctor_clean, doctor_scan, DoctorError, DoctorReport};
 pub use maintenance::{
     apply_version_allowed, classify_local_plugin, collect_worker_env, download_with_policy,
     is_maintenance_worker_exe, notify_uninstall_complete, poll_uninstall_absence,
@@ -23,8 +23,8 @@ pub use maintenance::{
     MAINTENANCE_WORKER_NAME, UNINSTALL_TTY_PHRASE, UNINSTALL_TTY_PROMPT, WORKER_ENV_ALLOWLIST,
 };
 pub use omarchy::{
-    argv_is_approved, enable_argv, rescan_argv, CommandOutput, CommandRunner, OmarchyClient,
-    OmarchyError, ProcessCommandRunner,
+    argv_is_approved, enable_argv, rescan_argv, shell_has_plugin_entry, CommandOutput,
+    CommandRunner, OmarchyClient, OmarchyError, ProcessCommandRunner,
 };
 
 #[cfg(test)]
