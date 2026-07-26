@@ -415,6 +415,7 @@ TestCase {
     verify(src.indexOf("onManifestChanged") >= 0)
     verify(src.indexOf("onHelperPathChanged") >= 0)
     verify(src.indexOf("tryStartProduction()") >= 0)
+    verify(src.indexOf("manifest.__sourceDir") >= 0)
     // Empty helper path must wait, not finishVersionProbeFailure.
     var emptyBranch = src.indexOf("if (!helper.length)")
     verify(emptyBranch >= 0)

@@ -89,8 +89,16 @@ Item {
   function resolvedHelperPath() {
     if (helperPath && helperPath.length > 0)
       return helperPath
-    if (pluginRoot && pluginRoot.length > 0)
-      return pluginRoot + "/bin/agent-bar"
+    // Prefer live manifest.__sourceDir over pluginRoot: Quattro sets `manifest`
+    // after createObject, and onManifestChanged can run before the pluginRoot
+    // binding re-evaluates (nested JS field access is not a QML property).
+    var root = ""
+    if (manifest && manifest.__sourceDir)
+      root = String(manifest.__sourceDir)
+    else if (pluginRoot && pluginRoot.length > 0)
+      root = pluginRoot
+    if (root && root.length > 0)
+      return root + "/bin/agent-bar"
     return ""
   }
 
