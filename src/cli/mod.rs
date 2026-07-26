@@ -254,9 +254,50 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
             CliFailure::internal("update check/apply is not implemented yet (later bundle task)"),
         ),
         Command::Config(config) => dispatch_config(config),
-        Command::Status(_) | Command::Login(_) | Command::Uninstall { .. } | Command::Doctor(_) => {
+        Command::Login(provider) => dispatch_login(provider),
+        Command::Status(_) | Command::Uninstall { .. } | Command::Doctor(_) => {
             Err(CliFailure::internal("command is not implemented yet"))
         }
+    }
+}
+
+fn dispatch_login(provider: ProviderId) -> Result<(), CliFailure> {
+    use crate::providers::adapter::run_login;
+    use crate::providers::{adapter_for, ExecutionEnvironment, TokioProcessRunner};
+
+    let adapter = adapter_for(provider);
+    let env = ExecutionEnvironment::from_process();
+    let discovery = adapter
+        .discover(&env)
+        .map_err(|err| CliFailure::validation(err.to_string()))?;
+    if discovery.login_executable().is_none() {
+        return Err(CliFailure {
+            message: format!(
+                "{} login executable was not found",
+                adapter.descriptor().display_name
+            ),
+            exit_code: GENERIC_FAILURE,
+        });
+    }
+
+    let runner = TokioProcessRunner;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| CliFailure::internal(err.to_string()))?;
+    let outcome = runtime
+        .block_on(run_login(adapter, &discovery, &runner, &runner))
+        .map_err(|err| CliFailure {
+            message: err.to_string(),
+            exit_code: GENERIC_FAILURE,
+        })?;
+    if outcome.exit_code == 0 {
+        Ok(())
+    } else {
+        Err(CliFailure {
+            message: String::new(),
+            exit_code: outcome.exit_code,
+        })
     }
 }
 

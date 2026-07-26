@@ -90,12 +90,14 @@ impl From<std::io::Error> for ProcessError {
     }
 }
 
-/// Runnable process seam for adapters and tests.
+/// Runnable process seam for adapters and tests (object-safe).
 pub trait ProcessRunner: Send + Sync {
-    fn run(
-        &self,
-        spec: &ProcessSpec,
-    ) -> impl std::future::Future<Output = Result<ProcessOutput, ProcessError>> + Send;
+    fn run<'a>(
+        &'a self,
+        spec: &'a ProcessSpec,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ProcessOutput, ProcessError>> + Send + 'a>,
+    >;
 }
 
 /// Tokio-backed runner: argv only, never `sh -c` / `bash -lc` / `eval`.
@@ -103,8 +105,13 @@ pub trait ProcessRunner: Send + Sync {
 pub struct TokioProcessRunner;
 
 impl ProcessRunner for TokioProcessRunner {
-    async fn run(&self, spec: &ProcessSpec) -> Result<ProcessOutput, ProcessError> {
-        run_process(spec).await
+    fn run<'a>(
+        &'a self,
+        spec: &'a ProcessSpec,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ProcessOutput, ProcessError>> + Send + 'a>,
+    > {
+        Box::pin(run_process(spec))
     }
 }
 
