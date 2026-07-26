@@ -402,4 +402,27 @@ TestCase {
     verify(src.indexOf("startVersionProbe") >= 0)
     verify(src.indexOf("syncMaintenanceVersion") >= 0)
   }
+
+  // Live Quattro createObject sets manifest after construction completes.
+  // Service must retry production start when helper path appears, and must not
+  // mark versionFailed merely because the path was empty on first attempt.
+  function test_service_qml_defers_probe_until_helper_path() {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", serviceUrl, false)
+    xhr.send()
+    var src = String(xhr.responseText)
+    verify(src.indexOf("function tryStartProduction") >= 0)
+    verify(src.indexOf("onManifestChanged") >= 0)
+    verify(src.indexOf("onHelperPathChanged") >= 0)
+    verify(src.indexOf("tryStartProduction()") >= 0)
+    // Empty helper path must wait, not finishVersionProbeFailure.
+    var emptyBranch = src.indexOf("if (!helper.length)")
+    verify(emptyBranch >= 0)
+    var nextFail = src.indexOf("finishVersionProbeFailure", emptyBranch)
+    var nextReturn = src.indexOf("return", emptyBranch)
+    verify(nextReturn >= 0)
+    // The immediate empty-path branch must return without permanent failure.
+    if (nextFail >= 0)
+      verify(nextReturn < nextFail)
+  }
 }

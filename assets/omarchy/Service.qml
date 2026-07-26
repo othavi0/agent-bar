@@ -420,6 +420,19 @@ Item {
       finishVersionProbeFailure()
   }
 
+  // Quattro injects `manifest` (and thus pluginRoot) after createObject returns.
+  // The completed handler therefore often runs with an empty helper path; do not
+  // treat that as a permanent probe failure — retry when the path appears.
+  function tryStartProduction() {
+    if (testMode)
+      return
+    if (versionReady || versionProbeRunning)
+      return
+    if (!resolvedHelperPath().length)
+      return
+    startVersionProbe()
+  }
+
   function startVersionProbe() {
     if (versionProbeRunning || versionReady)
       return
@@ -429,7 +442,8 @@ Item {
       return
     var helper = resolvedHelperPath()
     if (!helper.length) {
-      finishVersionProbeFailure()
+      // Empty path is expected before Quattro property injection; wait for
+      // onManifestChanged / onHelperPathChanged rather than locking out.
       return
     }
     versionProbeRunning = true
@@ -824,8 +838,15 @@ Item {
     function refresh(providerId): string { return root.refresh(providerId) }
   }
 
+  onHelperPathChanged: root.tryStartProduction()
+
+  onManifestChanged: {
+    root.syncMaintenanceVersion()
+    root.tryStartProduction()
+  }
+
   Component.onCompleted: {
     root.syncMaintenanceVersion()
-    root.startVersionProbe()
+    root.tryStartProduction()
   }
 }
