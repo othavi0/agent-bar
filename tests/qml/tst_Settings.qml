@@ -137,7 +137,7 @@ TestCase {
     verify(src.indexOf("Notifications") >= 0)
     verify(src.indexOf("Remaining") >= 0)
     verify(src.indexOf("Used") >= 0)
-    verify(src.indexOf("Maintenance") >= 0)
+    verify(src.indexOf("MaintenanceView") >= 0)
     // No credentials / money / theme / cache editor
     verify(src.indexOf("credential") < 0 || src.toLowerCase().indexOf("no credential") >= 0)
     verify(src.indexOf("password") < 0)

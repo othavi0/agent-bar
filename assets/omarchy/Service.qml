@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "ServiceCore.js" as Core
 
@@ -36,11 +37,16 @@ Item {
   // Applied product settings for bar chips (order / metric). Null → defaults.
   property var appliedSettings: null
   property var maintenanceState: Core.maintenanceIdle()
+  property var maintenanceUi: Core.maintenanceUiIdle("")
   property var pendingForcedTargets: Core.emptyPending()
-  // Task 11/13 action bookkeeping (login terminal helper lands in Task 13).
+  // Login bookkeeping + last detached argv (testable without exec).
   property int loginRequestCount: 0
   property string lastLoginProviderId: ""
+  property var lastLoginArgv: null
   property string lastViewInstallationUrl: ""
+  // Pending maintenance intention after confirm (update apply / uninstall).
+  property var pendingMaintenanceIntention: null
+  property string pendingMaintenancePayload: ""
 
   // Version probe
   property string helperVersion: ""
@@ -257,9 +263,120 @@ Item {
       return
     if (!Core.isClosedProvider(providerId))
       return
+    var rootPath = pluginRoot
+    if (!rootPath || !rootPath.length)
+      return
+    var argv = Core.loginDetachedArgv(rootPath, providerId)
+    if (!argv)
+      return
     lastLoginProviderId = String(providerId)
+    lastLoginArgv = argv.slice()
     loginRequestCount++
-    // Task 13 wires argv-safe terminal helper; intention is recorded now.
+    if (testMode)
+      return
+    // Exact argv array — never shell-string construction (UX-048).
+    Quickshell.execDetached(argv)
+  }
+
+  // ---- Maintenance UI (update / uninstall) ----
+
+  function syncMaintenanceVersion() {
+    var ver = helperVersion || manifestVersion || ""
+    if (!maintenanceUi || !maintenanceUi.phase || maintenanceUi.phase === "idle") {
+      maintenanceUi = Core.maintenanceUiIdle(ver)
+      return
+    }
+    if (ver && (!maintenanceUi.installedVersion || !String(maintenanceUi.installedVersion).length)) {
+      var next = Core.cloneMaintenanceUi(maintenanceUi)
+      next.installedVersion = ver
+      maintenanceUi = next
+    }
+  }
+
+  function checkForUpdates() {
+    if (maintenanceState.blocked)
+      return
+    if (!Core.canStartLane(maintenanceCheckBusy))
+      return
+    syncMaintenanceVersion()
+    maintenanceUi = Core.maintenanceUiChecking(maintenanceUi)
+    maintenanceCheckBusy = true
+    if (testMode)
+      return
+    var helper = resolvedHelperPath()
+    if (!helper.length) {
+      maintenanceCheckBusy = false
+      maintenanceUi = Core.maintenanceUiFromCheck(maintenanceUi, "", 1, helperVersion)
+      return
+    }
+    maintenanceCheckProcess.command = Core.updateCheckArgv(helper)
+    maintenanceCheckProcess.running = true
+  }
+
+  function applyUpdateCheckResult(stdout, exitCode) {
+    maintenanceCheckBusy = false
+    maintenanceUi = Core.maintenanceUiFromCheck(
+      maintenanceUi,
+      stdout,
+      exitCode,
+      helperVersion || manifestVersion
+    )
+  }
+
+  function openUpdateConfirm() {
+    maintenanceUi = Core.maintenanceUiOpenUpdateConfirm(maintenanceUi)
+  }
+
+  function closeUpdateConfirm() {
+    maintenanceUi = Core.maintenanceUiCloseUpdateConfirm(maintenanceUi)
+  }
+
+  function confirmUpdateApply() {
+    if (!maintenanceUi || !maintenanceUi.targetVersion)
+      return false
+    var intention = Core.maintenanceIntention("update_apply", maintenanceUi)
+    if (!intention || !intention.version.length)
+      return false
+    pendingMaintenanceIntention = intention
+    pendingMaintenancePayload = ""
+    maintenanceUi = Core.maintenanceUiApplying(maintenanceUi)
+    beginMaintenanceHandoff()
+    return true
+  }
+
+  function openUninstallConfirm() {
+    maintenanceUi = Core.maintenanceUiOpenUninstallConfirm(maintenanceUi)
+  }
+
+  function closeUninstallConfirm() {
+    maintenanceUi = Core.maintenanceUiCloseUninstallConfirm(maintenanceUi)
+  }
+
+  function setUninstallPurge(purge) {
+    maintenanceUi = Core.maintenanceUiSetPurge(maintenanceUi, purge)
+  }
+
+  // UX-047: first click arms, second confirms.
+  function armOrConfirmUninstall() {
+    var result = Core.maintenanceUiArmOrConfirmUninstall(maintenanceUi)
+    maintenanceUi = result.ui
+    if (!result.confirmed)
+      return false
+    var intention = Core.maintenanceIntention("uninstall", maintenanceUi)
+    pendingMaintenanceIntention = intention
+    pendingMaintenancePayload = JSON.stringify(intention.payload)
+    maintenanceUi = Core.maintenanceUiUninstalling(maintenanceUi)
+    beginMaintenanceHandoff()
+    return true
+  }
+
+  function openReleaseNotes() {
+    var url = maintenanceUi && maintenanceUi.releaseNotesUrl
+        ? String(maintenanceUi.releaseNotesUrl)
+        : ""
+    if (url.indexOf("https://") !== 0)
+      return
+    Qt.openUrlExternally(url)
   }
 
   function viewInstallation(providerId, url) {
@@ -330,6 +447,7 @@ Item {
     helperVersion = versionText
     versionReady = true
     versionFailed = false
+    syncMaintenanceVersion()
     if (collectionDelayMs > 0) {
       collectionDelay.interval = collectionDelayMs
       collectionDelay.start()
@@ -505,19 +623,60 @@ Item {
     if (!Core.canStartLane(maintenanceHandoffBusy))
       return
     maintenanceHandoffBusy = true
+    var helper = resolvedHelperPath()
+    var intention = pendingMaintenanceIntention
+    var argv = null
+    if (intention && intention.kind === "update_apply")
+      argv = Core.updateApplyArgv(helper, intention.version)
+    else if (intention && intention.kind === "uninstall")
+      argv = Core.uninstallArgv(helper, intention.purge)
+    else
+      argv = helper && helper.length ? [helper, "doctor", "scan"] : null
+
     if (testMode)
       return
-    // Detached worker placeholder — Task 16/17 wires real maintenance argv.
-    maintenanceHandoffProcess.command = [resolvedHelperPath(), "doctor", "scan"]
+    if (!argv) {
+      maintenanceHandoffBusy = false
+      return
+    }
+    // Full transaction worker lands in CP3; argv shape is fixed here.
+    if (intention && intention.kind === "uninstall" && pendingMaintenancePayload.length) {
+      maintenanceHandoffProcess.stdinEnabled = true
+    } else {
+      maintenanceHandoffProcess.stdinEnabled = false
+    }
+    maintenanceHandoffProcess.command = argv
     maintenanceHandoffProcess.running = true
   }
 
-  function applyMaintenanceHandoffDone() {
+  function applyMaintenanceHandoffDone(exitCode) {
     maintenanceHandoffBusy = false
+    var intention = pendingMaintenanceIntention
+    pendingMaintenanceIntention = null
+    pendingMaintenancePayload = ""
     maintenanceState = Core.maintenanceIdle()
     pollEnabled = true
     if (versionReady)
       pollTimer.restart()
+    if (intention && intention.kind === "update_apply") {
+      if (exitCode === 0) {
+        maintenanceUi = Core.maintenanceUiIdle(helperVersion || intention.version)
+        maintenanceUi.message = "Update applied."
+      } else {
+        maintenanceUi = Core.cloneMaintenanceUi(maintenanceUi)
+        maintenanceUi.phase = "error"
+        maintenanceUi.message = "Update failed."
+      }
+    } else if (intention && intention.kind === "uninstall") {
+      if (exitCode === 0) {
+        maintenanceUi = Core.maintenanceUiIdle(helperVersion)
+        maintenanceUi.message = "Uninstall completed."
+      } else {
+        maintenanceUi = Core.cloneMaintenanceUi(maintenanceUi)
+        maintenanceUi.phase = "error"
+        maintenanceUi.message = "Uninstall failed."
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -587,19 +746,28 @@ Item {
     id: maintenanceCheckProcess
     stdout: StdioCollector { id: maintenanceCheckOut; waitForEnd: true }
     stderr: StdioCollector { id: maintenanceCheckErr; waitForEnd: true }
-    onExited: function () {
-      root.maintenanceCheckBusy = false
+    onExited: function (exitCode) {
+      root.applyUpdateCheckResult(maintenanceCheckOut.text || "", exitCode)
     }
   }
 
   Process {
     id: maintenanceHandoffProcess
+    stdinEnabled: false
     stdout: StdioCollector { id: maintenanceHandoffOut; waitForEnd: true }
     stderr: StdioCollector { id: maintenanceHandoffErr; waitForEnd: true }
-    onExited: function () {
-      root.applyMaintenanceHandoffDone()
+    onStarted: {
+      if (root.pendingMaintenancePayload && root.pendingMaintenancePayload.length
+          && maintenanceHandoffProcess.stdinEnabled) {
+        write(root.pendingMaintenancePayload + "\n")
+      }
+    }
+    onExited: function (exitCode) {
+      root.applyMaintenanceHandoffDone(exitCode)
     }
   }
+
+  Component.onCompleted: syncMaintenanceVersion()
 
   Timer {
     id: versionTimeout

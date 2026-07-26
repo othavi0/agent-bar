@@ -291,35 +291,17 @@ Item {
       }
     }
 
-    // Maintenance section anchor — Task 13 fills content
-    Column {
+    Rectangle {
       width: parent.width
-      spacing: Style.space(6)
+      height: 1
+      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+    }
 
-      Rectangle {
-        width: parent.width
-        height: 1
-        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
-      }
-
-      Text {
-        text: "Maintenance"
-        color: Qt.darker(root.foreground, 1.35)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        textFormat: Text.PlainText
-      }
-
-      Text {
-        width: parent.width
-        text: "Update and uninstall controls land in the next task."
-        color: Qt.darker(root.foreground, 1.4)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        wrapMode: Text.WordWrap
-        textFormat: Text.PlainText
-      }
+    MaintenanceView {
+      width: parent.width
+      agentService: root.agentService
+      foreground: root.foreground
+      fontFamily: root.fontFamily
     }
   }
 }
