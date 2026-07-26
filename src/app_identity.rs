@@ -20,4 +20,14 @@ mod tests {
         assert!(OMARCHY_PLUGIN_ID.contains('.'));
         assert!(OMARCHY_SHELL_DIR.starts_with('/'));
     }
+
+    /// v10 release identity: package version, manifest, helper, and archive
+    /// name must all be 10.0.0 (BUNDLE-006 / docs/releasing.md).
+    #[test]
+    fn package_version_is_v10_release_identity() {
+        assert_eq!(
+            VERSION, "10.0.0",
+            "Cargo.toml package version must be 10.0.0 for the v10 release candidate"
+        );
+    }
 }
