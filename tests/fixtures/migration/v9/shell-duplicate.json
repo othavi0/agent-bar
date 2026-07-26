@@ -1,0 +1,10 @@
+{
+  "bar": {
+    "left": [
+      { "id": "agent-bar.usage", "refreshIntervalSec": 60 }
+    ],
+    "right": [
+      { "id": "agent-bar.usage" }
+    ]
+  }
+}

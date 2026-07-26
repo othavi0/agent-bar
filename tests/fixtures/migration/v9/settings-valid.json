@@ -1,0 +1,13 @@
+{
+  "version": 3,
+  "waybar": {
+    "providers": ["codex", "amp", "grok"],
+    "providerOrder": ["codex", "claude", "amp", "grok"],
+    "displayMode": "used",
+    "interval": 120,
+    "separators": "gap"
+  },
+  "notify": {
+    "enabled": false
+  }
+}

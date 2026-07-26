@@ -1,6 +1,7 @@
 //! Settings: v10 canonical store plus temporary v9 legacy surface.
 
 pub mod legacy;
+pub mod migration;
 pub mod schema;
 pub mod store;
 

@@ -1,0 +1,8 @@
+{
+  "bar": {
+    "right": [
+      { "id": "omarchy.clock" },
+      { "id": "agent-bar.usage" }
+    ]
+  }
+}
