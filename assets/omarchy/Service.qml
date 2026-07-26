@@ -770,7 +770,8 @@ Item {
     }
   }
 
-  Component.onCompleted: syncMaintenanceVersion()
+  // Single completed handler — QML rejects duplicate assignments of this
+  // handler (live Quattro: "Property value set multiple times" at service load).
 
   Timer {
     id: versionTimeout
@@ -823,5 +824,8 @@ Item {
     function refresh(providerId): string { return root.refresh(providerId) }
   }
 
-  Component.onCompleted: startVersionProbe()
+  Component.onCompleted: {
+    root.syncMaintenanceVersion()
+    root.startVersionProbe()
+  }
 }

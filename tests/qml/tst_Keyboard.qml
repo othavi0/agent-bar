@@ -69,6 +69,22 @@ TestCase {
     verify(src.indexOf("scrollHome") >= 0 || src.indexOf("Home") >= 0)
   }
 
+  // Live Quattro KeyboardPanel default property is contentItem (QQuickItem list).
+  // Top-level Shortcut / Component children fail type checks on contentItem.
+  function test_popup_shortcuts_nested_under_item_not_panel_default() {
+    var src = read("assets/omarchy/Popup.qml")
+    verify(src.indexOf("scrollShortcuts") >= 0)
+    verify(src.indexOf("id: scrollShortcuts") >= 0)
+    // Shortcuts must appear after PanelKeyCatcher opens, not as bare panel children.
+    var keyCatcherAt = src.indexOf("id: keyCatcher")
+    var firstShortcutAt = src.indexOf("Shortcut {")
+    verify(keyCatcherAt >= 0)
+    verify(firstShortcutAt > keyCatcherAt)
+    // Loader views must be property Component, not default content children.
+    verify(src.indexOf("property Component providerContent") >= 0)
+    verify(src.indexOf("property Component settingsContent") >= 0)
+  }
+
   function test_focus_controller_source() {
     var src = read("assets/omarchy/components/FocusController.qml")
     verify(src.indexOf("function move") >= 0)

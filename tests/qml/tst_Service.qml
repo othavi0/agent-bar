@@ -386,4 +386,20 @@ TestCase {
     verify(src.indexOf("id: pollTimer") >= 0)
     verify(src.indexOf('target: "agent-bar.usage"') >= 0)
   }
+
+  // Live Quattro: duplicate Component.onCompleted → "Property value set multiple times"
+  // and the service never loads (bar chips disappear).
+  function test_service_qml_has_single_component_on_completed() {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", serviceUrl, false)
+    xhr.send()
+    var src = String(xhr.responseText)
+    var re = /Component\.onCompleted/g
+    var count = 0
+    while (re.exec(src) !== null)
+      count++
+    compare(count, 1)
+    verify(src.indexOf("startVersionProbe") >= 0)
+    verify(src.indexOf("syncMaintenanceVersion") >= 0)
+  }
 }

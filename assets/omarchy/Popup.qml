@@ -155,28 +155,6 @@ KeyboardPanel {
     lineHeight: root.contentLineHeight
   }
 
-  // A11Y-023: page/home/end when panel shortcuts are live
-  Shortcut {
-    sequences: ["PgDown", "Page Down"]
-    enabled: root.isOpen && !keyCatcher.blocked
-    onActivated: focusController.scrollPage(1)
-  }
-  Shortcut {
-    sequences: ["PgUp", "Page Up"]
-    enabled: root.isOpen && !keyCatcher.blocked
-    onActivated: focusController.scrollPage(-1)
-  }
-  Shortcut {
-    sequence: "Home"
-    enabled: root.isOpen && !keyCatcher.blocked
-    onActivated: focusController.scrollHome()
-  }
-  Shortcut {
-    sequence: "End"
-    enabled: root.isOpen && !keyCatcher.blocked
-    onActivated: focusController.scrollEnd()
-  }
-
   PanelKeyCatcher {
     id: keyCatcher
     anchors.fill: parent
@@ -193,6 +171,35 @@ KeyboardPanel {
     onActivateRequested: focusController.activate()
     onTextKey: function (text) {
       root.handleTextKey(text)
+    }
+
+    // A11Y-023: page/home/end. Nested under an Item (not KeyboardPanel default
+    // contentItem) because Shortcut is not a QQuickItem and live Quattro rejects
+    // non-Item default children ("Cannot assign QQuickShortcut to contentItem").
+    Item {
+      id: scrollShortcuts
+      width: 0
+      height: 0
+      Shortcut {
+        sequences: ["PgDown", "Page Down"]
+        enabled: root.isOpen && !keyCatcher.blocked
+        onActivated: focusController.scrollPage(1)
+      }
+      Shortcut {
+        sequences: ["PgUp", "Page Up"]
+        enabled: root.isOpen && !keyCatcher.blocked
+        onActivated: focusController.scrollPage(-1)
+      }
+      Shortcut {
+        sequence: "Home"
+        enabled: root.isOpen && !keyCatcher.blocked
+        onActivated: focusController.scrollHome()
+      }
+      Shortcut {
+        sequence: "End"
+        enabled: root.isOpen && !keyCatcher.blocked
+        onActivated: focusController.scrollEnd()
+      }
     }
 
     Row {
@@ -253,8 +260,9 @@ KeyboardPanel {
     }
   }
 
-  Component {
-    id: providerContent
+  // Declared as properties (not default contentItem children): KeyboardPanel's
+  // default property is a QQuickItem list and rejects QQmlComponent objects.
+  property Component providerContent: Component {
     ProviderView {
       width: contentColumn.width
       provider: root.selectedProvider
@@ -267,8 +275,7 @@ KeyboardPanel {
     }
   }
 
-  Component {
-    id: settingsContent
+  property Component settingsContent: Component {
     SettingsView {
       width: contentColumn.width
       agentService: root.agentService
