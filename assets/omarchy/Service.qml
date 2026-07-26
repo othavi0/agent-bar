@@ -37,6 +37,10 @@ Item {
   property var appliedSettings: null
   property var maintenanceState: Core.maintenanceIdle()
   property var pendingForcedTargets: Core.emptyPending()
+  // Task 11/13 action bookkeeping (login terminal helper lands in Task 13).
+  property int loginRequestCount: 0
+  property string lastLoginProviderId: ""
+  property string lastViewInstallationUrl: ""
 
   // Version probe
   property string helperVersion: ""
@@ -141,6 +145,50 @@ Item {
       settingsState = Core.settingsOpen(settingsState, snap, settingsGeneration)
       settingsDraft = settingsState.draft
       kickSettingsRead()
+    }
+  }
+
+  // JSON-025: map closed action kinds to typed service methods.
+  function retryProvider(providerId) {
+    refreshProvider(providerId, true)
+  }
+
+  function loginProvider(providerId) {
+    if (maintenanceState.blocked)
+      return
+    if (!Core.isClosedProvider(providerId))
+      return
+    lastLoginProviderId = String(providerId)
+    loginRequestCount++
+    // Task 13 wires argv-safe terminal helper; intention is recorded now.
+  }
+
+  function viewInstallation(providerId, url) {
+    if (!Core.isClosedProvider(providerId))
+      return
+    var target = String(url || "")
+    if (target.indexOf("https://") !== 0)
+      return
+    lastViewInstallationUrl = target
+    Qt.openUrlExternally(target)
+  }
+
+  function dispatchAction(providerId, action) {
+    if (!action)
+      return
+    var kind = Core.mapActionKind(action.kind)
+    if (!kind)
+      return
+    if (kind === "retry") {
+      retryProvider(providerId)
+      return
+    }
+    if (kind === "login") {
+      loginProvider(providerId)
+      return
+    }
+    if (kind === "view_installation") {
+      viewInstallation(providerId, action.target)
     }
   }
 

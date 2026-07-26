@@ -538,3 +538,283 @@ function routeChipClick(button, owner, providerId, popupOwner) {
   }
   return { action: "noop" }
 }
+
+// ---------------------------------------------------------------------------
+// Popup / provider presentation (UX-013..032A, JSON-023..028)
+// ---------------------------------------------------------------------------
+
+var ACTION_INTENTS = {
+  "retry": true,
+  "login": true,
+  "view_installation": true
+}
+
+var MONEY_COPY_RE = /(?:\bBRL\b|\$|USD|EUR|GBP|\bspend\b|\bbalance\b|\bcredits?\b|\bcost\b|\bprice\b|\bcurrency\b)/i
+
+function findProvider(snapshot, providerId) {
+  if (!snapshot || !Array.isArray(snapshot.providers))
+    return null
+  var want = String(providerId || "")
+  for (var i = 0; i < snapshot.providers.length; i++) {
+    var p = snapshot.providers[i]
+    if (p && String(p.id) === want)
+      return p
+  }
+  return null
+}
+
+function resolveSelectedProvider(snapshot, selectedProviderId, settings) {
+  var chips = visibleProviders(snapshot, settings)
+  if (!chips.length)
+    return null
+  var want = String(selectedProviderId || "")
+  if (want) {
+    for (var i = 0; i < chips.length; i++) {
+      if (String(chips[i].id) === want)
+        return chips[i]
+    }
+  }
+  return chips[0]
+}
+
+function connectionLabel(state) {
+  var s = String(state || "")
+  if (s === "ready")
+    return "Connected"
+  if (s === "stale")
+    return "Stale"
+  if (s === "loading")
+    return "Loading"
+  if (s === "cli_missing")
+    return "CLI missing"
+  if (s === "unauthenticated")
+    return "Not connected"
+  if (s === "rate_limited")
+    return "Rate limited"
+  if (s === "network_error")
+    return "Network error"
+  if (s === "provider_error")
+    return "Provider error"
+  return "Unknown"
+}
+
+function planBadge(provider) {
+  if (!provider || !provider.plan)
+    return ""
+  if (provider.plan.label)
+    return String(provider.plan.label)
+  if (provider.plan.id)
+    return String(provider.plan.id)
+  return ""
+}
+
+// Render only the safe English message from the typed error object.
+function errorMessage(provider) {
+  if (!provider || !provider.error)
+    return ""
+  var msg = provider.error.message
+  if (msg === null || msg === undefined)
+    return ""
+  return plainText(String(msg))
+}
+
+function plainText(value) {
+  var s = String(value === null || value === undefined ? "" : value)
+  // Drop control chars / ANSI; never treat as HTML.
+  s = s.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+  return s
+}
+
+function containsMoneyCopy(text) {
+  return MONEY_COPY_RE.test(String(text || ""))
+}
+
+function emptyWindowsMessage() {
+  return "Percentage usage is not available for this account"
+}
+
+function stateTitle(provider) {
+  if (!provider)
+    return "Loading"
+  var s = String(provider.state || "")
+  if (s === "loading")
+    return "Loading"
+  if (s === "ready" && (!provider.windows || provider.windows.length === 0))
+    return "No percentage usage"
+  if (s === "stale")
+    return "Stale"
+  if (s === "cli_missing")
+    return "CLI not found"
+  if (s === "unauthenticated")
+    return "Authentication required"
+  if (s === "rate_limited")
+    return "Rate limited"
+  if (s === "network_error")
+    return "Network error"
+  if (s === "provider_error")
+    return "Provider error"
+  return connectionLabel(s)
+}
+
+function stateBody(provider) {
+  if (!provider)
+    return "Collecting provider status\u2026"
+  var s = String(provider.state || "")
+  if (s === "loading")
+    return "Collecting provider status\u2026"
+  if (s === "ready" && (!provider.windows || provider.windows.length === 0))
+    return emptyWindowsMessage()
+  if (s === "stale") {
+    var base = "Showing the last successful result."
+    var err = errorMessage(provider)
+    if (err.length)
+      return base + " " + err
+    return base
+  }
+  if (s === "cli_missing") {
+    var cli = errorMessage(provider)
+    return cli.length ? cli : "Required CLI was not found."
+  }
+  if (s === "unauthenticated") {
+    var auth = errorMessage(provider)
+    return auth.length ? auth : "Sign in to collect usage."
+  }
+  if (s === "rate_limited") {
+    var rl = errorMessage(provider)
+    return rl.length ? rl : "The provider rate-limited this request. Try again shortly."
+  }
+  if (s === "network_error") {
+    var net = errorMessage(provider)
+    return net.length ? net : "A temporary network error prevented collection."
+  }
+  if (s === "provider_error") {
+    var pe = errorMessage(provider)
+    return pe.length ? pe : "The provider returned an unusable response."
+  }
+  return ""
+}
+
+function defaultActionLabel(kind) {
+  if (kind === "retry")
+    return "Retry"
+  if (kind === "login")
+    return "Connect"
+  if (kind === "view_installation")
+    return "View installation"
+  return String(kind || "")
+}
+
+// Closed action list for the current provider state (JSON-025).
+function stateActions(provider) {
+  var out = []
+  if (!provider)
+    return out
+  var state = String(provider.state || "")
+  var seen = {}
+
+  function pushAction(kind, label, target) {
+    var k = String(kind || "")
+    if (!ACTION_INTENTS[k] || seen[k])
+      return
+    seen[k] = true
+    out.push({
+      kind: k,
+      label: plainText(label || defaultActionLabel(k)),
+      target: target === undefined ? null : target
+    })
+  }
+
+  if (provider.action && provider.action.kind)
+    pushAction(provider.action.kind, provider.action.label, provider.action.target)
+
+  if (state === "cli_missing")
+    pushAction("retry", "Check again", null)
+  if (state === "stale" || state === "rate_limited" || state === "network_error" || state === "provider_error")
+    pushAction("retry", "Retry", null)
+  if (state === "unauthenticated" && !seen.login && !seen.view_installation)
+    pushAction("login", "Connect", null)
+
+  return out
+}
+
+function mapActionKind(kind) {
+  var k = String(kind || "")
+  if (!ACTION_INTENTS[k])
+    return null
+  return k
+}
+
+function windowDisplayLines(provider, metric) {
+  var lines = []
+  if (!provider || !Array.isArray(provider.windows))
+    return lines
+  var mode = metric === "used" ? "used" : "remaining"
+  for (var i = 0; i < provider.windows.length; i++) {
+    var w = provider.windows[i]
+    if (!w)
+      continue
+    var pct = mode === "used" ? Number(w.usedPercent) : Number(w.remainingPercent)
+    var pctText = isFinite(pct) ? (Math.round(pct) + "%") : "\u2014"
+    lines.push({
+      id: String(w.id || ("w" + i)),
+      label: plainText(w.label || w.id || "Window"),
+      percentText: pctText,
+      resetsAt: w.resetsAt ? String(w.resetsAt) : null
+    })
+  }
+  return lines
+}
+
+function headerModel(provider, refreshing) {
+  if (!provider) {
+    return {
+      name: "",
+      plan: "",
+      connection: "Loading",
+      lastSuccessAt: null,
+      refreshing: !!refreshing,
+      showStale: false
+    }
+  }
+  return {
+    name: plainText(provider.name || providerDisplayName(provider.id)),
+    plan: plainText(planBadge(provider)),
+    connection: connectionLabel(provider.state),
+    lastSuccessAt: provider.lastSuccessAt ? String(provider.lastSuccessAt) : null,
+    refreshing: !!refreshing,
+    showStale: String(provider.state) === "stale"
+  }
+}
+
+function contentMode(provider) {
+  if (!provider)
+    return "skeleton"
+  var s = String(provider.state || "")
+  if (s === "loading")
+    return "skeleton"
+  if (s === "ready") {
+    if (!provider.windows || provider.windows.length === 0)
+      return "empty_windows"
+    return "windows"
+  }
+  if (s === "stale") {
+    if (provider.windows && provider.windows.length > 0)
+      return "stale_windows"
+    return "state"
+  }
+  return "state"
+}
+
+// Popup open for this owner only (UX-021 / UX-022).
+function popupOpenForOwner(popupOwner, owner) {
+  if (!popupOwner || owner === null || owner === undefined)
+    return false
+  return popupOwner.owner === owner
+}
+
+function popupView(popupOwner) {
+  if (!popupOwner || !popupOwner.view)
+    return "usage"
+  return String(popupOwner.view)
+}

@@ -99,4 +99,20 @@ BarWidget {
       }
     }
   }
+
+  // Monitor-local popup; only the owning bar instance opens (UX-021/022).
+  Loader {
+    active: root.bar !== null
+    sourceComponent: popupComponent
+  }
+
+  Component {
+    id: popupComponent
+    Popup {
+      anchorItem: root
+      bar: root.bar
+      owner: root
+      agentService: root.agentService
+    }
+  }
 }
