@@ -1,8 +1,5 @@
 # New Provider Guide
 
-> Target v10 provider adapter contract; not yet implemented on the
-> specification branch.
-
 Adding a provider is a cross-contract change. It requires Rust metadata and
 normalization, deterministic fixtures, an approved icon, official installation
 and login behavior, QML rendering compatibility, settings migration, and

@@ -1,9 +1,5 @@
 # Agent Bar
 
-> **Target documentation for v10.** The implementation is not complete on this
-> specification branch. v9 remains the current release until every v10 gate
-> passes.
-
 Agent Bar is an Omarchy Quattro Quickshell plugin that shows normalized quota
 and reset information for Claude, Codex, Amp, and Grok.
 
@@ -48,9 +44,9 @@ scrolling, complete keyboard navigation, and active Omarchy theme tokens.
 
 Agent Bar never installs provider CLIs and never handles credentials.
 
-## Installation target
+## Installation
 
-After v10 is released, installation uses the plugin-scoped bootstrap:
+Installation uses the plugin-scoped bootstrap from a published release tag:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/othavi0/agent-bar/v10.0.0/install.sh

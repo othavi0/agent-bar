@@ -1,8 +1,5 @@
 # Architecture
 
-> Target v10 architecture. The v9 source tree remains transitional until the
-> implementation plan deletes it.
-
 ## System
 
 ```text

@@ -1,7 +1,6 @@
 # Documentation
 
-> These files describe the approved v10 target. v9 remains the current release
-> until the implementation and acceptance plan completes.
+Active product and engineering documentation for Agent Bar v10.
 
 ## User and operator documentation
 

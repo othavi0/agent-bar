@@ -1,8 +1,5 @@
 # Troubleshooting
 
-> Target v10 troubleshooting paths; the private helper commands below are not
-> available until the implementation plan completes.
-
 Resolve the private helper:
 
 ```bash

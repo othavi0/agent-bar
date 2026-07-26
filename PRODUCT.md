@@ -1,8 +1,5 @@
 # Product
 
-> **Target product contract for v10.** v9 remains the current release until the
-> v10 acceptance matrix passes.
-
 ## Users
 
 Omarchy Quattro users who work with Claude, Codex, Amp, or Grok and need a

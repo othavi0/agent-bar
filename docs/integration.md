@@ -1,8 +1,5 @@
 # Plugin Integration and Ownership
 
-> Target v10 integration contract; not yet implemented on the specification
-> branch.
-
 ## Installation
 
 The plugin-scoped `install.sh`:

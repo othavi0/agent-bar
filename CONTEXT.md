@@ -1,6 +1,7 @@
 # Agent Bar Domain
 
-> **Target v10 vocabulary.** Do not import v9 Waybar/TUI terms into new code.
+Canonical product vocabulary. Do not import removed v9 Waybar or TUI terms into
+new code.
 
 ## Surfaces
 

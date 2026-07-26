@@ -1,7 +1,7 @@
 # Releasing Agent Bar
 
-> v10 release preparation only. Publishing requires separate explicit
-> authorization.
+Publishing requires separate explicit authorization after the final acceptance
+matrix and live QA.
 
 The release is one architecture-specific Omarchy plugin bundle. There is no
 standalone binary tarball, AUR package, cargo-binstall metadata, or global

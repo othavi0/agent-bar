@@ -7,21 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Planned for 10.0.0
+### Added
 
-- Replace all graphical surfaces with one Omarchy Quattro Quickshell plugin.
-- Bundle the Rust backend as a private plugin helper.
-- Add one shared shell service, monitor-local chips, a consolidated popup,
-  native Settings, provider login actions, update, and uninstall.
-- Introduce strict word-based helper commands and status JSON schema v2.
-- Add transactional v9 migration, ownership checks, backups, atomic bundle
-  replacement, health verification, and rollback.
-- Remove the TUI, Waybar, session history, charts, monetary data, standalone
-  installation, AUR, cargo-binstall, and schema-v1 status compatibility.
+- Omarchy Quattro plugin `agent-bar.usage` with one shared `Service.qml`,
+  monitor-local `BarWidget.qml` chips, consolidated popup, Settings, update,
+  and uninstall.
+- Private Rust helper at plugin path `bin/agent-bar` for provider collection,
+  cache, settings, notifications, doctor, and transactional maintenance.
+- Claude, Codex, Amp, and Grok percentage quota windows with typed states
+  (`ready`, `stale`, `cli_missing`, `unauthenticated`, `rate_limited`,
+  `network_error`, `provider_error`).
+- Status JSON schema v2 and strict word-based helper grammar.
+- Transactional setup, v9-to-v10 settings migration, ownership classification,
+  backups, journaled update/uninstall, health verification, and rollback.
+- Plugin-scoped `install.sh` bootstrap and release bundle builder for
+  `x86_64-unknown-linux-gnu`.
+- Active documentation, legacy scan, and executable doc contract tests.
 
-This entry describes the approved target. It moves to a dated release section
-only after implementation, final review, live QA, and explicit release
-authorization.
+### Removed
+
+- TUI and terminal dashboard.
+- Waybar and Pango output.
+- Session history, charts, and local or provider-reported monetary data.
+- Schema-v1 status compatibility.
+- Standalone global install, AUR packaging, and cargo-binstall metadata.
+- Permanent daemon and global `agent-bar` executable.
+
+### Breaking
+
+- Status stdout is schema v2 only.
+- Product artifact is only the Omarchy plugin bundle.
+- Settings live solely in `$XDG_CONFIG_HOME/agent-bar/settings.json`.
+
+This section becomes the dated `10.0.0` release entry after final review, live
+QA, and explicit release authorization. Authored release notes live at
+`docs/releases/10.0.0.md`.
 
 ## [9.0.0] - 2026-07-21
 

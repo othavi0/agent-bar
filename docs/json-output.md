@@ -1,7 +1,7 @@
 # Status JSON Schema v2
 
-> Target v10 schema, not yet implemented on the specification branch. It will
-> be consumed by the shared Quickshell service.
+Consumed by the shared Quickshell service. The checked-in structural schema is
+`schemas/status-v2.schema.json`.
 
 Request:
 

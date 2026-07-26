@@ -1,7 +1,8 @@
 # Private Helper Commands
 
-> Target v10 command contract. The helper is bundled inside the plugin and is
-> not the normal user interface.
+The helper is bundled inside the plugin and is not the normal user interface.
+Users interact through the Quickshell UI; these commands support diagnostics,
+recovery, and the shared service.
 
 Resolve it with:
 
@@ -57,7 +58,7 @@ credentials and preserves the meaningful provider exit status.
 "$PLUGIN" config show
 "$PLUGIN" config apply stdin
 "$PLUGIN" config apply file /path/to/settings.json
-"$PLUGIN" config apply json '{"schemaVersion":1,...}'
+"$PLUGIN" config apply json '{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true}}'
 ```
 
 `show` is read-only. `apply` requires one complete valid settings document and

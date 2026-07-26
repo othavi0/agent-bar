@@ -1,8 +1,5 @@
 # Runtime
 
-> Target v10 runtime and ownership model; not yet implemented on the
-> specification branch.
-
 ## Owned paths
 
 | Path | Purpose |

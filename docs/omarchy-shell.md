@@ -1,8 +1,5 @@
 # Omarchy Quattro Plugin Contract
 
-> Target v10 integration for the locally verified Quattro plugin registry; not
-> yet implemented on the specification branch.
-
 ## Installed path
 
 Quattro discovers user plugins at the literal path:

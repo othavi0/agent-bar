@@ -6,7 +6,8 @@ Author a markdown file per published version:
 docs/releases/<semver>.md
 ```
 
-Example: `docs/releases/10.0.0.md`.
+Tracked notes for the initial Quickshell-only release:
+[`10.0.0.md`](10.0.0.md).
 
 The release builder and `publish.yml` consume this path. When the file is
 absent at tag publish time, CI materializes notes from the GitHub release body

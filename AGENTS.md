@@ -4,8 +4,7 @@ The canonical repository instructions are in [CLAUDE.md](CLAUDE.md). Read that
 file before editing code or documentation.
 
 The approved v10 design and implementation plan are in
-[docs/specs/v10/](docs/specs/v10/README.md). This branch documents a target;
-v9 remains implemented until the plan completes.
+[docs/specs/v10/](docs/specs/v10/README.md). This branch implements that plan.
 
 ## Boot order
 

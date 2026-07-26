@@ -1,12 +1,9 @@
 # Agent Bar Engineering Contract
 
-> This branch specifies the v10 target. Until implementation completes, v9
-> code may still contradict this file. The canonical transition contract is
-> `docs/specs/v10/`.
-
 `AGENTS.md` is the Codex adapter. This file is the repository's canonical agent
-contract. Source and executable tests win over ordinary documentation; the
-approved v10 specification wins when replacing v9 behavior.
+contract for Agent Bar v10. Source and executable tests win over ordinary
+documentation; the approved specification in `docs/specs/v10/` is the product
+contract when documentation and behavior disagree.
 
 ## Hard rules
 
