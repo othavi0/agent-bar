@@ -230,29 +230,9 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
         Command::Setup(SetupOptions::Production) => Err(CliFailure::internal(
             "setup is not implemented yet (later plugin transaction task)",
         )),
-        Command::Update(UpdateCommand::Interactive) => {
-            let is_tty = io::stdin().is_terminal();
-            // Network-backed update discovery arrives in the bundle task.
-            // Until then interactive update only enforces the TTY gate and the
-            // up-to-date path when no offer seam is wired.
-            let offer = InteractiveUpdateOffer::UpToDate;
-            let stdin = io::stdin();
-            let mut locked_in = stdin.lock();
-            let stdout = io::stdout();
-            let mut locked_out = stdout.lock();
-            let stderr = io::stderr();
-            let mut locked_err = stderr.lock();
-            confirm_interactive_update(
-                is_tty,
-                offer,
-                &mut locked_in,
-                &mut locked_out,
-                &mut locked_err,
-            )
-        }
-        Command::Update(UpdateCommand::Check) | Command::Update(UpdateCommand::Apply(_)) => Err(
-            CliFailure::internal("update check/apply is not implemented yet (later bundle task)"),
-        ),
+        Command::Update(UpdateCommand::Interactive) => dispatch_update_interactive(),
+        Command::Update(UpdateCommand::Check) => dispatch_update_check(),
+        Command::Update(UpdateCommand::Apply(version)) => dispatch_update_apply(&version.as_str()),
         Command::Config(config) => dispatch_config(config),
         Command::Login(provider) => dispatch_login(provider),
         Command::Status(opts) => dispatch_status(opts),
@@ -260,6 +240,164 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
             Err(CliFailure::internal("command is not implemented yet"))
         }
     }
+}
+
+fn dispatch_update_check() -> Result<(), CliFailure> {
+    use crate::plugin::{ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe};
+    use crate::support::{Clock, SystemClock};
+
+    let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let clock = SystemClock;
+    let probe = UpdateCheckProbe::default();
+    let doc =
+        UpdateCheck::run(&http, &clock, &probe).map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let json = doc
+        .to_stdout_json()
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    print!("{json}");
+    let _ = Clock::now_utc(&clock);
+    Ok(())
+}
+
+fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
+    use crate::plugin::{
+        apply_version_allowed, collect_worker_env, download_with_policy, stage_update_bundle,
+        txid_from_bytes, MaintenanceJournalPayload, MaintenanceOp, MaintenanceWorker, PluginPaths,
+        ProcessCommandRunner, ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe,
+        WORKER_ENV_ALLOWLIST,
+    };
+    use crate::support::{Clock, SystemClock};
+
+    let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let clock = SystemClock;
+    let probe = UpdateCheckProbe::default();
+    // Fresh check required before apply (BUNDLE-022).
+    let doc =
+        UpdateCheck::run(&http, &clock, &probe).map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let selected =
+        apply_version_allowed(&doc, version).map_err(|e| CliFailure::validation(e.to_string()))?;
+
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| CliFailure::plugin("HOME is required for update apply".to_string()))?;
+    let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let paths = PluginPaths::production(PathBuf::from(home), xdg_state);
+
+    let txid = txid_from_bytes(
+        format!(
+            "update:{}:{}:{}",
+            version,
+            selected.source_commit,
+            Clock::now_utc(&clock)
+        )
+        .as_bytes(),
+    );
+
+    let archive =
+        UpdateCheck::download_archive(&http, &selected.archive_url, &selected.archive_sha256)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    // Corroborating checksum sidecar (not a substitute for the pinned hash).
+    if let Ok(side) = download_with_policy(&http, &selected.checksum_url) {
+        let text = String::from_utf8_lossy(&side);
+        if !text.contains(&selected.archive_sha256) {
+            return Err(CliFailure::plugin(
+                "checksum sidecar does not corroborate pinned archive hash",
+            ));
+        }
+    }
+
+    let (stage, receipt) = stage_update_bundle(&paths, &txid, &archive)
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    if receipt.version != version {
+        return Err(CliFailure::plugin(format!(
+            "staged version {} does not equal requested {version}",
+            receipt.version
+        )));
+    }
+
+    let current_exe =
+        std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
+    let previous = probe.current_version.clone();
+    let payload = MaintenanceJournalPayload {
+        txid: txid.clone(),
+        operation: MaintenanceOp::Update,
+        expected_version: Some(version.to_string()),
+        previous_version: Some(previous),
+        stage_path: stage.display().to_string(),
+        plugin_root: paths.plugin_root.display().to_string(),
+        quarantine_path: paths
+            .quarantine_dir(&txid)
+            .map_err(|e| CliFailure::plugin(e.to_string()))?
+            .display()
+            .to_string(),
+        selected: Some(selected),
+        omarchy_bin: "omarchy".into(),
+        omarchy_shell_bin: "omarchy-shell".into(),
+        is_fresh_install: !paths.plugin_root.exists(),
+        is_v9_rollback: false,
+    };
+
+    let env_pairs = collect_worker_env(
+        std::env::vars().filter(|(k, _)| WORKER_ENV_ALLOWLIST.contains(&k.as_str())),
+    );
+    let runner = ProcessCommandRunner;
+    let unit = MaintenanceWorker::handoff_update(
+        &paths,
+        &runner,
+        &current_exe,
+        &txid,
+        &payload,
+        &env_pairs,
+        "systemd-run",
+    )
+    .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    eprintln!("maintenance handoff accepted: {unit}");
+    Ok(())
+}
+
+fn dispatch_update_interactive() -> Result<(), CliFailure> {
+    use crate::plugin::{ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe};
+    use crate::support::SystemClock;
+
+    let is_tty = io::stdin().is_terminal();
+    let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let clock = SystemClock;
+    let probe = UpdateCheckProbe::default();
+    let doc =
+        UpdateCheck::run(&http, &clock, &probe).map_err(|e| CliFailure::plugin(e.to_string()))?;
+
+    let offer = if doc.available {
+        let latest = doc
+            .latest_compatible
+            .as_ref()
+            .ok_or_else(|| CliFailure::plugin("available without latestCompatible"))?;
+        InteractiveUpdateOffer::Available {
+            current: doc.current.version.clone(),
+            target: latest.version.clone(),
+        }
+    } else {
+        InteractiveUpdateOffer::UpToDate
+    };
+
+    let stdin = io::stdin();
+    let mut locked_in = stdin.lock();
+    let stdout = io::stdout();
+    let mut locked_out = stdout.lock();
+    let stderr = io::stderr();
+    let mut locked_err = stderr.lock();
+    confirm_interactive_update(
+        is_tty,
+        offer,
+        &mut locked_in,
+        &mut locked_out,
+        &mut locked_err,
+    )?;
+
+    if let Some(latest) = doc.latest_compatible {
+        if doc.available {
+            return dispatch_update_apply(&latest.version);
+        }
+    }
+    Ok(())
 }
 
 fn dispatch_status(opts: StatusOptions) -> Result<(), CliFailure> {

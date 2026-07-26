@@ -5,12 +5,16 @@ edition = "2021"
 # 1.88: piso real, não 1.80 — tachyonfx (via anpa) exige 1.82.
 rust-version = "1.88"
 license = "MIT"
-description = "LLM quota monitor for Waybar - Claude, Codex, Amp, Grok"
+description = "LLM quota monitor for Claude, Codex, Amp, and Grok."
 repository = "https://github.com/othavi0/agent-bar"
 
 [[bin]]
 name = "agent-bar"
 path = "src/main.rs"
+
+[[bin]]
+name = "agent-bar-bundle"
+path = "src/bin/agent-bar-bundle.rs"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -57,10 +61,3 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
-
-# cargo-binstall puxa o binário direto do GitHub Release (sem crates.io).
-# O tarball tem `agent-bar` na raiz do arquivo (ver .github/workflows/publish.yml).
-[package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/agent-bar-{ version }-x86_64.tar.gz"
-pkg-fmt = "tgz"
-bin-dir = "agent-bar"

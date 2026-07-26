@@ -1,12 +1,24 @@
 //! Plugin bundle paths, ownership classification, and maintenance transactions.
 
+pub mod bundle;
 pub mod doctor;
+pub mod maintenance;
 pub mod omarchy;
 pub mod ownership;
 pub mod paths;
 pub mod transaction;
 
+pub use bundle::{
+    BundleBuilder, BundleError, BundleFileEntry, BundleReceipt, BundleValidator, ReleaseBuilder,
+    ReleaseMetadata, MINIMUM_QUICKSHELL_VERSION, OFFICIAL_TARGET, OMARCHY_CONTRACT,
+};
 pub use doctor::{doctor_clean, doctor_scan, DoctorError, DoctorReport};
+pub use maintenance::{
+    apply_version_allowed, collect_worker_env, download_with_policy, is_maintenance_worker_exe,
+    stage_update_bundle, MaintenanceError, MaintenanceJournalPayload, MaintenanceOp,
+    MaintenanceWorker, RealSleeper, ReqwestReleaseHttp, UpdateCheck, UpdateCheckDocument,
+    UpdateCheckProbe, MAINTENANCE_WORKER_NAME, WORKER_ENV_ALLOWLIST,
+};
 pub use omarchy::{
     argv_is_approved, enable_argv, rescan_argv, CommandOutput, CommandRunner, OmarchyClient,
     OmarchyError, ProcessCommandRunner,
@@ -19,8 +31,8 @@ pub use ownership::{
     OwnershipEvidence, OwnershipRules,
 };
 pub use paths::{
-    is_hidden_plugin_sibling, validate_archive_entry_path, validate_txid, PathError, PluginPaths,
-    PLUGIN_ID,
+    is_hidden_plugin_sibling, txid_from_bytes, validate_archive_entry_path, validate_txid,
+    PathError, PluginPaths, PLUGIN_ID,
 };
 pub use transaction::{
     exchange_paths, inspect_tar_zst_entries, JournalEntry, Transaction, TransactionError,

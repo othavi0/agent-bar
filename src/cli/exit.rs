@@ -43,4 +43,11 @@ impl CliFailure {
             exit_code: INTERNAL,
         }
     }
+
+    pub fn plugin(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            exit_code: PLUGIN,
+        }
+    }
 }
