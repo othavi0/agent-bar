@@ -757,9 +757,12 @@ Item {
     stdout: StdioCollector { id: maintenanceHandoffOut; waitForEnd: true }
     stderr: StdioCollector { id: maintenanceHandoffErr; waitForEnd: true }
     onStarted: {
+      // BUNDLE-036 / UX-048: non-TTY uninstall confirmation uses read_to_end.
+      // write() alone does not deliver EOF; stdinEnabled=false closes the write channel.
       if (root.pendingMaintenancePayload && root.pendingMaintenancePayload.length
           && maintenanceHandoffProcess.stdinEnabled) {
         write(root.pendingMaintenancePayload + "\n")
+        maintenanceHandoffProcess.stdinEnabled = false
       }
     }
     onExited: function (exitCode) {

@@ -3784,16 +3784,40 @@ mod tests {
                     "point={point:?} settings untouched"
                 );
             }
-            // No successful commit report claiming ok without rollback.
+            // Pre-commit failures must write a durable report with rolled_back +
+            // service-verified rollback (rescan + previous-version health).
             let report_path = paths.reports_dir.join(format!("{txid}.json"));
-            if report_path.is_file() {
-                let report: DurableReport =
-                    serde_json::from_slice(&fs::read(&report_path).unwrap()).unwrap();
-                assert!(!report.ok || report.rolled_back, "point={point:?}");
-                if report.rolled_back {
-                    assert!(!report.ok || !report.message.contains("committed without"));
-                }
-            }
+            assert!(
+                report_path.is_file(),
+                "point={point:?} durable rollback report required"
+            );
+            let report: DurableReport =
+                serde_json::from_slice(&fs::read(&report_path).unwrap()).unwrap();
+            assert!(!report.ok, "point={point:?} must not claim ok");
+            assert!(
+                report.rolled_back,
+                "point={point:?} must claim rolled_back after pre-commit failure"
+            );
+            assert!(
+                report.message.contains("rolled back") || report.message.contains("injected"),
+                "point={point:?} message={:?}",
+                report.message
+            );
+            let calls = runner.recorded();
+            let has_rescan = calls
+                .iter()
+                .any(|(_, args)| args.iter().any(|a| a == "rescan"));
+            let has_health = calls
+                .iter()
+                .any(|(_, args)| args.iter().any(|a| a == "health"));
+            assert!(
+                has_rescan,
+                "point={point:?} rollback must issue plugin rescan; calls={calls:?}"
+            );
+            assert!(
+                has_health,
+                "point={point:?} rollback must verify old service health; calls={calls:?}"
+            );
         }
     }
 
@@ -3874,6 +3898,11 @@ mod tests {
 
     #[test]
     fn uninstall_exclusive_gate_blocks_shared_status_lane() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Instant;
+
         let dir = tempdir().unwrap();
         let paths = PluginPaths::with_plugins_dir(
             dir.path(),
@@ -3882,6 +3911,7 @@ mod tests {
         );
         fs::create_dir_all(&paths.plugins_dir).unwrap();
         fs::create_dir_all(&paths.transactions_dir).unwrap();
+        fs::create_dir_all(&paths.reports_dir).unwrap();
         let tools = dir.path().join("tools");
         fs::create_dir_all(&tools).unwrap();
         let shell = dir.path().join("shell.json");
@@ -3892,6 +3922,9 @@ mod tests {
         fs::write(&settings, b"{}").unwrap();
         let cache = dir.path().join("cache");
         fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join("status-v2.json"), b"{}").unwrap();
+        let notif = cache.join("notification-state-v1.json");
+        fs::write(&notif, b"{}").unwrap();
         let txid = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
         let payload = sample_uninstall_payload(
             &paths, txid, "10.0.0", &tools, false, &shell, &settings, &cache,
@@ -3903,31 +3936,126 @@ mod tests {
             .write_to(&paths.journal_path(txid).unwrap())
             .unwrap();
 
-        // Shared holder (status) must not recreate lanes while exclusive is held by worker.
-        // Simulate: exclusive held by handoff barrier — shared try fails.
-        let gate = MaintenanceGate::open(&paths.maintenance_lock).unwrap();
-        let exclusive = gate.lock_exclusive().unwrap();
-        assert!(gate.try_lock_shared().unwrap().is_none());
-        drop(exclusive);
+        let lock_path = paths.maintenance_lock.clone();
+
+        // Phase 1: external status helper already holding shared (lanes not drained)
+        // must block exclusive handoff/mutation.
+        {
+            let gate = MaintenanceGate::open(&lock_path).unwrap();
+            let shared = gate.lock_shared().unwrap();
+            assert!(
+                gate.try_lock_exclusive().unwrap().is_none(),
+                "status shared hold must block exclusive maintenance handoff"
+            );
+            drop(shared); // service-owned status lane drained
+        }
+
+        // Phase 2: concurrent shared waiter awaits while exclusive worker mutates.
+        // Prove shared try fails under exclusive, waiter unblocks only after worker,
+        // and cache/notification paths are not recreated.
+        let saw_exclusive_block = std::sync::Arc::new(AtomicBool::new(false));
+        let saw_flag = std::sync::Arc::clone(&saw_exclusive_block);
+        let (start_tx, start_rx) = mpsc::channel::<()>();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let lock_for_waiter = lock_path.clone();
+        let cache_for_waiter = cache.clone();
+        let notif_for_waiter = notif.clone();
+        let waiter = thread::spawn(move || {
+            start_rx.recv().expect("start signal");
+            let gate = MaintenanceGate::open(&lock_for_waiter).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < deadline {
+                if gate.try_lock_shared().unwrap().is_none() {
+                    saw_flag.store(true, Ordering::SeqCst);
+                    // Block until exclusive fully released (worker finished).
+                    let _shared = gate.lock_shared().unwrap();
+                    // After shared re-acquires: no cache/notification recreation.
+                    assert!(
+                        !cache_for_waiter.exists(),
+                        "cache must not be recreated after exclusive uninstall"
+                    );
+                    assert!(
+                        !notif_for_waiter.exists(),
+                        "notification state must not be recreated after exclusive uninstall"
+                    );
+                    let _ = done_tx.send(());
+                    return;
+                }
+                thread::sleep(Duration::from_millis(1));
+            }
+            let _ = done_tx.send(());
+        });
+
+        start_tx.send(()).unwrap();
+        // Give waiter a polling head-start before exclusive acquisition.
+        thread::sleep(Duration::from_millis(10));
 
         let runner = RecordingRunner::default();
-        push_uninstall_success_ipc(&runner);
-        struct NoopSleeper;
-        impl Sleeper for NoopSleeper {
-            fn sleep(&self, _: Duration) {}
+        // Force at least one absence-poll sleep under exclusive so the concurrent
+        // shared waiter reliably observes the barrier (not a pure race).
+        {
+            let mut q = runner.responses.lock().unwrap();
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            })); // rescan
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: r#"[{"id":"agent-bar.usage"}]"#.into(),
+                stderr: String::new(),
+            })); // still present → sleep
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: "ok\n".into(),
+                stderr: String::new(),
+            })); // health still ok
+            q.push(Ok(CommandOutput {
+                code: 0,
+                stdout: r#"[{"id":"omarchy.menu"}]"#.into(),
+                stderr: String::new(),
+            })); // absent
+            q.push(Ok(CommandOutput {
+                code: 1,
+                stdout: "unknown\n".into(),
+                stderr: String::new(),
+            })); // health gone
+        }
+        // Monotonic now advances only on sleep so the poll loop does not
+        // immediately hit the deadline while the sleeper holds the exclusive window.
+        let tick = std::sync::atomic::AtomicU64::new(0);
+        let now = || Duration::from_millis(tick.load(Ordering::SeqCst));
+        struct DelaySleeperTick<'a> {
+            tick: &'a std::sync::atomic::AtomicU64,
+        }
+        impl Sleeper for DelaySleeperTick<'_> {
+            fn sleep(&self, d: Duration) {
+                self.tick
+                    .fetch_add(d.as_millis() as u64, Ordering::SeqCst);
+                thread::sleep(Duration::from_millis(40));
+            }
         }
         MaintenanceWorker::run_worker_from_journal(
             &paths,
             &runner,
             txid,
-            &NoopSleeper,
+            &DelaySleeperTick { tick: &tick },
             Duration::ZERO,
-            &|| Duration::from_secs(1),
+            &now,
             None,
         )
         .unwrap();
-        // Cache was removed and must not reappear from the worker.
-        assert!(!cache.exists());
+
+        done_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("shared waiter must complete after exclusive release");
+        waiter.join().expect("waiter thread");
+        assert!(
+            saw_exclusive_block.load(Ordering::SeqCst),
+            "shared status lane must observe exclusive block during uninstall worker"
+        );
+        assert!(!cache.exists(), "cache removed and not recreated");
+        assert!(!notif.exists(), "notification path removed and not recreated");
         assert!(!paths.plugin_root.exists());
     }
 }

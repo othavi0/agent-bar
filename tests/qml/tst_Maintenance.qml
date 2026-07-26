@@ -146,6 +146,26 @@ TestCase {
     verify(src.indexOf("sh -c") < 0)
   }
 
+  // BUNDLE-036 / UX-048: after writing uninstall confirmation, close stdin so the
+  // helper's read_to_end receives EOF (write alone does not close the channel).
+  function test_service_uninstall_stdin_closes_after_write() {
+    var src = read("assets/omarchy/Service.qml")
+    var handoff = src.indexOf("id: maintenanceHandoffProcess")
+    verify(handoff >= 0)
+    var onStarted = src.indexOf("onStarted:", handoff)
+    verify(onStarted >= 0)
+    var onExited = src.indexOf("onExited:", onStarted)
+    verify(onExited > onStarted)
+    var body = src.substring(onStarted, onExited)
+    verify(body.indexOf("write(root.pendingMaintenancePayload") >= 0
+           || body.indexOf("write(root.pendingMaintenancePayload +") >= 0
+           || body.indexOf("pendingMaintenancePayload") >= 0)
+    verify(body.indexOf("write(") >= 0)
+    var writeAt = body.indexOf("write(")
+    var closeAt = body.indexOf("stdinEnabled = false", writeAt)
+    verify(closeAt > writeAt, "stdinEnabled=false must follow write for EOF")
+  }
+
   function test_maintenance_view_ux_copy() {
     var src = read("assets/omarchy/MaintenanceView.qml")
     verify(src.indexOf("Plugin bundle") >= 0)
