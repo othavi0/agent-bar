@@ -176,6 +176,9 @@ struct CodexRateLimitsDoc {
 }
 
 /// Parse Codex rate-limit JSON. Credits are discarded.
+///
+/// Window IDs/labels come from `window_minutes` duration, not primary/secondary
+/// slot order. Primary with 10080 minutes is weekly; 300 is session.
 pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> ProviderResult {
     let doc: CodexRateLimitsDoc = match serde_json::from_slice(bytes) {
         Ok(doc) => doc,
@@ -190,30 +193,15 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
     };
 
     let mut windows = Vec::new();
-    if let Some(primary) = doc.primary.as_ref() {
-        if let Some(w) = codex_window("session", "Session", primary) {
-            windows.push(w);
-        }
-    }
-    if let Some(secondary) = doc.secondary.as_ref() {
-        let (id, label) = if secondary.window_minutes == Some(10080) {
-            ("weekly", "Weekly")
-        } else if secondary.window_minutes.is_some() {
-            ("other", "Other")
-        } else {
-            ("weekly", "Weekly")
+    for (ordinal, raw) in [
+        (1usize, doc.primary.as_ref()),
+        (2usize, doc.secondary.as_ref()),
+    ] {
+        let Some(raw) = raw else {
+            continue;
         };
-        let id = if id == "other" {
-            format!("other:{}:1", secondary.window_minutes.unwrap_or(0))
-        } else {
-            id.to_owned()
-        };
-        let label = if id.starts_with("other:") {
-            format!("{}m", secondary.window_minutes.unwrap_or(0))
-        } else {
-            label.to_owned()
-        };
-        if let Some(w) = codex_window(&id, &label, secondary) {
+        let (id, label) = codex_window_identity(raw.window_minutes, ordinal);
+        if let Some(w) = codex_window(&id, &label, raw) {
             windows.push(w);
         }
     }
@@ -230,6 +218,26 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
         account: None,
         windows,
         last_success_at: now,
+    }
+}
+
+/// Map a Codex rate-limit duration to window id and display label.
+///
+/// Known durations: 300 → session, 10080 → weekly. Other positive minutes use
+/// `other:{n}:{ordinal}`. Missing duration falls back by slot ordinal (primary
+/// → session, secondary → weekly) for incomplete payloads.
+fn codex_window_identity(window_minutes: Option<i64>, ordinal: usize) -> (String, String) {
+    match window_minutes {
+        Some(10080) => ("weekly".into(), "Weekly".into()),
+        Some(300) => ("session".into(), "Session".into()),
+        Some(n) if n > 0 => (format!("other:{n}:{ordinal}"), format!("{n}m")),
+        _ => {
+            if ordinal == 1 {
+                ("session".into(), "Session".into())
+            } else {
+                ("weekly".into(), "Weekly".into())
+            }
+        }
     }
 }
 
@@ -568,6 +576,45 @@ mod tests {
                 assert!((windows[0].used_percent() - 30.0).abs() < 0.01);
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn codex_primary_only_weekly_is_labeled_weekly() {
+        let body = br#"{
+      "primary": {"used_percent": 1.0, "window_minutes": 10080, "resets_at": 1785628013},
+      "plan_type": "plus"
+    }"#;
+        let now = datetime!(2026-07-26 18:00:00 UTC);
+        let result = codex_from_rate_limits_json(body, now);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(windows[0].label(), "Weekly");
+                assert!((windows[0].used_percent() - 1.0).abs() < 0.01);
+                assert!(plan.is_some());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn codex_dual_windows_map_session_and_weekly_by_duration() {
+        let body = include_bytes!("../../tests/fixtures/providers/codex/rate-limits-ready.json");
+        let result = codex_from_rate_limits_json(body, datetime!(2026-07-26 18:00:00 UTC));
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 2);
+                assert_eq!(windows[0].id(), "session");
+                assert_eq!(windows[0].label(), "Session");
+                assert!((windows[0].used_percent() - 30.0).abs() < 0.01);
+                assert_eq!(windows[1].id(), "weekly");
+                assert_eq!(windows[1].label(), "Weekly");
+                assert!((windows[1].used_percent() - 40.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
