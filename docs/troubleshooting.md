@@ -39,6 +39,18 @@ The provider is connected but exposes no normalized percentage quota for that
 account. Agent Bar intentionally does not show spend, balance, or credits as a
 substitute percentage.
 
+## Codex Retry loops with “rate limits not available”
+
+Ensure the Codex CLI is logged in. Agent Bar collects Codex rate limits through
+`codex app-server` JSON-RPC `rateLimits/read`, then newest valid rate-limit
+events under `~/.codex/sessions`. It does not rely on `rate-limits.json` alone.
+
+## Grok shows `—` or missing Weekly
+
+When billing returns no usable percentage, Grok is connected with empty windows
+and the chip shows `—`. Weekly reset comes from the billing period end.
+Context is no longer a product window.
+
 ## Popup does not appear
 
 Check:

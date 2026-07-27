@@ -65,9 +65,10 @@ state, settings persistence, or cache.
 | `support` | Atomic files, clock, filesystem, redaction |
 
 Provider adapters receive a narrow context for process, HTTP, filesystem,
-clock, and redaction. Claude may collect through HTTP, Grok through filesystem,
-Codex through a composite process/fallback flow, and Amp through its CLI.
-Adapters are not forced into a command-only abstraction.
+clock, and redaction. Claude may collect through HTTP, Grok through
+authenticated billing HTTP, Codex through a composite app-server/session-log
+flow, and Amp through its CLI. Adapters are not forced into a command-only
+abstraction.
 
 ## Data contract
 

@@ -152,7 +152,7 @@ pub trait ProviderAdapter: Send + Sync {
 availability. A provider may collect without an installed login CLI; this must
 not become `cli_missing`.
 `CollectionContext` exposes narrow process, HTTP, filesystem, clock, and
-redaction capabilities. This supports Claude HTTP collection, Grok filesystem
+redaction capabilities. This supports Claude HTTP collection, Grok HTTP billing
 collection, Codex composite app-server/session-log collection, and Amp process
 collection without forcing them into a fake command abstraction.
 `ProviderResult` is a typed domain result, not serialized provider JSON.
@@ -201,17 +201,15 @@ Locked collection policy:
 | `claude` | `$HOME/.claude/.credentials.json`, then authenticated `GET https://api.anthropic.com/api/oauth/usage` | `session`, `weekly`, then provider-scoped `weekly-model:<sanitized-id>` | 300 s | 10 s | one network/timeout retry |
 | `codex` | resolved `codex app-server` JSON-RPC `rateLimits/read`, then newest valid rate-limit event below `$HOME/.codex/sessions` | `session`, `weekly`, then `other:<duration-minutes>:<ordinal>` | 90 s | 10 s | one app-server timeout retry before filesystem fallback |
 | `amp` | resolved `amp usage` with `NO_COLOR=1`, `TERM=dumb` | `daily`, or no windows when the account exposes no percentage | 90 s | 10 s | one timeout/process-I/O retry |
-| `grok` | `$GROK_HOME/auth.json`, then bounded walk of `$GROK_HOME/sessions/**/signals.json` | `context`, or no windows when no valid context percentage exists | 90 s | 10 s | none |
+| `grok` | `$GROK_HOME/auth.json`, then authenticated GET `https://cli-chat-proxy.grok.com/v1/billing?format=credits` (literal; headers Authorization Bearer + x-grok-client-mode) | `weekly` | 90 s | 10 s | one network/timeout retry |
 
 Collection concurrency is at most four adapters. Every process stdout, process
 stderr, HTTP response, and individual provider file is capped at 1 MiB before
-parsing. The Grok walk does not follow links, descends at most eight levels,
-visits at most 4096 directory entries, and reads at most 256 candidate
-`signals.json` files. Codex filesystem fallback applies the same 1 MiB
-per-file limit, does not follow links, descends at most eight levels, and
-visits at most 4096 directory entries. Codex candidate files sort by mtime
-descending then raw path bytes ascending before taking 256; valid events sort
-by parsed UTC event timestamp descending, then candidate path and line number.
+parsing. Codex filesystem fallback applies the same 1 MiB per-file limit, does
+not follow links, descends at most eight levels, and visits at most 4096
+directory entries. Codex candidate files sort by mtime descending then raw
+path bytes ascending before taking 256; valid events sort by parsed UTC event
+timestamp descending, then candidate path and line number.
 
 `GROK_HOME`, when set, must be a nonempty absolute path; an invalid set value
 is a typed provider configuration error. When unset, it resolves to
@@ -225,7 +223,7 @@ nonzero usage-command results are never retried. Adapter source fallback is
 not counted as a retry.
 
 Provider labels are fixed English copy: Claude `Session`/`Weekly`, Codex
-`Session`/`Weekly`, Amp `Daily`, and Grok `Context`. Dynamic model labels are
+`Session`/`Weekly`, Amp `Daily`, and Grok `Weekly`. Dynamic model labels are
 sanitized plain text. A dynamic Claude model ID is lowercased, limited to
 ASCII letters/digits/hyphens, and prefixed with `weekly-model:`; collisions
 receive the deterministic source-order suffix `:2`, `:3`, and so on. Monetary
