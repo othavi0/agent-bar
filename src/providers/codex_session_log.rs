@@ -37,9 +37,13 @@ pub fn extract_rate_limits_from_jsonl(bytes: &[u8]) -> Option<Vec<u8>> {
     None
 }
 
+/// Per-file read cap for session JSONL candidates (1 MiB).
+const MAX_SESSION_JSONL_BYTES: u64 = 1024 * 1024;
+
 /// Bounded walk of `sessions_dir`: no symlinks, depth ≤ 8, visits ≤ 4096,
-/// candidates ≤ 256 jsonl files. Sort mtime desc then path asc; scan each
-/// candidate reverse for token_count; return first hit's rate_limits JSON.
+/// candidates ≤ 256 jsonl files, each file ≤ 1 MiB. Sort mtime desc then path
+/// asc; scan each candidate reverse for token_count; return first hit's
+/// rate_limits JSON.
 pub fn find_latest_rate_limits(sessions_dir: &Path) -> Option<Vec<u8>> {
     use std::cmp::Ordering;
     use std::fs;
@@ -93,8 +97,14 @@ pub fn find_latest_rate_limits(sessions_dir: &Path) -> Option<Vec<u8>> {
     candidates.truncate(256);
 
     // Prefer newest candidate that yields extractable limits (not merely
-    // newest file without limits).
+    // newest file without limits). Skip files larger than 1 MiB.
     for (_mtime, path) in &candidates {
+        let Ok(meta) = fs::metadata(path) else {
+            continue;
+        };
+        if meta.len() > MAX_SESSION_JSONL_BYTES {
+            continue;
+        }
         let Ok(bytes) = fs::read(path) else {
             continue;
         };
@@ -185,6 +195,52 @@ mod tests {
         std::fs::write(sessions.join("good.jsonl"), fixture).expect("write good");
 
         let raw = find_latest_rate_limits(&sessions).expect("skip empty, use good");
+        let now = datetime!(2026-07-26 18:00:00 UTC);
+        match codex_from_rate_limits_json(&raw, now) {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows[0].id(), "weekly");
+                assert!((windows[0].used_percent() - 12.5).abs() < 0.01);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn find_latest_skips_files_over_1_mib_in_favor_of_smaller_valid() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let sessions = dir.path().join("sessions");
+        std::fs::create_dir_all(&sessions).expect("mkdir");
+
+        // Oversized candidate sorts first by path ("a-huge.jsonl" < "z-good.jsonl")
+        // when mtimes match; must be skipped due to 1 MiB cap.
+        let huge_path = sessions.join("a-huge.jsonl");
+        {
+            use std::io::Write;
+            let mut f = std::fs::File::create(&huge_path).expect("create huge");
+            // Write just over 1 MiB of JSONL-shaped content with a fake rate_limits
+            // so a size-blind reader would succeed — size cap must prevent that.
+            let line = concat!(
+                r#"{"payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":1.0,"window_minutes":10080}}}}"#,
+                "\n"
+            );
+            let mut written = 0usize;
+            let target = (MAX_SESSION_JSONL_BYTES as usize) + 1;
+            while written < target {
+                f.write_all(line.as_bytes()).expect("write chunk");
+                written += line.len();
+            }
+            f.flush().expect("flush");
+        }
+        assert!(
+            std::fs::metadata(&huge_path).expect("meta").len() > MAX_SESSION_JSONL_BYTES,
+            "fixture must exceed 1 MiB"
+        );
+
+        let fixture =
+            include_bytes!("../../tests/fixtures/providers/codex/session-token-count.jsonl");
+        std::fs::write(sessions.join("z-good.jsonl"), fixture).expect("write good");
+
+        let raw = find_latest_rate_limits(&sessions).expect("skip huge, use good");
         let now = datetime!(2026-07-26 18:00:00 UTC);
         match codex_from_rate_limits_json(&raw, now) {
             ProviderResult::Ready { windows, .. } => {

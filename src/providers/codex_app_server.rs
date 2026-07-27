@@ -210,7 +210,16 @@ where
 
     loop {
         tokio::select! {
-            _ = &mut hard => return AppServerOutcome::TimedOut,
+            _ = &mut hard => {
+                // Prefer already-parsed rate limits over classifying as timeout.
+                return match rate_limits.as_ref().and_then(|r| {
+                    let plan = account_plan.as_ref().and_then(|o| o.as_deref());
+                    normalize_to_rate_limits_json(r, plan)
+                }) {
+                    Some(bytes) => AppServerOutcome::Ok(bytes),
+                    None => AppServerOutcome::TimedOut,
+                };
+            }
             _ = &mut grace, if grace_armed => {
                 return match rate_limits.as_ref().and_then(|r| {
                     let plan = account_plan.as_ref().and_then(|o| o.as_deref());
@@ -230,7 +239,14 @@ where
                     Err(_) => continue,
                 };
                 match msg.id {
-                    Some(0) if msg.result.is_some() => {
+                    Some(0) => {
+                        // Initialize response: error or missing result → fail now.
+                        if msg.error.is_some() || msg.result.is_none() {
+                            log::debug!(
+                                "Codex app-server initialize returned error or no result"
+                            );
+                            return AppServerOutcome::Failed;
+                        }
                         if write_json_line(
                             &mut writer,
                             &serde_json::json!({"method": "initialized", "params": {}}),
@@ -511,5 +527,139 @@ mod tests {
         )
         .await;
         assert!(matches!(outcome, AppServerOutcome::TimedOut));
+    }
+
+    #[tokio::test]
+    async fn appserver_hard_timeout_returns_ok_when_rate_limits_already_parsed() {
+        let (client, server) = duplex(64 * 1024);
+        let (client_read, client_write) = tokio::io::split(client);
+
+        let server_task = tokio::spawn(async move {
+            let (read_half, mut write_half) = tokio::io::split(server);
+            let mut lines = BufReader::new(read_half).lines();
+            let _ = lines.next_line().await; // initialize
+            write_half
+                .write_all(br#"{"id":0,"result":{}}"#)
+                .await
+                .expect("init");
+            write_half.write_all(b"\n").await.expect("nl");
+
+            // Send rate limits (id=2) but never account/read (id=1), so the
+            // client arms grace and then hits hard timeout with limits held.
+            let mut saw_limits = false;
+            while !saw_limits {
+                let line = match lines.next_line().await {
+                    Ok(Some(l)) => l,
+                    _ => break,
+                };
+                if line.contains("account/rateLimits/read") {
+                    saw_limits = true;
+                    write_half
+                        .write_all(
+                            br#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":12.5,"windowDurationMins":300,"resetsAt":1700000000}}}}"#,
+                        )
+                        .await
+                        .expect("limits");
+                    write_half.write_all(b"\n").await.expect("nl");
+                }
+                // Deliberately ignore account/read so account_plan stays None.
+            }
+            // Hold the stream open past hard timeout.
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        });
+
+        let outcome = run_appserver_protocol_outcome(
+            client_read,
+            client_write,
+            "10.0.0",
+            Duration::from_millis(300),
+        )
+        .await;
+        match outcome {
+            AppServerOutcome::Ok(bytes) => {
+                let now = datetime!(2026-07-26 18:00:00 UTC);
+                match codex_from_rate_limits_json(&bytes, now) {
+                    ProviderResult::Ready { windows, .. } => {
+                        assert!(!windows.is_empty());
+                        assert!((windows[0].used_percent() - 12.5).abs() < 0.01);
+                    }
+                    other => panic!("normalize failed: {other:?}"),
+                }
+            }
+            other => panic!("expected Ok with parsed limits, got {other:?}"),
+        }
+        let _ = server_task.await;
+    }
+
+    #[tokio::test]
+    async fn appserver_initialize_error_returns_failed_immediately() {
+        let (client, server) = duplex(64 * 1024);
+        let (client_read, client_write) = tokio::io::split(client);
+
+        let server_task = tokio::spawn(async move {
+            let (read_half, mut write_half) = tokio::io::split(server);
+            let mut lines = BufReader::new(read_half).lines();
+            let _ = lines.next_line().await; // initialize
+            write_half
+                .write_all(br#"{"id":0,"error":{"code":-32000,"message":"init failed"}}"#)
+                .await
+                .expect("err");
+            write_half.write_all(b"\n").await.expect("nl");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        });
+
+        let started = std::time::Instant::now();
+        let outcome = run_appserver_protocol_outcome(
+            client_read,
+            client_write,
+            "10.0.0",
+            Duration::from_secs(5),
+        )
+        .await;
+        let elapsed = started.elapsed();
+        assert!(
+            matches!(outcome, AppServerOutcome::Failed),
+            "expected Failed on id=0 error, got {outcome:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "must not wait hard timeout, elapsed={elapsed:?}"
+        );
+        let _ = server_task.await;
+    }
+
+    #[tokio::test]
+    async fn appserver_initialize_missing_result_returns_failed_immediately() {
+        let (client, server) = duplex(64 * 1024);
+        let (client_read, client_write) = tokio::io::split(client);
+
+        let server_task = tokio::spawn(async move {
+            let (read_half, mut write_half) = tokio::io::split(server);
+            let mut lines = BufReader::new(read_half).lines();
+            let _ = lines.next_line().await; // initialize
+                                             // id=0 with neither result nor error → treat as failed.
+            write_half.write_all(br#"{"id":0}"#).await.expect("empty");
+            write_half.write_all(b"\n").await.expect("nl");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        });
+
+        let started = std::time::Instant::now();
+        let outcome = run_appserver_protocol_outcome(
+            client_read,
+            client_write,
+            "10.0.0",
+            Duration::from_secs(5),
+        )
+        .await;
+        let elapsed = started.elapsed();
+        assert!(
+            matches!(outcome, AppServerOutcome::Failed),
+            "expected Failed on id=0 without result, got {outcome:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "must not wait hard timeout, elapsed={elapsed:?}"
+        );
+        let _ = server_task.await;
     }
 }
