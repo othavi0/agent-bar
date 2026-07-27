@@ -1,101 +1,89 @@
 # Runtime
 
-## Owned Paths
+## Owned paths
 
 | Path | Purpose |
 | --- | --- |
-| `~/.agent-bar` | Managed checkout created by `install.sh` and updated by `agent-bar update`. |
-| `~/.config/agent-bar/settings.json` | User settings. Normalized on load and written atomically. |
-| `~/.cache/agent-bar/` | Provider quota cache. |
-| `~/.local/bin/agent-bar` | Symlink created by setup. |
-| `~/.config/waybar/agent-bar/icons/` | Installed provider icons. |
-| `~/.config/waybar/agent-bar/modules.jsonc` | Generated Waybar module include. |
-| `~/.config/waybar/agent-bar/style.css` | Generated Waybar stylesheet. |
-| `~/.config/waybar/scripts/agent-bar-open-terminal` | Terminal helper used by Waybar click actions. |
+| `$HOME/.config/omarchy/plugins/agent-bar.usage/` | Complete plugin bundle |
+| `$XDG_CONFIG_HOME/agent-bar/settings.json` | Canonical product settings |
+| `$XDG_CACHE_HOME/agent-bar/status-v2.json` | Normalized provider cache |
+| `$XDG_CACHE_HOME/agent-bar/status.lock` | Cross-process collection lock |
+| `$XDG_CACHE_HOME/agent-bar/notification-state-v1.json` | Alert deduplication |
+| `$XDG_CACHE_HOME/agent-bar/notification.lock` | Alert evaluation/dispatch lock |
+| `$XDG_STATE_HOME/agent-bar/backups/` | Exact migration/maintenance backups |
+| `$XDG_STATE_HOME/agent-bar/transactions/` | Journals and transient workers |
+| `$XDG_STATE_HOME/agent-bar/reports/` | Durable sanitized maintenance reports |
+| `$XDG_STATE_HOME/agent-bar/maintenance.lock` | Stable shared/exclusive mutation gate |
 
-## Patched Waybar Files
+Default XDG paths are `~/.config`, `~/.cache`, and `~/.local/state`.
 
-| File | Managed change |
-| --- | --- |
-| `~/.config/waybar/config.jsonc` | Adds the generated include and `custom/agent-bar-*` modules to `modules-right`. |
-| `~/.config/waybar/style.css` | Adds one managed import for `./agent-bar/style.css`. |
+The plugin root and Omarchy `shell.json` always use `$HOME/.config/omarchy` in
+production.
 
-The app does not rewrite full Waybar files.
+## Bundle
 
-## Install Paths
+The plugin bundle contains manifest, `bundle.json`, QML, approved icons, the
+terminal helper, and private Rust helper. `bundle.json` records ID, version,
+target, Omarchy contract, minimum Quickshell version, source commit, and
+hash/size/mode for every other file.
 
-Three supported paths. The first two converge on the same
-`~/.local/bin/agent-bar` symlink that generated Waybar modules invoke; the AUR
-binary lives at `/usr/bin/agent-bar` (in PATH) and its generated module invokes
-`agent-bar` directly.
-
-| Path | Source | Update |
-| --- | --- | --- |
-| Hosted installer (primary) | `curl -fsSL .../install.sh \| bash` installs binary to `~/.local/bin/agent-bar` | `agent-bar update` (managed-git) |
-| AUR `-bin` (Arch) | `yay -S agent-bar-bin` → standalone binary at `/usr/bin/agent-bar`, assets in `/usr/share/agent-bar/` | package manager (`paru -Syu`); `agent-bar update` defers to it |
-| Dev checkout | Manual `git clone` anywhere + `cargo build && ./target/debug/agent-bar setup` | `git pull` (update refuses) |
-
-For the first two, `agent-bar setup` creates `~/.local/bin/agent-bar` as the
-stable command path (target depends on which install ran setup). The AUR binary
-is owned by the package manager; `setup` only writes the Waybar integration and
-reads assets from `/usr/share/agent-bar/`.
+No global `agent-bar`, application entry, package, or managed checkout exists.
 
 ## Settings
 
-Settings schema version: `3`.
+```json
+{
+  "schemaVersion": 1,
+  "providers": [
+    { "id": "claude", "enabled": true },
+    { "id": "codex", "enabled": true },
+    { "id": "amp", "enabled": true },
+    { "id": "grok", "enabled": true }
+  ],
+  "display": {
+    "metric": "remaining"
+  },
+  "refreshIntervalSeconds": 60,
+  "notifications": {
+    "enabled": true
+  }
+}
+```
 
-Defaults:
-
-- providers: `claude`, `codex`, `amp`, `grok`
-- provider order: `claude`, `codex`, `amp`, `grok`
-- separator style: `gap`
-- display mode: `remaining`
-- Codex window policy: `both`
-- menu animations: `true`
-- menu font family: `IBM Plex Mono`
-- menu font size: `12`
-
-Normalization:
-
-- unknown providers are dropped
-- duplicates are collapsed
-- enabled providers missing from `providerOrder` are appended
-- invalid separator, display, or window-policy values fall back to defaults
-- if the normalized form differs from the stored file, it is written back to disk
-
-Older settings files are normalized to schema version 3 on load: the version is
-stamped, unknown providers are dropped (e.g. a `copilot` entry from a previous
-version is removed), and the legacy `waybar.show_percentage` key is dropped
-silently (v2 → v3).
-
-### Menu Font (`menu.animations`/`menu.fontFamily`/`menu.fontSize`)
-
-`agent-bar menu` launches inside a terminal spawned by
-`scripts/agent-bar-open-terminal`, which passes `menu.fontFamily`/
-`menu.fontSize` to the terminal emulator's own font flag so the TUI opens
-with the configured font. This only works for emulators the script knows a
-font flag for (Alacritty, kitty, foot, Ghostty); the generic `xdg-terminal-exec`
-fallback path (used when none of those are found, or via `uwsm-app`) has no
-such flag, so the configured font silently does not apply there — the
-terminal's own default font is used instead. Also: if `$TERMINAL` is set to
-something other than `alacritty`, the script skips the Alacritty-specific
-font injection and respects the user's terminal choice as-is.
+Unknown keys and invalid/duplicate/missing providers are rejected. Reads never
+rewrite. Applies validate before lock and atomic replacement. File mode is
+`0600`.
 
 ## Cache
 
-- default TTL: 5 minutes
-- cache keys allow only letters, numbers, `_`, and `-`
-- concurrent cache misses for the same key are deduplicated
-- failed fetches do not poison the cache
+Cache contains normalized status only. It does not contain:
 
-## Provider Credentials
+- credentials or tokens;
+- raw provider output or headers;
+- account identifiers;
+- monetary values;
+- local session history.
 
-Credentials stay owned by each provider. `agent-bar` reads or invokes
-them; it does not store provider tokens.
+Corrupt cache is quarantined and rebuilt. Temporary provider failure retains
+last good data as stale.
 
-| Provider | Source |
-| --- | --- |
-| Claude | `~/.claude/.credentials.json` |
-| Codex | `~/.codex/auth.json`, recent `~/.codex/sessions/**` rate-limit events, or `codex app-server` |
-| Amp | official `amp` CLI |
-| Grok | `~/.grok/auth.json`; session `signals.json` under `~/.grok/sessions/**` (read-only, no network) |
+## Provider data sources
+
+- Claude may use local credentials plus provider HTTP.
+- Codex may use app-server with a bounded local fallback.
+- Amp uses its official usage command.
+- Grok may use provider-owned local auth/session data.
+
+Collection discovery is separate from interactive login-CLI discovery.
+
+## Privacy
+
+Logs, screenshots, checkpoints, cache, and doctor reports redact tokens,
+credentials, raw payloads, headers, and account identifiers. External display
+strings are sanitized English plain text.
+
+## Permissions
+
+Settings, cache, journals, backups, and transient worker copies are restricted
+to the user. Bundle executable files are `0755`; nonexecutables use
+deterministic nonexecutable modes. Bundles contain no symlinks.

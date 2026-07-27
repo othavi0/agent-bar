@@ -1,0 +1,9 @@
+{
+  "bar": {
+    "left": [
+      { "id": "omarchy.menu" },
+      { "id": "agent-bar.usage", "refreshIntervalSec": 90 },
+      { "id": "omarchy.workspaces" }
+    ]
+  }
+}

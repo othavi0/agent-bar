@@ -1,120 +1,103 @@
 # Troubleshooting
 
-## Start With The Layer
+Resolve the private helper:
 
-| Symptom | First check |
+```bash
+PLUGIN="$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar"
+```
+
+## Start with doctor
+
+```bash
+"$PLUGIN" doctor scan
+```
+
+Doctor is read-only. It reports bundle/version integrity, settings/cache
+validity, shell entry placement, provider discovery, legacy ownership, and
+incomplete transactions without printing credentials or account identifiers.
+
+## One provider is unavailable
+
+```bash
+"$PLUGIN" status provider claude format human cache bypass
+```
+
+Interpret the typed state:
+
+| State | Action |
 | --- | --- |
-| Waybar shows nothing | `agent-bar status --refresh` |
-| One provider is missing | `agent-bar status --provider <id> --refresh` |
-| Waybar JSON/parser error | run the module command in a terminal |
-| Waybar layout changed unexpectedly | inspect `~/.config/waybar/config.jsonc` managed entries |
-| Style broke after manual edits | inspect GTK CSS, not browser CSS assumptions |
-| `[agent-bar] Pollution detected in $HOME` warnings | run `agent-bar doctor` |
+| `cli_missing` | Use `View installation`; Agent Bar does not install it |
+| `unauthenticated` | Use `Connect` when login is available; otherwise use `View installation` |
+| `rate_limited` | Wait for the provider or reset; do not relogin blindly |
+| `network_error` | Check network, then `Check again` |
+| `provider_error` | Inspect safe stderr diagnostics with `RUST_LOG` |
+| `stale` | Last good data is visible; refresh failed temporarily |
 
-## Runtime Checks
+## Chip shows `—`
 
-```bash
-agent-bar status --refresh
-agent-bar status --provider claude --refresh
-agent-bar status --provider codex --refresh
-agent-bar status --provider amp --refresh
-```
+The provider is connected but exposes no normalized percentage quota for that
+account. Agent Bar intentionally does not show spend, balance, or credits as a
+substitute percentage.
 
-If these fail outside Waybar, fix provider auth/runtime first. Waybar is not the
-first suspect.
+## Popup does not appear
 
-## Setup Finished But Modules Do Not Appear
-
-Run setup again:
+Check:
 
 ```bash
-agent-bar setup
+omarchy plugin validate "$HOME/.config/omarchy/plugins/agent-bar.usage"
+omarchy plugin rescan
 ```
 
-Then reload Waybar manually if needed:
+Then inspect:
+
+- manifest ID and version;
+- `service` and `bar-widget` entry points;
+- one exact `agent-bar.usage` entry in `shell.json`;
+- helper/manifest version equality.
+
+Do not run `omarchy bar plugin add` over an existing entry; it can reset
+placement.
+
+## Settings do not save
 
 ```bash
-pkill -SIGUSR2 waybar
+"$PLUGIN" config show
 ```
 
-## Update Refuses To Run
+Confirm the settings file is valid and user-owned. Save errors leave the
+previous file intact. Use `RUST_LOG=debug` only with sanitized output.
 
-`agent-bar update` refuses when it runs from a development checkout (a git
-checkout that is not `~/.agent-bar`). Update a dev checkout with git directly:
+## Update failed
 
 ```bash
-git pull
+"$PLUGIN" doctor scan
 ```
 
-For the managed `~/.agent-bar` checkout (the install.sh path), `agent-bar update`
-works without extra steps. For system installs (AUR), use the package manager
-(`paru -Syu agent-bar-bin`).
+Inspect the latest transaction journal under
+`$XDG_STATE_HOME/agent-bar/transactions`. A failed update must restore the
+previous complete bundle. Do not delete staging/quarantine manually before
+doctor identifies it.
 
-## `$HOME` Pollution
+## Modified or ambiguous legacy files
 
-If leftover agent-bar artifacts are detected in `$HOME`, clean them up with:
+`doctor clean` removes only confirmed ownership and creates a backup:
 
 ```bash
-agent-bar doctor
+"$PLUGIN" doctor clean
 ```
 
-See [Commands → `doctor`](commands.md) for flags.
+Modified or ambiguous paths remain for manual review.
 
-## Provider Auth
+## Collect diagnostics
 
-### Claude
+Provide:
 
-Claude uses Claude Code credentials from `~/.claude/.credentials.json`.
+- Agent Bar version.
+- Omarchy and Quickshell versions.
+- Sanitized `doctor scan`.
+- Exact status command and exit code.
+- Typed provider state.
+- Relevant sanitized transaction journal.
 
-### Codex
-
-Codex uses `~/.codex/auth.json`, recent session rate-limit events, or the Codex
-app-server protocol when available.
-
-### Amp
-
-Install Amp with the official installer:
-
-```bash
-curl -fsSL https://ampcode.com/install.sh | bash
-```
-
-Then run:
-
-```bash
-amp login
-```
-
-### Grok
-
-Grok Build CLI uses OAuth in `~/.grok/auth.json`; the provider itself
-makes zero network calls — it reads session `signals.json` files under
-`~/.grok/sessions/**` for context-window data. Log in with:
-
-```bash
-grok login
-```
-
-An access token past its `expires_at` does **not** log you out: the Grok
-CLI renews it via refresh token, and agent-bar only checks for a
-non-empty `key` in `auth.json`.
-
-## Reset Managed Waybar Entries
-
-For a normal reset:
-
-```bash
-agent-bar setup
-```
-
-For removal:
-
-```bash
-agent-bar uninstall
-```
-
-For non-interactive forced cleanup:
-
-```bash
-agent-bar remove
-```
+Never include credential files, raw provider payloads, tokens, account labels,
+or live `shell.json` contents that expose unrelated user configuration.

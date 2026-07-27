@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Test-only private helper. Mimics agent-bar version (and optional slow status).
+set -euo pipefail
+
+cmd="${1:-}"
+
+case "$cmd" in
+  version)
+    # Exact package-style semver + newline; no stderr.
+    printf '%s\n' "${FAKE_AGENT_BAR_VERSION:-10.0.0}"
+    exit 0
+    ;;
+  status)
+    sleep "${FAKE_AGENT_BAR_STATUS_SLEEP:-0}"
+    ver="${FAKE_AGENT_BAR_VERSION:-10.0.0}"
+    printf '%s\n' "{\"schemaVersion\":2,\"helperVersion\":\"${ver}\",\"generatedAt\":\"2026-07-26T18:42:00Z\",\"request\":{\"provider\":null,\"cache\":\"use\"},\"providers\":[]}"
+    exit 0
+    ;;
+  config)
+    if [[ "${2:-}" == "show" ]]; then
+      printf '%s\n' '{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true}}'
+      exit 0
+    fi
+    printf 'unknown config\n' >&2
+    exit 2
+    ;;
+  *)
+    printf 'unknown command\n' >&2
+    exit 2
+    ;;
+esac

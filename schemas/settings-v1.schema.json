@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/othavi0/agent-bar/schemas/settings-v1.schema.json",
+  "title": "Agent Bar settings schema v1",
+  "description": "Structural contract for settings.json. Exact once-only provider membership and display order semantics are validated in Rust, not here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "providers",
+    "display",
+    "refreshIntervalSeconds",
+    "notifications"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/providerItem"
+      }
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric"],
+      "properties": {
+        "metric": {
+          "type": "string",
+          "enum": ["used", "remaining"]
+        }
+      }
+    },
+    "refreshIntervalSeconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 3600
+    },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "providerItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "enabled"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["claude", "codex", "amp", "grok"]
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

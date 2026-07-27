@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": "codex",
+    "cache": "bypass"
+  },
+  "providers": [
+    {
+      "id": "codex",
+      "name": "Codex",
+      "state": "rate_limited",
+      "source": null,
+      "plan": null,
+      "account": null,
+      "windows": [],
+      "lastSuccessAt": null,
+      "error": {
+        "code": "rate_limited",
+        "message": "Codex rate limited the request.",
+        "retryable": true
+      },
+      "action": {
+        "kind": "retry",
+        "label": "Retry",
+        "target": null
+      }
+    }
+  ]
+}

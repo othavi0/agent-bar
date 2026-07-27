@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Capture and verify the exact CP2/CP4 UI evidence inventory.
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+EVIDENCE="${ROOT}/target/v10-ui-evidence"
+QML_TEST="${ROOT}/tests/qml/tst_Screenshots.qml"
+
+REQUIRED=(
+  ready-light.png
+  ready-dark.png
+  loading-dark.png
+  refreshing-with-data-dark.png
+  stale-dark.png
+  cli-missing-dark.png
+  unauthenticated-dark.png
+  rate-limited-dark.png
+  network-error-dark.png
+  provider-error-dark.png
+  settings-clean-dark.png
+  settings-dirty-dark.png
+  settings-invalid-dark.png
+  maintenance-update-dark.png
+  uninstall-confirmation-dark.png
+)
+
+rm -rf "${EVIDENCE}"
+mkdir -p "${EVIDENCE}"
+
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
+export QML_XHR_ALLOW_FILE_READ=1
+export AGENT_BAR_UI_EVIDENCE_DIR="${EVIDENCE}"
+
+QMLTEST="${QMLTEST:-}"
+if [[ -z "${QMLTEST}" ]]; then
+  if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
+    QMLTEST=/usr/lib/qt6/bin/qmltestrunner
+  else
+    QMLTEST="$(command -v qmltestrunner)"
+  fi
+fi
+
+"${QMLTEST}" \
+  -input "${QML_TEST}" \
+  -import /usr/share/omarchy/shell \
+  -import "${ROOT}/assets/omarchy" \
+  -o -,txt
+
+missing=0
+for name in "${REQUIRED[@]}"; do
+  path="${EVIDENCE}/${name}"
+  if [[ ! -s "${path}" ]]; then
+    echo "missing or empty evidence: ${name}" >&2
+    missing=1
+  fi
+done
+
+# Reject unexpected PNGs
+shopt -s nullglob
+extras=()
+for path in "${EVIDENCE}"/*.png; do
+  base="$(basename -- "${path}")"
+  found=0
+  for name in "${REQUIRED[@]}"; do
+    if [[ "${base}" == "${name}" ]]; then
+      found=1
+      break
+    fi
+  done
+  if [[ "${found}" -eq 0 ]]; then
+    extras+=("${base}")
+  fi
+done
+if [[ "${#extras[@]}" -gt 0 ]]; then
+  echo "unexpected evidence PNGs: ${extras[*]}" >&2
+  missing=1
+fi
+
+if [[ "${missing}" -ne 0 ]]; then
+  exit 1
+fi
+
+# Sorted SHA256SUMS of the exact inventory
+(
+  cd "${EVIDENCE}"
+  # shellcheck disable=SC2086
+  sha256sum "${REQUIRED[@]}" | sort -k2 > SHA256SUMS
+)
+
+echo "verify-v10-ui: ${#REQUIRED[@]} PNGs ok → ${EVIDENCE}/SHA256SUMS"

@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": null,
+    "cache": "use"
+  },
+  "providers": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "state": "ready",
+      "source": "cache",
+      "plan": {
+        "id": "pro",
+        "label": "Pro"
+      },
+      "account": {
+        "label": "Personal"
+      },
+      "windows": [
+        {
+          "id": "session",
+          "label": "Session",
+          "usedPercent": 10.0,
+          "remainingPercent": 90.0,
+          "resetsAt": "2026-07-26T22:00:00Z"
+        },
+        {
+          "id": "weekly",
+          "label": "Weekly",
+          "usedPercent": 25.5,
+          "remainingPercent": 74.5,
+          "resetsAt": "2026-08-01T00:00:00Z"
+        }
+      ],
+      "lastSuccessAt": "2026-07-26T18:40:00Z",
+      "error": null,
+      "action": null
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "state": "cli_missing",
+      "source": null,
+      "plan": null,
+      "account": null,
+      "windows": [],
+      "lastSuccessAt": null,
+      "error": {
+        "code": "cli_not_found",
+        "message": "Codex CLI was not found.",
+        "retryable": false
+      },
+      "action": {
+        "kind": "view_installation",
+        "label": "View installation",
+        "target": "https://developers.openai.com/codex"
+      }
+    }
+  ]
+}

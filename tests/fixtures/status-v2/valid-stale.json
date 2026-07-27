@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:45:00Z",
+  "request": {
+    "provider": null,
+    "cache": "use"
+  },
+  "providers": [
+    {
+      "id": "grok",
+      "name": "Grok",
+      "state": "stale",
+      "source": "cache",
+      "plan": {
+        "id": "super",
+        "label": "SuperGrok"
+      },
+      "account": {
+        "label": "Personal"
+      },
+      "windows": [
+        {
+          "id": "session",
+          "label": "Session",
+          "usedPercent": 90.0,
+          "remainingPercent": 10.0,
+          "resetsAt": null
+        }
+      ],
+      "lastSuccessAt": "2026-07-26T18:40:00Z",
+      "error": {
+        "code": "network_error",
+        "message": "Temporary network failure while refreshing Grok.",
+        "retryable": true
+      },
+      "action": {
+        "kind": "retry",
+        "label": "Retry",
+        "target": null
+      }
+    }
+  ]
+}

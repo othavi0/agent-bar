@@ -1,68 +1,100 @@
-# agent-bar
+# Agent Bar Domain
 
-Monitor de quotas LLM para a barra do desktop (Waybar e Omarchy 4 /
-omarchy-shell). O binário Rust é a fonte de dados; a barra só apresenta.
+Canonical product vocabulary. Do not import removed v9 Waybar or TUI terms into
+new code.
 
-## Language
+## Surfaces
 
-### Surfaces
+**Bar chip**
+A compact provider icon and percentage rendered by `BarWidget.qml`.
 
-**Bar:**
-A barra do desktop onde o usuário lê quota de relance. No Omarchy 4 é o
-omarchy-shell (Quickshell); no path clássico é Waybar.
-_Avoid_: status bar genérico, panel (salvo no sentido de PopupCard)
+**Consolidated popup**
+The single logical Agent Bar popup. It opens on one monitor and shows one
+provider or Settings at a time.
 
-**Chip:**
-Indicador compacto de um provider na Bar (ícone + percentual).
-_Avoid_: module (reservado ao contrato Waybar `custom/agent-bar-*`)
+**Provider rail**
+The vertical icon-only selector on the popup's left edge.
 
-**Usage popup:**
-Painel nativo do omarchy-shell que mostra quotas e breakdown sem abrir
-terminal. Abre no clique esquerdo do Chip.
-_Avoid_: tooltip (é o equivalente rico do tooltip Waybar, mas é popup QML)
+**Provider view**
+The selected provider's plan, state, percentage windows, resets, and actions.
 
-**Settings mode:**
-Mesmo popup em modo de edição de configuração (clique direito no Omarchy).
-Não é a TUI.
-_Avoid_: settings screen, preferences window
+**Settings**
+The popup view that edits the canonical Agent Bar settings draft.
 
-**TUI / Menu:**
-Dashboard completo em terminal (`agent-bar menu`): Detail, History, Login,
-Config. Abre por comando ou pelo link “Abrir menu (TUI)” no popup.
-_Avoid_: abrir a TUI no right-click Omarchy (comportamento pré-8.5.0)
+**Maintenance**
+The Settings section for update and uninstall.
 
-### Config
+## Runtime
 
-**Editable settings (subset Omarchy):**
-Campos que o Settings mode edita: providers habilitados, ordem, displayMode
-(remaining/used), notify.enabled. Persistidos em `settings.json` via
-`config apply`.
-_Avoid_: “settings do shell” para esses campos
+**Shared service**
+The one `Service.qml` instance loaded by Quattro. It owns polling, helper
+process scheduling, state snapshots, popup ownership, settings generations, and
+notification-evaluation requests.
 
-**Plugin setting:**
-Config do widget no omarchy-shell (`refreshIntervalSec` e schema do
-manifest). Vive no entry do plugin em `shell.json` via `updateEntryInline`.
-_Avoid_: misturar com Editable settings
+**Bar widget instance**
+A lightweight monitor-local view. It does not own polling or provider state.
 
-**Dual-write:**
-No Save do Settings mode: primeiro `config apply` (settings.json); se OK,
-depois `updateEntryInline` (intervalo). Ordem fixa para não gravar interval
-quando o apply falha.
+**Private helper**
+The bundled Rust executable at `bin/agent-bar`. It is an implementation detail,
+not a standalone product.
 
-**Provider list canônica:**
-`waybar.providers` / `waybar.provider_order` em `settings.json` — mesmo
-conjunto que a TUI Config e o Waybar. No Omarchy o QML filtra chips por essa
-lista; o envelope `--format json` continua completo.
-_Avoid_: lista de providers só no shell.json
+**Plugin bundle**
+The complete version-matched `agent-bar.usage` directory: manifest, QML, icons,
+scripts, receipt, and private helper.
 
-### Integration
+## Provider model
 
-**Drop-in plugin:**
-Arquivos do widget escritos em
-`~/.config/omarchy/plugins/agent-bar.usage/` pelo setup, embutidos no binário.
-_Avoid_: `omarchy plugin add` de git como path principal
+**Provider descriptor**
+The canonical Rust catalog entry containing provider ID, name, icon key,
+official installation URL, discovery metadata, TTL, and timeout.
 
-**action-right:**
-Comando interno do right-click **Waybar** (abre TUI focada). Fora do help
-público; o Omarchy não o usa no right-click.
-_Avoid_: chamar de “menu” ou “settings”
+**Collection availability**
+Whether Agent Bar can obtain provider quota. It is separate from login CLI
+availability.
+
+**Login availability**
+Whether Agent Bar can delegate to the provider's official interactive login
+command.
+
+**Usage window**
+A percentage quota with stable ID, English label, used/remaining values, and
+optional UTC reset timestamp.
+
+**Last good data**
+The most recent valid normalized provider snapshot.
+
+**Stale**
+Last good data retained after a temporary refresh failure.
+
+## Configuration and state
+
+**Settings document**
+The strict complete document in
+`$XDG_CONFIG_HOME/agent-bar/settings.json`.
+
+**Persisted snapshot**
+The canonical settings returned by a successful `config show` or apply.
+
+**Draft**
+The mutable Settings UI copy. It is never persisted implicitly.
+
+**Collection generation**
+A completed live provider collection used for cross-process singleflight and
+forced-refresh coalescing.
+
+**Transaction**
+A journaled setup/migration/update/uninstall operation with backup, staging,
+validation, commit, and rollback.
+
+**Ownership evidence**
+The proof that permits Agent Bar to classify and remove one of its own files.
+
+## Terms to avoid
+
+- `module` for a bar chip.
+- `menu` or `TUI` for the popup.
+- `Waybar settings`.
+- `extra usage` for arbitrary provider data.
+- `standalone install`.
+- `available` as a substitute for typed provider state.
+- human error-message regex as control flow.

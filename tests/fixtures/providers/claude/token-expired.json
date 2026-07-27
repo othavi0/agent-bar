@@ -1,0 +1,6 @@
+{
+  "error": {
+    "error_code": "token_expired",
+    "message": "expired"
+  }
+}

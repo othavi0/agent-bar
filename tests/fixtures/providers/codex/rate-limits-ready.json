@@ -1,0 +1,17 @@
+{
+  "primary": {
+    "usedPercent": 30.0,
+    "windowDurationMins": 300,
+    "resetsAt": 1700000000
+  },
+  "secondary": {
+    "usedPercent": 40.0,
+    "windowDurationMins": 10080,
+    "resetsAt": 1700000000
+  },
+  "credits": {
+    "has_credits": true,
+    "unlimited": false,
+    "balance": "99.0"
+  }
+}

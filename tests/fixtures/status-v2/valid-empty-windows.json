@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "helperVersion": "10.0.0",
+  "generatedAt": "2026-07-26T18:42:00Z",
+  "request": {
+    "provider": "codex",
+    "cache": "bypass"
+  },
+  "providers": [
+    {
+      "id": "codex",
+      "name": "Codex",
+      "state": "ready",
+      "source": "live",
+      "plan": {
+        "id": "plus",
+        "label": "Plus"
+      },
+      "account": {
+        "label": "Work"
+      },
+      "windows": [],
+      "lastSuccessAt": "2026-07-26T18:42:00Z",
+      "error": null,
+      "action": null
+    }
+  ]
+}

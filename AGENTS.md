@@ -1,75 +1,60 @@
-# agent-bar — Codex Adapter
+# Agent Bar Codex Adapter
 
-This repository is **Claude Code first**. The canonical agent instructions live
-in [`CLAUDE.md`](CLAUDE.md), and Codex must read and follow that file before
-editing anything here.
+The canonical repository instructions are in [CLAUDE.md](CLAUDE.md). Read that
+file before editing code or documentation.
 
-This file is only the Codex compatibility adapter. Keep it small enough to avoid
-drift, but explicit enough that a fresh Codex session can bootstrap safely.
+The approved v10 design and implementation plan are in
+[docs/specs/v10/](docs/specs/v10/README.md). This branch implements that plan.
 
-## Boot Order
+## Boot order
 
 1. Read this file.
-2. Read [`CLAUDE.md`](CLAUDE.md) in full — it fits comfortably under 200
-   lines after the 6.0.0 Rust rewrite.
-3. Let `CLAUDE.md` define the repo contract. The code in `src/` still wins over
-   docs when behavior and docs disagree.
-4. Translate Claude Code-specific tools and workflows to Codex equivalents using
-   the table below.
+2. Read `CLAUDE.md`.
+3. Read the relevant v10 specification files.
+4. Check `git status --short`.
+5. Preserve unrelated changes.
 
-## Hard Bootstraps
+## Hard bootstrap
 
-Use these before `CLAUDE.md` is fully loaded:
+- Rust/Cargo and QML only; no Node runtime or test tooling.
+- Product is only the Quickshell plugin `agent-bar.usage`.
+- The Rust helper is private inside the plugin bundle.
+- Keep the terminal helper as argv-safe Bash.
+- Do not run live setup, update, uninstall, rescan, shell restart, or config
+  mutation outside the approved final QA gate.
+- Use temporary plugin roots and isolated XDG directories for tests.
+- Do not edit `/usr/share/omarchy`.
+- Do not commit or push unless authorized.
+- Never bypass hooks, force-push, merge, tag, or publish without explicit
+  authorization.
 
-- **Rust/cargo only** — no Node, npm, bun, pnpm, yarn, ts-node, or Deno for
-  runtime or test workflows.
-- Run the CLI as `cargo run -- <args>` during development, or the installed
-  `agent-bar` binary in production.
-- Never convert `scripts/agent-bar-open-terminal` (Bash helper) to Rust.
-- Do not run live-mutating commands (`agent-bar setup`, `update`, `uninstall`,
-  `remove`) without explicit user approval.
-- Do not hand-edit live `~/.config/waybar` or `~/.config/agent-bar` for
-  verification. Use temp directories, injected path flags, and `XDG_*`
-  overrides.
-- Keep stdout clean for Waybar JSON. Diagnostics belong on stderr unless the
-  command is intentionally terminal/TUI output.
-- Preserve unrelated user changes in the worktree.
+## Codex tool translation
 
-## Claude Code To Codex
-
-| Claude Code concept | Codex equivalent in this repo |
+| Intent | Codex |
 | --- | --- |
-| `CLAUDE.md` project memory | Canonical repo instructions. Read it directly. |
-| `AskUserQuestion` | `request_user_input` when available; otherwise ask one concise question only when needed. |
-| `Bash` | `exec_command`; prefer `rtk` prefixes where possible. |
-| `Read` | `exec_command` with `rtk sed`, `rtk nl`, `rtk head`, or `rtk tail`. |
-| `Grep` | `exec_command` with `rtk rg`. |
-| `Glob` | `exec_command` with `rtk rg --files` or plain `find` when predicates are needed. |
-| `Write` / `Edit` / `MultiEdit` | `apply_patch`. |
-| `TodoWrite` | `update_plan` for visible progress. |
-| `Task` / subagents | `spawn_agent` only when the user or harness permits delegation. |
-| `Skill` | Open the relevant `SKILL.md` and follow it. |
-| `WebSearch` / `WebFetch` | `web.run`; for library docs prefer `ctx7` when the global instructions require it. |
-| Plan mode | Controlled by the Codex harness; do not fake it with file edits. |
+| Read/search | `exec_command` with `rtk sed` / `rtk rg` |
+| Edit | `apply_patch` |
+| Progress | `update_plan` |
+| Subagent | `spawn_agent` only when user/harness permits |
+| Current external docs | `ctx7` or the applicable documentation skill |
+| Browser QA | `agent-browser` |
 
-## Codex Workflow In This Repo
+Prefer `rtk` for shell commands. Use `rg`/`rg --files` for search.
 
-- Start with `rtk git status --short`.
-- Read the smallest relevant slice of [`CLAUDE.md`](CLAUDE.md) and source files.
-- For docs or agent-instruction-only edits, focused verification is
-  `git diff --check`.
-- For code changes, use the verification matrix in `CLAUDE.md`; broaden to
-  `cargo test && cargo clippy --all-targets -- -D warnings` when shared
-  contracts move.
-- Do not commit or push unless the user explicitly asks.
+## Verification
 
-## Repo Pointers
+Documentation-only changes:
 
-- [`CLAUDE.md`](CLAUDE.md) — canonical agent contract.
-- [`README.md`](README.md) — install and command surface.
-- [`docs/README.md`](docs/README.md) — operational docs index.
-- [`docs/commands.md`](docs/commands.md) — CLI reference.
-- [`docs/runtime.md`](docs/runtime.md) — settings, cache, credentials, owned paths.
-- [`docs/integration.md`](docs/integration.md) — setup/update/remove ownership model.
-- [`docs/waybar-contract.md`](docs/waybar-contract.md) — generated Waybar module/CSS contract.
-- [`docs/new-provider.md`](docs/new-provider.md) — provider extension checklist.
+```bash
+git diff --check
+```
+
+Shared contract changes:
+
+```bash
+cargo fmt --check
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
+QML and bundle gates are defined in `CLAUDE.md` and the v10 acceptance spec.

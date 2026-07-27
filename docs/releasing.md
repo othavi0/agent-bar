@@ -1,102 +1,106 @@
-# Releasing agent-bar
+# Releasing Agent Bar
 
-Runbook para cortar um release. A versão é única, vinda de `Cargo.toml`
-(`CARGO_PKG_VERSION`). O CI (`.github/workflows/publish.yml`) builda o binário
-musl estático via `cargo-zigbuild` e anexa o tarball + `.sha256` ao GitHub Release.
+Publishing requires separate explicit authorization after the final acceptance
+matrix and live QA.
 
-## 1. Preparar a versão
+The release is one architecture-specific Omarchy plugin bundle. There is no
+standalone binary tarball, AUR package, cargo-binstall metadata, or global
+installation.
 
-1. Bumpar `version` em `Cargo.toml` (ex: `6.0.0` → `6.1.0`).
-2. Bumpar `pkgver` em `packaging/aur/PKGBUILD` e em `packaging/aur/.SRCINFO` para o
-   mesmo valor; resetar `pkgrel=1` em ambos.
-3. Atualizar `CHANGELOG.md` (mover de `[Unreleased]` para uma seção
-   `## [<version>] - YYYY-MM-DD`, formato Keep a Changelog).
-4. Conferir que tudo bate:
-   ```bash
-   ./scripts/check-version v<version>   # Cargo.toml == PKGBUILD == tag
-   cargo test && cargo clippy --all-targets -- -D warnings
-   ```
+## Release identity
 
-## 2. Commitar + taggear
+The following must match exactly:
 
-```bash
-git add Cargo.toml CHANGELOG.md packaging/aur/
-git commit -m "chore: release v<version>"
-git push
+- `Cargo.toml` package version;
+- `manifest.json` version;
+- `bundle.json` version;
+- private helper `version` output;
+- archive filename;
+- metadata version, target, Omarchy contract, minimum Quickshell version,
+  source commit, archive size, and archive SHA-256;
+- checksum sidecar and metadata archive SHA-256;
+- metadata release-notes URL and the authorized release tag;
+- Git tag after authorization.
 
-git tag -a v<version> -m "agent-bar <version>"
-git push origin v<version>
+Initial target:
+
+```text
+agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.tar.zst
+agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.tar.zst.sha256
+agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.metadata.json
+LICENSE
 ```
 
-## 3. Publicar o GitHub Release (dispara o CI)
+## Prepare
+
+1. Complete every checkpoint and live QA.
+2. Update `CHANGELOG.md` and migration guide.
+3. Prepare English release notes.
+4. Run the complete acceptance matrix.
+5. Assemble the plugin twice from a clean source state.
+6. Compare inventory, modes, IDs, versions, and content hashes.
+7. Validate archive traversal/link/device protections.
+8. Verify the checksum and closed metadata equality.
+
+The tracked release-notes source is `docs/releases/10.0.0.md`. After every
+tracked release change is committed, require a clean worktree and run:
 
 ```bash
-gh release create v<version> --title "v<version>" --notes-file <notas.md>
+SOURCE_COMMIT="$(git rev-parse HEAD)"
+cargo run --bin agent-bar-bundle -- assemble \
+  output target/release-candidate/agent-bar.usage \
+  source-commit "$SOURCE_COMMIT"
+cargo run --bin agent-bar-bundle -- release \
+  bundle target/release-candidate/agent-bar.usage \
+  output target/release-candidate/files \
+  source-commit "$SOURCE_COMMIT" \
+  release-notes docs/releases/10.0.0.md
 ```
 
-Criar o Release dispara `publish.yml` (`release: published`), que:
-- instala Rust + target `x86_64-unknown-linux-musl` + zig (`mlugg/setup-zig`) +
-  `cargo-zigbuild`;
-- builda `cargo zigbuild --release --target x86_64-unknown-linux-musl`;
-- empacota `agent-bar-<version>-x86_64.tar.gz` (binário + `scripts/agent-bar-open-terminal`
-  + `icons/` + `LICENSE`, todos na raiz do arquivo) + `.sha256`;
-- anexa ambos ao Release;
-- **publica no AUR automaticamente** (job `publish-aur`): preenche
-  `pkgver`/`pkgrel`/`sha256sums` no PKGBUILD/.SRCINFO do repo com os valores
-  do build e pusha para `agent-bar-bin`. Versão nova → `pkgrel=1`; mesma
-  versão com packaging alterado → `pkgrel+1`; nada mudou → skip (re-run
-  seguro). Requer o secret `AUR_SSH_PRIVATE_KEY` (chave dedicada de CI com a
-  pública registrada na conta AUR `noctua`).
+The builder refuses a dirty/wrong HEAD and produces archive, checksum,
+metadata JSON, and LICENSE from that exact commit.
 
-Acompanhar e confirmar:
-```bash
-gh run watch "$(gh run list --workflow=publish.yml -L1 --json databaseId -q '.[0].databaseId')" --exit-status
-gh release view v<version> --json assets   # tarball + .sha256 presentes
-```
-
-## 4. sha256 do PKGBUILD (automático)
-
-O job `publish-aur` do CI preenche o `sha256sums` na cópia enviada ao AUR —
-o PKGBUILD/.SRCINFO **do repo** pode ficar com o hash da versão anterior ou
-placeholder; ele é template, não a fonte publicada. Opcionalmente, alinhar o
-hash do repo por higiene:
+## Required isolated gates
 
 ```bash
-gh release download v<version> -p '*.sha256' -D /tmp/ab-rel
-HASH="$(cut -d' ' -f1 /tmp/ab-rel/*.sha256)"
-# Substituir o sha256sums em packaging/aur/PKGBUILD E packaging/aur/.SRCINFO por "$HASH"
-git add packaging/aur/ && git commit -m "chore: sha256 do PKGBUILD pro v<version>" && git push
+cargo fmt --check
+cargo test
+cargo clippy --all-targets -- -D warnings
+git diff --check
+
+cargo build --release
+cargo run --bin agent-bar-bundle -- \
+  assemble target/release/agent-bar.usage
+
+omarchy plugin validate target/release/agent-bar.usage
+find target/release/agent-bar.usage -type f -name '*.qml' -exec \
+  qmllint -I /usr/share/omarchy/shell {} +
+shellcheck target/release/agent-bar.usage/scripts/agent-bar-open-terminal
+target/release/agent-bar.usage/bin/agent-bar version
+readelf -h target/release/agent-bar.usage/bin/agent-bar
 ```
 
-## 5. Publicar no AUR — manual (fallback)
+Also run QML behavior/screenshot, migration, transaction fault matrix, docs,
+legacy, and dependency gates from the canonical acceptance specification.
 
-**Normalmente desnecessário**: o passo 3 já publica via CI. Use este fluxo só
-se o job `publish-aur` falhar (ex.: secret ausente/expirado).
+## Authorization boundary
 
-O AUR é um repo git **separado** (`ssh://aur@aur.archlinux.org/agent-bar-bin.git`).
-Requer a conta do AUR do mantenedor + chave SSH registrada nela (a chave precisa
-estar em https://aur.archlinux.org/account → SSH Public Key). Não é a chave padrão
-do GitHub — registre a chave certa no AUR antes.
+The implementation worker may:
 
-```bash
-git clone ssh://aur@aur.archlinux.org/agent-bar-bin.git /tmp/aur-agent-bar
-cd /tmp/aur-agent-bar
-cp ~/Projects/agent-bar/packaging/aur/PKGBUILD .
-cp ~/Projects/agent-bar/packaging/aur/.SRCINFO .
-cp ~/Projects/agent-bar/packaging/aur/agent-bar-bin.install .
-git add -A
-git commit -m "agent-bar-bin <version>"
-git push
-```
+- bump target version on the feature branch;
+- prepare archive/checksum and release notes;
+- push the feature branch;
+- open the final ready PR.
 
-Notas:
-- O `.SRCINFO` precisa estar consistente com o `PKGBUILD` (mesmo `pkgver`/`sha256sums`).
-  Se tiver `makepkg`, regenerar com `makepkg --printsrcinfo > .SRCINFO`; senão editar à mão.
-- Se o repo AUR ainda não existir, o primeiro `git push` o cria (o `pkgbase` no
-  `.SRCINFO` define o nome).
-- Validar localmente (opcional, em Arch): `makepkg -si` numa cópia do tarball.
+The worker may not:
 
-## Distribuição (sem AUR)
+- merge;
+- create or push a tag;
+- publish a GitHub Release;
+- distribute an archive;
+- update any package repository;
+- skip final Codex review or live rollback evidence.
 
-`install.sh` (curl|bash) e `cargo binstall agent-bar` puxam o binário direto do
-GitHub Release — funcionam assim que o passo 3 termina, independente do AUR.
+After the user merges and separately authorizes release, follow the approved
+GitHub release procedure for the exact reviewed commit. Do not rebuild from a
+different source state.

@@ -1,32 +1,11 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod action_right;
 pub mod app_identity;
 pub mod cache;
 pub mod cli;
-pub mod config;
-pub mod config_cmd;
-pub mod doctor;
-pub mod formatters;
-pub mod http;
-pub mod install;
-pub mod logger;
-pub mod notify;
-pub mod omarchy_integration;
-pub mod platform;
+pub mod notifications;
+pub mod plugin;
 pub mod providers;
-pub mod runtime;
 pub mod settings;
-pub mod setup;
-pub mod term_prompt;
-#[cfg(test)]
-pub mod test_support;
-pub mod theme;
-pub mod tui;
-pub mod uninstall;
-pub mod update;
-pub mod usage;
-pub mod watch;
-pub mod waybar;
-pub use waybar::waybar_contract;
-pub use waybar::waybar_integration;
+pub mod status;
+pub mod support;

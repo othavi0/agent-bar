@@ -1,0 +1,11 @@
+{
+  "version": 3,
+  "waybar": {
+    "providers": ["claude", "codex", "amp", "grok"],
+    "displayMode": "remaining",
+    "interval": 10
+  },
+  "notify": {
+    "enabled": true
+  }
+}

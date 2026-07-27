@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "waybar": {
+    "providers": ["claude", "codex", "amp", "grok"],
+    "displayMode": "remaining",
+    "interval": 60
+  },
+  "notify": {
+    "enabled": true
+  },
+  "legacyTheme": "saga"
+}

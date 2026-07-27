@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Omarchy Quattro plugin `agent-bar.usage` with one shared `Service.qml`,
+  monitor-local `BarWidget.qml` chips, consolidated popup, Settings, update,
+  and uninstall.
+- Private Rust helper at plugin path `bin/agent-bar` for provider collection,
+  cache, settings, notifications, doctor, and transactional maintenance.
+- Claude, Codex, Amp, and Grok percentage quota windows with typed states
+  (`ready`, `stale`, `cli_missing`, `unauthenticated`, `rate_limited`,
+  `network_error`, `provider_error`).
+- Status JSON schema v2 and strict word-based helper grammar.
+- Transactional setup, v9-to-v10 settings migration, ownership classification,
+  backups, journaled update/uninstall, health verification, and rollback.
+- Plugin-scoped `install.sh` bootstrap and release bundle builder for
+  `x86_64-unknown-linux-gnu`.
+- Active documentation, legacy scan, and executable doc contract tests.
+
+### Removed
+
+- TUI and terminal dashboard.
+- Waybar and Pango output.
+- Session history, charts, and local or provider-reported monetary data.
+- Schema-v1 status compatibility.
+- Standalone global install, AUR packaging, and cargo-binstall metadata.
+- Permanent daemon and global `agent-bar` executable.
+
+### Breaking
+
+- Status stdout is schema v2 only.
+- Product artifact is only the Omarchy plugin bundle.
+- Settings live solely in `$XDG_CONFIG_HOME/agent-bar/settings.json`.
+
+This section becomes the dated `10.0.0` release entry after final review, live
+QA, and explicit release authorization. Authored release notes live at
+`docs/releases/10.0.0.md`.
+
 ## [9.0.0] - 2026-07-21
 
 Redesign completo do popup (Omarchy-shell) + Waybar rebaixada a tier
