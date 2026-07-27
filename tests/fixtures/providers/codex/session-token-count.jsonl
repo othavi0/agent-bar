@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-25T23:00:00.000Z","type":"event","payload":{"type":"message"}}
+{"timestamp":"2026-07-25T23:01:00.000Z","type":"event","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12.5,"window_minutes":10080,"resets_at":1785628013},"plan_type":"plus"}}}

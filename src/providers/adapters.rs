@@ -11,6 +11,7 @@ use super::adapter::{
     CollectionContext, ProviderAdapter,
 };
 use super::catalog::{AMP, CLAUDE, CODEX, GROK};
+use super::codex_session_log::find_latest_rate_limits;
 use super::process::ProcessSpec;
 use super::v2_map::{
     amp_from_usage_text, claude_from_usage_json, codex_from_rate_limits_json,
@@ -268,11 +269,18 @@ impl ProviderAdapter for CodexAdapter {
                     retryable: false,
                 };
             }
+            // 1. Explicit rate-limits.json if present
             let rates_path = home.join(".codex/rate-limits.json");
             if let Ok(bytes) = context.fs.read(&rates_path) {
                 return codex_from_rate_limits_json(&bytes, context.clock.now_utc());
             }
 
+            // 2. Bounded session-log fallback (~/.codex/sessions/**/*.jsonl)
+            if let Some(bytes) = find_latest_rate_limits(&home.join(".codex/sessions")) {
+                return codex_from_rate_limits_json(&bytes, context.clock.now_utc());
+            }
+
+            // 3. No collection exe → cli_missing
             let Some(exe) = collection_exe(discovery) else {
                 return missing_collection(
                     ProviderId::Codex,
@@ -280,7 +288,7 @@ impl ProviderAdapter for CodexAdapter {
                     CODEX.installation_url,
                 );
             };
-            // Without a live app-server in unit tests, missing rates is a typed miss.
+            // 4. App-server not wired yet (Task 3); typed retryable miss.
             let _ = exe;
             ProviderResult::ProviderError {
                 id: ProviderId::Codex,
