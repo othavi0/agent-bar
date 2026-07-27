@@ -1,10 +1,7 @@
 //! Concrete [`ProviderAdapter`] implementations for the four locked providers.
 
-use std::path::Path;
-
 use crate::cli::ProviderId;
 use crate::status::schema::{Account, Plan, ProviderResult};
-use crate::support::FileSystem;
 
 use super::adapter::{
     collection_exe, login_available, missing_collection, unauthenticated, BoxFuture,
@@ -16,7 +13,7 @@ use super::codex_session_log::find_latest_rate_limits;
 use super::process::ProcessSpec;
 use super::v2_map::{
     amp_from_usage_text, claude_from_usage_json, codex_from_rate_limits_json,
-    grok_from_auth_and_signals,
+    grok_from_billing_json,
 };
 use super::{Discovery, ProviderDescriptor};
 
@@ -88,6 +85,9 @@ impl ProviderAdapter for AmpAdapter {
 // Grok
 // ---------------------------------------------------------------------------
 
+/// Authenticated billing endpoint (literal; equality-tested).
+pub const GROK_BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
+
 pub struct GrokAdapter;
 
 pub static GROK_ADAPTER: GrokAdapter = GrokAdapter;
@@ -137,108 +137,125 @@ impl ProviderAdapter for GrokAdapter {
                 }
             };
 
-            let (logged_in, account) = parse_grok_auth(&auth_bytes);
-            if !logged_in {
-                return unauthenticated(
-                    ProviderId::Grok,
-                    GROK.display_name,
-                    "Grok is not authenticated.",
-                    login_available(discovery),
-                    GROK.installation_url,
-                );
-            }
+            // Token is used only for the Authorization header — never stored in
+            // ProviderResult, logs, or error messages.
+            let (token, account) = match parse_grok_auth_token(&auth_bytes) {
+                Some(v) => v,
+                None => {
+                    return unauthenticated(
+                        ProviderId::Grok,
+                        GROK.display_name,
+                        "Grok is not authenticated.",
+                        login_available(discovery),
+                        GROK.installation_url,
+                    );
+                }
+            };
 
-            let signals = find_latest_signals(context.fs, &grok_home.join("sessions"));
-            let _ = collection_exe(discovery); // login/collection independence
-            grok_from_auth_and_signals(
-                true,
-                account,
-                signals.as_deref(),
-                context.clock.now_utc(),
-                login_available(discovery),
-            )
+            let bearer = format!("Bearer {token}");
+            let headers = [
+                ("Authorization", bearer.as_str()),
+                ("x-grok-client-mode", "cli"),
+            ];
+            let max_body = GROK.max_output_bytes;
+            let login = login_available(discovery);
+            let now = context.clock.now_utc();
+
+            let mut attempts: u8 = 0;
+            loop {
+                attempts = attempts.saturating_add(1);
+                match context.http.get(GROK_BILLING_URL, &headers, max_body).await {
+                    Ok(resp) if resp.status == 401 || resp.status == 403 => {
+                        return unauthenticated(
+                            ProviderId::Grok,
+                            GROK.display_name,
+                            "Grok authentication was rejected.",
+                            login,
+                            GROK.installation_url,
+                        );
+                    }
+                    Ok(resp) if (200..300).contains(&resp.status) => {
+                        let _ = resp.final_url;
+                        return grok_from_billing_json(&resp.body, account, now, login);
+                    }
+                    Ok(resp) if resp.status >= 500 => {
+                        return ProviderResult::ProviderError {
+                            id: ProviderId::Grok,
+                            name: GROK.display_name.to_owned(),
+                            message: "Grok billing request failed.".into(),
+                            retryable: true,
+                        };
+                    }
+                    Ok(_) => {
+                        return ProviderResult::ProviderError {
+                            id: ProviderId::Grok,
+                            name: GROK.display_name.to_owned(),
+                            message: "Grok billing request failed.".into(),
+                            retryable: false,
+                        };
+                    }
+                    Err(super::adapter::HttpError::Network(_)) => {
+                        if attempts == 1 {
+                            if let Some(delay) = GROK.retry_delay() {
+                                tokio::time::sleep(delay).await;
+                                continue;
+                            }
+                        }
+                        return ProviderResult::NetworkError {
+                            id: ProviderId::Grok,
+                            name: GROK.display_name.to_owned(),
+                            message: "Network error while contacting Grok.".into(),
+                        };
+                    }
+                    Err(super::adapter::HttpError::RedirectRefused(_)) => {
+                        return ProviderResult::ProviderError {
+                            id: ProviderId::Grok,
+                            name: GROK.display_name.to_owned(),
+                            message: "Grok billing redirect refused.".into(),
+                            retryable: false,
+                        };
+                    }
+                    Err(super::adapter::HttpError::BodyTooLarge) => {
+                        return ProviderResult::ProviderError {
+                            id: ProviderId::Grok,
+                            name: GROK.display_name.to_owned(),
+                            message: "Grok billing response exceeded size limit.".into(),
+                            retryable: false,
+                        };
+                    }
+                    Err(super::adapter::HttpError::InvalidResponse(_)) => {
+                        return ProviderResult::ProviderError {
+                            id: ProviderId::Grok,
+                            name: GROK.display_name.to_owned(),
+                            message: "Invalid Grok billing response.".into(),
+                            retryable: false,
+                        };
+                    }
+                }
+            }
         })
     }
 }
 
-fn parse_grok_auth(bytes: &[u8]) -> (bool, Option<String>) {
-    let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) else {
-        return (false, None);
-    };
-    let Some(map) = value.as_object() else {
-        return (false, None);
-    };
+/// Extract API key + optional first_name label from Grok `auth.json`.
+///
+/// Returns `None` when no non-empty `key` is present. The token must only be
+/// used for the HTTP Authorization header and must never enter `ProviderResult`.
+fn parse_grok_auth_token(bytes: &[u8]) -> Option<(String, Option<String>)> {
+    let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let map = value.as_object()?;
     for (_k, entry) in map {
         let key = entry.get("key").and_then(|v| v.as_str()).unwrap_or("");
-        if !key.is_empty() {
-            let name = entry
-                .get("first_name")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned);
-            return (true, name);
-        }
-    }
-    (false, None)
-}
-
-/// Bounded walk: no follow links, max depth 8, max 4096 entries, max 256 signals.
-fn find_latest_signals(fs: &dyn FileSystem, sessions: &Path) -> Option<Vec<u8>> {
-    // Prefer a simple known file if present (tests); otherwise walk via std for
-    // directory listing (FileSystem seam is read/metadata only).
-    let direct = sessions.join("recent/signals.json");
-    if let Ok(bytes) = fs.read(&direct) {
-        return Some(bytes);
-    }
-    walk_signals_std(sessions)
-}
-
-fn walk_signals_std(sessions: &Path) -> Option<Vec<u8>> {
-    use std::cmp::Ordering;
-    use std::fs;
-
-    if !sessions.is_dir() {
-        return None;
-    }
-    let mut candidates: Vec<(std::time::SystemTime, std::path::PathBuf)> = Vec::new();
-    let mut stack = vec![(sessions.to_path_buf(), 0u32)];
-    let mut visits = 0u32;
-    while let Some((dir, depth)) = stack.pop() {
-        if visits >= 4096 || depth > 8 {
+        if key.is_empty() {
             continue;
         }
-        visits += 1;
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            visits += 1;
-            if visits >= 4096 {
-                break;
-            }
-            let path = entry.path();
-            let Ok(meta) = entry.metadata() else {
-                continue;
-            };
-            if meta.file_type().is_symlink() {
-                continue;
-            }
-            if meta.is_dir() && depth < 8 {
-                stack.push((path, depth + 1));
-            } else if meta.is_file()
-                && path.file_name().and_then(|s| s.to_str()) == Some("signals.json")
-            {
-                let mtime = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
-                candidates.push((mtime, path));
-            }
-        }
+        let name = entry
+            .get("first_name")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        return Some((key.to_owned(), name));
     }
-    candidates.sort_by(|a, b| match b.0.cmp(&a.0) {
-        Ordering::Equal => a.1.as_os_str().cmp(b.1.as_os_str()),
-        other => other,
-    });
-    candidates.truncate(256);
-    let path = &candidates.first()?.1;
-    fs::read(path).ok()
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -467,15 +484,15 @@ pub struct MapFileSystem {
 }
 
 #[cfg(test)]
-impl FileSystem for MapFileSystem {
-    fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+impl crate::support::FileSystem for MapFileSystem {
+    fn read(&self, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
         self.files
             .get(path)
             .cloned()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "missing"))
     }
 
-    fn metadata(&self, path: &Path) -> std::io::Result<crate::support::FileMetadata> {
+    fn metadata(&self, path: &std::path::Path) -> std::io::Result<crate::support::FileMetadata> {
         let bytes = self.read(path)?;
         Ok(crate::support::FileMetadata {
             len: bytes.len() as u64,
@@ -496,6 +513,7 @@ mod tests {
     use crate::providers::http::ScriptedHttpClient;
     use crate::providers::process::{ProcessError, ProcessOutput, ProcessRunner, ProcessSpec};
     use crate::providers::v2_map::assert_no_money;
+    use std::path::Path;
     use std::sync::Mutex;
     use time::macros::datetime;
 
@@ -698,33 +716,43 @@ mod tests {
         assert!(matches!(result, ProviderResult::ProviderError { .. }));
     }
 
-    #[tokio::test]
-    async fn grok_ready_from_auth_and_signals_fixture() {
-        let process = ScriptedProcess::one(ProcessOutput {
+    fn grok_test_env_and_auth(fs: &mut MapFileSystem) -> ExecutionEnvironment {
+        let home = std::path::PathBuf::from("/home/u");
+        let grok_home = home.join(".grok");
+        fs.files.insert(
+            grok_home.join("auth.json"),
+            // Synthetic key — not a real JWT or credential.
+            br#"{"acct":{"key":"SYNTH_GROK_KEY_NOT_REAL","first_name":"Ada"}}"#.to_vec(),
+        );
+        ExecutionEnvironment {
+            home,
+            path_dirs: vec![],
+            grok_home: None,
+        }
+    }
+
+    fn empty_process() -> ScriptedProcess {
+        ScriptedProcess::one(ProcessOutput {
             exit_code: Some(0),
             stdout: String::new(),
             stderr: String::new(),
             timed_out: false,
             stdout_truncated: false,
             stderr_truncated: false,
-        });
-        let http = ScriptedHttpClient::default();
+        })
+    }
+
+    #[tokio::test]
+    async fn grok_ready_from_billing_http() {
+        let body = include_bytes!("../../tests/fixtures/providers/grok/billing-weekly.json");
+        let http = ScriptedHttpClient::single(Ok(HttpResponse {
+            status: 200,
+            final_url: GROK_BILLING_URL.into(),
+            body: body.to_vec(),
+        }));
+        let process = empty_process();
         let mut fs = MapFileSystem::default();
-        let home = std::path::PathBuf::from("/home/u");
-        let grok_home = home.join(".grok");
-        fs.files.insert(
-            grok_home.join("auth.json"),
-            br#"{"acct":{"key":"k","first_name":"Ada"}}"#.to_vec(),
-        );
-        fs.files.insert(
-            grok_home.join("sessions/recent/signals.json"),
-            include_bytes!("../../tests/fixtures/grok/signals-recent.json").to_vec(),
-        );
-        let env = ExecutionEnvironment {
-            home,
-            path_dirs: vec![],
-            grok_home: None,
-        };
+        let env = grok_test_env_and_auth(&mut fs);
         let clock = FixedClock(datetime!(2026-07-26 18:00:00 UTC));
         let ctx = CollectionContext {
             env: &env,
@@ -742,12 +770,95 @@ mod tests {
         };
         let result = GROK_ADAPTER.collect(&ctx, &discovery).await;
         assert_no_money(&result);
+        let dbg = format!("{result:?}");
+        assert!(
+            !dbg.contains("SYNTH_GROK_KEY_NOT_REAL"),
+            "token must not appear in domain result"
+        );
+        assert_eq!(
+            http.last_url.lock().unwrap().as_deref(),
+            Some(GROK_BILLING_URL)
+        );
+        let headers = http.last_headers.lock().unwrap().clone();
+        assert!(
+            headers.iter().any(|(k, v)| {
+                k == "Authorization" && v.starts_with("Bearer ") && v.contains("SYNTH_GROK_KEY")
+            }),
+            "Authorization Bearer header missing: {headers:?}"
+        );
+        assert!(
+            headers
+                .iter()
+                .any(|(k, v)| k == "x-grok-client-mode" && v == "cli"),
+            "x-grok-client-mode header missing: {headers:?}"
+        );
         match result {
-            ProviderResult::Ready { windows, .. } => {
-                assert_eq!(windows[0].id(), "context");
+            ProviderResult::Ready {
+                windows, account, ..
+            } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(windows[0].label(), "Weekly");
+                assert!(windows.iter().all(|w| w.id() != "context"));
+                assert_eq!(account.as_ref().map(|a| a.label.as_str()), Some("Ada"));
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn grok_billing_401_unauthenticated() {
+        let http = ScriptedHttpClient::single(Ok(HttpResponse {
+            status: 401,
+            final_url: GROK_BILLING_URL.into(),
+            body: br#"{"error":"unauthorized"}"#.to_vec(),
+        }));
+        let process = empty_process();
+        let mut fs = MapFileSystem::default();
+        let env = grok_test_env_and_auth(&mut fs);
+        let clock = FixedClock(datetime!(2026-07-26 18:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = Discovery {
+            collection: CollectionAvailability::Missing,
+            login: LoginAvailability::Available {
+                executable: std::path::PathBuf::from("/usr/bin/grok"),
+            },
+        };
+        let result = GROK_ADAPTER.collect(&ctx, &discovery).await;
+        let dbg = format!("{result:?}");
+        assert!(!dbg.contains("SYNTH_GROK_KEY_NOT_REAL"));
+        assert!(matches!(result, ProviderResult::Unauthenticated { .. }));
+    }
+
+    #[tokio::test]
+    async fn grok_billing_timeout_network_error() {
+        let http = ScriptedHttpClient::single(Err(crate::providers::adapter::HttpError::Network(
+            "timeout".into(),
+        )));
+        let process = empty_process();
+        let mut fs = MapFileSystem::default();
+        let env = grok_test_env_and_auth(&mut fs);
+        let clock = FixedClock(datetime!(2026-07-26 18:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = discovery_with_exe(Path::new("/usr/bin/grok"));
+        let result = GROK_ADAPTER.collect(&ctx, &discovery).await;
+        let dbg = format!("{result:?}");
+        assert!(!dbg.contains("SYNTH_GROK_KEY_NOT_REAL"));
+        assert!(matches!(result, ProviderResult::NetworkError { .. }));
     }
 
     #[tokio::test]

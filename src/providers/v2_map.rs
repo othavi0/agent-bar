@@ -202,8 +202,8 @@ fn grok_billing_resets_at(doc: &GrokBillingDoc) -> Option<OffsetDateTime> {
 
 /// Build Grok result from auth flag + optional signals JSON bytes.
 ///
-/// Kept until Task 5 rewires the adapter to billing HTTP. Product window is
-/// weekly via [`grok_from_billing_json`]; do not treat context as primary.
+/// Legacy helper retained for unauthenticated/auth fixtures. Product collect
+/// uses [`grok_from_billing_json`] (weekly only); do not treat context as primary.
 pub fn grok_from_auth_and_signals(
     logged_in: bool,
     account_label: Option<String>,
