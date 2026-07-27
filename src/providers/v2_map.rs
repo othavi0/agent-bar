@@ -766,7 +766,8 @@ mod tests {
 
     #[test]
     fn grok_billing_accepts_cli_config_envelope() {
-        let body = include_bytes!("../../tests/fixtures/providers/grok/billing-weekly-wrapped.json");
+        let body =
+            include_bytes!("../../tests/fixtures/providers/grok/billing-weekly-wrapped.json");
         let now = datetime!(2026-07-27 12:00:00 UTC);
         let result = grok_from_billing_json(body, None, now, true);
         assert_no_money(&result);
