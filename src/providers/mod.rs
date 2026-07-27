@@ -3,6 +3,7 @@
 pub mod adapter;
 pub mod adapters;
 pub mod catalog;
+pub mod codex_app_server;
 pub mod codex_session_log;
 pub mod http;
 pub mod process;

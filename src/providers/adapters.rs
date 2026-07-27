@@ -11,6 +11,7 @@ use super::adapter::{
     CollectionContext, ProviderAdapter,
 };
 use super::catalog::{AMP, CLAUDE, CODEX, GROK};
+use super::codex_app_server::{fetch_rate_limits_via_appserver, AppServerOutcome};
 use super::codex_session_log::find_latest_rate_limits;
 use super::process::ProcessSpec;
 use super::v2_map::{
@@ -259,7 +260,6 @@ impl ProviderAdapter for CodexAdapter {
         discovery: &'a Discovery,
     ) -> BoxFuture<'a, ProviderResult> {
         Box::pin(async move {
-            // Prefer filesystem session-log fixture path under $HOME/.codex
             let home = &context.env.home;
             if !home.is_absolute() {
                 return ProviderResult::ProviderError {
@@ -269,27 +269,40 @@ impl ProviderAdapter for CodexAdapter {
                     retryable: false,
                 };
             }
-            // 1. Explicit rate-limits.json if present
+
+            // 1. App-server when collection exe is present (one timeout retry).
+            if let Some(exe) = collection_exe(discovery) {
+                let version = crate::app_identity::VERSION;
+                let timeout = CODEX.timeout;
+                let mut outcome = fetch_rate_limits_via_appserver(exe, version, timeout).await;
+                if matches!(outcome, AppServerOutcome::TimedOut) {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    outcome = fetch_rate_limits_via_appserver(exe, version, timeout).await;
+                }
+                if let AppServerOutcome::Ok(bytes) = outcome {
+                    return codex_from_rate_limits_json(&bytes, context.clock.now_utc());
+                }
+            }
+
+            // 2. Explicit rate-limits.json if present
             let rates_path = home.join(".codex/rate-limits.json");
             if let Ok(bytes) = context.fs.read(&rates_path) {
                 return codex_from_rate_limits_json(&bytes, context.clock.now_utc());
             }
 
-            // 2. Bounded session-log fallback (~/.codex/sessions/**/*.jsonl)
+            // 3. Bounded session-log fallback (~/.codex/sessions/**/*.jsonl)
             if let Some(bytes) = find_latest_rate_limits(&home.join(".codex/sessions")) {
                 return codex_from_rate_limits_json(&bytes, context.clock.now_utc());
             }
 
-            // 3. No collection exe → cli_missing
-            let Some(exe) = collection_exe(discovery) else {
+            // 4. Typed miss / cli_missing
+            if collection_exe(discovery).is_none() {
                 return missing_collection(
                     ProviderId::Codex,
                     CODEX.display_name,
                     CODEX.installation_url,
                 );
-            };
-            // 4. App-server not wired yet (Task 3); typed retryable miss.
-            let _ = exe;
+            }
             ProviderResult::ProviderError {
                 id: ProviderId::Codex,
                 name: CODEX.display_name.to_owned(),
@@ -768,7 +781,9 @@ mod tests {
             http: &http,
             plugin_root: None,
         };
-        let discovery = discovery_with_exe(Path::new("/usr/bin/codex"));
+        // Non-existent exe so app-server spawn fails immediately and collection
+        // falls through to rate-limits.json (no live Codex dependency).
+        let discovery = discovery_with_exe(Path::new("/nonexistent/codex"));
         let result = CODEX_ADAPTER.collect(&ctx, &discovery).await;
         assert_no_money(&result);
         match result {
