@@ -137,7 +137,8 @@ pub fn grok_from_billing_json(
     now: OffsetDateTime,
     _login_available: bool,
 ) -> ProviderResult {
-    let doc: GrokBillingDoc = match serde_json::from_slice(bytes) {
+    // Live CLI proxy wraps fields in `{ "config": { ... } }`; fixtures may be flat.
+    let doc: GrokBillingDoc = match parse_grok_billing_doc(bytes) {
         Ok(doc) => doc,
         Err(_) => {
             return ProviderResult::ProviderError {
@@ -187,6 +188,18 @@ pub fn grok_from_billing_json(
         windows,
         last_success_at: now,
     }
+}
+
+fn parse_grok_billing_doc(bytes: &[u8]) -> Result<GrokBillingDoc, serde_json::Error> {
+    let value: Value = serde_json::from_slice(bytes)?;
+    let payload = match &value {
+        Value::Object(map) => match map.get("config") {
+            Some(cfg) if cfg.is_object() => cfg.clone(),
+            _ => value,
+        },
+        _ => value,
+    };
+    serde_json::from_value(payload)
 }
 
 fn grok_billing_resets_at(doc: &GrokBillingDoc) -> Option<OffsetDateTime> {
@@ -746,6 +759,24 @@ mod tests {
         match grok_from_billing_json(body, None, now, true) {
             ProviderResult::Ready { windows, .. } => {
                 assert!(windows.iter().all(|w| w.id() != "context"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_billing_accepts_cli_config_envelope() {
+        let body = include_bytes!("../../tests/fixtures/providers/grok/billing-weekly-wrapped.json");
+        let now = datetime!(2026-07-27 12:00:00 UTC);
+        let result = grok_from_billing_json(body, None, now, true);
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert!((windows[0].used_percent() - 96.0).abs() < 0.01);
+                assert!((windows[0].remaining_percent() - 4.0).abs() < 0.01);
+                assert!(windows[0].resets_at().is_some());
             }
             other => panic!("{other:?}"),
         }
