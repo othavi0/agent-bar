@@ -100,7 +100,110 @@ struct GrokSignals {
     context_window_tokens: Option<u64>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct GrokBillingDoc {
+    #[serde(default, rename = "creditUsagePercent")]
+    credit_usage_percent: Option<f64>,
+    #[serde(default, rename = "currentPeriod")]
+    current_period: Option<GrokPeriodRaw>,
+    #[serde(default, rename = "billingPeriodEnd")]
+    billing_period_end: Option<String>,
+    #[serde(default, rename = "subscriptionTiers")]
+    subscription_tiers: Option<String>,
+    /// Discarded monetary fields.
+    #[serde(default, rename = "prepaidBalance")]
+    prepaid_balance: Option<Value>,
+    #[serde(default, rename = "onDemandCap")]
+    on_demand_cap: Option<Value>,
+    #[serde(default, rename = "onDemandUsed")]
+    on_demand_used: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GrokPeriodRaw {
+    #[serde(default)]
+    end: Option<String>,
+}
+
+/// Parse Grok billing JSON into a single weekly percentage window.
+///
+/// - `creditUsagePercent` → used; remaining = 100 − used
+/// - `currentPeriod.end` or `billingPeriodEnd` → resetsAt
+/// - money-like fields discarded; never emits a `context` window
+/// - missing/invalid percent → Ready with empty windows
+pub fn grok_from_billing_json(
+    bytes: &[u8],
+    account_label: Option<String>,
+    now: OffsetDateTime,
+    _login_available: bool,
+) -> ProviderResult {
+    let doc: GrokBillingDoc = match serde_json::from_slice(bytes) {
+        Ok(doc) => doc,
+        Err(_) => {
+            return ProviderResult::ProviderError {
+                id: ProviderId::Grok,
+                name: GROK.display_name.to_owned(),
+                message: "Grok returned an invalid billing payload.".into(),
+                retryable: false,
+            };
+        }
+    };
+
+    // prepaid_balance / on_demand_* are deserialized only to document discard.
+    let _ = (
+        &doc.prepaid_balance,
+        &doc.on_demand_cap,
+        &doc.on_demand_used,
+    );
+
+    let mut windows = Vec::new();
+    if let Some(used_raw) = doc.credit_usage_percent {
+        if used_raw.is_finite() {
+            let used = used_raw.clamp(0.0, 100.0);
+            let remaining = (100.0 - used).clamp(0.0, 100.0);
+            let resets = grok_billing_resets_at(&doc);
+            if let Ok(w) = UsageWindow::try_new("weekly", "Weekly", used, remaining, resets) {
+                windows.push(w);
+            }
+        }
+    }
+
+    let plan = doc
+        .subscription_tiers
+        .filter(|s| !s.is_empty())
+        .map(|id| Plan {
+            label: id.clone(),
+            id,
+        });
+
+    ProviderResult::Ready {
+        id: ProviderId::Grok,
+        name: GROK.display_name.to_owned(),
+        source: DataSource::Live,
+        plan,
+        account: account_label.map(|label| Account {
+            label: sanitize_account_label(&label),
+        }),
+        windows,
+        last_success_at: now,
+    }
+}
+
+fn grok_billing_resets_at(doc: &GrokBillingDoc) -> Option<OffsetDateTime> {
+    let end = doc
+        .current_period
+        .as_ref()
+        .and_then(|p| p.end.as_deref())
+        .or(doc.billing_period_end.as_deref())?;
+    OffsetDateTime::parse(end, &Rfc3339)
+        .ok()
+        .map(|ts| ts.to_offset(UtcOffset::UTC))
+}
+
 /// Build Grok result from auth flag + optional signals JSON bytes.
+///
+/// Kept until Task 5 rewires the adapter to billing HTTP. Product window is
+/// weekly via [`grok_from_billing_json`]; do not treat context as primary.
 pub fn grok_from_auth_and_signals(
     logged_in: bool,
     account_label: Option<String>,
@@ -619,20 +722,30 @@ mod tests {
     }
 
     #[test]
-    fn grok_signals_context_window() {
-        let signals = include_bytes!("../../tests/fixtures/grok/signals-recent.json");
-        let result = grok_from_auth_and_signals(
-            true,
-            Some("user".into()),
-            Some(signals.as_slice()),
-            datetime!(2026-07-26 18:00:00 UTC),
-            true,
-        );
-        assert_no_money(&result);
-        match result {
+    fn grok_billing_weekly_window_discards_money() {
+        let body = include_bytes!("../../tests/fixtures/providers/grok/billing-weekly.json");
+        let now = datetime!(2026-07-27 12:00:00 UTC);
+        match grok_from_billing_json(body, Some("Ada".into()), now, true) {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(windows[0].label(), "Weekly");
+                assert!((windows[0].used_percent() - 33.0).abs() < 0.01);
+                assert!((windows[0].remaining_percent() - 67.0).abs() < 0.01);
+                assert!(windows[0].resets_at().is_some());
+                assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("SuperGrok"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_billing_ready_never_emits_context() {
+        let body = include_bytes!("../../tests/fixtures/providers/grok/billing-weekly.json");
+        let now = datetime!(2026-07-27 12:00:00 UTC);
+        match grok_from_billing_json(body, None, now, true) {
             ProviderResult::Ready { windows, .. } => {
-                assert_eq!(windows[0].id(), "context");
-                assert!((windows[0].used_percent() - 10.0).abs() < 0.01);
+                assert!(windows.iter().all(|w| w.id() != "context"));
             }
             other => panic!("{other:?}"),
         }
