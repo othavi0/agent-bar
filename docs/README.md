@@ -17,6 +17,8 @@ Active product and engineering documentation for Agent Bar v10.
 - [JSON output](json-output.md) — status schema v2.
 - [New provider](new-provider.md) — adapter and fixture checklist.
 - [Releasing](releasing.md) — plugin-bundle release boundary.
+- [v10.0.0 live QA](qa/v10.0.0-live-qa-2026-07-27.md) — post-release
+  TEST-035…042 matrix and screenshots.
 - [ADRs](adr/README.md) — durable architectural decisions.
 - [Domain vocabulary](../CONTEXT.md) — canonical terms.
 

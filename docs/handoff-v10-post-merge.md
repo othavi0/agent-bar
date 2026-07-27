@@ -36,6 +36,9 @@ Default branch is **`master`** (not `main`).
 | CI-style gates (`fmt` / `test` / `clippy` / `diff --check`) | Passed at polish commit |
 | PR opened and body updated | #25 |
 | **Merge to master** | **Done by user** |
+| Dual RC at `b9475bf` + tag/publish `v10.0.0` | **Done** (assets on GitHub Release) |
+| `publish.yml` checksum CWD fix | **Done** (PR #26) |
+| Live re-evidence TEST-035…042 post-release | **Done** — [report](qa/v10.0.0-live-qa-2026-07-27.md) |
 
 ### Canonical docs for this slice
 
@@ -53,41 +56,36 @@ Default branch is **`master`** (not `main`).
 
 ## 2. What is NOT done (you own this)
 
-### A. Release publish (blocking for end users)
+### A. Release publish — **done**
 
-v10 code is on **master** but there is **no** published GitHub release/tag assumed complete until you verify.
+| Item | Result |
+| --- | --- |
+| Dual RC at `b9475bf` | Byte-identical archive/sidecar/metadata |
+| Archive SHA-256 | `102035312ef33c98498f645877ab0857a9eff39790d3a6a295c70276d786c6d6` |
+| Tag + GitHub Release | [v10.0.0](https://github.com/othavi0/agent-bar/releases/tag/v10.0.0) |
+| `install.sh` against published | Exercised with `--force --yes`; existing entry used rescan only |
+| CI attach fix | PR #26 (`sha256sum` from output dir) |
 
-1. **Checkout clean `master` at merge commit** (or current `origin/master` tip).
-2. **Re-run dual RC identity** at **this** HEAD (prior dual RC was at `0df2904`, not post-`986c4c5` / merge):
-   - Assemble/release twice from the same source commit.
-   - Require byte-identical archives and matching SHA-256.
-   - Follow `docs/specs/v10/08-plugin-bundle-and-release.md` (BUNDLE-* matrix: inventory, mode, arch, version, traversal, rollback).
-3. **Build release artifacts** with the internal builder (`agent-bar-bundle release …`) — clean worktree, `HEAD == source-commit`, English notes from `docs/releases/10.0.0.md` (confirm file exists and matches product).
-4. **Tag** `v10.0.0` only with explicit human authorization (runbook EXEC-010).
-5. **Publish** GitHub release: archive + `.sha256` + notes; URLs must match `bundle.json` / receipt shape in the release spec.
-6. **Smoke `install.sh`** against the published release on a machine with Omarchy:
-   - Fresh: `omarchy plugin enable agent-bar.usage` path.
-   - Existing: `omarchy plugin rescan` path; **never** unconditional `omarchy bar plugin add`.
-   - Confirm shell.json placement not rewritten by update.
+### B. Live acceptance re-evidence — **done**
 
-### B. Live acceptance re-evidence (blocking for “fully green” claim)
+Canonical post-release report:
 
-Earlier Task 22 report (`/tmp/agent-bar-v10-live-qa.md`) is **stale** on popup (marked Fail before polish). After merge/release candidate:
+- [docs/qa/v10.0.0-live-qa-2026-07-27.md](qa/v10.0.0-live-qa-2026-07-27.md)
+- Screenshots: [docs/qa/v10.0.0-2026-07-27/](qa/v10.0.0-2026-07-27/)
 
-| ID | Action | Notes |
-| --- | --- | --- |
-| TEST-035–036 | Re-run backup + install from **new** RC | Hash baseline before/after |
-| TEST-037 chips | Re-screenshot both monitors | Expect real % / state cues |
-| TEST-037 popup | **Re-prove** open, transfer, outside-click, keyboard, scroll | Mouse works; Hyprland 0.56 uses Lua dispatch `hl.dsp.cursor.move({x=,y=})` if automating |
-| TEST-037 theme | Dark/light probe + restore | Optional if time-boxed |
-| TEST-038 update | `available:false` pre-release; apply is post-release only | |
-| TEST-038 uninstall | Standard uninstall JSON confirmation (non-TTY) | Earlier path was flaky |
-| TEST-038 purge | **Not run** — must run once with evidence | |
-| TEST-040–042 | Rollback hashes; no unrelated mutation | |
+| ID | Result (2026-07-27) |
+| --- | --- |
+| TEST-035–036 | Pass — backup + published install; shell.json unchanged |
+| TEST-037 chips | Pass — dual monitor real % / state cues |
+| TEST-037 popup | Pass — open, transfer, outside-click, settings, usage track |
+| TEST-037 theme | Skip (optional) |
+| TEST-038 update | Fail (env) — unauth GitHub API HTTP 403 under rate limit |
+| TEST-038 uninstall + purge | Pass — non-TTY JSON confirmation |
+| TEST-040–042 | Pass — baseline hash restore; no unrelated plugin mutation |
 
-Record a **new** report under a dated path (do not only amend the old Fail matrix).
+Earlier Task 22 report (`/tmp/agent-bar-v10-live-qa.md`) remains historical/stale.
 
-### C. Product / engineering residuals (non-blocking for first tag if documented)
+### C. Product / engineering residuals (non-blocking; still open)
 
 | Residual | Severity | Suggested action |
 | --- | --- | --- |
@@ -135,26 +133,26 @@ Hard rules (still in force):
 
 ```text
 Phase 1 — Release engineering
-  [ ] Clean master worktree
-  [ ] Dual assemble+release at merge HEAD
-  [ ] Validate archive inventory/mode/arch/version/traversal/rollback
-  [ ] Prepare notes docs/releases/10.0.0.md
-  [ ] Ask user: authorize tag v10.0.0 + GitHub publish
+  [x] Clean master worktree
+  [x] Dual assemble+release at merge HEAD
+  [x] Validate archive inventory/mode/arch/version/traversal/rollback
+  [x] Prepare notes docs/releases/10.0.0.md
+  [x] Tag v10.0.0 + GitHub publish (authorized)
 
 Phase 2 — Live acceptance on Omarchy host
-  [ ] Install published (or local RC) bundle
-  [ ] Full TEST-035…042 with screenshots under a new evidence dir
-  [ ] Especially: popup tour, purge uninstall, dual-monitor transfer
-  [ ] Restore baseline; write honest report
+  [x] Install published bundle
+  [x] Full TEST-035…042 with screenshots (docs/qa/v10.0.0-*)
+  [x] Popup tour, purge uninstall, dual-monitor transfer
+  [x] Restore baseline; write honest report
 
 Phase 3 — Close residuals (optional / follow-up PR)
   [ ] appliedSettings on cold start
   [ ] IPC typed args
-  [ ] Any defects found in Phase 2
+  [ ] update check GitHub unauth 403 mitigation (if product wants token/cache)
 
 Phase 4 — Announce
-  [ ] README/install curl pin to v10.0.0 if not already
-  [ ] User-facing release notes
+  [x] README/install curl pin to v10.0.0
+  [x] User-facing release notes (docs/releases/10.0.0.md + GitHub body)
 ```
 
 ---
@@ -209,4 +207,4 @@ agent-bar-bundle release bundle <plugin-dir> output <output-dir>
 
 ## 7. One-line status for standup
 
-> **v10 is merged to master (PR #25). Next owner: dual RC + publish `v10.0.0`, then re-run full live acceptance (especially popup tour + purge uninstall). Feature work complete; release and final QA gates remain.**
+> **v10.0.0 is published and live-accepted (dual monitor popup + purge + restore). Residuals: appliedSettings cold start, IPC typed args, update-check GitHub 403. Optional hygiene: close feat branch / retarget worktrees.**
