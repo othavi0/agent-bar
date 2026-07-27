@@ -1,13 +1,13 @@
 # Agent Bar v10 Specification
 
-Status: **approved target design; not yet implemented**
+Status: **implemented on `master` (PR #25 merged 2026-07-27); release/publish
+and full live re-evidence still open**
 
-Approved on: 2026-07-26
+Approved on: 2026-07-26 · Merged: [PR #25](https://github.com/othavi0/agent-bar/pull/25)
 
 This directory is the canonical product and engineering contract for Agent Bar
-v10. Until the implementation passes every acceptance gate, the repository
-still contains v9 behavior. Documents outside this directory must not be used
-to override this specification.
+v10. Post-merge release owner: follow
+[docs/handoff-v10-post-merge.md](../../handoff-v10-post-merge.md).
 
 ## Product statement
 
