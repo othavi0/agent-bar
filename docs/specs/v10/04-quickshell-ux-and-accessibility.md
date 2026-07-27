@@ -47,7 +47,8 @@ not literal UI.
 
 - `UX-013`: The left rail is visually separate and uses provider icons only.
 - `UX-014`: Provider names are available through tooltips and accessibility.
-- `UX-015`: Settings is anchored at the bottom of the rail.
+- `UX-015`: Settings is the last control in the rail stack (equal frame
+  padding top and bottom; not overlaid with `anchors.bottom` on short cards).
 - `UX-016`: The provider header does not repeat the provider icon.
 - `UX-017`: The header shows name, plan badge, connection state, update age,
   and provider refresh.
@@ -56,6 +57,12 @@ not literal UI.
   width.
 - `UX-020`: Popup dimensions use Quattro fitting helpers and the current screen
   geometry; fixed sizes are maximum intentions, not unconditional dimensions.
+  Content-fit height has a small compact floor only; no large empty minimum.
+- `UX-020A`: Each percentage window row shows a horizontal usage track filled
+  by the displayed metric (used or remaining).
+- `UX-020B`: The selected rail icon uses a neutral soft plate only for the
+  provider that owns the open content; no accent edge tick; Settings has no
+  idle selected-looking border.
 - `UX-021`: The popup opens on the monitor that received the interaction.
 - `UX-022`: Only one agent-bar popup is visible across all monitors.
 - `UX-023`: Moving the popup to another monitor preserves selected provider
@@ -165,6 +172,8 @@ Requirements:
 - `A11Y-016`: `flickableDirection` is vertical.
 - `A11Y-017`: `boundsBehavior` is `Flickable.StopAtBounds`.
 - `A11Y-018`: A vertical scrollbar appears when content overflows.
+- `A11Y-018A`: When content does not overflow the viewport, the Flickable is
+  not interactive and `contentY` stays at 0.
 - `A11Y-019`: Mouse wheel and touchpad scrolling follow system direction.
 - `A11Y-020`: No custom wheel inversion, debounce, or network request is tied
   to scrolling.

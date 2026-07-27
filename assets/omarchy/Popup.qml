@@ -6,17 +6,23 @@ import "ServiceCore.js" as Core
 import "components"
 
 // Monitor-local consolidated popup (UX-013..025, A11Y-001..023).
+//
+// Do NOT redeclare KeyboardPanel's required anchorItem/bar here. Redeclaring
+// them as required on this derived type makes Loader/createObject treat the
+// base required props as unset (createObject returns null; chip click is a
+// no-op). Call sites pass anchorItem + bar like first-party model-usage.
 KeyboardPanel {
   id: root
 
-  required property Item anchorItem
-  required property QtObject bar
   property var owner: null
   property var agentService: null
 
   property int maxContentWidth: Style.space(540)
   property int maxContentHeight: Style.space(560)
+  // Compact floor: header + one window row + rail stack — not a 280px void.
+  property int minContentHeight: Style.space(160)
   property int contentLineHeight: Style.font.body + Style.space(8)
+  property int contentMargins: Style.space(14)
 
   // A11Y-008: Settings/NumberField can raise this while editing.
   property bool editorActive: contentLoader.item && contentLoader.item.editorOwnsFocus
@@ -39,6 +45,11 @@ KeyboardPanel {
   readonly property string selectedId: {
     if (!agentService)
       return ""
+    // Prefer the open popup's provider so the rail plate matches the pane
+    // (selectedProviderId alone could lag / fallback to Claude).
+    if (agentService.popupOwner && agentService.popupOwner.providerId
+        && String(agentService.popupOwner.providerId).length)
+      return String(agentService.popupOwner.providerId)
     if (agentService.selectedProviderId && String(agentService.selectedProviderId).length)
       return String(agentService.selectedProviderId)
     if (railProviders.length)
@@ -59,9 +70,23 @@ KeyboardPanel {
     owner
   )
 
+  // Prefer real content height; rail min height prevents icon crush/overlap.
+  readonly property int measuredBodyHeight: {
+    var col = contentColumn ? contentColumn.implicitHeight : 0
+    var margins = contentMargins * 2
+    var railMin = rail && rail.minStackHeight
+        ? rail.minStackHeight + Style.space(8)
+        : Style.space(160)
+    return Math.max(col + margins, railMin)
+  }
+
   open: isOpen
   contentWidth: maxContentWidth
-  contentHeight: Math.min(maxContentHeight, Math.max(Style.space(280), panelBody.implicitHeight + padding * 2))
+  contentHeight: Core.fittedPopupContentHeight(
+    measuredBodyHeight + padding * 2,
+    minContentHeight,
+    maxContentHeight
+  )
   focusTarget: keyCatcher
 
   function close() {
@@ -131,7 +156,15 @@ KeyboardPanel {
       root.stepProvider(route.delta)
   }
 
+  FocusController {
+    id: focusController
+    flickable: contentFlick
+    lineHeight: root.contentLineHeight
+  }
+
   function rebuildFocusTargets() {
+    if (!focusController || typeof focusController.setTargets !== "function")
+      return
     var list = []
     if (rail && typeof rail.collectFocusTargets === "function")
       list = list.concat(rail.collectFocusTargets())
@@ -141,19 +174,20 @@ KeyboardPanel {
   }
 
   onViewChanged: {
-    contentFlick.contentY = 0
-    Qt.callLater(rebuildFocusTargets)
+    if (contentFlick)
+      contentFlick.contentY = 0
+    Qt.callLater(function () {
+      if (typeof root.rebuildFocusTargets === "function")
+        root.rebuildFocusTargets()
+    })
   }
   onSelectedIdChanged: Qt.callLater(function () {
-    focusController.clampScroll()
-    rebuildFocusTargets()
+    // FocusController may not be ready on the first selectedId emission.
+    if (focusController && typeof focusController.clampScroll === "function")
+      focusController.clampScroll()
+    if (typeof root.rebuildFocusTargets === "function")
+      root.rebuildFocusTargets()
   })
-
-  FocusController {
-    id: focusController
-    flickable: contentFlick
-    lineHeight: root.contentLineHeight
-  }
 
   PanelKeyCatcher {
     id: keyCatcher
@@ -209,7 +243,8 @@ KeyboardPanel {
 
       ProviderRail {
         id: rail
-        width: Style.space(48)
+        width: rail.railWidth
+        // Fill panel height so ColumnLayout spacer can expand; min via measuredBodyHeight.
         height: parent.height
         providers: root.railProviders
         selectedProviderId: root.selectedId
@@ -220,29 +255,49 @@ KeyboardPanel {
         onSettingsClicked: root.openSettings()
       }
 
-      Rectangle {
-        width: 1
+      // Gutter between bordered rail and content (must match content width math).
+      Item {
+        id: railGutter
+        width: Style.space(8)
         height: parent.height
-        color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.12)
       }
 
       Item {
-        width: parent.width - rail.width - 1
+        // Exact remaining width — previous `- 1` made content too wide and
+        // clipped the first glyphs of titles / body / action labels.
+        width: Math.max(0, parent.width - rail.width - railGutter.width)
         height: parent.height
+        clip: true
 
         Flickable {
           id: contentFlick
           anchors.fill: parent
-          anchors.margins: Style.space(14)
+          anchors.leftMargin: root.contentMargins
+          anchors.rightMargin: root.contentMargins
+          anchors.topMargin: root.contentMargins
+          anchors.bottomMargin: root.contentMargins
           contentWidth: width
           contentHeight: contentColumn.implicitHeight
           clip: true
           boundsBehavior: Flickable.StopAtBounds
           flickableDirection: Flickable.VerticalFlick
-          ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+          interactive: Core.flickableInteractive(contentHeight, height)
+          ScrollBar.vertical: ScrollBar {
+            policy: contentFlick.interactive ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+          }
 
-          onContentHeightChanged: focusController.clampScroll()
-          onHeightChanged: focusController.clampScroll()
+          onContentHeightChanged: {
+            if (!Core.flickableInteractive(contentHeight, height))
+              contentY = 0
+            else if (focusController && typeof focusController.clampScroll === "function")
+              focusController.clampScroll()
+          }
+          onHeightChanged: {
+            if (!Core.flickableInteractive(contentHeight, height))
+              contentY = 0
+            else if (focusController && typeof focusController.clampScroll === "function")
+              focusController.clampScroll()
+          }
 
           Column {
             id: contentColumn
@@ -252,7 +307,10 @@ KeyboardPanel {
               id: contentLoader
               width: parent.width
               sourceComponent: root.view === "settings" ? settingsContent : providerContent
-              onLoaded: Qt.callLater(rebuildFocusTargets)
+              onLoaded: Qt.callLater(function () {
+                if (typeof root.rebuildFocusTargets === "function")
+                  root.rebuildFocusTargets()
+              })
             }
           }
         }

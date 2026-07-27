@@ -28,11 +28,13 @@ Item {
     spacing: Style.space(4)
 
     Row {
-      width: parent.width
+      width: Math.max(0, parent.width)
       spacing: Style.space(8)
 
       Text {
         id: nameLabel
+        // Cap name so the row never forces content wider than the pane.
+        width: Math.min(implicitWidth, Math.max(Style.space(48), parent.width * 0.42))
         text: root.name
         color: root.foreground
         font.family: root.fontFamily
@@ -63,6 +65,8 @@ Item {
       }
 
       Text {
+        // Remaining header text elides instead of shoving layout left/right.
+        width: Math.min(implicitWidth, Math.max(Style.space(40), parent.width * 0.28))
         text: root.connection
         color: root.showStale
             ? (root.foreground)
@@ -70,18 +74,23 @@ Item {
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         font.bold: root.showStale
+        elide: Text.ElideRight
         textFormat: Text.PlainText
         Accessible.name: root.connection
       }
 
       Item {
-        // Push refresh control to the trailing edge when space allows.
-        width: Math.max(Style.space(8), parent.width - nameLabel.implicitWidth - Style.space(120))
+        // Flexible spacer; never negative.
+        width: Math.max(Style.space(4),
+            parent.width
+            - nameLabel.width
+            - Style.space(100))
         height: 1
       }
 
       // UX-051 refresh glyph
       PanelActionButton {
+        size: Style.space(22)
         iconText: "󰑐"
         tooltipText: root.refreshing ? "Refreshing\u2026" : "Refresh provider"
         foreground: root.foreground

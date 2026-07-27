@@ -380,6 +380,10 @@ TestCase {
     verify(src.indexOf("refreshAll") >= 0)
     verify(src.indexOf("openSettings") >= 0)
     verify(src.indexOf("requestPopup") >= 0)
+    // UX-021: Popup is a direct child (Loader+Component left KeyboardPanel
+    // required props unset → no panel on chip click).
+    verify(src.indexOf("sourceComponent") < 0)
+    verify(src.indexOf("Popup {") >= 0)
     // UX-003: no product brand chip label
     verify(src.indexOf("\"AB\"") < 0)
     verify(src.indexOf("Agent Bar") < 0)

@@ -50,33 +50,36 @@ Column {
     spacing: Style.space(8)
 
     Text {
-      width: parent.width
+      // Bind to available width; avoid implicit-width grow that clips left glyphs.
+      width: Math.max(0, parent.width)
       text: root.title
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
       font.bold: true
-      wrapMode: Text.WordWrap
+      wrapMode: Text.Wrap
+      horizontalAlignment: Text.AlignLeft
       textFormat: Text.PlainText
       Accessible.name: root.title
       Accessible.role: Accessible.Heading
     }
 
     Text {
-      width: parent.width
+      width: Math.max(0, parent.width)
       visible: root.body.length > 0
       text: root.body
       color: Qt.darker(root.foreground, 1.25)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
-      wrapMode: Text.WordWrap
+      wrapMode: Text.Wrap
+      horizontalAlignment: Text.AlignLeft
       textFormat: Text.PlainText
       Accessible.name: root.body
       Accessible.role: Accessible.StaticText
     }
 
     Flow {
-      width: parent.width
+      width: Math.max(0, parent.width)
       spacing: Style.space(8)
 
       Repeater {
@@ -89,6 +92,8 @@ Column {
           fontFamily: root.fontFamily
           bordered: true
           focusable: true
+          // Keep action labels fully inside content (no left clip).
+          leftAlign: true
           Accessible.name: text
           onClicked: root.actionActivated(
             modelData && modelData.kind ? String(modelData.kind) : "",

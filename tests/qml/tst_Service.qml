@@ -115,6 +115,9 @@ TestCase {
     function closePopup(owner) {
       popupOwner = Core.closePopup(popupOwner, owner)
     }
+    function dismissPopup() {
+      popupOwner = Core.dismissPopup(popupOwner)
+    }
     function openSettings(owner) {
       if (maintenanceState.blocked) return
       requestPopup(owner, selectedProviderId || null, "settings")
@@ -333,6 +336,20 @@ TestCase {
     verify(h.popupOwner !== null)
     h.closePopup("mon-a")
     compare(h.popupOwner, null)
+  }
+
+  function test_popup_dismiss_clears_any_owner() {
+    reset()
+    h.requestPopup("mon-a", "claude", "usage")
+    verify(h.popupOwner !== null)
+    // Foreign monitor cannot same-owner close, but dismiss always clears.
+    h.closePopup("mon-b")
+    verify(h.popupOwner !== null)
+    h.dismissPopup()
+    compare(h.popupOwner, null)
+    verify(Core.foreignPopupOpen({ owner: "mon-a" }, "mon-b"))
+    verify(!Core.foreignPopupOpen({ owner: "mon-a" }, "mon-a"))
+    verify(!Core.foreignPopupOpen(null, "mon-b"))
   }
 
   function test_popup_cross_monitor_transfer() {

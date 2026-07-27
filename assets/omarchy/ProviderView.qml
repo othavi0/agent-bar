@@ -22,8 +22,10 @@ Item {
   readonly property var actions: Core.stateActions(provider)
 
   width: parent ? parent.width : implicitWidth
+  // Size to content only — stretching to parent.height caused a binding loop
+  // and fought Popup content-fit height.
   implicitHeight: body.implicitHeight
-  height: Math.max(implicitHeight, parent ? parent.height : implicitHeight)
+  height: implicitHeight
 
   Column {
     id: body
@@ -88,6 +90,9 @@ Item {
           width: parent.width
           label: modelData.label
           percentText: modelData.percentText
+          percent: modelData.percent !== undefined && modelData.percent !== null
+              ? Number(modelData.percent)
+              : -1
           resetsAt: modelData.resetsAt ? modelData.resetsAt : ""
           foreground: root.foreground
           fontFamily: root.fontFamily

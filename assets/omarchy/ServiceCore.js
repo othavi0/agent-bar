@@ -247,6 +247,20 @@ function closePopup(current, owner) {
   return null
 }
 
+// Outside-click / foreign-monitor dismiss: clear ownership unconditionally.
+function dismissPopup(_current) {
+  return null
+}
+
+// True when this monitor/widget is not the popup owner but a popup is open.
+function foreignPopupOpen(popupOwner, selfOwner) {
+  if (!popupOwner || popupOwner.owner === null || popupOwner.owner === undefined)
+    return false
+  if (selfOwner === null || selfOwner === undefined)
+    return false
+  return popupOwner.owner !== selfOwner
+}
+
 // Cross-monitor transfer: new owner takes popup (requestPopup always transfers).
 function popupOwnerId(popup) {
   return popup ? popup.owner : null
@@ -1194,11 +1208,15 @@ function windowDisplayLines(provider, metric) {
     if (!w)
       continue
     var pct = mode === "used" ? Number(w.usedPercent) : Number(w.remainingPercent)
-    var pctText = isFinite(pct) ? (Math.round(pct) + "%") : "\u2014"
+    var finite = isFinite(pct)
+    var rounded = finite ? Math.round(pct) : null
+    var pctText = finite ? (rounded + "%") : "\u2014"
     lines.push({
       id: String(w.id || ("w" + i)),
       label: plainText(w.label || w.id || "Window"),
       percentText: pctText,
+      // 0–100 for progress track; -1 when unavailable.
+      percent: finite ? Math.max(0, Math.min(100, rounded)) : -1,
       resetsAt: w.resetsAt ? String(w.resetsAt) : null
     })
   }
@@ -1279,6 +1297,26 @@ function maxContentY(contentHeight, viewportHeight) {
   if (!isFinite(ch) || !isFinite(vh))
     return 0
   return Math.max(0, ch - vh)
+}
+
+// A11Y short-content: Flickable must not accept wheel/drag when no overflow.
+function flickableInteractive(contentHeight, viewportHeight) {
+  return maxContentY(contentHeight, viewportHeight) > 0
+}
+
+// Card height from real body (not a large empty floor). minCompact is a
+// small floor for header+one row; maxCap is maxContentHeight.
+function fittedPopupContentHeight(bodyHeight, minCompact, maxCap) {
+  var body = Number(bodyHeight)
+  var minH = Number(minCompact)
+  var maxH = Number(maxCap)
+  if (!isFinite(body) || body < 0)
+    body = 0
+  if (!isFinite(minH) || minH < 0)
+    minH = 0
+  if (!isFinite(maxH) || maxH <= 0)
+    maxH = body
+  return Math.min(maxH, Math.max(minH, body))
 }
 
 function clampContentY(y, contentHeight, viewportHeight) {

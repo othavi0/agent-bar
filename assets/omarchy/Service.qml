@@ -154,6 +154,15 @@ Item {
     }
   }
 
+  // Outside-click on any monitor (including foreign-monitor dismiss layer).
+  function dismissPopup() {
+    popupOwner = Core.dismissPopup(popupOwner)
+    if (!popupOwner && !Core.settingsShouldRetainOnClose(settingsState)) {
+      settingsState = Core.settingsClosed()
+      settingsDraft = null
+    }
+  }
+
   function openSettings(owner) {
     if (maintenanceState.blocked)
       return

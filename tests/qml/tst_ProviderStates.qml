@@ -37,6 +37,7 @@ TestCase {
     var lines = Core.windowDisplayLines(p, "remaining")
     verify(lines.length > 0)
     verify(lines[0].percentText.indexOf("%") >= 0)
+    verify(lines[0].percent >= 0 && lines[0].percent <= 100)
   }
 
   function test_empty_windows_ready_message() {
@@ -58,6 +59,7 @@ TestCase {
     var lines = Core.windowDisplayLines(p, "used")
     compare(lines.length, 1)
     compare(lines[0].percentText, "90%")
+    compare(lines[0].percent, 90)
   }
 
   function test_cli_missing_view_installation_and_check_again() {

@@ -41,10 +41,15 @@ Each `BarWidget.qml` exists per monitor and owns:
 
 - provider chips;
 - Quattro click-target registration;
-- the monitor-local popup anchor and visible window;
+- the monitor-local popup anchor and visible `Popup` / `KeyboardPanel`;
+- optional foreign-monitor dismiss overlay when the popup is owned elsewhere
+  (`dismissPopup()` clears ownership on outside click);
 - rendering derived from the shared service.
 
-Widgets do not own polling, provider state, settings persistence, or cache.
+The consolidated popup uses a bordered icon rail (providers + Settings), a
+content-fit card height, overflow-gated vertical scrolling, and percentage
+window rows with a progress track. Widgets do not own polling, provider
+state, settings persistence, or cache.
 
 ## Rust boundaries
 
