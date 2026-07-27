@@ -3,6 +3,8 @@
 pub mod adapter;
 pub mod adapters;
 pub mod catalog;
+pub mod codex_app_server;
+pub mod codex_session_log;
 pub mod http;
 pub mod process;
 pub mod v2_map;
@@ -13,7 +15,7 @@ pub use adapter::{
 };
 pub use adapters::{
     AmpAdapter, ClaudeAdapter, CodexAdapter, GrokAdapter, AMP_ADAPTER, CLAUDE_ADAPTER,
-    CLAUDE_USAGE_URL, CODEX_ADAPTER, GROK_ADAPTER,
+    CLAUDE_USAGE_URL, CODEX_ADAPTER, GROK_ADAPTER, GROK_BILLING_URL,
 };
 pub use catalog::{
     descriptor, discover, login_process_argv, CatalogError, CollectionAvailability, Discovery,

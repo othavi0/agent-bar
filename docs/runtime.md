@@ -72,7 +72,7 @@ last good data as stale.
 - Claude may use local credentials plus provider HTTP.
 - Codex may use app-server with a bounded local fallback.
 - Amp uses its official usage command.
-- Grok may use provider-owned local auth/session data.
+- Grok may use local auth for an authenticated billing HTTPS request.
 
 Collection discovery is separate from interactive login-CLI discovery.
 

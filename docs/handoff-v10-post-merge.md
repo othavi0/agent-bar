@@ -23,7 +23,7 @@ Default branch is **`master`** (not `main`).
   - Chips with real percents/states on dual monitors.
   - Popup opens on left/right click.
   - Rail option-A stack, bordered strip, neutral selection, settings slot.
-  - Usage progress tracks (Amp Daily, Grok Context, etc.).
+  - Usage progress tracks (Amp Daily, Grok Weekly, etc.).
   - Content-fit height; Flickable only when overflowing.
   - Foreign-monitor dismiss layer + `Service.dismissPopup()`.
   - Same-monitor outside-click via KeyboardPanel (platform pattern).

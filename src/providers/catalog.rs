@@ -257,7 +257,7 @@ pub static GROK: ProviderDescriptor = ProviderDescriptor {
     cache_ttl: Duration::from_secs(90),
     timeout: Duration::from_secs(10),
     max_output_bytes: ONE_MIB,
-    retry_policy: RetryPolicy::None,
+    retry_policy: RetryPolicy::OneTransient,
 };
 
 /// Look up a descriptor by closed provider id.
@@ -435,7 +435,7 @@ mod tests {
         assert_eq!(GROK.icon_key, "grok");
         assert_eq!(GROK.login_argv, &["grok", "login"]);
         assert_eq!(GROK.installation_url, "https://x.ai/cli");
-        assert_eq!(GROK.retry_policy, RetryPolicy::None);
+        assert_eq!(GROK.retry_policy, RetryPolicy::OneTransient);
         assert_eq!(GROK.fallback_executable_paths[0].root, PathRoot::GrokHome);
     }
 

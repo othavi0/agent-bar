@@ -100,7 +100,123 @@ struct GrokSignals {
     context_window_tokens: Option<u64>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct GrokBillingDoc {
+    #[serde(default, rename = "creditUsagePercent")]
+    credit_usage_percent: Option<f64>,
+    #[serde(default, rename = "currentPeriod")]
+    current_period: Option<GrokPeriodRaw>,
+    #[serde(default, rename = "billingPeriodEnd")]
+    billing_period_end: Option<String>,
+    #[serde(default, rename = "subscriptionTiers")]
+    subscription_tiers: Option<String>,
+    /// Discarded monetary fields.
+    #[serde(default, rename = "prepaidBalance")]
+    prepaid_balance: Option<Value>,
+    #[serde(default, rename = "onDemandCap")]
+    on_demand_cap: Option<Value>,
+    #[serde(default, rename = "onDemandUsed")]
+    on_demand_used: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GrokPeriodRaw {
+    #[serde(default)]
+    end: Option<String>,
+}
+
+/// Parse Grok billing JSON into a single weekly percentage window.
+///
+/// - `creditUsagePercent` → used; remaining = 100 − used
+/// - `currentPeriod.end` or `billingPeriodEnd` → resetsAt
+/// - money-like fields discarded; never emits a `context` window
+/// - missing/invalid percent → Ready with empty windows
+pub fn grok_from_billing_json(
+    bytes: &[u8],
+    account_label: Option<String>,
+    now: OffsetDateTime,
+    _login_available: bool,
+) -> ProviderResult {
+    // Live CLI proxy wraps fields in `{ "config": { ... } }`; fixtures may be flat.
+    let doc: GrokBillingDoc = match parse_grok_billing_doc(bytes) {
+        Ok(doc) => doc,
+        Err(_) => {
+            return ProviderResult::ProviderError {
+                id: ProviderId::Grok,
+                name: GROK.display_name.to_owned(),
+                message: "Grok returned an invalid billing payload.".into(),
+                retryable: false,
+            };
+        }
+    };
+
+    // prepaid_balance / on_demand_* are deserialized only to document discard.
+    let _ = (
+        &doc.prepaid_balance,
+        &doc.on_demand_cap,
+        &doc.on_demand_used,
+    );
+
+    let mut windows = Vec::new();
+    if let Some(used_raw) = doc.credit_usage_percent {
+        if used_raw.is_finite() {
+            let used = used_raw.clamp(0.0, 100.0);
+            let remaining = (100.0 - used).clamp(0.0, 100.0);
+            let resets = grok_billing_resets_at(&doc);
+            if let Ok(w) = UsageWindow::try_new("weekly", "Weekly", used, remaining, resets) {
+                windows.push(w);
+            }
+        }
+    }
+
+    let plan = doc
+        .subscription_tiers
+        .filter(|s| !s.is_empty())
+        .map(|id| Plan {
+            label: id.clone(),
+            id,
+        });
+
+    ProviderResult::Ready {
+        id: ProviderId::Grok,
+        name: GROK.display_name.to_owned(),
+        source: DataSource::Live,
+        plan,
+        account: account_label.map(|label| Account {
+            label: sanitize_account_label(&label),
+        }),
+        windows,
+        last_success_at: now,
+    }
+}
+
+fn parse_grok_billing_doc(bytes: &[u8]) -> Result<GrokBillingDoc, serde_json::Error> {
+    let value: Value = serde_json::from_slice(bytes)?;
+    let payload = match &value {
+        Value::Object(map) => match map.get("config") {
+            Some(cfg) if cfg.is_object() => cfg.clone(),
+            _ => value,
+        },
+        _ => value,
+    };
+    serde_json::from_value(payload)
+}
+
+fn grok_billing_resets_at(doc: &GrokBillingDoc) -> Option<OffsetDateTime> {
+    let end = doc
+        .current_period
+        .as_ref()
+        .and_then(|p| p.end.as_deref())
+        .or(doc.billing_period_end.as_deref())?;
+    OffsetDateTime::parse(end, &Rfc3339)
+        .ok()
+        .map(|ts| ts.to_offset(UtcOffset::UTC))
+}
+
 /// Build Grok result from auth flag + optional signals JSON bytes.
+///
+/// Legacy helper retained for unauthenticated/auth fixtures. Product collect
+/// uses [`grok_from_billing_json`] (weekly only); do not treat context as primary.
 pub fn grok_from_auth_and_signals(
     logged_in: bool,
     account_label: Option<String>,
@@ -176,6 +292,9 @@ struct CodexRateLimitsDoc {
 }
 
 /// Parse Codex rate-limit JSON. Credits are discarded.
+///
+/// Window IDs/labels come from `window_minutes` duration, not primary/secondary
+/// slot order. Primary with 10080 minutes is weekly; 300 is session.
 pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> ProviderResult {
     let doc: CodexRateLimitsDoc = match serde_json::from_slice(bytes) {
         Ok(doc) => doc,
@@ -190,30 +309,15 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
     };
 
     let mut windows = Vec::new();
-    if let Some(primary) = doc.primary.as_ref() {
-        if let Some(w) = codex_window("session", "Session", primary) {
-            windows.push(w);
-        }
-    }
-    if let Some(secondary) = doc.secondary.as_ref() {
-        let (id, label) = if secondary.window_minutes == Some(10080) {
-            ("weekly", "Weekly")
-        } else if secondary.window_minutes.is_some() {
-            ("other", "Other")
-        } else {
-            ("weekly", "Weekly")
+    for (ordinal, raw) in [
+        (1usize, doc.primary.as_ref()),
+        (2usize, doc.secondary.as_ref()),
+    ] {
+        let Some(raw) = raw else {
+            continue;
         };
-        let id = if id == "other" {
-            format!("other:{}:1", secondary.window_minutes.unwrap_or(0))
-        } else {
-            id.to_owned()
-        };
-        let label = if id.starts_with("other:") {
-            format!("{}m", secondary.window_minutes.unwrap_or(0))
-        } else {
-            label.to_owned()
-        };
-        if let Some(w) = codex_window(&id, &label, secondary) {
+        let (id, label) = codex_window_identity(raw.window_minutes, ordinal);
+        if let Some(w) = codex_window(&id, &label, raw) {
             windows.push(w);
         }
     }
@@ -230,6 +334,26 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
         account: None,
         windows,
         last_success_at: now,
+    }
+}
+
+/// Map a Codex rate-limit duration to window id and display label.
+///
+/// Known durations: 300 → session, 10080 → weekly. Other positive minutes use
+/// `other:{n}:{ordinal}`. Missing duration falls back by slot ordinal (primary
+/// → session, secondary → weekly) for incomplete payloads.
+fn codex_window_identity(window_minutes: Option<i64>, ordinal: usize) -> (String, String) {
+    match window_minutes {
+        Some(10080) => ("weekly".into(), "Weekly".into()),
+        Some(300) => ("session".into(), "Session".into()),
+        Some(n) if n > 0 => (format!("other:{n}:{ordinal}"), format!("{n}m")),
+        _ => {
+            if ordinal == 1 {
+                ("session".into(), "Session".into())
+            } else {
+                ("weekly".into(), "Weekly".into())
+            }
+        }
     }
 }
 
@@ -572,20 +696,88 @@ mod tests {
     }
 
     #[test]
-    fn grok_signals_context_window() {
-        let signals = include_bytes!("../../tests/fixtures/grok/signals-recent.json");
-        let result = grok_from_auth_and_signals(
-            true,
-            Some("user".into()),
-            Some(signals.as_slice()),
-            datetime!(2026-07-26 18:00:00 UTC),
-            true,
-        );
+    fn codex_primary_only_weekly_is_labeled_weekly() {
+        let body = br#"{
+      "primary": {"used_percent": 1.0, "window_minutes": 10080, "resets_at": 1785628013},
+      "plan_type": "plus"
+    }"#;
+        let now = datetime!(2026-07-26 18:00:00 UTC);
+        let result = codex_from_rate_limits_json(body, now);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(windows[0].label(), "Weekly");
+                assert!((windows[0].used_percent() - 1.0).abs() < 0.01);
+                assert!(plan.is_some());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn codex_dual_windows_map_session_and_weekly_by_duration() {
+        let body = include_bytes!("../../tests/fixtures/providers/codex/rate-limits-ready.json");
+        let result = codex_from_rate_limits_json(body, datetime!(2026-07-26 18:00:00 UTC));
         assert_no_money(&result);
         match result {
             ProviderResult::Ready { windows, .. } => {
-                assert_eq!(windows[0].id(), "context");
-                assert!((windows[0].used_percent() - 10.0).abs() < 0.01);
+                assert_eq!(windows.len(), 2);
+                assert_eq!(windows[0].id(), "session");
+                assert_eq!(windows[0].label(), "Session");
+                assert!((windows[0].used_percent() - 30.0).abs() < 0.01);
+                assert_eq!(windows[1].id(), "weekly");
+                assert_eq!(windows[1].label(), "Weekly");
+                assert!((windows[1].used_percent() - 40.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_billing_weekly_window_discards_money() {
+        let body = include_bytes!("../../tests/fixtures/providers/grok/billing-weekly.json");
+        let now = datetime!(2026-07-27 12:00:00 UTC);
+        match grok_from_billing_json(body, Some("Ada".into()), now, true) {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(windows[0].label(), "Weekly");
+                assert!((windows[0].used_percent() - 33.0).abs() < 0.01);
+                assert!((windows[0].remaining_percent() - 67.0).abs() < 0.01);
+                assert!(windows[0].resets_at().is_some());
+                assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("SuperGrok"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_billing_ready_never_emits_context() {
+        let body = include_bytes!("../../tests/fixtures/providers/grok/billing-weekly.json");
+        let now = datetime!(2026-07-27 12:00:00 UTC);
+        match grok_from_billing_json(body, None, now, true) {
+            ProviderResult::Ready { windows, .. } => {
+                assert!(windows.iter().all(|w| w.id() != "context"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_billing_accepts_cli_config_envelope() {
+        let body =
+            include_bytes!("../../tests/fixtures/providers/grok/billing-weekly-wrapped.json");
+        let now = datetime!(2026-07-27 12:00:00 UTC);
+        let result = grok_from_billing_json(body, None, now, true);
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert!((windows[0].used_percent() - 96.0).abs() < 0.01);
+                assert!((windows[0].remaining_percent() - 4.0).abs() < 0.01);
+                assert!(windows[0].resets_at().is_some());
             }
             other => panic!("{other:?}"),
         }
