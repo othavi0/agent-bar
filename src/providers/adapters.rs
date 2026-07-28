@@ -60,6 +60,7 @@ impl ProviderAdapter for AmpAdapter {
                             "Amp is not authenticated.",
                             login_available(discovery),
                             AMP.installation_url,
+                            false,
                         )
                     } else {
                         ProviderResult::ProviderError {
@@ -133,6 +134,7 @@ impl ProviderAdapter for GrokAdapter {
                         "Grok is not authenticated.",
                         login_available(discovery),
                         GROK.installation_url,
+                        false,
                     );
                 }
             };
@@ -148,6 +150,7 @@ impl ProviderAdapter for GrokAdapter {
                         "Grok is not authenticated.",
                         login_available(discovery),
                         GROK.installation_url,
+                        false,
                     );
                 }
             };
@@ -161,75 +164,64 @@ impl ProviderAdapter for GrokAdapter {
             let login = login_available(discovery);
             let now = context.clock.now_utc();
 
-            let mut attempts: u8 = 0;
-            loop {
-                attempts = attempts.saturating_add(1);
-                match context.http.get(GROK_BILLING_URL, &headers, max_body).await {
-                    Ok(resp) if resp.status == 401 || resp.status == 403 => {
-                        return unauthenticated(
-                            ProviderId::Grok,
-                            GROK.display_name,
-                            "Grok authentication was rejected.",
-                            login,
-                            GROK.installation_url,
-                        );
+            match super::retry::http_get_with_retry(
+                context.http,
+                &GROK,
+                GROK_BILLING_URL,
+                &headers,
+                max_body,
+            )
+            .await
+            {
+                Ok(resp) if resp.status == 401 || resp.status == 403 => unauthenticated(
+                    ProviderId::Grok,
+                    GROK.display_name,
+                    "Grok authentication was rejected.",
+                    login,
+                    GROK.installation_url,
+                    false,
+                ),
+                Ok(resp) if (200..300).contains(&resp.status) => {
+                    let _ = resp.final_url;
+                    grok_from_billing_json(&resp.body, account, now, login)
+                }
+                Ok(resp) if resp.status >= 500 => ProviderResult::ProviderError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Grok billing request failed.".into(),
+                    retryable: true,
+                },
+                Ok(_) => ProviderResult::ProviderError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Grok billing request failed.".into(),
+                    retryable: false,
+                },
+                Err(super::adapter::HttpError::Network(_)) => ProviderResult::NetworkError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Network error while contacting Grok.".into(),
+                },
+                Err(super::adapter::HttpError::RedirectRefused(_)) => {
+                    ProviderResult::ProviderError {
+                        id: ProviderId::Grok,
+                        name: GROK.display_name.to_owned(),
+                        message: "Grok billing redirect refused.".into(),
+                        retryable: false,
                     }
-                    Ok(resp) if (200..300).contains(&resp.status) => {
-                        let _ = resp.final_url;
-                        return grok_from_billing_json(&resp.body, account, now, login);
-                    }
-                    Ok(resp) if resp.status >= 500 => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing request failed.".into(),
-                            retryable: true,
-                        };
-                    }
-                    Ok(_) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing request failed.".into(),
-                            retryable: false,
-                        };
-                    }
-                    Err(super::adapter::HttpError::Network(_)) => {
-                        if attempts == 1 {
-                            if let Some(delay) = GROK.retry_delay() {
-                                tokio::time::sleep(delay).await;
-                                continue;
-                            }
-                        }
-                        return ProviderResult::NetworkError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Network error while contacting Grok.".into(),
-                        };
-                    }
-                    Err(super::adapter::HttpError::RedirectRefused(_)) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing redirect refused.".into(),
-                            retryable: false,
-                        };
-                    }
-                    Err(super::adapter::HttpError::BodyTooLarge) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing response exceeded size limit.".into(),
-                            retryable: false,
-                        };
-                    }
-                    Err(super::adapter::HttpError::InvalidResponse(_)) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Invalid Grok billing response.".into(),
-                            retryable: false,
-                        };
+                }
+                Err(super::adapter::HttpError::BodyTooLarge) => ProviderResult::ProviderError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Grok billing response exceeded size limit.".into(),
+                    retryable: false,
+                },
+                Err(super::adapter::HttpError::InvalidResponse(_)) => {
+                    ProviderResult::ProviderError {
+                        id: ProviderId::Grok,
+                        name: GROK.display_name.to_owned(),
+                        message: "Invalid Grok billing response.".into(),
+                        retryable: false,
                     }
                 }
             }
@@ -361,10 +353,11 @@ impl ProviderAdapter for ClaudeAdapter {
                         "Claude is not authenticated.",
                         login_available(discovery),
                         CLAUDE.installation_url,
+                        false,
                     );
                 }
             };
-            let (token, plan, account) = match parse_claude_credentials(&cred_bytes) {
+            let creds = match parse_claude_credentials(&cred_bytes) {
                 Some(v) => v,
                 None => {
                     return unauthenticated(
@@ -373,19 +366,43 @@ impl ProviderAdapter for ClaudeAdapter {
                         "Claude is not authenticated.",
                         login_available(discovery),
                         CLAUDE.installation_url,
+                        false,
                     );
                 }
             };
 
+            // An expired session self-heals when Claude Code refreshes the
+            // token; report it as retryable so prior data is retained as stale.
+            let now_ms = context
+                .clock
+                .now_utc()
+                .unix_timestamp()
+                .saturating_mul(1000);
+            if creds.expires_at_ms.is_some_and(|exp| exp <= now_ms) {
+                return unauthenticated(
+                    ProviderId::Claude,
+                    CLAUDE.display_name,
+                    "Claude session expired. Open Claude Code to refresh it.",
+                    login_available(discovery),
+                    CLAUDE.installation_url,
+                    true,
+                );
+            }
+
             // Never log the token. Pass only as Authorization header value.
+            let bearer = format!("Bearer {}", creds.token);
             let headers = [
-                ("Authorization", token.as_str()),
+                ("Authorization", bearer.as_str()),
                 ("anthropic-beta", "oauth-2025-04-20"),
             ];
-            match context
-                .http
-                .get(CLAUDE_USAGE_URL, &headers, CLAUDE.max_output_bytes)
-                .await
+            match super::retry::http_get_with_retry(
+                context.http,
+                &CLAUDE,
+                CLAUDE_USAGE_URL,
+                &headers,
+                CLAUDE.max_output_bytes,
+            )
+            .await
             {
                 Ok(resp) if resp.status == 401 || resp.status == 403 => unauthenticated(
                     ProviderId::Claude,
@@ -393,6 +410,7 @@ impl ProviderAdapter for ClaudeAdapter {
                     "Claude authentication was rejected.",
                     login_available(discovery),
                     CLAUDE.installation_url,
+                    false,
                 ),
                 Ok(resp) if resp.status == 429 => ProviderResult::RateLimited {
                     id: ProviderId::Claude,
@@ -411,8 +429,8 @@ impl ProviderAdapter for ClaudeAdapter {
                     claude_from_usage_json(
                         &resp.body,
                         context.clock.now_utc(),
-                        plan,
-                        account,
+                        creds.plan,
+                        creds.account,
                         login_available(discovery),
                     )
                 }
@@ -448,21 +466,65 @@ impl ProviderAdapter for ClaudeAdapter {
     }
 }
 
-fn parse_claude_credentials(bytes: &[u8]) -> Option<(String, Option<Plan>, Option<Account>)> {
+struct ClaudeCredentials {
+    token: String,
+    plan: Option<Plan>,
+    account: Option<Account>,
+    expires_at_ms: Option<i64>,
+}
+
+fn parse_claude_credentials(bytes: &[u8]) -> Option<ClaudeCredentials> {
     let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     let oauth = value.get("claudeAiOauth")?;
     let token = oauth.get("accessToken")?.as_str()?.to_owned();
     if token.is_empty() {
         return None;
     }
-    let plan = oauth
-        .get("subscriptionType")
-        .and_then(|v| v.as_str())
-        .map(|id| Plan {
-            id: id.to_owned(),
-            label: id.to_owned(),
+    let plan = claude_plan(
+        oauth.get("subscriptionType").and_then(|v| v.as_str()),
+        oauth.get("rateLimitTier").and_then(|v| v.as_str()),
+    );
+    let expires_at_ms = oauth.get("expiresAt").and_then(|v| v.as_i64());
+    Some(ClaudeCredentials {
+        token,
+        plan,
+        account: None,
+        expires_at_ms,
+    })
+}
+
+/// Prefer the granular rate-limit tier ("max_20x" → "Max 20x"); fall back to
+/// the capitalized subscription type. Mirrors the native widget's formatTier.
+fn claude_plan(subscription_type: Option<&str>, rate_limit_tier: Option<&str>) -> Option<Plan> {
+    if let Some(tier) = rate_limit_tier.filter(|t| !t.is_empty()) {
+        if let Some(pos) = tier.find("max_") {
+            let suffix = &tier[pos + 4..];
+            let digits = suffix.strip_suffix('x').unwrap_or("");
+            if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+                return Some(Plan {
+                    id: tier.to_owned(),
+                    label: format!("Max {suffix}"),
+                });
+            }
+        }
+        return Some(Plan {
+            id: tier.to_owned(),
+            label: capitalize_ascii(tier),
         });
-    Some((token, plan, None))
+    }
+    let sub = subscription_type.filter(|s| !s.is_empty())?;
+    Some(Plan {
+        id: sub.to_owned(),
+        label: capitalize_ascii(sub),
+    })
+}
+
+fn capitalize_ascii(raw: &str) -> String {
+    let mut chars = raw.chars();
+    match chars.next() {
+        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 /// Test-only fixed clock.
@@ -675,6 +737,20 @@ mod tests {
             http.last_url.lock().unwrap().as_deref(),
             Some(CLAUDE_USAGE_URL)
         );
+        let headers = http.last_headers.lock().unwrap().clone();
+        assert!(
+            headers.iter().any(|(k, v)| {
+                k == "Authorization" && v.starts_with("Bearer ") && v.contains("SECRET_TOKEN_VALUE")
+            }),
+            "Authorization Bearer header missing: got keys {:?}",
+            headers.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>()
+        );
+        assert!(
+            headers
+                .iter()
+                .any(|(k, v)| k == "anthropic-beta" && v == "oauth-2025-04-20"),
+            "anthropic-beta header missing"
+        );
         assert!(matches!(result, ProviderResult::Ready { .. }));
         assert_no_money(&result);
     }
@@ -714,6 +790,111 @@ mod tests {
         let discovery = discovery_with_exe(Path::new("/usr/bin/claude"));
         let result = CLAUDE_ADAPTER.collect(&ctx, &discovery).await;
         assert!(matches!(result, ProviderResult::ProviderError { .. }));
+    }
+
+    #[tokio::test]
+    async fn claude_retries_once_on_network_error() {
+        let body = br#"{"five_hour":{"utilization":10.0,"resets_at":"2026-07-28T22:00:00Z"}}"#;
+        let http = ScriptedHttpClient {
+            responses: Mutex::new(vec![
+                Ok(HttpResponse {
+                    status: 200,
+                    final_url: CLAUDE_USAGE_URL.into(),
+                    body: body.to_vec(),
+                }),
+                Err(crate::providers::adapter::HttpError::Network("blip".into())),
+            ]),
+            last_url: Mutex::new(None),
+            last_headers: Mutex::new(Vec::new()),
+        };
+        let process = empty_process();
+        let mut fs = MapFileSystem::default();
+        fs.files.insert(
+            std::path::PathBuf::from("/home/u/.claude/.credentials.json"),
+            br#"{"claudeAiOauth":{"accessToken":"tok"}}"#.to_vec(),
+        );
+        let env = ExecutionEnvironment {
+            home: std::path::PathBuf::from("/home/u"),
+            path_dirs: vec![],
+            grok_home: None,
+        };
+        let clock = FixedClock(datetime!(2026-07-28 18:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = discovery_with_exe(Path::new("/usr/bin/claude"));
+        let result = CLAUDE_ADAPTER.collect(&ctx, &discovery).await;
+        assert!(
+            matches!(result, ProviderResult::Ready { .. }),
+            "one transient network error must be retried: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn claude_expired_token_skips_http_and_is_retryable() {
+        let http = ScriptedHttpClient::default(); // any HTTP call would error
+        let process = empty_process();
+        let mut fs = MapFileSystem::default();
+        fs.files.insert(
+            std::path::PathBuf::from("/home/u/.claude/.credentials.json"),
+            // expiresAt in the past relative to the fixed clock below.
+            br#"{"claudeAiOauth":{"accessToken":"tok","expiresAt":1690000000000}}"#.to_vec(),
+        );
+        let env = ExecutionEnvironment {
+            home: std::path::PathBuf::from("/home/u"),
+            path_dirs: vec![],
+            grok_home: None,
+        };
+        let clock = FixedClock(datetime!(2026-07-28 18:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = discovery_with_exe(Path::new("/usr/bin/claude"));
+        let result = CLAUDE_ADAPTER.collect(&ctx, &discovery).await;
+        assert!(
+            http.last_url.lock().unwrap().is_none(),
+            "expired token must not trigger an HTTP request"
+        );
+        match result {
+            ProviderResult::Unauthenticated {
+                message, retryable, ..
+            } => {
+                assert!(message.contains("expired"), "message: {message}");
+                assert!(retryable, "expired session must be retryable");
+            }
+            other => panic!("expected unauthenticated, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_plan_formats_rate_limit_tier() {
+        let plan = claude_plan(Some("max"), Some("max_20x"));
+        assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("Max 20x"));
+        assert_eq!(plan.as_ref().map(|p| p.id.as_str()), Some("max_20x"));
+
+        // Real-world tier shape observed live: prefix before max_.
+        let real = claude_plan(Some("max"), Some("default_claude_max_20x"));
+        assert_eq!(real.as_ref().map(|p| p.label.as_str()), Some("Max 20x"));
+        assert_eq!(
+            real.as_ref().map(|p| p.id.as_str()),
+            Some("default_claude_max_20x")
+        );
+
+        let fallback = claude_plan(Some("pro"), None);
+        assert_eq!(fallback.as_ref().map(|p| p.label.as_str()), Some("Pro"));
+        assert_eq!(fallback.as_ref().map(|p| p.id.as_str()), Some("pro"));
+
+        assert!(claude_plan(None, None).is_none());
     }
 
     fn grok_test_env_and_auth(fs: &mut MapFileSystem) -> ExecutionEnvironment {

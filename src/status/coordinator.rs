@@ -542,6 +542,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retryable_auth_failure_retains_prior_ready_as_stale() {
+        // Expired-token style failure (retryable) keeps last good windows.
+        let now = datetime!(2026-07-28 18:42:00 UTC);
+        let prior = ready_claude(now);
+        let live = ProviderStatus::unauthenticated(
+            ProviderId::Claude,
+            "Claude",
+            ProviderError::new(ErrorCode::AuthenticationRequired, "expired", true),
+            ProviderAction::login("Log in"),
+        )
+        .unwrap();
+        let out = apply_stale_retention(live, Some(&prior)).unwrap();
+        assert_eq!(out.state(), ProviderState::Stale);
+        assert_eq!(out.windows().len(), 1, "prior windows must be retained");
+        assert!(out.error().is_some_and(|e| e.retryable));
+    }
+
+    #[tokio::test]
     async fn auth_failure_does_not_retain_stale_usage() {
         let now = datetime!(2026-07-26 18:42:00 UTC);
         let prior = ready_claude(now);

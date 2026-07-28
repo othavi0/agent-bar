@@ -231,6 +231,7 @@ pub fn grok_from_auth_and_signals(
             message: "Grok is not authenticated.".into(),
             login_available,
             installation_url: GROK.installation_url.to_owned(),
+            retryable: false,
         };
     }
 
@@ -382,6 +383,8 @@ struct ClaudeUsageDoc {
     #[serde(default)]
     seven_day: Option<ClaudeWindowRaw>,
     #[serde(default)]
+    seven_day_oauth_apps: Option<ClaudeWindowRaw>,
+    #[serde(default)]
     seven_day_opus: Option<ClaudeWindowRaw>,
     #[serde(default)]
     seven_day_sonnet: Option<ClaudeWindowRaw>,
@@ -468,9 +471,10 @@ pub fn claude_from_usage_json(
             return ProviderResult::Unauthenticated {
                 id: ProviderId::Claude,
                 name: CLAUDE.display_name.to_owned(),
-                message: "Claude authentication expired.".into(),
+                message: "Claude session expired. Open Claude Code to refresh it.".into(),
                 login_available,
                 installation_url: CLAUDE.installation_url.to_owned(),
+                retryable: true,
             };
         }
         return ProviderResult::ProviderError {
@@ -486,12 +490,13 @@ pub fn claude_from_usage_json(
     let mut windows = Vec::new();
     if let Some(w) = doc.five_hour.as_ref() {
         if let Some(window) = claude_window("session", "Session", w) {
-            windows.push(window);
+            push_window_unique(&mut windows, window);
         }
     }
-    if let Some(w) = doc.seven_day.as_ref() {
+    // OAuth tokens report the weekly bucket as seven_day_oauth_apps; prefer it.
+    if let Some(w) = doc.seven_day_oauth_apps.as_ref().or(doc.seven_day.as_ref()) {
         if let Some(window) = claude_window("weekly", "Weekly", w) {
-            windows.push(window);
+            push_window_unique(&mut windows, window);
         }
     }
     // Dynamic model windows from limits[] or legacy seven_day_* fields.
@@ -500,7 +505,7 @@ pub fn claude_from_usage_json(
             continue;
         };
         let kind = limit.kind.as_deref().unwrap_or("");
-        if kind == "five_hour" || kind == "seven_day" {
+        if kind == "five_hour" || kind == "seven_day" || kind == "seven_day_oauth_apps" {
             continue; // handled via dedicated fields when present
         }
         let model_id = limit
@@ -521,7 +526,7 @@ pub fn claude_from_usage_json(
             resets_at: limit.resets_at.clone(),
         };
         if let Some(window) = claude_window(&id, &label, &raw) {
-            windows.push(window);
+            push_window_unique(&mut windows, window);
         }
     }
     for (suffix, field) in [
@@ -531,7 +536,7 @@ pub fn claude_from_usage_json(
         if let Some(w) = field {
             let id = weekly_model_id(suffix, 0);
             if let Some(window) = claude_window(&id, &format!("Weekly {suffix}"), w) {
-                windows.push(window);
+                push_window_unique(&mut windows, window);
             }
         }
     }
@@ -547,26 +552,50 @@ pub fn claude_from_usage_json(
     }
 }
 
+/// Insert keeping window ids unique; first occurrence wins (dynamic limits[]
+/// entries are pushed before legacy seven_day_* fields on purpose).
+fn push_window_unique(windows: &mut Vec<UsageWindow>, window: UsageWindow) {
+    if windows.iter().any(|w| w.id() == window.id()) {
+        return;
+    }
+    windows.push(window);
+}
+
+/// Parse a reset timestamp that may be RFC3339, epoch seconds, or epoch millis.
+///
+/// The documented contract is RFC3339-only, but the live OAuth endpoint and
+/// sibling providers also emit epochs; be liberal on input, strict on output.
+fn parse_reset_timestamp(raw: &str) -> Option<OffsetDateTime> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(ts) = OffsetDateTime::parse(trimmed, &Rfc3339) {
+        return Some(ts.to_offset(UtcOffset::UTC));
+    }
+    let numeric: i128 = trimmed.parse().ok()?;
+    if numeric <= 0 {
+        return None;
+    }
+    // < 1e12 → seconds; otherwise milliseconds (mirrors the reference widget).
+    let nanos = if numeric < 1_000_000_000_000 {
+        numeric.checked_mul(1_000_000_000)?
+    } else {
+        numeric.checked_mul(1_000_000)?
+    };
+    OffsetDateTime::from_unix_timestamp_nanos(nanos)
+        .ok()
+        .map(|ts| ts.to_offset(UtcOffset::UTC))
+}
+
 fn claude_window(id: &str, label: &str, raw: &ClaudeWindowRaw) -> Option<UsageWindow> {
     if !raw.utilization.is_finite() {
         return None;
     }
-    // Guard double-division: values are already percent, not 0..=1 fractions.
-    let used = if raw.utilization > 0.0 && raw.utilization <= 1.0 {
-        // Ambiguous tiny values: treat as percent only when clearly percent-like
-        // API always sends 0..=100; if someone passes 0.42 meaning 42%, that
-        // was the historical bug — we intentionally treat <=1 as percent only
-        // when the fixture marks it via >100 impossible; keep as-is clamp.
-        raw.utilization.clamp(0.0, 100.0)
-    } else {
-        raw.utilization.clamp(0.0, 100.0)
-    };
+    // Utilization is already percent scale (1.0 == 1%); clamp only.
+    let used = raw.utilization.clamp(0.0, 100.0);
     let remaining = (100.0 - used).clamp(0.0, 100.0);
-    let resets = raw
-        .resets_at
-        .as_deref()
-        .and_then(|s| OffsetDateTime::parse(s, &Rfc3339).ok())
-        .map(|ts| ts.to_offset(UtcOffset::UTC));
+    let resets = raw.resets_at.as_deref().and_then(parse_reset_timestamp);
     UsageWindow::try_new(id, label, used, remaining, resets).ok()
 }
 
@@ -652,7 +681,15 @@ mod tests {
         let body = br#"{"error":{"error_code":"token_expired","message":"expired"}}"#;
         let result =
             claude_from_usage_json(body, datetime!(2026-07-26 18:00:00 UTC), None, None, true);
-        assert!(matches!(result, ProviderResult::Unauthenticated { .. }));
+        match result {
+            ProviderResult::Unauthenticated {
+                message, retryable, ..
+            } => {
+                assert!(retryable, "server-reported expiry must be retryable");
+                assert!(message.contains("expired"), "message: {message}");
+            }
+            other => panic!("expected unauthenticated, got {other:?}"),
+        }
     }
 
     #[test]
@@ -671,6 +708,55 @@ mod tests {
     }
 
     #[test]
+    fn parse_reset_timestamp_accepts_iso_and_epoch() {
+        let iso = parse_reset_timestamp("2026-08-01T00:00:00Z");
+        assert!(iso.is_some());
+        // Epoch seconds (10 digits).
+        let secs = parse_reset_timestamp("1785272823");
+        assert_eq!(secs.map(|t| t.unix_timestamp()), Some(1_785_272_823));
+        // Epoch milliseconds (13 digits).
+        let millis = parse_reset_timestamp("1785272823412");
+        assert_eq!(millis.map(|t| t.unix_timestamp()), Some(1_785_272_823));
+        // Garbage and non-positive are rejected.
+        assert!(parse_reset_timestamp("soon").is_none());
+        assert!(parse_reset_timestamp("0").is_none());
+        assert!(parse_reset_timestamp("-5").is_none());
+        assert!(parse_reset_timestamp("").is_none());
+    }
+
+    #[test]
+    fn claude_window_accepts_epoch_resets_at() {
+        let body = br#"{"five_hour":{"utilization":42.0,"resets_at":"1785272823"}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert!(
+                    windows[0].resets_at().is_some(),
+                    "epoch resets_at was dropped"
+                );
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_utilization_one_means_one_percent() {
+        // The endpoint reports percent scale: 1.0 is 1%, never 100%.
+        let body = br#"{"five_hour":{"utilization":1.0,"resets_at":"2026-07-28T22:00:00Z"}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert!((windows[0].used_percent() - 1.0).abs() < 0.01);
+                assert!((windows[0].remaining_percent() - 99.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn claude_unknown_limits_empty_windows() {
         let body = br#"{"limits":[{"kind":"mystery"}]}"#;
         let result =
@@ -678,6 +764,38 @@ mod tests {
         match result {
             ProviderResult::Ready { windows, .. } => assert!(windows.is_empty()),
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_reads_seven_day_oauth_apps_bucket() {
+        let body = br#"{"five_hour":{"utilization":10.0,"resets_at":"2026-07-28T20:00:00Z"},"seven_day_oauth_apps":{"utilization":37.0,"resets_at":"2026-08-01T00:00:00Z"}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 2);
+                assert_eq!(windows[1].id(), "weekly");
+                assert!((windows[1].used_percent() - 37.0).abs() < 0.01);
+                assert!(windows[1].resets_at().is_some());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_prefers_oauth_apps_bucket_over_seven_day() {
+        let body =
+            br#"{"seven_day_oauth_apps":{"utilization":30.0},"seven_day":{"utilization":60.0}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert!((windows[0].used_percent() - 30.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
@@ -780,6 +898,36 @@ mod tests {
                 assert!(windows[0].resets_at().is_some());
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_dedupes_model_window_ids_across_sources() {
+        // limits[] entry AND legacy seven_day_opus for the same model must not
+        // produce duplicate window ids (schema rejects the whole row otherwise).
+        let body = br#"{
+            "five_hour": {"utilization": 10.0},
+            "limits": [{"kind": "seven_day_model", "utilization": 20.0,
+                        "scope": {"model": {"id": "opus", "display_name": "Opus"}}}],
+            "seven_day_opus": {"utilization": 55.0}
+        }"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        // The whole row must survive schema validation downstream (duplicate
+        // window ids make ensure_unique_window_ids reject the entire status).
+        let status = crate::status::collect::provider_status_from_result(result.clone());
+        assert!(status.is_ok(), "row failed schema validation: {status:?}");
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                let opus: Vec<_> = windows
+                    .iter()
+                    .filter(|w| w.id() == "weekly-model:opus")
+                    .collect();
+                assert_eq!(opus.len(), 1, "duplicate weekly-model:opus windows");
+                // limits[] (dynamic) wins over the legacy field.
+                assert!((opus[0].used_percent() - 20.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
