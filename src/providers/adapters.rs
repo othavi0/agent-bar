@@ -480,13 +480,10 @@ fn parse_claude_credentials(bytes: &[u8]) -> Option<ClaudeCredentials> {
     if token.is_empty() {
         return None;
     }
-    let plan = oauth
-        .get("subscriptionType")
-        .and_then(|v| v.as_str())
-        .map(|id| Plan {
-            id: id.to_owned(),
-            label: id.to_owned(),
-        });
+    let plan = claude_plan(
+        oauth.get("subscriptionType").and_then(|v| v.as_str()),
+        oauth.get("rateLimitTier").and_then(|v| v.as_str()),
+    );
     let expires_at_ms = oauth.get("expiresAt").and_then(|v| v.as_i64());
     Some(ClaudeCredentials {
         token,
@@ -494,6 +491,36 @@ fn parse_claude_credentials(bytes: &[u8]) -> Option<ClaudeCredentials> {
         account: None,
         expires_at_ms,
     })
+}
+
+/// Prefer the granular rate-limit tier ("max_20x" → "Max 20x"); fall back to
+/// the capitalized subscription type. Mirrors the native widget's formatTier.
+fn claude_plan(subscription_type: Option<&str>, rate_limit_tier: Option<&str>) -> Option<Plan> {
+    if let Some(tier) = rate_limit_tier.filter(|t| !t.is_empty()) {
+        if let Some(suffix) = tier.strip_prefix("max_") {
+            return Some(Plan {
+                id: tier.to_owned(),
+                label: format!("Max {suffix}"),
+            });
+        }
+        return Some(Plan {
+            id: tier.to_owned(),
+            label: capitalize_ascii(tier),
+        });
+    }
+    let sub = subscription_type.filter(|s| !s.is_empty())?;
+    Some(Plan {
+        id: sub.to_owned(),
+        label: capitalize_ascii(sub),
+    })
+}
+
+fn capitalize_ascii(raw: &str) -> String {
+    let mut chars = raw.chars();
+    match chars.next() {
+        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 /// Test-only fixed clock.
@@ -843,6 +870,19 @@ mod tests {
             }
             other => panic!("expected unauthenticated, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn claude_plan_formats_rate_limit_tier() {
+        let plan = claude_plan(Some("max"), Some("max_20x"));
+        assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("Max 20x"));
+        assert_eq!(plan.as_ref().map(|p| p.id.as_str()), Some("max_20x"));
+
+        let fallback = claude_plan(Some("pro"), None);
+        assert_eq!(fallback.as_ref().map(|p| p.label.as_str()), Some("Pro"));
+        assert_eq!(fallback.as_ref().map(|p| p.id.as_str()), Some("pro"));
+
+        assert!(claude_plan(None, None).is_none());
     }
 
     fn grok_test_env_and_auth(fs: &mut MapFileSystem) -> ExecutionEnvironment {
