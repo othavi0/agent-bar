@@ -559,6 +559,33 @@ fn push_window_unique(windows: &mut Vec<UsageWindow>, window: UsageWindow) {
     windows.push(window);
 }
 
+/// Parse a reset timestamp that may be RFC3339, epoch seconds, or epoch millis.
+///
+/// The documented contract is RFC3339-only, but the live OAuth endpoint and
+/// sibling providers also emit epochs; be liberal on input, strict on output.
+fn parse_reset_timestamp(raw: &str) -> Option<OffsetDateTime> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(ts) = OffsetDateTime::parse(trimmed, &Rfc3339) {
+        return Some(ts.to_offset(UtcOffset::UTC));
+    }
+    let numeric: i128 = trimmed.parse().ok()?;
+    if numeric <= 0 {
+        return None;
+    }
+    // < 1e12 → seconds; otherwise milliseconds (mirrors the reference widget).
+    let nanos = if numeric < 1_000_000_000_000 {
+        numeric.checked_mul(1_000_000_000)?
+    } else {
+        numeric.checked_mul(1_000_000)?
+    };
+    OffsetDateTime::from_unix_timestamp_nanos(nanos)
+        .ok()
+        .map(|ts| ts.to_offset(UtcOffset::UTC))
+}
+
 fn claude_window(id: &str, label: &str, raw: &ClaudeWindowRaw) -> Option<UsageWindow> {
     if !raw.utilization.is_finite() {
         return None;
@@ -574,11 +601,7 @@ fn claude_window(id: &str, label: &str, raw: &ClaudeWindowRaw) -> Option<UsageWi
         raw.utilization.clamp(0.0, 100.0)
     };
     let remaining = (100.0 - used).clamp(0.0, 100.0);
-    let resets = raw
-        .resets_at
-        .as_deref()
-        .and_then(|s| OffsetDateTime::parse(s, &Rfc3339).ok())
-        .map(|ts| ts.to_offset(UtcOffset::UTC));
+    let resets = raw.resets_at.as_deref().and_then(parse_reset_timestamp);
     UsageWindow::try_new(id, label, used, remaining, resets).ok()
 }
 
@@ -679,6 +702,40 @@ mod tests {
                 assert!((windows[0].remaining_percent() - 58.0).abs() < 0.01);
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_reset_timestamp_accepts_iso_and_epoch() {
+        let iso = parse_reset_timestamp("2026-08-01T00:00:00Z");
+        assert!(iso.is_some());
+        // Epoch seconds (10 digits).
+        let secs = parse_reset_timestamp("1785272823");
+        assert_eq!(secs.map(|t| t.unix_timestamp()), Some(1_785_272_823));
+        // Epoch milliseconds (13 digits).
+        let millis = parse_reset_timestamp("1785272823412");
+        assert_eq!(millis.map(|t| t.unix_timestamp()), Some(1_785_272_823));
+        // Garbage and non-positive are rejected.
+        assert!(parse_reset_timestamp("soon").is_none());
+        assert!(parse_reset_timestamp("0").is_none());
+        assert!(parse_reset_timestamp("-5").is_none());
+        assert!(parse_reset_timestamp("").is_none());
+    }
+
+    #[test]
+    fn claude_window_accepts_epoch_resets_at() {
+        let body = br#"{"five_hour":{"utilization":42.0,"resets_at":"1785272823"}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert!(
+                    windows[0].resets_at().is_some(),
+                    "epoch resets_at was dropped"
+                );
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
