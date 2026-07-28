@@ -161,75 +161,63 @@ impl ProviderAdapter for GrokAdapter {
             let login = login_available(discovery);
             let now = context.clock.now_utc();
 
-            let mut attempts: u8 = 0;
-            loop {
-                attempts = attempts.saturating_add(1);
-                match context.http.get(GROK_BILLING_URL, &headers, max_body).await {
-                    Ok(resp) if resp.status == 401 || resp.status == 403 => {
-                        return unauthenticated(
-                            ProviderId::Grok,
-                            GROK.display_name,
-                            "Grok authentication was rejected.",
-                            login,
-                            GROK.installation_url,
-                        );
+            match super::retry::http_get_with_retry(
+                context.http,
+                &GROK,
+                GROK_BILLING_URL,
+                &headers,
+                max_body,
+            )
+            .await
+            {
+                Ok(resp) if resp.status == 401 || resp.status == 403 => unauthenticated(
+                    ProviderId::Grok,
+                    GROK.display_name,
+                    "Grok authentication was rejected.",
+                    login,
+                    GROK.installation_url,
+                ),
+                Ok(resp) if (200..300).contains(&resp.status) => {
+                    let _ = resp.final_url;
+                    grok_from_billing_json(&resp.body, account, now, login)
+                }
+                Ok(resp) if resp.status >= 500 => ProviderResult::ProviderError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Grok billing request failed.".into(),
+                    retryable: true,
+                },
+                Ok(_) => ProviderResult::ProviderError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Grok billing request failed.".into(),
+                    retryable: false,
+                },
+                Err(super::adapter::HttpError::Network(_)) => ProviderResult::NetworkError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Network error while contacting Grok.".into(),
+                },
+                Err(super::adapter::HttpError::RedirectRefused(_)) => {
+                    ProviderResult::ProviderError {
+                        id: ProviderId::Grok,
+                        name: GROK.display_name.to_owned(),
+                        message: "Grok billing redirect refused.".into(),
+                        retryable: false,
                     }
-                    Ok(resp) if (200..300).contains(&resp.status) => {
-                        let _ = resp.final_url;
-                        return grok_from_billing_json(&resp.body, account, now, login);
-                    }
-                    Ok(resp) if resp.status >= 500 => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing request failed.".into(),
-                            retryable: true,
-                        };
-                    }
-                    Ok(_) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing request failed.".into(),
-                            retryable: false,
-                        };
-                    }
-                    Err(super::adapter::HttpError::Network(_)) => {
-                        if attempts == 1 {
-                            if let Some(delay) = GROK.retry_delay() {
-                                tokio::time::sleep(delay).await;
-                                continue;
-                            }
-                        }
-                        return ProviderResult::NetworkError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Network error while contacting Grok.".into(),
-                        };
-                    }
-                    Err(super::adapter::HttpError::RedirectRefused(_)) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing redirect refused.".into(),
-                            retryable: false,
-                        };
-                    }
-                    Err(super::adapter::HttpError::BodyTooLarge) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Grok billing response exceeded size limit.".into(),
-                            retryable: false,
-                        };
-                    }
-                    Err(super::adapter::HttpError::InvalidResponse(_)) => {
-                        return ProviderResult::ProviderError {
-                            id: ProviderId::Grok,
-                            name: GROK.display_name.to_owned(),
-                            message: "Invalid Grok billing response.".into(),
-                            retryable: false,
-                        };
+                }
+                Err(super::adapter::HttpError::BodyTooLarge) => ProviderResult::ProviderError {
+                    id: ProviderId::Grok,
+                    name: GROK.display_name.to_owned(),
+                    message: "Grok billing response exceeded size limit.".into(),
+                    retryable: false,
+                },
+                Err(super::adapter::HttpError::InvalidResponse(_)) => {
+                    ProviderResult::ProviderError {
+                        id: ProviderId::Grok,
+                        name: GROK.display_name.to_owned(),
+                        message: "Invalid Grok billing response.".into(),
+                        retryable: false,
                     }
                 }
             }
@@ -383,10 +371,14 @@ impl ProviderAdapter for ClaudeAdapter {
                 ("Authorization", bearer.as_str()),
                 ("anthropic-beta", "oauth-2025-04-20"),
             ];
-            match context
-                .http
-                .get(CLAUDE_USAGE_URL, &headers, CLAUDE.max_output_bytes)
-                .await
+            match super::retry::http_get_with_retry(
+                context.http,
+                &CLAUDE,
+                CLAUDE_USAGE_URL,
+                &headers,
+                CLAUDE.max_output_bytes,
+            )
+            .await
             {
                 Ok(resp) if resp.status == 401 || resp.status == 403 => unauthenticated(
                     ProviderId::Claude,
@@ -729,6 +721,49 @@ mod tests {
         let discovery = discovery_with_exe(Path::new("/usr/bin/claude"));
         let result = CLAUDE_ADAPTER.collect(&ctx, &discovery).await;
         assert!(matches!(result, ProviderResult::ProviderError { .. }));
+    }
+
+    #[tokio::test]
+    async fn claude_retries_once_on_network_error() {
+        let body = br#"{"five_hour":{"utilization":10.0,"resets_at":"2026-07-28T22:00:00Z"}}"#;
+        let http = ScriptedHttpClient {
+            responses: Mutex::new(vec![
+                Ok(HttpResponse {
+                    status: 200,
+                    final_url: CLAUDE_USAGE_URL.into(),
+                    body: body.to_vec(),
+                }),
+                Err(crate::providers::adapter::HttpError::Network("blip".into())),
+            ]),
+            last_url: Mutex::new(None),
+            last_headers: Mutex::new(Vec::new()),
+        };
+        let process = empty_process();
+        let mut fs = MapFileSystem::default();
+        fs.files.insert(
+            std::path::PathBuf::from("/home/u/.claude/.credentials.json"),
+            br#"{"claudeAiOauth":{"accessToken":"tok"}}"#.to_vec(),
+        );
+        let env = ExecutionEnvironment {
+            home: std::path::PathBuf::from("/home/u"),
+            path_dirs: vec![],
+            grok_home: None,
+        };
+        let clock = FixedClock(datetime!(2026-07-28 18:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = discovery_with_exe(Path::new("/usr/bin/claude"));
+        let result = CLAUDE_ADAPTER.collect(&ctx, &discovery).await;
+        assert!(
+            matches!(result, ProviderResult::Ready { .. }),
+            "one transient network error must be retried: {result:?}"
+        );
     }
 
     fn grok_test_env_and_auth(fs: &mut MapFileSystem) -> ExecutionEnvironment {

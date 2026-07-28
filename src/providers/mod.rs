@@ -7,6 +7,7 @@ pub mod codex_app_server;
 pub mod codex_session_log;
 pub mod http;
 pub mod process;
+mod retry;
 pub mod v2_map;
 
 pub use adapter::{
