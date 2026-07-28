@@ -471,10 +471,10 @@ pub fn claude_from_usage_json(
             return ProviderResult::Unauthenticated {
                 id: ProviderId::Claude,
                 name: CLAUDE.display_name.to_owned(),
-                message: "Claude authentication expired.".into(),
+                message: "Claude session expired. Open Claude Code to refresh it.".into(),
                 login_available,
                 installation_url: CLAUDE.installation_url.to_owned(),
-                retryable: false,
+                retryable: true,
             };
         }
         return ProviderResult::ProviderError {
@@ -681,7 +681,15 @@ mod tests {
         let body = br#"{"error":{"error_code":"token_expired","message":"expired"}}"#;
         let result =
             claude_from_usage_json(body, datetime!(2026-07-26 18:00:00 UTC), None, None, true);
-        assert!(matches!(result, ProviderResult::Unauthenticated { .. }));
+        match result {
+            ProviderResult::Unauthenticated {
+                message, retryable, ..
+            } => {
+                assert!(retryable, "server-reported expiry must be retryable");
+                assert!(message.contains("expired"), "message: {message}");
+            }
+            other => panic!("expected unauthenticated, got {other:?}"),
+        }
     }
 
     #[test]
