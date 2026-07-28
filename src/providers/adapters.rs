@@ -378,8 +378,9 @@ impl ProviderAdapter for ClaudeAdapter {
             };
 
             // Never log the token. Pass only as Authorization header value.
+            let bearer = format!("Bearer {token}");
             let headers = [
-                ("Authorization", token.as_str()),
+                ("Authorization", bearer.as_str()),
                 ("anthropic-beta", "oauth-2025-04-20"),
             ];
             match context
@@ -674,6 +675,20 @@ mod tests {
         assert_eq!(
             http.last_url.lock().unwrap().as_deref(),
             Some(CLAUDE_USAGE_URL)
+        );
+        let headers = http.last_headers.lock().unwrap().clone();
+        assert!(
+            headers.iter().any(|(k, v)| {
+                k == "Authorization" && v.starts_with("Bearer ") && v.contains("SECRET_TOKEN_VALUE")
+            }),
+            "Authorization Bearer header missing: got keys {:?}",
+            headers.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>()
+        );
+        assert!(
+            headers
+                .iter()
+                .any(|(k, v)| k == "anthropic-beta" && v == "oauth-2025-04-20"),
+            "anthropic-beta header missing"
         );
         assert!(matches!(result, ProviderResult::Ready { .. }));
         assert_no_money(&result);
