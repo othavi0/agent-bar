@@ -497,11 +497,15 @@ fn parse_claude_credentials(bytes: &[u8]) -> Option<ClaudeCredentials> {
 /// the capitalized subscription type. Mirrors the native widget's formatTier.
 fn claude_plan(subscription_type: Option<&str>, rate_limit_tier: Option<&str>) -> Option<Plan> {
     if let Some(tier) = rate_limit_tier.filter(|t| !t.is_empty()) {
-        if let Some(suffix) = tier.strip_prefix("max_") {
-            return Some(Plan {
-                id: tier.to_owned(),
-                label: format!("Max {suffix}"),
-            });
+        if let Some(pos) = tier.find("max_") {
+            let suffix = &tier[pos + 4..];
+            let digits = suffix.strip_suffix('x').unwrap_or("");
+            if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+                return Some(Plan {
+                    id: tier.to_owned(),
+                    label: format!("Max {suffix}"),
+                });
+            }
         }
         return Some(Plan {
             id: tier.to_owned(),
@@ -877,6 +881,14 @@ mod tests {
         let plan = claude_plan(Some("max"), Some("max_20x"));
         assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("Max 20x"));
         assert_eq!(plan.as_ref().map(|p| p.id.as_str()), Some("max_20x"));
+
+        // Real-world tier shape observed live: prefix before max_.
+        let real = claude_plan(Some("max"), Some("default_claude_max_20x"));
+        assert_eq!(real.as_ref().map(|p| p.label.as_str()), Some("Max 20x"));
+        assert_eq!(
+            real.as_ref().map(|p| p.id.as_str()),
+            Some("default_claude_max_20x")
+        );
 
         let fallback = claude_plan(Some("pro"), None);
         assert_eq!(fallback.as_ref().map(|p| p.label.as_str()), Some("Pro"));
