@@ -357,7 +357,7 @@ impl ProviderAdapter for ClaudeAdapter {
                     );
                 }
             };
-            let (token, plan, account) = match parse_claude_credentials(&cred_bytes) {
+            let creds = match parse_claude_credentials(&cred_bytes) {
                 Some(v) => v,
                 None => {
                     return unauthenticated(
@@ -371,8 +371,26 @@ impl ProviderAdapter for ClaudeAdapter {
                 }
             };
 
+            // An expired session self-heals when Claude Code refreshes the
+            // token; report it as retryable so prior data is retained as stale.
+            let now_ms = context
+                .clock
+                .now_utc()
+                .unix_timestamp()
+                .saturating_mul(1000);
+            if creds.expires_at_ms.is_some_and(|exp| exp <= now_ms) {
+                return unauthenticated(
+                    ProviderId::Claude,
+                    CLAUDE.display_name,
+                    "Claude session expired. Open Claude Code to refresh it.",
+                    login_available(discovery),
+                    CLAUDE.installation_url,
+                    true,
+                );
+            }
+
             // Never log the token. Pass only as Authorization header value.
-            let bearer = format!("Bearer {token}");
+            let bearer = format!("Bearer {}", creds.token);
             let headers = [
                 ("Authorization", bearer.as_str()),
                 ("anthropic-beta", "oauth-2025-04-20"),
@@ -411,8 +429,8 @@ impl ProviderAdapter for ClaudeAdapter {
                     claude_from_usage_json(
                         &resp.body,
                         context.clock.now_utc(),
-                        plan,
-                        account,
+                        creds.plan,
+                        creds.account,
                         login_available(discovery),
                     )
                 }
@@ -448,7 +466,14 @@ impl ProviderAdapter for ClaudeAdapter {
     }
 }
 
-fn parse_claude_credentials(bytes: &[u8]) -> Option<(String, Option<Plan>, Option<Account>)> {
+struct ClaudeCredentials {
+    token: String,
+    plan: Option<Plan>,
+    account: Option<Account>,
+    expires_at_ms: Option<i64>,
+}
+
+fn parse_claude_credentials(bytes: &[u8]) -> Option<ClaudeCredentials> {
     let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     let oauth = value.get("claudeAiOauth")?;
     let token = oauth.get("accessToken")?.as_str()?.to_owned();
@@ -462,7 +487,13 @@ fn parse_claude_credentials(bytes: &[u8]) -> Option<(String, Option<Plan>, Optio
             id: id.to_owned(),
             label: id.to_owned(),
         });
-    Some((token, plan, None))
+    let expires_at_ms = oauth.get("expiresAt").and_then(|v| v.as_i64());
+    Some(ClaudeCredentials {
+        token,
+        plan,
+        account: None,
+        expires_at_ms,
+    })
 }
 
 /// Test-only fixed clock.
@@ -771,6 +802,47 @@ mod tests {
             matches!(result, ProviderResult::Ready { .. }),
             "one transient network error must be retried: {result:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn claude_expired_token_skips_http_and_is_retryable() {
+        let http = ScriptedHttpClient::default(); // any HTTP call would error
+        let process = empty_process();
+        let mut fs = MapFileSystem::default();
+        fs.files.insert(
+            std::path::PathBuf::from("/home/u/.claude/.credentials.json"),
+            // expiresAt in the past relative to the fixed clock below.
+            br#"{"claudeAiOauth":{"accessToken":"tok","expiresAt":1690000000000}}"#.to_vec(),
+        );
+        let env = ExecutionEnvironment {
+            home: std::path::PathBuf::from("/home/u"),
+            path_dirs: vec![],
+            grok_home: None,
+        };
+        let clock = FixedClock(datetime!(2026-07-28 18:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = discovery_with_exe(Path::new("/usr/bin/claude"));
+        let result = CLAUDE_ADAPTER.collect(&ctx, &discovery).await;
+        assert!(
+            http.last_url.lock().unwrap().is_none(),
+            "expired token must not trigger an HTTP request"
+        );
+        match result {
+            ProviderResult::Unauthenticated {
+                message, retryable, ..
+            } => {
+                assert!(message.contains("expired"), "message: {message}");
+                assert!(retryable, "expired session must be retryable");
+            }
+            other => panic!("expected unauthenticated, got {other:?}"),
+        }
     }
 
     fn grok_test_env_and_auth(fs: &mut MapFileSystem) -> ExecutionEnvironment {
