@@ -592,16 +592,8 @@ fn claude_window(id: &str, label: &str, raw: &ClaudeWindowRaw) -> Option<UsageWi
     if !raw.utilization.is_finite() {
         return None;
     }
-    // Guard double-division: values are already percent, not 0..=1 fractions.
-    let used = if raw.utilization > 0.0 && raw.utilization <= 1.0 {
-        // Ambiguous tiny values: treat as percent only when clearly percent-like
-        // API always sends 0..=100; if someone passes 0.42 meaning 42%, that
-        // was the historical bug — we intentionally treat <=1 as percent only
-        // when the fixture marks it via >100 impossible; keep as-is clamp.
-        raw.utilization.clamp(0.0, 100.0)
-    } else {
-        raw.utilization.clamp(0.0, 100.0)
-    };
+    // Utilization is already percent scale (1.0 == 1%); clamp only.
+    let used = raw.utilization.clamp(0.0, 100.0);
     let remaining = (100.0 - used).clamp(0.0, 100.0);
     let resets = raw.resets_at.as_deref().and_then(parse_reset_timestamp);
     UsageWindow::try_new(id, label, used, remaining, resets).ok()
@@ -736,6 +728,21 @@ mod tests {
                     windows[0].resets_at().is_some(),
                     "epoch resets_at was dropped"
                 );
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_utilization_one_means_one_percent() {
+        // The endpoint reports percent scale: 1.0 is 1%, never 100%.
+        let body = br#"{"five_hour":{"utilization":1.0,"resets_at":"2026-07-28T22:00:00Z"}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert!((windows[0].used_percent() - 1.0).abs() < 0.01);
+                assert!((windows[0].remaining_percent() - 99.0).abs() < 0.01);
             }
             other => panic!("expected ready, got {other:?}"),
         }
