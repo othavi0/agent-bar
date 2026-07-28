@@ -445,11 +445,14 @@ impl ProviderStatus {
         )
     }
 
-    /// Temporary failures eligible for stale retention (not auth / missing CLI).
+    /// Temporary failures eligible for stale retention. Rejected auth and
+    /// missing CLI never retain; an expired session (retryable auth) does.
     pub fn is_temporary_failure(&self) -> bool {
         match self.state {
             ProviderState::NetworkError | ProviderState::RateLimited => true,
-            ProviderState::ProviderError => self.error.as_ref().is_some_and(|e| e.retryable),
+            ProviderState::ProviderError | ProviderState::Unauthenticated => {
+                self.error.as_ref().is_some_and(|e| e.retryable)
+            }
             _ => false,
         }
     }
@@ -951,6 +954,7 @@ pub enum ProviderResult {
         message: String,
         login_available: bool,
         installation_url: String,
+        retryable: bool,
     },
     RateLimited {
         id: ProviderId,

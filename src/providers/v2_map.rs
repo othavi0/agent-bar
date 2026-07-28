@@ -231,6 +231,7 @@ pub fn grok_from_auth_and_signals(
             message: "Grok is not authenticated.".into(),
             login_available,
             installation_url: GROK.installation_url.to_owned(),
+            retryable: false,
         };
     }
 
@@ -473,6 +474,7 @@ pub fn claude_from_usage_json(
                 message: "Claude authentication expired.".into(),
                 login_available,
                 installation_url: CLAUDE.installation_url.to_owned(),
+                retryable: false,
             };
         }
         return ProviderResult::ProviderError {

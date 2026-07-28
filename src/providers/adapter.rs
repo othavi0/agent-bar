@@ -214,6 +214,7 @@ pub(crate) fn unauthenticated(
     message: impl Into<String>,
     login_available: bool,
     url: &str,
+    retryable: bool,
 ) -> ProviderResult {
     ProviderResult::Unauthenticated {
         id,
@@ -221,6 +222,7 @@ pub(crate) fn unauthenticated(
         message: message.into(),
         login_available,
         installation_url: url.to_owned(),
+        retryable,
     }
 }
 

@@ -51,6 +51,7 @@ pub fn provider_status_from_result(result: ProviderResult) -> Result<ProviderSta
             message,
             login_available,
             installation_url,
+            retryable,
         } => {
             let action = if login_available {
                 ProviderAction::login("Log in")
@@ -60,7 +61,7 @@ pub fn provider_status_from_result(result: ProviderResult) -> Result<ProviderSta
             ProviderStatus::unauthenticated(
                 id,
                 name,
-                ProviderError::new(ErrorCode::AuthenticationRequired, message, false),
+                ProviderError::new(ErrorCode::AuthenticationRequired, message, retryable),
                 action,
             )
         }

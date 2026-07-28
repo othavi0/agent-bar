@@ -60,6 +60,7 @@ impl ProviderAdapter for AmpAdapter {
                             "Amp is not authenticated.",
                             login_available(discovery),
                             AMP.installation_url,
+                            false,
                         )
                     } else {
                         ProviderResult::ProviderError {
@@ -133,6 +134,7 @@ impl ProviderAdapter for GrokAdapter {
                         "Grok is not authenticated.",
                         login_available(discovery),
                         GROK.installation_url,
+                        false,
                     );
                 }
             };
@@ -148,6 +150,7 @@ impl ProviderAdapter for GrokAdapter {
                         "Grok is not authenticated.",
                         login_available(discovery),
                         GROK.installation_url,
+                        false,
                     );
                 }
             };
@@ -176,6 +179,7 @@ impl ProviderAdapter for GrokAdapter {
                     "Grok authentication was rejected.",
                     login,
                     GROK.installation_url,
+                    false,
                 ),
                 Ok(resp) if (200..300).contains(&resp.status) => {
                     let _ = resp.final_url;
@@ -349,6 +353,7 @@ impl ProviderAdapter for ClaudeAdapter {
                         "Claude is not authenticated.",
                         login_available(discovery),
                         CLAUDE.installation_url,
+                        false,
                     );
                 }
             };
@@ -361,6 +366,7 @@ impl ProviderAdapter for ClaudeAdapter {
                         "Claude is not authenticated.",
                         login_available(discovery),
                         CLAUDE.installation_url,
+                        false,
                     );
                 }
             };
@@ -386,6 +392,7 @@ impl ProviderAdapter for ClaudeAdapter {
                     "Claude authentication was rejected.",
                     login_available(discovery),
                     CLAUDE.installation_url,
+                    false,
                 ),
                 Ok(resp) if resp.status == 429 => ProviderResult::RateLimited {
                     id: ProviderId::Claude,
