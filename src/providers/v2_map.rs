@@ -488,13 +488,13 @@ pub fn claude_from_usage_json(
     let mut windows = Vec::new();
     if let Some(w) = doc.five_hour.as_ref() {
         if let Some(window) = claude_window("session", "Session", w) {
-            windows.push(window);
+            push_window_unique(&mut windows, window);
         }
     }
     // OAuth tokens report the weekly bucket as seven_day_oauth_apps; prefer it.
     if let Some(w) = doc.seven_day_oauth_apps.as_ref().or(doc.seven_day.as_ref()) {
         if let Some(window) = claude_window("weekly", "Weekly", w) {
-            windows.push(window);
+            push_window_unique(&mut windows, window);
         }
     }
     // Dynamic model windows from limits[] or legacy seven_day_* fields.
@@ -524,7 +524,7 @@ pub fn claude_from_usage_json(
             resets_at: limit.resets_at.clone(),
         };
         if let Some(window) = claude_window(&id, &label, &raw) {
-            windows.push(window);
+            push_window_unique(&mut windows, window);
         }
     }
     for (suffix, field) in [
@@ -534,7 +534,7 @@ pub fn claude_from_usage_json(
         if let Some(w) = field {
             let id = weekly_model_id(suffix, 0);
             if let Some(window) = claude_window(&id, &format!("Weekly {suffix}"), w) {
-                windows.push(window);
+                push_window_unique(&mut windows, window);
             }
         }
     }
@@ -548,6 +548,15 @@ pub fn claude_from_usage_json(
         windows,
         last_success_at: now,
     }
+}
+
+/// Insert keeping window ids unique; first occurrence wins (dynamic limits[]
+/// entries are pushed before legacy seven_day_* fields on purpose).
+fn push_window_unique(windows: &mut Vec<UsageWindow>, window: UsageWindow) {
+    if windows.iter().any(|w| w.id() == window.id()) {
+        return;
+    }
+    windows.push(window);
 }
 
 fn claude_window(id: &str, label: &str, raw: &ClaudeWindowRaw) -> Option<UsageWindow> {
@@ -815,6 +824,36 @@ mod tests {
                 assert!(windows[0].resets_at().is_some());
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_dedupes_model_window_ids_across_sources() {
+        // limits[] entry AND legacy seven_day_opus for the same model must not
+        // produce duplicate window ids (schema rejects the whole row otherwise).
+        let body = br#"{
+            "five_hour": {"utilization": 10.0},
+            "limits": [{"kind": "seven_day_model", "utilization": 20.0,
+                        "scope": {"model": {"id": "opus", "display_name": "Opus"}}}],
+            "seven_day_opus": {"utilization": 55.0}
+        }"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        // The whole row must survive schema validation downstream (duplicate
+        // window ids make ensure_unique_window_ids reject the entire status).
+        let status = crate::status::collect::provider_status_from_result(result.clone());
+        assert!(status.is_ok(), "row failed schema validation: {status:?}");
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                let opus: Vec<_> = windows
+                    .iter()
+                    .filter(|w| w.id() == "weekly-model:opus")
+                    .collect();
+                assert_eq!(opus.len(), 1, "duplicate weekly-model:opus windows");
+                // limits[] (dynamic) wins over the legacy field.
+                assert!((opus[0].used_percent() - 20.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
