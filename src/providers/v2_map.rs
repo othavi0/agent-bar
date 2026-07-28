@@ -382,6 +382,8 @@ struct ClaudeUsageDoc {
     #[serde(default)]
     seven_day: Option<ClaudeWindowRaw>,
     #[serde(default)]
+    seven_day_oauth_apps: Option<ClaudeWindowRaw>,
+    #[serde(default)]
     seven_day_opus: Option<ClaudeWindowRaw>,
     #[serde(default)]
     seven_day_sonnet: Option<ClaudeWindowRaw>,
@@ -489,7 +491,8 @@ pub fn claude_from_usage_json(
             windows.push(window);
         }
     }
-    if let Some(w) = doc.seven_day.as_ref() {
+    // OAuth tokens report the weekly bucket as seven_day_oauth_apps; prefer it.
+    if let Some(w) = doc.seven_day_oauth_apps.as_ref().or(doc.seven_day.as_ref()) {
         if let Some(window) = claude_window("weekly", "Weekly", w) {
             windows.push(window);
         }
@@ -500,7 +503,7 @@ pub fn claude_from_usage_json(
             continue;
         };
         let kind = limit.kind.as_deref().unwrap_or("");
-        if kind == "five_hour" || kind == "seven_day" {
+        if kind == "five_hour" || kind == "seven_day" || kind == "seven_day_oauth_apps" {
             continue; // handled via dedicated fields when present
         }
         let model_id = limit
@@ -678,6 +681,38 @@ mod tests {
         match result {
             ProviderResult::Ready { windows, .. } => assert!(windows.is_empty()),
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_reads_seven_day_oauth_apps_bucket() {
+        let body = br#"{"five_hour":{"utilization":10.0,"resets_at":"2026-07-28T20:00:00Z"},"seven_day_oauth_apps":{"utilization":37.0,"resets_at":"2026-08-01T00:00:00Z"}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 2);
+                assert_eq!(windows[1].id(), "weekly");
+                assert!((windows[1].used_percent() - 37.0).abs() < 0.01);
+                assert!(windows[1].resets_at().is_some());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_prefers_oauth_apps_bucket_over_seven_day() {
+        let body =
+            br#"{"seven_day_oauth_apps":{"utilization":30.0},"seven_day":{"utilization":60.0}}"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-07-28 18:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].id(), "weekly");
+                assert!((windows[0].used_percent() - 30.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
