@@ -61,7 +61,7 @@ pub fn amp_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult 
         } else {
             None
         };
-        if let Ok(window) = UsageWindow::try_new("daily", "Daily", used, rem, resets) {
+        if let Ok(window) = UsageWindow::try_new("daily", "1d Reset", used, rem, resets) {
             windows.push(window);
         }
     }
@@ -163,7 +163,7 @@ pub fn grok_from_billing_json(
             let used = used_raw.clamp(0.0, 100.0);
             let remaining = (100.0 - used).clamp(0.0, 100.0);
             let resets = grok_billing_resets_at(&doc);
-            if let Ok(w) = UsageWindow::try_new("weekly", "Weekly", used, remaining, resets) {
+            if let Ok(w) = UsageWindow::try_new("weekly", "7d Reset", used, remaining, resets) {
                 windows.push(w);
             }
         }
@@ -345,14 +345,14 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
 /// → session, secondary → weekly) for incomplete payloads.
 fn codex_window_identity(window_minutes: Option<i64>, ordinal: usize) -> (String, String) {
     match window_minutes {
-        Some(10080) => ("weekly".into(), "Weekly".into()),
-        Some(300) => ("session".into(), "Session".into()),
-        Some(n) if n > 0 => (format!("other:{n}:{ordinal}"), format!("{n}m")),
+        Some(10080) => ("weekly".into(), "7d Reset".into()),
+        Some(300) => ("session".into(), "5h Reset".into()),
+        Some(n) if n > 0 => (format!("other:{n}:{ordinal}"), format!("{n}m Reset")),
         _ => {
             if ordinal == 1 {
-                ("session".into(), "Session".into())
+                ("session".into(), "5h Reset".into())
             } else {
-                ("weekly".into(), "Weekly".into())
+                ("weekly".into(), "7d Reset".into())
             }
         }
     }
@@ -489,13 +489,13 @@ pub fn claude_from_usage_json(
 
     let mut windows = Vec::new();
     if let Some(w) = doc.five_hour.as_ref() {
-        if let Some(window) = claude_window("session", "Session", w) {
+        if let Some(window) = claude_window("session", "5h Reset", w) {
             push_window_unique(&mut windows, window);
         }
     }
     // OAuth tokens report the weekly bucket as seven_day_oauth_apps; prefer it.
     if let Some(w) = doc.seven_day_oauth_apps.as_ref().or(doc.seven_day.as_ref()) {
-        if let Some(window) = claude_window("weekly", "Weekly", w) {
+        if let Some(window) = claude_window("weekly", "7d Reset", w) {
             push_window_unique(&mut windows, window);
         }
     }
@@ -520,7 +520,7 @@ pub fn claude_from_usage_json(
             .as_ref()
             .and_then(|s| s.model.as_ref())
             .and_then(|m| m.display_name.clone())
-            .unwrap_or_else(|| "Weekly model".into());
+            .unwrap_or_else(|| "Model".into());
         let raw = ClaudeWindowRaw {
             utilization: util,
             resets_at: limit.resets_at.clone(),
@@ -529,13 +529,13 @@ pub fn claude_from_usage_json(
             push_window_unique(&mut windows, window);
         }
     }
-    for (suffix, field) in [
-        ("opus", doc.seven_day_opus.as_ref()),
-        ("sonnet", doc.seven_day_sonnet.as_ref()),
+    for (suffix, label, field) in [
+        ("opus", "Opus", doc.seven_day_opus.as_ref()),
+        ("sonnet", "Sonnet", doc.seven_day_sonnet.as_ref()),
     ] {
         if let Some(w) = field {
             let id = weekly_model_id(suffix, 0);
-            if let Some(window) = claude_window(&id, &format!("Weekly {suffix}"), w) {
+            if let Some(window) = claude_window(&id, label, w) {
                 push_window_unique(&mut windows, window);
             }
         }
@@ -825,7 +825,7 @@ mod tests {
             ProviderResult::Ready { windows, plan, .. } => {
                 assert_eq!(windows.len(), 1);
                 assert_eq!(windows[0].id(), "weekly");
-                assert_eq!(windows[0].label(), "Weekly");
+                assert_eq!(windows[0].label(), "7d Reset");
                 assert!((windows[0].used_percent() - 1.0).abs() < 0.01);
                 assert!(plan.is_some());
             }
@@ -842,10 +842,10 @@ mod tests {
             ProviderResult::Ready { windows, .. } => {
                 assert_eq!(windows.len(), 2);
                 assert_eq!(windows[0].id(), "session");
-                assert_eq!(windows[0].label(), "Session");
+                assert_eq!(windows[0].label(), "5h Reset");
                 assert!((windows[0].used_percent() - 30.0).abs() < 0.01);
                 assert_eq!(windows[1].id(), "weekly");
-                assert_eq!(windows[1].label(), "Weekly");
+                assert_eq!(windows[1].label(), "7d Reset");
                 assert!((windows[1].used_percent() - 40.0).abs() < 0.01);
             }
             other => panic!("expected ready, got {other:?}"),
@@ -860,7 +860,7 @@ mod tests {
             ProviderResult::Ready { windows, plan, .. } => {
                 assert_eq!(windows.len(), 1);
                 assert_eq!(windows[0].id(), "weekly");
-                assert_eq!(windows[0].label(), "Weekly");
+                assert_eq!(windows[0].label(), "7d Reset");
                 assert!((windows[0].used_percent() - 33.0).abs() < 0.01);
                 assert!((windows[0].remaining_percent() - 67.0).abs() < 0.01);
                 assert!(windows[0].resets_at().is_some());
