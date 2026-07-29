@@ -84,8 +84,11 @@ KeyboardPanel {
 
   open: isOpen
   contentWidth: maxContentWidth
+  // verticalContentInset (padding + borders), not padding alone: KeyboardPanel
+  // subtracts the border from the inner area, so sizing without it left the
+  // border as phantom overflow and enabled a few-pixel scroll.
   contentHeight: Scroll.fittedPopupContentHeight(
-    measuredBodyHeight + padding * 2,
+    measuredBodyHeight + verticalContentInset,
     minContentHeight,
     maxContentHeight
   )
