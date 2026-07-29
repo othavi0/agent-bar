@@ -930,7 +930,7 @@ function chipStateCue(provider) {
     return ""
   var state = String(provider.state || "")
   if (state === "stale")
-    return " stale"
+    return " ⌛"
   if (state === "loading")
     return "\u2026"
   if (state === "cli_missing" || state === "unauthenticated" || state === "rate_limited"
@@ -947,7 +947,7 @@ function chipDimmed(provider) {
 }
 
 // UX-011: provider, displayed percentage, state, reset summary.
-function chipTooltip(provider, metric) {
+function chipTooltip(provider, metric, nowMs) {
   if (!provider)
     return ""
   var name = provider.name ? String(provider.name) : providerDisplayName(provider.id)
@@ -956,8 +956,11 @@ function chipTooltip(provider, metric) {
   var parts = [name, pct, state]
   var w = primaryWindow(provider)
   if (w && w.resetsAt) {
-    var label = w.label ? String(w.label) : String(w.id || "window")
-    parts.push("resets " + label + " " + String(w.resetsAt))
+    var resetText = formatResetText(String(w.resetsAt), nowMs === undefined ? Date.now() : nowMs)
+    if (resetText) {
+      var label = w.label ? String(w.label) : String(w.id || "window")
+      parts.push("resets " + label + " " + resetText)
+    }
   }
   return parts.join(" \u00b7 ")
 }
@@ -1258,11 +1261,12 @@ function formatAgoText(iso, nowMs) {
   return Math.floor(hours / 24) + "d ago"
 }
 
-function windowDisplayLines(provider, metric) {
+function windowDisplayLines(provider, metric, nowMs) {
   var lines = []
   if (!provider || !isArrayLike(provider.windows))
     return lines
   var mode = metric === "used" ? "used" : "remaining"
+  var effectiveNowMs = nowMs === undefined ? Date.now() : nowMs
   for (var i = 0; i < provider.windows.length; i++) {
     var w = provider.windows[i]
     if (!w)
@@ -1277,10 +1281,25 @@ function windowDisplayLines(provider, metric) {
       percentText: pctText,
       // 0–100 for progress track; -1 when unavailable.
       percent: finite ? Math.max(0, Math.min(100, rounded)) : -1,
-      resetsAt: w.resetsAt ? String(w.resetsAt) : null
+      resetsAt: w.resetsAt ? String(w.resetsAt) : null,
+      resetText: w.resetsAt ? formatResetText(String(w.resetsAt), effectiveNowMs) : ""
     })
   }
   return lines
+}
+
+var PRIMARY_WINDOW_IDS = { "session": true, "weekly": true, "daily": true }
+
+function windowGroups(provider, metric, nowMs) {
+  var lines = windowDisplayLines(provider, metric, nowMs)
+  var groups = { primary: [], secondary: [] }
+  for (var i = 0; i < lines.length; i++) {
+    if (PRIMARY_WINDOW_IDS[lines[i].id])
+      groups.primary.push(lines[i])
+    else
+      groups.secondary.push(lines[i])
+  }
+  return groups
 }
 
 function headerModel(provider, refreshing) {

@@ -160,4 +160,29 @@ TestCase {
     compare(Core.mapActionKind("view_installation"), "view_installation")
     compare(Core.mapActionKind("shell"), null)
   }
+
+  function test_window_groups_split_primary_and_models() {
+    var provider = {
+      id: "claude", name: "Claude", state: "ready",
+      windows: [
+        { id: "session", label: "5h Reset", usedPercent: 31, remainingPercent: 69,
+          resetsAt: "2026-07-28T17:59:59Z" },
+        { id: "weekly", label: "7d Reset", usedPercent: 6, remainingPercent: 94,
+          resetsAt: "2026-07-31T11:59:59Z" },
+        { id: "weekly-model:opus", label: "Opus", usedPercent: 2, remainingPercent: 98,
+          resetsAt: "2026-07-31T11:59:59Z" }
+      ]
+    }
+    var now = Date.parse("2026-07-28T15:00:00Z")
+    var groups = Core.windowGroups(provider, "remaining", now)
+    compare(groups.primary.length, 2)
+    compare(groups.secondary.length, 1)
+    compare(groups.primary[0].label, "5h Reset")
+    verify(groups.primary[0].resetText.indexOf("2h 59m") === 0, groups.primary[0].resetText)
+    compare(groups.secondary[0].label, "Opus")
+  }
+
+  function test_chip_state_cue_stale_is_hourglass() {
+    compare(Core.chipStateCue({ state: "stale" }), " ⌛")
+  }
 }
