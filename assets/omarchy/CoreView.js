@@ -128,22 +128,16 @@ function chipDimmed(provider) {
   return state !== "ready"
 }
 
-// UX-011: provider, displayed percentage, state, reset summary.
-function chipTooltip(provider, metric, nowMs) {
+// UX-011: provider and displayed percentage; typed state only when it is
+// actionable (anything but ready). Reset detail lives in the popup.
+function chipTooltip(provider, metric) {
   if (!provider)
     return ""
   var name = provider.name ? String(provider.name) : providerDisplayName(provider.id)
-  var pct = chipPercentText(provider, metric)
+  var parts = [name, chipPercentText(provider, metric)]
   var state = provider.state ? String(provider.state) : "unknown"
-  var parts = [name, pct, state]
-  var w = primaryWindow(provider)
-  if (w && w.resetsAt) {
-    var resetText = formatResetText(String(w.resetsAt), nowMs === undefined ? Date.now() : nowMs)
-    if (resetText) {
-      var label = w.label ? String(w.label) : String(w.id || "window")
-      parts.push("resets " + label + " " + resetText)
-    }
-  }
+  if (state !== "ready")
+    parts.push(state)
   return parts.join(" \u00b7 ")
 }
 
