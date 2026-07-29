@@ -1198,6 +1198,64 @@ function mapActionKind(kind) {
   return k
 }
 
+// ---------------------------------------------------------------------------
+// Humanized time (UX Fase 2: countdown + absolute local time)
+// ---------------------------------------------------------------------------
+
+function parseIsoMs(iso) {
+  if (iso === null || iso === undefined)
+    return NaN
+  var s = String(iso)
+  if (!s.length)
+    return NaN
+  var ms = Date.parse(s)
+  return isFinite(ms) ? ms : NaN
+}
+
+function countdownText(diffMs) {
+  var totalMinutes = Math.floor(diffMs / 60000)
+  var days = Math.floor(totalMinutes / 1440)
+  var hours = Math.floor((totalMinutes % 1440) / 60)
+  var minutes = totalMinutes % 60
+  if (days > 0)
+    return days + "d " + hours + "h"
+  if (hours > 0)
+    return hours + "h " + minutes + "m"
+  return minutes + "m"
+}
+
+// "2h 30m · 14:59" (<24h) | "2d 18h · Fri 09:00" (>=24h) | "now" | "".
+function formatResetText(iso, nowMs) {
+  var ms = parseIsoMs(iso)
+  if (!isFinite(ms))
+    return ""
+  var diff = ms - nowMs
+  if (diff <= 0)
+    return "now"
+  var date = new Date(ms)
+  var absolute = diff >= 86400000
+      ? Qt.formatDateTime(date, "ddd hh:mm")
+      : Qt.formatDateTime(date, "hh:mm")
+  return countdownText(diff) + " · " + absolute
+}
+
+// "just now" | "5m ago" | "3h ago" | "2d ago" | "".
+function formatAgoText(iso, nowMs) {
+  var ms = parseIsoMs(iso)
+  if (!isFinite(ms))
+    return ""
+  var diff = Math.max(0, nowMs - ms)
+  if (diff < 60000)
+    return "just now"
+  var minutes = Math.floor(diff / 60000)
+  if (minutes < 60)
+    return minutes + "m ago"
+  var hours = Math.floor(minutes / 60)
+  if (hours < 24)
+    return hours + "h ago"
+  return Math.floor(hours / 24) + "d ago"
+}
+
 function windowDisplayLines(provider, metric) {
   var lines = []
   if (!provider || !isArrayLike(provider.windows))
