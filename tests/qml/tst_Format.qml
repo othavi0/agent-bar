@@ -23,8 +23,9 @@ TestCase {
   function test_reset_over_24h_uses_days_and_weekday() {
     var text = Core.formatResetText("2026-07-31T09:00:00Z", nowMs)
     verify(text.indexOf("2d 18h") === 0, text)
-    // Absolute part carries a weekday token (locale en).
-    verify(/[A-Z][a-z]{2} \d\d:\d\d$/.test(text), "weekday absolute: " + text)
+    // 2026-07-31 is a Friday; weekday token must be hardcoded English,
+    // never locale-dependent.
+    verify(text.indexOf("Fri ") > 0, "weekday absolute: " + text)
   }
 
   function test_reset_past_is_now() {

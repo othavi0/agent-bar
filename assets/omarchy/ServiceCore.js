@@ -1212,6 +1212,8 @@ function parseIsoMs(iso) {
   return isFinite(ms) ? ms : NaN
 }
 
+var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
 function countdownText(diffMs) {
   var totalMinutes = Math.floor(diffMs / 60000)
   var days = Math.floor(totalMinutes / 1440)
@@ -1234,7 +1236,7 @@ function formatResetText(iso, nowMs) {
     return "now"
   var date = new Date(ms)
   var absolute = diff >= 86400000
-      ? Qt.formatDateTime(date, "ddd hh:mm")
+      ? WEEKDAYS[date.getDay()] + " " + Qt.formatDateTime(date, "hh:mm")
       : Qt.formatDateTime(date, "hh:mm")
   return countdownText(diff) + " · " + absolute
 }
