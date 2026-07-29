@@ -29,6 +29,13 @@ TestCase {
     return env.providers[0]
   }
 
+  function read(rel) {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", "file://" + repoRoot + "/" + rel, false)
+    xhr.send()
+    return String(xhr.responseText || "")
+  }
+
   function test_ready_windows_mode() {
     var p = firstProvider("ready.json")
     compare(Core.contentMode(p), "windows")
@@ -208,5 +215,31 @@ TestCase {
     for (i = 0; i < acts.length; i++)
       if (acts[i].kind === "retry") hasRetry = true
     verify(hasRetry, "retryable error must offer Retry")
+  }
+
+  // ProviderView.qml transitively imports qs.Commons/qs.Ui, which only
+  // Quickshell's own runtime resolves — the bare Qt6 qmltestrunner used by
+  // this gate cannot compile any file with `import qs.Commons` at all
+  // (verified independently: even a one-line file with just that import
+  // fails with the identical "module qs.Commons is not installed" error;
+  // Task 5 already documented that no test in this repo live-instantiates
+  // a qs.*-dependent component — see task-5-report.md). So the fix is
+  // verified by source inspection instead of Qt.createComponent/createObject.
+  function test_provider_view_timer_gates_on_active() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("property bool active: true") >= 0,
+        "ProviderView must expose an owner-driven active prop")
+    verify(view.indexOf("running: root.active") >= 0,
+        "Timer must gate on active, not a child's visible prop")
+    verify(view.indexOf("running: root.visible") < 0,
+        "the fixed defect (visible-gated timer) must not resurface")
+    verify(view.indexOf("nowTickRunning") >= 0,
+        "a test-observable alias for the timer's running state must exist")
+    verify(view.indexOf("onActiveChanged") >= 0,
+        "reopening the popup must refresh nowMs, not show a stale countdown")
+
+    var popup = read("assets/omarchy/Popup.qml")
+    verify(popup.indexOf("active: root.isOpen") >= 0,
+        "Popup must drive ProviderView.active from its own open state")
   }
 }

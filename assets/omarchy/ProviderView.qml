@@ -14,15 +14,23 @@ Item {
   property bool refreshing: false
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  // Popup open state (Popup.qml's contentLoader keeps this instance alive
+  // across close/open, so a child `visible` prop never gates the tick —
+  // the owner must drive this explicitly).
+  property bool active: true
 
   signal refreshRequested(string providerId)
   signal actionRequested(string providerId, string kind, var target)
 
   // Re-humanize countdowns while the popup stays open.
   property double nowMs: Date.now()
+  // Test hook: expose whether the tick is actually running.
+  property alias nowTickRunning: nowTimer.running
+  onActiveChanged: if (active) nowMs = Date.now()
   Timer {
+    id: nowTimer
     interval: 30000
-    running: root.visible
+    running: root.active
     repeat: true
     onTriggered: root.nowMs = Date.now()
   }

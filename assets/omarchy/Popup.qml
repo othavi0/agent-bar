@@ -323,6 +323,7 @@ KeyboardPanel {
   property Component providerContent: Component {
     ProviderView {
       width: contentColumn.width
+      active: root.isOpen
       provider: root.selectedProvider
       displayMetric: root.displayMetric
       refreshing: agentService ? !!agentService.refreshing : false
