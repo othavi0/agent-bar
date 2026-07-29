@@ -93,7 +93,7 @@ Item {
           percent: modelData.percent !== undefined && modelData.percent !== null
               ? Number(modelData.percent)
               : -1
-          resetsAt: modelData.resetsAt ? modelData.resetsAt : ""
+          resetText: modelData.resetText ? modelData.resetText : ""
           foreground: root.foreground
           fontFamily: root.fontFamily
         }

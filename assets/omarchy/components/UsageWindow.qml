@@ -1,17 +1,22 @@
 import QtQuick
 import qs.Commons
 
-// One normalized percentage window: label, percent, optional reset, and a
-// glanceable track (Operate: density + real data, no decorative chrome).
+// One normalized percentage window, "Camadas" hierarchy (Fase 2):
+// kicker label -> big numeral + unit -> accent track -> humanized reset line.
 Item {
   id: root
 
   property string label: ""
-  property string percentText: "\u2014"
+  property string percentText: "—"
   // 0–100 when known; negative when unavailable (hide fill).
   property real percent: -1
-  property string resetsAt: ""
+  property string resetText: ""
+  property string unitText: "left"
+  // Primary windows render large; secondary (per-model) render compact.
+  property bool emphasis: true
+  property bool dimmed: false
   property color foreground: Color.foreground
+  property color accent: Color.accent
   property string fontFamily: Style.font.family
 
   readonly property bool hasPercent: root.percent >= 0 && root.percent <= 100
@@ -20,65 +25,54 @@ Item {
       : 0
 
   width: parent ? parent.width : implicitWidth
-  implicitHeight: col.implicitHeight
+  implicitHeight: root.emphasis ? bigCol.implicitHeight : compactRow.implicitHeight
   height: implicitHeight
+  opacity: root.dimmed ? 0.6 : 1.0
 
   Column {
-    id: col
+    id: bigCol
+    visible: root.emphasis
     width: parent.width
-    spacing: Style.space(6)
+    spacing: Style.space(4)
+
+    Text {
+      width: parent.width
+      text: root.label
+      color: Qt.darker(root.foreground, 1.35)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.capitalization: Font.AllUppercase
+      font.letterSpacing: 1
+      elide: Text.ElideRight
+      textFormat: Text.PlainText
+      Accessible.ignored: true
+    }
 
     Row {
-      width: parent.width
-      spacing: Style.space(10)
-
-      Text {
-        id: labelText
-        width: Math.max(Style.space(72), parent.width * 0.38)
-        text: root.label
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-        elide: Text.ElideRight
-        textFormat: Text.PlainText
-        Accessible.name: root.label
-      }
-
+      spacing: Style.space(6)
       Text {
         text: root.percentText
         color: root.foreground
         font.family: root.fontFamily
-        font.pixelSize: Style.font.body
+        font.pixelSize: Math.round(Style.font.body * 1.8)
         font.bold: true
         textFormat: Text.PlainText
-        Accessible.name: root.percentText
+        Accessible.ignored: true
       }
-
-      Item {
-        width: Math.max(0, parent.width - labelText.width - Style.space(100))
-        height: 1
-      }
-
       Text {
-        visible: root.resetsAt.length > 0
-        width: Math.min(implicitWidth, parent.width * 0.32)
-        anchors.verticalCenter: parent.verticalCenter
-        text: root.resetsAt
+        anchors.baseline: parent.children[0].baseline
+        text: root.unitText
         color: Qt.darker(root.foreground, 1.35)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
-        elide: Text.ElideRight
-        horizontalAlignment: Text.AlignRight
         textFormat: Text.PlainText
-        Accessible.name: "resets " + root.resetsAt
+        Accessible.ignored: true
       }
     }
 
-    // Track always present for ready windows so Amp/Grok/etc. match at a glance.
     Rectangle {
-      id: track
       width: parent.width
-      height: Style.space(6)
+      height: Style.space(5)
       radius: height / 2
       color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
       Accessible.ignored: true
@@ -86,21 +80,71 @@ Item {
       Rectangle {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.max(root.hasPercent && root.fillRatio > 0 ? Style.space(6) : 0,
+        width: Math.max(root.hasPercent && root.fillRatio > 0 ? Style.space(5) : 0,
                         parent.width * root.fillRatio)
         height: parent.height
         radius: parent.radius
-        color: root.foreground
-        opacity: root.hasPercent ? 0.85 : 0
+        color: root.dimmed ? root.foreground : root.accent
+        opacity: root.dimmed ? 0.45 : 0.9
         visible: root.hasPercent && root.fillRatio > 0
+      }
+    }
+
+    Row {
+      visible: root.resetText.length > 0
+      spacing: Style.space(4)
+      Text {
+        text: "resets"
+        color: Qt.darker(root.foreground, 1.35)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        textFormat: Text.PlainText
+        Accessible.ignored: true
+      }
+      Text {
+        text: root.resetText
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        textFormat: Text.PlainText
+        Accessible.ignored: true
       }
     }
   }
 
+  Row {
+    id: compactRow
+    visible: !root.emphasis
+    width: parent.width
+    spacing: Style.space(8)
+
+    Text {
+      id: compactLabel
+      width: Math.max(0, parent.width * 0.5)
+      text: root.label
+      color: Qt.darker(root.foreground, 1.2)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+      textFormat: Text.PlainText
+      Accessible.ignored: true
+    }
+    Text {
+      text: root.percentText + " " + root.unitText
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      textFormat: Text.PlainText
+      Accessible.ignored: true
+    }
+  }
+
   Accessible.name: {
-    var parts = [root.label, root.percentText]
-    if (root.resetsAt.length)
-      parts.push("resets " + root.resetsAt)
+    var parts = [root.label, root.percentText + " " + root.unitText]
+    if (root.resetText.length)
+      parts.push("resets " + root.resetText)
     return parts.join(", ")
   }
   Accessible.role: Accessible.StaticText
