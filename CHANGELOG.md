@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [10.1.0] - 2026-07-29
+
+### Fixed
+
+- Claude usage collection works again: the OAuth request now sends the
+  `Bearer` prefix, reads the `seven_day_oauth_apps` weekly bucket, dedupes
+  window ids across dynamic and legacy fields, and accepts epoch `resets_at`.
+- Expired Claude sessions (detected client-side before HTTP or reported by
+  the server) are retryable and retain cached windows as stale instead of
+  wiping them.
+- Interactive `update` validates TTY before any network access, matching the
+  CLI contract.
+- Documented QML test runner invocation now targets the Qt6 binary with the
+  required environment (the bare `qmltestrunner` on Arch is Qt5 and fails
+  silently).
+
+### Changed
+
+- Window labels are duration-based across providers: `5h Reset`, `7d Reset`,
+  `1d Reset`, `{n}m Reset`; per-model windows use the plain model name.
+- Popup redesigned in layers: large primary windows with theme-accent
+  tracks, per-model quiet list, stale banner with retry gated by
+  `error.retryable`, and a meta footer; reset and update times are
+  humanized (`2h 30m · 14:59`, `5m ago`); the stale chip cue is `⌛`.
+- Claude plan badge formats the real rate-limit tier (for example
+  `Max 20x`).
+- Claude and Grok HTTP collection share one transient-retry helper.
+- `ServiceCore.js` split into five concern modules; the QML enum mirrors are
+  locked to the Rust schema by a contract test.
+
+### Removed
+
+- Dormant `anyhow` dependency (the dependency scan now verifies real usage)
+  and the unused forced-targets cache subsystem.
+
+## [10.0.0] - 2026-07-27
+
 ### Added
 
 - Omarchy Quattro plugin `agent-bar.usage` with one shared `Service.qml`,
@@ -39,9 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Product artifact is only the Omarchy plugin bundle.
 - Settings live solely in `$XDG_CONFIG_HOME/agent-bar/settings.json`.
 
-This section becomes the dated `10.0.0` release entry after final review, live
-QA, and explicit release authorization. Authored release notes live at
-`docs/releases/10.0.0.md`.
+Authored release notes live at `docs/releases/10.0.0.md`.
 
 ## [9.0.0] - 2026-07-21
 
