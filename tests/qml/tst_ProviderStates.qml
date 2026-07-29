@@ -172,9 +172,9 @@ TestCase {
     var provider = {
       id: "claude", name: "Claude", state: "ready",
       windows: [
-        { id: "session", label: "5h Reset", usedPercent: 31, remainingPercent: 69,
+        { id: "session", label: "Session (5h)", usedPercent: 31, remainingPercent: 69,
           resetsAt: "2026-07-28T17:59:59Z" },
-        { id: "weekly", label: "7d Reset", usedPercent: 6, remainingPercent: 94,
+        { id: "weekly", label: "Weekly (7d)", usedPercent: 6, remainingPercent: 94,
           resetsAt: "2026-07-31T11:59:59Z" },
         { id: "weekly-model:opus", label: "Opus", usedPercent: 2, remainingPercent: 98,
           resetsAt: "2026-07-31T11:59:59Z" }
@@ -184,7 +184,7 @@ TestCase {
     var groups = Core.windowGroups(provider, "remaining", now)
     compare(groups.primary.length, 2)
     compare(groups.secondary.length, 1)
-    compare(groups.primary[0].label, "5h Reset")
+    compare(groups.primary[0].label, "Session (5h)")
     verify(groups.primary[0].resetText.indexOf("2h 59m") === 0, groups.primary[0].resetText)
     compare(groups.secondary[0].label, "Opus")
   }

@@ -253,15 +253,17 @@ TestCase {
     verify(!Core.chipDimmed(makeProvider("claude", "ready", 1, 99)))
   }
 
-  function test_tooltip_includes_provider_percent_state_reset() {
+  function test_tooltip_ready_is_name_and_percent_only() {
     var p = makeProvider("claude", "ready", 42, 58, "2026-07-26T22:00:00Z")
     var tip = Core.chipTooltip(p, "remaining", Date.parse("2026-07-26T20:00:00Z"))
-    verify(tip.indexOf("Claude") >= 0)
-    verify(tip.indexOf("58%") >= 0)
-    verify(tip.indexOf("ready") >= 0)
-    verify(tip.indexOf("resets") >= 0)
-    verify(tip.indexOf("2h 0m") >= 0)
-    verify(tip.indexOf("2026-07-26T22:00:00Z") === -1)
+    compare(tip, "Claude · 58%")
+  }
+
+  function test_tooltip_appends_state_only_when_not_ready() {
+    var stale = makeProvider("claude", "stale", 42, 58, "2026-07-26T22:00:00Z")
+    compare(Core.chipTooltip(stale, "remaining"), "Claude · 58% · stale")
+    var err = makeProvider("grok", "network_error")
+    compare(Core.chipTooltip(err, "remaining"), "Grok · — · network_error")
   }
 
   // ---- Task 10: click routing ----

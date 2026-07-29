@@ -17,6 +17,12 @@ use crate::support::redact::strip_ansi_and_controls;
 
 use super::catalog::{AMP, CLAUDE, CODEX, GROK};
 
+/// Display labels for the shared window ids. Every provider mapper uses these;
+/// QML renders them verbatim and never re-derives.
+const LABEL_SESSION: &str = "Session (5h)";
+const LABEL_DAILY: &str = "Daily (1d)";
+const LABEL_WEEKLY: &str = "Weekly (7d)";
+
 // ---------------------------------------------------------------------------
 // Amp
 // ---------------------------------------------------------------------------
@@ -61,7 +67,7 @@ pub fn amp_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult 
         } else {
             None
         };
-        if let Ok(window) = UsageWindow::try_new("daily", "1d Reset", used, rem, resets) {
+        if let Ok(window) = UsageWindow::try_new("daily", LABEL_DAILY, used, rem, resets) {
             windows.push(window);
         }
     }
@@ -163,7 +169,7 @@ pub fn grok_from_billing_json(
             let used = used_raw.clamp(0.0, 100.0);
             let remaining = (100.0 - used).clamp(0.0, 100.0);
             let resets = grok_billing_resets_at(&doc);
-            if let Ok(w) = UsageWindow::try_new("weekly", "7d Reset", used, remaining, resets) {
+            if let Ok(w) = UsageWindow::try_new("weekly", LABEL_WEEKLY, used, remaining, resets) {
                 windows.push(w);
             }
         }
@@ -345,14 +351,14 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
 /// → session, secondary → weekly) for incomplete payloads.
 fn codex_window_identity(window_minutes: Option<i64>, ordinal: usize) -> (String, String) {
     match window_minutes {
-        Some(10080) => ("weekly".into(), "7d Reset".into()),
-        Some(300) => ("session".into(), "5h Reset".into()),
-        Some(n) if n > 0 => (format!("other:{n}:{ordinal}"), format!("{n}m Reset")),
+        Some(10080) => ("weekly".into(), LABEL_WEEKLY.into()),
+        Some(300) => ("session".into(), LABEL_SESSION.into()),
+        Some(n) if n > 0 => (format!("other:{n}:{ordinal}"), format!("{n}m")),
         _ => {
             if ordinal == 1 {
-                ("session".into(), "5h Reset".into())
+                ("session".into(), LABEL_SESSION.into())
             } else {
-                ("weekly".into(), "7d Reset".into())
+                ("weekly".into(), LABEL_WEEKLY.into())
             }
         }
     }
@@ -489,13 +495,13 @@ pub fn claude_from_usage_json(
 
     let mut windows = Vec::new();
     if let Some(w) = doc.five_hour.as_ref() {
-        if let Some(window) = claude_window("session", "5h Reset", w) {
+        if let Some(window) = claude_window("session", LABEL_SESSION, w) {
             push_window_unique(&mut windows, window);
         }
     }
     // OAuth tokens report the weekly bucket as seven_day_oauth_apps; prefer it.
     if let Some(w) = doc.seven_day_oauth_apps.as_ref().or(doc.seven_day.as_ref()) {
-        if let Some(window) = claude_window("weekly", "7d Reset", w) {
+        if let Some(window) = claude_window("weekly", LABEL_WEEKLY, w) {
             push_window_unique(&mut windows, window);
         }
     }
@@ -656,6 +662,7 @@ mod tests {
             ProviderResult::Ready { windows, .. } => {
                 assert_eq!(windows.len(), 1);
                 assert_eq!(windows[0].id(), "daily");
+                assert_eq!(windows[0].label(), "Daily (1d)");
                 assert!((windows[0].remaining_percent() - 97.0).abs() < 0.01);
             }
             other => panic!("expected ready, got {other:?}"),
@@ -732,6 +739,7 @@ mod tests {
         match result {
             ProviderResult::Ready { windows, .. } => {
                 assert_eq!(windows.len(), 1);
+                assert_eq!(windows[0].label(), "Session (5h)");
                 assert!(
                     windows[0].resets_at().is_some(),
                     "epoch resets_at was dropped"
@@ -825,9 +833,23 @@ mod tests {
             ProviderResult::Ready { windows, plan, .. } => {
                 assert_eq!(windows.len(), 1);
                 assert_eq!(windows[0].id(), "weekly");
-                assert_eq!(windows[0].label(), "7d Reset");
+                assert_eq!(windows[0].label(), "Weekly (7d)");
                 assert!((windows[0].used_percent() - 1.0).abs() < 0.01);
                 assert!(plan.is_some());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn codex_other_duration_labels_minutes_only() {
+        let body =
+            br#"{"primary":{"used_percent":10.0,"window_minutes":45,"resets_at":1785628013}}"#;
+        let result = codex_from_rate_limits_json(body, datetime!(2026-07-26 18:00:00 UTC));
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows[0].id(), "other:45:1");
+                assert_eq!(windows[0].label(), "45m");
             }
             other => panic!("expected ready, got {other:?}"),
         }
@@ -842,10 +864,10 @@ mod tests {
             ProviderResult::Ready { windows, .. } => {
                 assert_eq!(windows.len(), 2);
                 assert_eq!(windows[0].id(), "session");
-                assert_eq!(windows[0].label(), "5h Reset");
+                assert_eq!(windows[0].label(), "Session (5h)");
                 assert!((windows[0].used_percent() - 30.0).abs() < 0.01);
                 assert_eq!(windows[1].id(), "weekly");
-                assert_eq!(windows[1].label(), "7d Reset");
+                assert_eq!(windows[1].label(), "Weekly (7d)");
                 assert!((windows[1].used_percent() - 40.0).abs() < 0.01);
             }
             other => panic!("expected ready, got {other:?}"),
@@ -860,7 +882,7 @@ mod tests {
             ProviderResult::Ready { windows, plan, .. } => {
                 assert_eq!(windows.len(), 1);
                 assert_eq!(windows[0].id(), "weekly");
-                assert_eq!(windows[0].label(), "7d Reset");
+                assert_eq!(windows[0].label(), "Weekly (7d)");
                 assert!((windows[0].used_percent() - 33.0).abs() < 0.01);
                 assert!((windows[0].remaining_percent() - 67.0).abs() < 0.01);
                 assert!(windows[0].resets_at().is_some());

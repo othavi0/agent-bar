@@ -107,6 +107,15 @@ TestCase {
     }
   }
 
+  function test_card_height_accounts_for_border_inset() {
+    // KeyboardPanel subtracts verticalContentInset (padding + top/bottom
+    // border) from the inner area; sizing the card with padding alone leaves
+    // the border as phantom overflow that enables a few-pixel scroll.
+    var src = read("assets/omarchy/Popup.qml")
+    verify(src.indexOf("verticalContentInset") >= 0)
+    verify(src.indexOf("padding * 2") < 0)
+  }
+
   function test_popup_open_owner_gate() {
     var ownerA = { id: "a" }
     var ownerB = { id: "b" }
