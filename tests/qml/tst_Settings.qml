@@ -176,6 +176,32 @@ TestCase {
     verify(src.indexOf("config\", \"apply\", \"stdin\"") >= 0 || src.indexOf("settingsArgvApplyStdin") >= 0)
   }
 
+  // Settings write mirrors the maintenance handoff EOF pattern: `config apply
+  // stdin` reads until EOF, so write() must be followed by stdinEnabled=false
+  // or the helper hangs forever and the save never lands.
+  function test_service_settings_stdin_closes_after_write() {
+    var src = read("assets/omarchy/Service.qml")
+    var proc = src.indexOf("id: settingsWriteProcess")
+    verify(proc >= 0)
+    var onStarted = src.indexOf("onStarted:", proc)
+    verify(onStarted >= 0)
+    var onExited = src.indexOf("onExited:", onStarted)
+    verify(onExited > onStarted)
+    var body = src.substring(onStarted, onExited)
+    verify(body.indexOf("write(") >= 0)
+    var writeAt = body.indexOf("write(")
+    var closeAt = body.indexOf("stdinEnabled = false", writeAt)
+    verify(closeAt > writeAt, "stdinEnabled=false must follow write for EOF")
+    // Re-arm before each start so consecutive saves keep a writable stdin.
+    var kick = src.indexOf("function kickSettingsWrite")
+    verify(kick >= 0)
+    var kickEnd = src.indexOf("function applySettingsWriteResult", kick)
+    verify(kickEnd > kick)
+    var kickBody = src.substring(kick, kickEnd)
+    verify(kickBody.indexOf("stdinEnabled = true") >= 0,
+           "kickSettingsWrite must re-arm stdin before start")
+  }
+
   function test_popup_hosts_settings_view() {
     var src = read("assets/omarchy/Popup.qml")
     verify(src.indexOf("SettingsView") >= 0)
