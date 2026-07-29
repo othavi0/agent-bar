@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [10.2.0] - 2026-07-29
+
+### Changed
+
+- Window labels renamed across every provider: `Session (5h)`, `Daily (1d)`,
+  `Weekly (7d)`, and bare `{n}m` for other Codex durations. Removes the
+  duplicated "Reset" between the popup kicker and the humanized reset line.
+- Chip tooltip reduced to `Name · percent`; the typed state is appended only
+  when it is not `ready`, and the reset summary moved out (it lives in the
+  popup).
+
+### Fixed
+
+- Settings save works: the settings write process now closes stdin after
+  writing, so `config apply stdin` receives EOF instead of hanging forever.
+  The hang also left the write lane busy, silently rejecting every later
+  save until a shell restart.
+- `agent-bar update check`/`apply` work against real GitHub (#31): the
+  release metadata download now follows redirects under the closed host
+  policy (≤5 HTTPS hops, `github.com`/`*.githubusercontent.com` only) like
+  the archive and checksum downloads already did.
+- The popup no longer opens with a few pixels of phantom scroll: the card
+  height accounts for the panel border inset.
+
 ## [10.1.0] - 2026-07-29
 
 ### Fixed
