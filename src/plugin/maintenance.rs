@@ -520,20 +520,11 @@ impl UpdateCheck {
             validate_release_asset_url(&archive_asset.browser_download_url)?;
             validate_release_asset_url(&checksum_asset.browser_download_url)?;
 
-            let meta_resp = http.get(
-                &meta_asset.browser_download_url,
-                &[("User-Agent", RELEASE_USER_AGENT)],
-            )?;
-            if meta_resp.status != 200 {
-                return Err(MaintenanceError::msg(format!(
-                    "metadata download HTTP {} for {tag}",
-                    meta_resp.status
-                )));
-            }
-            // Reject credential leakage on redirects — scripted client already
-            // rejects Authorization headers; production uses Policy::none so
-            // callers must follow redirects explicitly via download_with_policy.
-            let meta = ReleaseMetadata::parse_json(&meta_resp.body)
+            // GitHub asset URLs always 302 to the CDN (issue #31); follow the
+            // redirect under the closed host policy like archive/checksum do.
+            let meta_body = download_with_policy(http, &meta_asset.browser_download_url)
+                .map_err(|e| MaintenanceError::msg(format!("metadata download for {tag}: {e}")))?;
+            let meta = ReleaseMetadata::parse_json(&meta_body)
                 .map_err(|e| MaintenanceError::msg(format!("malformed metadata for {tag}: {e}")))?;
 
             if meta.target != probe.target {
@@ -2542,6 +2533,125 @@ mod tests {
         let doc = UpdateCheck::run(&http, &clock, &probe).unwrap();
         assert!(doc.available);
         assert_eq!(doc.latest_compatible.as_ref().unwrap().version, "10.1.0");
+    }
+
+    // Issue #31: GitHub release assets always answer 302 to the CDN, so the
+    // metadata fetch must follow redirects under the closed policy like the
+    // archive/checksum downloads already do.
+    #[test]
+    fn update_check_follows_metadata_redirect() {
+        let meta_10_1 = ReleaseMetadata {
+            schema_version: 1,
+            plugin_id: PLUGIN_ID.into(),
+            version: "10.1.0".into(),
+            target: OFFICIAL_TARGET.into(),
+            omarchy_contract: 1,
+            minimum_quickshell_version: MINIMUM_QUICKSHELL_VERSION.into(),
+            source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
+            archive: ReleaseArchiveMeta {
+                file_name: "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst".into(),
+                size: 10,
+                sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
+            },
+            release_notes_url: "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0".into(),
+        };
+        let meta_json = meta_10_1.to_pretty_json().unwrap();
+
+        let releases = serde_json::json!([{
+            "tag_name": "v10.1.0",
+            "draft": false,
+            "prerelease": false,
+            "assets": [
+                {
+                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json",
+                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json"
+                },
+                {
+                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst",
+                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst"
+                },
+                {
+                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256",
+                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256"
+                }
+            ]
+        }]);
+
+        // Calls: list (200), metadata (302 → CDN), metadata (200). Pop order
+        // = reverse push.
+        let http = ScriptedReleaseHttp::with_responses(vec![
+            Ok(ReleaseHttpResponse {
+                status: 200,
+                headers: vec![],
+                body: meta_json.into_bytes(),
+            }),
+            Ok(ReleaseHttpResponse {
+                status: 302,
+                headers: vec![(
+                    "Location".into(),
+                    "https://objects.githubusercontent.com/meta".into(),
+                )],
+                body: vec![],
+            }),
+            Ok(ReleaseHttpResponse {
+                status: 200,
+                headers: vec![],
+                body: serde_json::to_vec(&releases).unwrap(),
+            }),
+        ]);
+
+        let clock = FixedClock(OffsetDateTime::parse("2026-07-26T18:42:00Z", &Rfc3339).unwrap());
+        let probe = UpdateCheckProbe {
+            current_version: "10.0.0".into(),
+            quickshell_version: "0.3.0".into(),
+            target: OFFICIAL_TARGET.into(),
+            omarchy_contract: 1,
+        };
+        let doc = UpdateCheck::run(&http, &clock, &probe).unwrap();
+        assert!(doc.available);
+        assert_eq!(doc.latest_compatible.as_ref().unwrap().version, "10.1.0");
+    }
+
+    #[test]
+    fn update_check_rejects_metadata_redirect_outside_allowlist() {
+        let releases = serde_json::json!([{
+            "tag_name": "v10.1.0",
+            "draft": false,
+            "prerelease": false,
+            "assets": [
+                {
+                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json",
+                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json"
+                },
+                {
+                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst",
+                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst"
+                },
+                {
+                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256",
+                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256"
+                }
+            ]
+        }]);
+        let http = ScriptedReleaseHttp::with_responses(vec![
+            Ok(ReleaseHttpResponse {
+                status: 302,
+                headers: vec![("Location".into(), "https://evil.example.com/meta".into())],
+                body: vec![],
+            }),
+            Ok(ReleaseHttpResponse {
+                status: 200,
+                headers: vec![],
+                body: serde_json::to_vec(&releases).unwrap(),
+            }),
+        ]);
+        let clock = FixedClock(OffsetDateTime::now_utc());
+        let probe = UpdateCheckProbe {
+            current_version: "10.0.0".into(),
+            ..UpdateCheckProbe::default()
+        };
+        let err = UpdateCheck::run(&http, &clock, &probe).unwrap_err();
+        assert!(err.to_string().contains("not allowed"), "{err}");
     }
 
     #[test]
