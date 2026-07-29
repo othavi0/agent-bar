@@ -3,7 +3,9 @@ import qs.Commons
 import "ServiceCore.js" as Core
 import "components"
 
-// Single selected-provider content pane (header + windows or state message).
+// Single selected-provider content pane, "Camadas" (Fase 2):
+// header -> [stale banner] -> primary windows (large) -> model list (quiet)
+// -> state message (non-window modes) -> meta footer.
 Item {
   id: root
 
@@ -16,14 +18,24 @@ Item {
   signal refreshRequested(string providerId)
   signal actionRequested(string providerId, string kind, var target)
 
+  // Re-humanize countdowns while the popup stays open.
+  property double nowMs: Date.now()
+  Timer {
+    interval: 30000
+    running: root.visible
+    repeat: true
+    onTriggered: root.nowMs = Date.now()
+  }
+
   readonly property var header: Core.headerModel(provider, refreshing)
   readonly property string mode: Core.contentMode(provider)
-  readonly property var windowLines: Core.windowDisplayLines(provider, displayMetric)
+  readonly property var groups: Core.windowGroups(provider, displayMetric, nowMs)
   readonly property var actions: Core.stateActions(provider)
+  readonly property bool isStale: root.mode === "stale_windows"
+  readonly property string unitText: root.displayMetric === "used" ? "used" : "left"
+  readonly property color accentColor: Color.accent
 
   width: parent ? parent.width : implicitWidth
-  // Size to content only — stretching to parent.height caused a binding loop
-  // and fought Popup content-fit height.
   implicitHeight: body.implicitHeight
   height: implicitHeight
 
@@ -36,8 +48,6 @@ Item {
       width: parent.width
       name: root.header.name
       plan: root.header.plan
-      connection: root.header.connection
-      lastSuccessAt: root.header.lastSuccessAt ? root.header.lastSuccessAt : ""
       refreshing: root.header.refreshing
       showStale: root.header.showStale
       foreground: root.foreground
@@ -48,91 +58,119 @@ Item {
       }
     }
 
-    // Full-width separator (UX-019)
     Rectangle {
       width: parent.width
       height: 1
       color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
     }
 
-    // Ready / stale windows
-    Column {
+    // Stale banner: glyph + typed message + Retry (never color-only).
+    Row {
+      visible: root.isStale
       width: parent.width
-      spacing: Style.space(4)
-      visible: root.mode === "windows" || root.mode === "stale_windows"
+      spacing: Style.space(8)
 
       Text {
-        visible: root.mode === "stale_windows"
-        width: parent.width
-        text: "Stale"
+        text: "⌛"
         color: root.foreground
         font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        font.bold: true
+        font.pixelSize: Style.font.body
         textFormat: Text.PlainText
+        Accessible.ignored: true
       }
-
       Text {
-        visible: root.mode === "stale_windows" && Core.errorMessage(root.provider).length > 0
-        width: parent.width
-        text: Core.errorMessage(root.provider)
-        color: Qt.darker(root.foreground, 1.25)
+        width: Math.max(0, parent.width - Style.space(120))
+        text: "Stale — " + Core.errorMessage(root.provider)
+        color: root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         wrapMode: Text.WordWrap
         textFormat: Text.PlainText
+        Accessible.name: text
       }
+      Repeater {
+        model: root.isStale ? root.actions : []
+        Text {
+          required property var modelData
+          visible: String(modelData.kind || "") === "retry"
+          text: modelData.label
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          font.underline: true
+          textFormat: Text.PlainText
+          Accessible.name: text
+          Accessible.role: Accessible.Button
+          Accessible.onPressAction: activate()
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: parent.activate()
+          }
+          function activate() {
+            if (!root.provider)
+              return
+            root.actionRequested(String(root.provider.id),
+                                 String(modelData.kind || ""), modelData.target)
+          }
+        }
+      }
+    }
+
+    // Primary windows, large.
+    Column {
+      width: parent.width
+      spacing: Style.space(12)
+      visible: root.mode === "windows" || root.mode === "stale_windows"
 
       Repeater {
-        model: root.windowLines
+        model: root.groups.primary
         UsageWindow {
           required property var modelData
           width: parent.width
           label: modelData.label
           percentText: modelData.percentText
           percent: modelData.percent !== undefined && modelData.percent !== null
-              ? Number(modelData.percent)
-              : -1
+              ? Number(modelData.percent) : -1
           resetText: modelData.resetText ? modelData.resetText : ""
+          unitText: root.unitText
+          emphasis: true
+          dimmed: root.isStale
           foreground: root.foreground
+          accent: root.accentColor
           fontFamily: root.fontFamily
         }
       }
+    }
 
-      // Stale may still offer retry
-      Flow {
-        visible: root.mode === "stale_windows" && root.actions.length > 0
+    // Secondary (per-model) windows, quiet list.
+    Column {
+      width: parent.width
+      spacing: Style.space(2)
+      visible: (root.mode === "windows" || root.mode === "stale_windows")
+          && root.groups.secondary.length > 0
+
+      Rectangle {
         width: parent.width
-        spacing: Style.space(8)
-        Repeater {
-          model: root.actions
-          // Lightweight text button without qs.Ui dependency for actions on stale windows
-          Text {
-            required property var modelData
-            text: modelData.label
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            font.underline: true
-            textFormat: Text.PlainText
-            Accessible.name: text
-            Accessible.role: Accessible.Button
-            Accessible.onPressAction: activate()
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: parent.activate()
-            }
-            function activate() {
-              if (!root.provider)
-                return
-              root.actionRequested(
-                String(root.provider.id),
-                String(modelData.kind || ""),
-                modelData.target
-              )
-            }
-          }
+        height: 1
+        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+      }
+
+      Repeater {
+        model: root.groups.secondary
+        UsageWindow {
+          required property var modelData
+          width: parent.width
+          label: modelData.label
+          percentText: modelData.percentText
+          percent: modelData.percent !== undefined && modelData.percent !== null
+              ? Number(modelData.percent) : -1
+          resetText: ""
+          unitText: root.unitText
+          emphasis: false
+          dimmed: root.isStale
+          foreground: root.foreground
+          fontFamily: root.fontFamily
         }
       }
     }
@@ -150,6 +188,47 @@ Item {
         if (!root.provider)
           return
         root.actionRequested(String(root.provider.id), kind, target)
+      }
+    }
+
+    // Meta footer: age + source left, connection right (was header noise).
+    Row {
+      width: parent.width
+      visible: root.mode === "windows" || root.mode === "stale_windows"
+
+      Text {
+        id: footerLeft
+        width: Math.max(0, parent.width * 0.6)
+        text: {
+          var parts = []
+          var age = Core.formatAgoText(
+            root.header.lastSuccessAt ? root.header.lastSuccessAt : "", root.nowMs)
+          if (age.length)
+            parts.push("Updated " + age)
+          if (root.provider && root.provider.source)
+            parts.push(String(root.provider.source) === "cache" ? "Cache" : "Live")
+          if (root.header.refreshing)
+            parts.push("refreshing…")
+          return parts.join(" · ")
+        }
+        color: Qt.darker(root.foreground, 1.4)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        Accessible.name: text
+      }
+      Text {
+        width: Math.max(0, parent.width - footerLeft.width)
+        text: root.header.connection
+        color: Qt.darker(root.foreground, root.header.showStale ? 1.0 : 1.15)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        font.bold: root.header.showStale
+        horizontalAlignment: Text.AlignRight
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        Accessible.name: text
       }
     }
   }

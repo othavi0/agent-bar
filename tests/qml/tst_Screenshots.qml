@@ -96,14 +96,14 @@ TestCase {
       applyTheme("light")
       stage.titleText = "Claude"
       stage.badgeText = "Connected"
-      stage.bodyText = "Session 58% remaining · Max plan"
+      stage.bodyText = "5h Reset 58% left · Max plan"
       return
     }
     applyTheme("dark")
     if (name.indexOf("ready-dark") === 0) {
       stage.titleText = "Claude"
       stage.badgeText = "Connected"
-      stage.bodyText = "Session 58% remaining · Max plan"
+      stage.bodyText = "5h Reset 58% left · Max plan"
     } else if (name.indexOf("loading-dark") === 0) {
       stage.titleText = "Loading"
       stage.badgeText = "Loading"
@@ -111,7 +111,7 @@ TestCase {
     } else if (name.indexOf("refreshing-with-data-dark") === 0) {
       stage.titleText = "Codex"
       stage.badgeText = "Connected · refreshing"
-      stage.bodyText = "Weekly 74% remaining (prior data kept)"
+      stage.bodyText = "7d Reset 74% left (prior data kept)"
     } else if (name.indexOf("stale-dark") === 0) {
       stage.titleText = "Grok"
       stage.badgeText = "Stale"

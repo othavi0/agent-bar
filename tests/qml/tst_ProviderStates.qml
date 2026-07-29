@@ -69,9 +69,9 @@ TestCase {
     var acts = Core.stateActions(p)
     var kinds = acts.map(function (a) { return a.kind })
     verify(kinds.indexOf("view_installation") >= 0)
-    verify(kinds.indexOf("retry") >= 0)
-    var labels = acts.map(function (a) { return a.label })
-    verify(labels.indexOf("Check again") >= 0 || labels.join(" ").indexOf("Check") >= 0)
+    // Fixture's error is retryable: false — "Check again" (a Retry action)
+    // must not be offered for a non-retryable error (JSON-025 addendum).
+    verify(kinds.indexOf("retry") < 0)
   }
 
   function test_unauthenticated_connect_or_install() {
@@ -184,5 +184,29 @@ TestCase {
 
   function test_chip_state_cue_stale_is_hourglass() {
     compare(Core.chipStateCue({ state: "stale" }), " ⌛")
+  }
+
+  function test_state_actions_respect_retryable() {
+    var nonRetryable = {
+      id: "claude", name: "Claude", state: "provider_error",
+      error: { code: "provider_error", message: "x", retryable: false },
+      action: { kind: "retry", label: "Retry", target: null }
+    }
+    var acts = Core.stateActions(nonRetryable)
+    var hasRetry = false
+    for (var i = 0; i < acts.length; i++)
+      if (acts[i].kind === "retry") hasRetry = true
+    verify(!hasRetry, "non-retryable error must not offer Retry")
+
+    var retryable = {
+      id: "claude", name: "Claude", state: "network_error",
+      error: { code: "network_error", message: "x", retryable: true },
+      action: { kind: "retry", label: "Retry", target: null }
+    }
+    acts = Core.stateActions(retryable)
+    hasRetry = false
+    for (i = 0; i < acts.length; i++)
+      if (acts[i].kind === "retry") hasRetry = true
+    verify(hasRetry, "retryable error must offer Retry")
   }
 }

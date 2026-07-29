@@ -1191,6 +1191,14 @@ function stateActions(provider) {
   if (state === "unauthenticated" && !seen.login && !seen.view_installation)
     pushAction("login", "Connect", null)
 
+  // JSON-025 addendum: a typed non-retryable error must never offer Retry,
+  // regardless of which branch above produced it.
+  var retryAllowed = !provider || !provider.error
+      || provider.error.retryable === undefined
+      || provider.error.retryable === true
+  if (!retryAllowed)
+    out = out.filter(function (a) { return a.kind !== "retry" })
+
   return out
 }
 

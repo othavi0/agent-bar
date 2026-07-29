@@ -131,11 +131,14 @@ Item {
       Accessible.ignored: true
     }
     Text {
+      width: Math.max(0, parent.width - compactLabel.width - Style.space(8))
       text: root.percentText + " " + root.unitText
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.bold: true
+      elide: Text.ElideRight
+      horizontalAlignment: Text.AlignRight
       textFormat: Text.PlainText
       Accessible.ignored: true
     }
