@@ -22,7 +22,7 @@
       "windows": [
         {
           "id": "session",
-          "label": "5h Reset",
+          "label": "Session (5h)",
           "usedPercent": 90.0,
           "remainingPercent": 10.0,
           "resetsAt": null
