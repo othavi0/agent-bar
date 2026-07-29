@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreSettings.js" as Core
+import "../../assets/omarchy/CoreService.js" as Service
+import "../../assets/omarchy/CoreView.js" as View
 
 TestCase {
   id: testCase
@@ -27,13 +29,13 @@ TestCase {
   // ---- Pure draft / validation ----
 
   function test_default_settings_valid() {
-    var d = Core.defaultSettings()
+    var d = Service.defaultSettings()
     var v = Core.validateSettingsDraft(d)
     compare(v.ok, true)
   }
 
   function test_provider_toggle_and_order() {
-    var d = Core.defaultSettings()
+    var d = Service.defaultSettings()
     d = Core.setProviderEnabled(d, "codex", false)
     compare(d.providers[1].id, "codex")
     compare(d.providers[1].enabled, false)
@@ -48,7 +50,7 @@ TestCase {
   }
 
   function test_display_metric_and_interval_bounds() {
-    var d = Core.defaultSettings()
+    var d = Service.defaultSettings()
     d = Core.setDisplayMetric(d, "used")
     compare(d.display.metric, "used")
     d = Core.setDisplayMetric(d, "remaining")
@@ -66,7 +68,7 @@ TestCase {
   }
 
   function test_notifications_toggle() {
-    var d = Core.defaultSettings()
+    var d = Service.defaultSettings()
     d = Core.setNotificationsEnabled(d, false)
     compare(d.notifications.enabled, false)
     d = Core.setNotificationsEnabled(d, true)
@@ -74,7 +76,7 @@ TestCase {
   }
 
   function test_restore_defaults_draft_only() {
-    var state = Core.settingsOpen(null, Core.defaultSettings(), 1)
+    var state = Core.settingsOpen(null, Service.defaultSettings(), 1)
     state = Core.settingsMarkDirty(state)
     state.draft = Core.setProviderEnabled(state.draft, "claude", false)
     state = Core.settingsRestoreDefaults(state)
@@ -85,7 +87,7 @@ TestCase {
   }
 
   function test_cancel_restores_snapshot() {
-    var snap = Core.defaultSettings()
+    var snap = Service.defaultSettings()
     var state = Core.settingsOpen(null, snap, 2)
     state.draft = Core.setDisplayMetric(state.draft, "used")
     state = Core.settingsMarkDirty(state)
@@ -96,7 +98,7 @@ TestCase {
   }
 
   function test_invalid_save_disabled() {
-    var state = Core.settingsOpen(null, Core.defaultSettings(), 3)
+    var state = Core.settingsOpen(null, Service.defaultSettings(), 3)
     compare(Core.settingsCanSave(state, state.draft), false) // clean
     state = Core.settingsMarkDirty(state)
     state.draft = Core.setRefreshInterval(state.draft, 5)
@@ -109,13 +111,13 @@ TestCase {
     var state = Core.settingsBeginLoad(1)
     compare(state.phase, "loading")
     compare(Core.settingsControlsLocked(state), true)
-    state = Core.settingsFinishLoad(state, 1, Core.defaultSettings())
+    state = Core.settingsFinishLoad(state, 1, Service.defaultSettings())
     compare(state.phase, "clean")
     compare(Core.settingsControlsLocked(state), false)
   }
 
   function test_save_begin_captures_payload() {
-    var state = Core.settingsOpen(null, Core.defaultSettings(), 5)
+    var state = Core.settingsOpen(null, Service.defaultSettings(), 5)
     state = Core.settingsMarkDirty(state)
     var payload = Core.cloneDraft(state.draft)
     payload = Core.setDisplayMetric(payload, "used")
@@ -142,7 +144,7 @@ TestCase {
     verify(src.indexOf("credential") < 0 || src.toLowerCase().indexOf("no credential") >= 0)
     verify(src.indexOf("password") < 0)
     verify(src.indexOf("apiKey") < 0)
-    verify(!Core.containsMoneyCopy(src))
+    verify(!View.containsMoneyCopy(src))
     verify(src.indexOf("Text.RichText") < 0)
   }
 

@@ -109,11 +109,22 @@ ilegíveis, hierarquia confusa, chip da barra fraco.
 1. **Humanização de tempo** — helper único (`formatWhen`): resets como
    "em 2h 14m", atualização como "há 3 min". Atualizar o teste que hoje
    **fixa** a string ISO crua (`tst_BarWidget.qml:257-263`).
-2. **Redesign do popup e do chip** — GATE OBRIGATÓRIO: mockups visuais
-   (HTML/companion) comparando opções de hierarquia e densidade, aprovados
-   pelo mantenedor ANTES de tocar QML de layout. O redesign ataca os quatro
-   problemas confirmados; o chip passa a comunicar estado de relance
-   (pior janela/percentual mais crítico entre providers habilitados).
+2. **Redesign do popup e do chip** — GATE CUMPRIDO em 2026-07-28: mockups
+   HTML + visual companion aprovados pelo mantenedor. Decisões travadas:
+   - Popup: direção "Camadas" — duas janelas principais em escala grande
+     (kicker uppercase + numeral 24-26px + trilha com acento do tema +
+     linha de reset), janelas por modelo rebaixadas a lista quieta,
+     meta (Updated/fonte/estado) rebaixada a rodapé.
+   - Rótulos de janela: "5h Reset" / "7d Reset" (padrão "{duração} Reset"
+     para todos os providers; ids de janela NÃO mudam, só labels).
+   - Tempo até reset: countdown compacto + hora absoluta local —
+     "2h 30m · 14:59"; acima de 24h usa dia — "2d 18h · Fri 09:00".
+   - Chip: estrutura atual mantida (1 número, janela primária); cues de
+     estado melhores (glifo "⌛" para stale, nunca "!"), tooltip com o
+     novo formato humanizado.
+   - Estado degradado: glifo+texto (nunca só cor), botão Retry derivado de
+     `error.retryable`, dado retido esmaecido com carimbo honesto
+     ("Updated 41 min ago · Cache").
 3. **`error.retryable` de verdade** — QML passa a ler o boolean do schema em
    vez da lista hardcoded paralela de states.
 4. **Split do `ServiceCore.js`** + enum sync por teste/geração (ver

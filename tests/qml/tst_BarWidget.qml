@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreView.js" as Core
 
 TestCase {
   id: testCase
@@ -245,7 +245,7 @@ TestCase {
 
   function test_state_cues_for_stale_error_loading() {
     compare(Core.chipStateCue(makeProvider("claude", "ready", 1, 99)), "")
-    compare(Core.chipStateCue(makeProvider("claude", "stale", 1, 99)), " stale")
+    compare(Core.chipStateCue(makeProvider("claude", "stale", 1, 99)), " ⌛")
     compare(Core.chipStateCue(makeProvider("claude", "cli_missing")), " !")
     compare(Core.chipStateCue(makeProvider("claude", "network_error")), " !")
     compare(Core.chipStateCue(makeProvider("claude", "loading")), "\u2026")
@@ -255,12 +255,13 @@ TestCase {
 
   function test_tooltip_includes_provider_percent_state_reset() {
     var p = makeProvider("claude", "ready", 42, 58, "2026-07-26T22:00:00Z")
-    var tip = Core.chipTooltip(p, "remaining")
+    var tip = Core.chipTooltip(p, "remaining", Date.parse("2026-07-26T20:00:00Z"))
     verify(tip.indexOf("Claude") >= 0)
     verify(tip.indexOf("58%") >= 0)
     verify(tip.indexOf("ready") >= 0)
     verify(tip.indexOf("resets") >= 0)
-    verify(tip.indexOf("2026-07-26T22:00:00Z") >= 0)
+    verify(tip.indexOf("2h 0m") >= 0)
+    verify(tip.indexOf("2026-07-26T22:00:00Z") === -1)
   }
 
   // ---- Task 10: click routing ----

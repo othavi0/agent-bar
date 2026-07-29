@@ -341,7 +341,6 @@ fn required_dependency_owners() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
         ("serde", "status/settings/cache/plugin JSON contracts"),
         ("serde_json", "status/settings/cache/plugin JSON contracts"),
-        ("anyhow", "sparse error bridging in private helper seams"),
         ("thiserror", "typed domain errors across modules"),
         ("time", "clock, status timestamps, provider windows"),
         ("tempfile", "atomic writes and isolated tests"),
@@ -364,7 +363,8 @@ fn required_dependency_owners() -> BTreeMap<&'static str, &'static str> {
     ])
 }
 
-fn parse_direct_deps(cargo_toml: &str) -> BTreeSet<String> {
+/// Parse direct dependency names declared under a single `[section]` header.
+fn parse_direct_deps_of_section(cargo_toml: &str, wanted_section: &str) -> BTreeSet<String> {
     let mut deps = BTreeSet::new();
     let mut section = "";
     for line in cargo_toml.lines() {
@@ -373,7 +373,7 @@ fn parse_direct_deps(cargo_toml: &str) -> BTreeSet<String> {
             section = trimmed;
             continue;
         }
-        if section != "[dependencies]" && section != "[dev-dependencies]" {
+        if section != wanted_section {
             continue;
         }
         if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -387,6 +387,36 @@ fn parse_direct_deps(cargo_toml: &str) -> BTreeSet<String> {
         }
     }
     deps
+}
+
+fn parse_direct_deps(cargo_toml: &str) -> BTreeSet<String> {
+    let mut deps = parse_direct_deps_of_section(cargo_toml, "[dependencies]");
+    deps.extend(parse_direct_deps_of_section(
+        cargo_toml,
+        "[dev-dependencies]",
+    ));
+    deps
+}
+
+/// Recursively collect `.rs` files under `root/rel_dir`.
+fn walkdir_rs_files(root: &Path, rel_dir: &str) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.join(rel_dir)];
+    while let Some(dir) = stack.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+    out
 }
 
 #[test]
@@ -506,4 +536,34 @@ fn active_legacy_scan_cargo_and_install_contract() {
             "install.sh must not contain installer legacy token `{token}`"
         );
     }
+}
+
+/// TEST-034 hardening: a documented owner is not proof of real use — every
+/// `[dependencies]` entry must actually appear (as a Rust identifier) in src/.
+/// `[dev-dependencies]` are intentionally excluded: they are expected to be
+/// referenced only from tests/.
+#[test]
+fn dependencies_are_actually_used_in_src() {
+    let root = workspace_root();
+    let cargo = fs::read_to_string(root.join("Cargo.toml")).expect("Cargo.toml");
+    let deps = parse_direct_deps_of_section(&cargo, "[dependencies]");
+
+    let mut sources = String::new();
+    for entry in walkdir_rs_files(&root, "src") {
+        sources.push_str(&fs::read_to_string(&entry).expect("read src file"));
+        sources.push('\n');
+    }
+
+    let mut unused = Vec::new();
+    for dep in &deps {
+        let ident = dep.replace('-', "_");
+        if !sources.contains(&ident) {
+            unused.push(dep.clone());
+        }
+    }
+    assert!(
+        unused.is_empty(),
+        "dependencies declared in Cargo.toml [dependencies] but never referenced in src/ \
+         (remove them or use them): {unused:?}"
+    );
 }

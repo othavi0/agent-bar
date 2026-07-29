@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
-import "ServiceCore.js" as Core
+import "CoreView.js" as Core
 
 // Left rail — stack: providers → spacer → Settings.
 // Horizontal padding is symmetric (slot fits exactly in the frame).

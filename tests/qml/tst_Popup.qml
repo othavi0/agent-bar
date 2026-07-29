@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreView.js" as Core
+import "../../assets/omarchy/CoreService.js" as Service
 
 TestCase {
   id: testCase
@@ -51,8 +52,15 @@ TestCase {
     verify(src.indexOf("iconSource") < 0)
     verify(src.indexOf("name") >= 0)
     verify(src.indexOf("plan") >= 0)
-    verify(src.indexOf("connection") >= 0)
     verify(src.indexOf("󰑐") >= 0)
+    // Connection moved out of the header into ProviderView's meta footer
+    // (Fase 2 slim-down) — the header no longer owns that prop/text at all.
+    verify(src.indexOf("connection") < 0)
+  }
+
+  function test_footer_shows_connection() {
+    var src = read("assets/omarchy/ProviderView.qml")
+    verify(src.indexOf("connection") >= 0)
   }
 
   function test_full_width_separator_present() {
@@ -88,12 +96,12 @@ TestCase {
       "assets/omarchy/components/StateMessage.qml",
       "assets/omarchy/components/UsageWindow.qml",
       "assets/omarchy/components/ProviderHeader.qml",
-      "assets/omarchy/ServiceCore.js"
+      "assets/omarchy/CoreView.js"
     ]
     for (var i = 0; i < files.length; i++) {
       var src = read(files[i])
-      // Allow the money detector regex itself in ServiceCore.js
-      if (files[i].indexOf("ServiceCore.js") >= 0)
+      // Allow the money detector regex itself in CoreView.js
+      if (files[i].indexOf("CoreView.js") >= 0)
         continue
       verify(!Core.containsMoneyCopy(src), files[i] + " has money copy")
     }
@@ -102,9 +110,9 @@ TestCase {
   function test_popup_open_owner_gate() {
     var ownerA = { id: "a" }
     var ownerB = { id: "b" }
-    verify(!Core.popupOpenForOwner(null, ownerA))
-    verify(Core.popupOpenForOwner({ owner: ownerA, providerId: "claude", view: "usage" }, ownerA))
-    verify(!Core.popupOpenForOwner({ owner: ownerA, providerId: "claude", view: "usage" }, ownerB))
+    verify(!Service.popupOpenForOwner(null, ownerA))
+    verify(Service.popupOpenForOwner({ owner: ownerA, providerId: "claude", view: "usage" }, ownerA))
+    verify(!Service.popupOpenForOwner({ owner: ownerA, providerId: "claude", view: "usage" }, ownerB))
   }
 
   function test_bar_widget_hosts_popup() {

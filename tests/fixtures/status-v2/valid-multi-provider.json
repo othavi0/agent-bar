@@ -22,14 +22,14 @@
       "windows": [
         {
           "id": "session",
-          "label": "Session",
+          "label": "5h Reset",
           "usedPercent": 10.0,
           "remainingPercent": 90.0,
           "resetsAt": "2026-07-26T22:00:00Z"
         },
         {
           "id": "weekly",
-          "label": "Weekly",
+          "label": "7d Reset",
           "usedPercent": 25.5,
           "remainingPercent": 74.5,
           "resetsAt": "2026-08-01T00:00:00Z"

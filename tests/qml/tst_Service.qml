@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreService.js" as Core
+import "../../assets/omarchy/CoreMaintenance.js" as Maintenance
+import "../../assets/omarchy/CoreSettings.js" as Settings
 
 TestCase {
   id: testCase
@@ -32,9 +34,9 @@ TestCase {
     property bool refreshing: false
     property string selectedProviderId: ""
     property var popupOwner: null
-    property var settingsState: Core.settingsClosed()
+    property var settingsState: Settings.settingsClosed()
     property var settingsDraft: null
-    property var maintenanceState: Core.maintenanceIdle()
+    property var maintenanceState: Maintenance.maintenanceIdle()
     property var pendingForcedTargets: Core.emptyPending()
     property bool statusBusy: false
     property bool settingsReadBusy: false
@@ -123,20 +125,20 @@ TestCase {
       requestPopup(owner, selectedProviderId || null, "settings")
       if (!settingsState || settingsState.phase === "closed") {
         settingsGen++
-        settingsState = Core.settingsBeginLoad(settingsGen)
+        settingsState = Settings.settingsBeginLoad(settingsGen)
         settingsDraft = null
         // Harness completes load immediately with defaults (production uses config show).
-        settingsState = Core.settingsFinishLoad(settingsState, settingsGen, Core.defaultSettings())
+        settingsState = Settings.settingsFinishLoad(settingsState, settingsGen, Core.defaultSettings())
         settingsDraft = settingsState.draft
       }
     }
     property int settingsGen: 0
     function beginMaintenance() {
-      maintenanceState = Core.maintenanceBeginHandoff(maintenanceState)
+      maintenanceState = Maintenance.maintenanceBeginHandoff(maintenanceState)
       pollEnabled = false
     }
     function tryDetach() {
-      return Core.maintenanceCanDetach(maintenanceState, statusBusy, settingsWriteBusy)
+      return Maintenance.maintenanceCanDetach(maintenanceState, statusBusy, settingsWriteBusy)
     }
     Timer {
       id: delay
@@ -155,9 +157,9 @@ TestCase {
     h.refreshing = false
     h.selectedProviderId = ""
     h.popupOwner = null
-    h.settingsState = Core.settingsClosed()
+    h.settingsState = Settings.settingsClosed()
     h.settingsDraft = null
-    h.maintenanceState = Core.maintenanceIdle()
+    h.maintenanceState = Maintenance.maintenanceIdle()
     h.pendingForcedTargets = Core.emptyPending()
     h.statusBusy = false
     h.settingsWriteBusy = false

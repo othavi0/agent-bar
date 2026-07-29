@@ -152,6 +152,10 @@ pub enum InteractiveUpdateOffer {
     Available { current: String, target: String },
 }
 
+/// Shared non-TTY rejection message for interactive `update` (CLI contract).
+const INTERACTIVE_UPDATE_REQUIRES_TTY: &str =
+    "interactive update requires a TTY; use 'update check' and 'update apply <version>'";
+
 /// Pure interactive `update` confirmation gate (CLI contract).
 ///
 /// Non-TTY exits with validation code 3 and guidance. TTY with no update
@@ -172,9 +176,7 @@ where
     if !is_tty {
         // Message is printed once by the binary dispatcher on CliFailure.
         let _ = stderr;
-        return Err(CliFailure::validation(
-            "interactive update requires a TTY; use 'update check' and 'update apply <version>'",
-        ));
+        return Err(CliFailure::validation(INTERACTIVE_UPDATE_REQUIRES_TTY));
     }
 
     match offer {
@@ -637,7 +639,7 @@ fn read_plugin_version(plugin_root: &Path) -> Option<String> {
 
 fn dispatch_update_check() -> Result<(), CliFailure> {
     use crate::plugin::{ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe};
-    use crate::support::{Clock, SystemClock};
+    use crate::support::SystemClock;
 
     let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
     let clock = SystemClock;
@@ -648,7 +650,6 @@ fn dispatch_update_check() -> Result<(), CliFailure> {
         .to_stdout_json()
         .map_err(|e| CliFailure::plugin(e.to_string()))?;
     print!("{json}");
-    let _ = Clock::now_utc(&clock);
     Ok(())
 }
 
@@ -801,6 +802,12 @@ fn dispatch_update_interactive() -> Result<(), CliFailure> {
     use crate::support::SystemClock;
 
     let is_tty = io::stdin().is_terminal();
+    if !is_tty {
+        // Reject before any network I/O: a non-interactive caller must use
+        // 'update check' / 'update apply' regardless of update availability
+        // or reachability of the releases API.
+        return Err(CliFailure::validation(INTERACTIVE_UPDATE_REQUIRES_TTY));
+    }
     let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
     let clock = SystemClock;
     let probe = UpdateCheckProbe::default();

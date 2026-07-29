@@ -3,7 +3,8 @@ import Quickshell
 import Quickshell.Wayland
 import qs.Ui
 import qs.Commons
-import "ServiceCore.js" as Core
+import "CoreView.js" as Core
+import "CoreService.js" as Service
 import "components"
 
 // Monitor-local provider chips. Resolves the shared service via shell.serviceFor.
@@ -19,7 +20,7 @@ BarWidget {
   readonly property var appliedSettings: {
     if (agentService && agentService.appliedSettings)
       return agentService.appliedSettings
-    return Core.defaultSettings()
+    return Service.defaultSettings()
   }
 
   readonly property string displayMetric: Core.displayMetric(appliedSettings)
@@ -33,7 +34,7 @@ BarWidget {
   readonly property string chipFontFamily: bar ? bar.fontFamily : "monospace"
 
   // Popup is open on another monitor → this instance hosts dismiss-only overlay.
-  readonly property bool foreignDismissActive: Core.foreignPopupOpen(
+  readonly property bool foreignDismissActive: Service.foreignPopupOpen(
     agentService ? agentService.popupOwner : null,
     root
   )

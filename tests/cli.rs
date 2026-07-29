@@ -655,9 +655,15 @@ fn binary_doctor_clean_backs_up_and_removes_owned_legacy() {
 #[test]
 fn binary_interactive_update_rejects_non_tty() {
     // Pipe stdin so the process is non-TTY.
+    let dir = tempdir().unwrap();
+    let home = dir.path();
     let bin = assert_cmd::cargo::cargo_bin("agent-bar");
     let mut child = StdCommand::new(&bin)
         .arg("update")
+        .env("HOME", home)
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use crate::cli::ProviderId;
 use crate::providers::process::{ProcessRunner, ProcessSpec};
-use crate::settings::schema::{DisplayMetric, Settings as SettingsDocument};
+use crate::settings::schema::Settings as SettingsDocument;
 use crate::status::schema::{ProviderState, StatusEnvelope};
 use crate::support::redact::strip_ansi_and_controls;
 
@@ -190,7 +190,6 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                 }
             }
         }
-        let _ = DisplayMetric::Remaining; // settings display not used for thresholds
         Ok(())
     }
 }

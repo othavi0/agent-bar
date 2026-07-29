@@ -1,5 +1,5 @@
 import QtQuick
-import "../ServiceCore.js" as Core
+import "../CoreScroll.js" as Core
 
 // Ordered focus ring for popup actions (A11Y-003/010/011).
 // Targets are plain Items that may expose:

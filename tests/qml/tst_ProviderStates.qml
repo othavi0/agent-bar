@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreView.js" as Core
 
 TestCase {
   id: testCase
@@ -27,6 +27,13 @@ TestCase {
   function firstProvider(fixtureName) {
     var env = loadFixture(fixtureName)
     return env.providers[0]
+  }
+
+  function read(rel) {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", "file://" + repoRoot + "/" + rel, false)
+    xhr.send()
+    return String(xhr.responseText || "")
   }
 
   function test_ready_windows_mode() {
@@ -69,9 +76,9 @@ TestCase {
     var acts = Core.stateActions(p)
     var kinds = acts.map(function (a) { return a.kind })
     verify(kinds.indexOf("view_installation") >= 0)
-    verify(kinds.indexOf("retry") >= 0)
-    var labels = acts.map(function (a) { return a.label })
-    verify(labels.indexOf("Check again") >= 0 || labels.join(" ").indexOf("Check") >= 0)
+    // Fixture's error is retryable: false — "Check again" (a Retry action)
+    // must not be offered for a non-retryable error (JSON-025 addendum).
+    verify(kinds.indexOf("retry") < 0)
   }
 
   function test_unauthenticated_connect_or_install() {
@@ -159,5 +166,80 @@ TestCase {
     compare(Core.mapActionKind("login"), "login")
     compare(Core.mapActionKind("view_installation"), "view_installation")
     compare(Core.mapActionKind("shell"), null)
+  }
+
+  function test_window_groups_split_primary_and_models() {
+    var provider = {
+      id: "claude", name: "Claude", state: "ready",
+      windows: [
+        { id: "session", label: "5h Reset", usedPercent: 31, remainingPercent: 69,
+          resetsAt: "2026-07-28T17:59:59Z" },
+        { id: "weekly", label: "7d Reset", usedPercent: 6, remainingPercent: 94,
+          resetsAt: "2026-07-31T11:59:59Z" },
+        { id: "weekly-model:opus", label: "Opus", usedPercent: 2, remainingPercent: 98,
+          resetsAt: "2026-07-31T11:59:59Z" }
+      ]
+    }
+    var now = Date.parse("2026-07-28T15:00:00Z")
+    var groups = Core.windowGroups(provider, "remaining", now)
+    compare(groups.primary.length, 2)
+    compare(groups.secondary.length, 1)
+    compare(groups.primary[0].label, "5h Reset")
+    verify(groups.primary[0].resetText.indexOf("2h 59m") === 0, groups.primary[0].resetText)
+    compare(groups.secondary[0].label, "Opus")
+  }
+
+  function test_chip_state_cue_stale_is_hourglass() {
+    compare(Core.chipStateCue({ state: "stale" }), " ⌛")
+  }
+
+  function test_state_actions_respect_retryable() {
+    var nonRetryable = {
+      id: "claude", name: "Claude", state: "provider_error",
+      error: { code: "provider_error", message: "x", retryable: false },
+      action: { kind: "retry", label: "Retry", target: null }
+    }
+    var acts = Core.stateActions(nonRetryable)
+    var hasRetry = false
+    for (var i = 0; i < acts.length; i++)
+      if (acts[i].kind === "retry") hasRetry = true
+    verify(!hasRetry, "non-retryable error must not offer Retry")
+
+    var retryable = {
+      id: "claude", name: "Claude", state: "network_error",
+      error: { code: "network_error", message: "x", retryable: true },
+      action: { kind: "retry", label: "Retry", target: null }
+    }
+    acts = Core.stateActions(retryable)
+    hasRetry = false
+    for (i = 0; i < acts.length; i++)
+      if (acts[i].kind === "retry") hasRetry = true
+    verify(hasRetry, "retryable error must offer Retry")
+  }
+
+  // ProviderView.qml transitively imports qs.Commons/qs.Ui, which only
+  // Quickshell's own runtime resolves — the bare Qt6 qmltestrunner used by
+  // this gate cannot compile any file with `import qs.Commons` at all
+  // (verified independently: even a one-line file with just that import
+  // fails with the identical "module qs.Commons is not installed" error;
+  // Task 5 already documented that no test in this repo live-instantiates
+  // a qs.*-dependent component — see task-5-report.md). So the fix is
+  // verified by source inspection instead of Qt.createComponent/createObject.
+  function test_provider_view_timer_gates_on_active() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("property bool active: true") >= 0,
+        "ProviderView must expose an owner-driven active prop")
+    verify(view.indexOf("running: root.active") >= 0,
+        "Timer must gate on active, not a child's visible prop")
+    verify(view.indexOf("running: root.visible") < 0,
+        "the fixed defect (visible-gated timer) must not resurface")
+    verify(view.indexOf("nowTickRunning") >= 0,
+        "a test-observable alias for the timer's running state must exist")
+    verify(view.indexOf("onActiveChanged") >= 0,
+        "reopening the popup must refresh nowMs, not show a stale countdown")
+
+    var popup = read("assets/omarchy/Popup.qml")
+    verify(popup.indexOf("active: root.isOpen") >= 0,
+        "Popup must drive ProviderView.active from its own open state")
   }
 }

@@ -19,8 +19,6 @@ path = "src/bin/agent-bar-bundle.rs"
 # status/settings/cache/plugin JSON contracts
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# sparse error bridging in private helper seams
-anyhow = "1"
 # typed domain errors across modules
 thiserror = "2"
 # clock, status timestamps, provider windows
