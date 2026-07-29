@@ -1,7 +1,10 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "ServiceCore.js" as Core
+import "CoreService.js" as Core
+import "CoreSettings.js" as Settings
+import "CoreMaintenance.js" as Maintenance
+import "CoreView.js" as View
 
 // Shared Agent Bar service — one instance per shell (ARCH-023 / ARCH-024).
 Item {
@@ -32,12 +35,12 @@ Item {
   property bool refreshing: false
   property string selectedProviderId: ""
   property var popupOwner: null // { owner, providerId, view } or null
-  property var settingsState: Core.settingsClosed()
+  property var settingsState: Settings.settingsClosed()
   property var settingsDraft: null
   // Applied product settings for bar chips (order / metric). Null → defaults.
   property var appliedSettings: null
-  property var maintenanceState: Core.maintenanceIdle()
-  property var maintenanceUi: Core.maintenanceUiIdle("")
+  property var maintenanceState: Maintenance.maintenanceIdle()
+  property var maintenanceUi: Maintenance.maintenanceUiIdle("")
   property var pendingForcedTargets: Core.emptyPending()
   // Login bookkeeping + last detached argv (testable without exec).
   property int loginRequestCount: 0
@@ -148,8 +151,8 @@ Item {
   function closePopup(owner) {
     popupOwner = Core.closePopup(popupOwner, owner)
     // SET-019: closing never fabricates load/save completion.
-    if (!popupOwner && !Core.settingsShouldRetainOnClose(settingsState)) {
-      settingsState = Core.settingsClosed()
+    if (!popupOwner && !Settings.settingsShouldRetainOnClose(settingsState)) {
+      settingsState = Settings.settingsClosed()
       settingsDraft = null
     }
   }
@@ -157,8 +160,8 @@ Item {
   // Outside-click on any monitor (including foreign-monitor dismiss layer).
   function dismissPopup() {
     popupOwner = Core.dismissPopup(popupOwner)
-    if (!popupOwner && !Core.settingsShouldRetainOnClose(settingsState)) {
-      settingsState = Core.settingsClosed()
+    if (!popupOwner && !Settings.settingsShouldRetainOnClose(settingsState)) {
+      settingsState = Settings.settingsClosed()
       settingsDraft = null
     }
   }
@@ -171,7 +174,7 @@ Item {
     if (!settingsState || settingsState.phase === "closed") {
       settingsGeneration++
       activeSettingsReadGeneration = settingsGeneration
-      settingsState = Core.settingsBeginLoad(settingsGeneration)
+      settingsState = Settings.settingsBeginLoad(settingsGeneration)
       settingsDraft = null
       kickSettingsRead()
     }
@@ -180,7 +183,7 @@ Item {
   // ---- Draft mutations (dirty only when unlocked) ----
 
   function settingsLocked() {
-    return Core.settingsControlsLocked(settingsState)
+    return Settings.settingsControlsLocked(settingsState)
   }
 
   function mutateSettingsDraft(mutator) {
@@ -189,10 +192,10 @@ Item {
     if (!settingsDraft)
       return
     settingsDraft = mutator(settingsDraft)
-    settingsState = Core.settingsMarkDirty(settingsState)
+    settingsState = Settings.settingsMarkDirty(settingsState)
     // Keep draft pointer on state for consumers that read settingsState.draft.
     if (settingsState && settingsState.phase !== "closed") {
-      var next = Core.cloneState(settingsState)
+      var next = Settings.cloneState(settingsState)
       next.draft = settingsDraft
       settingsState = next
     }
@@ -200,50 +203,50 @@ Item {
 
   function setProviderEnabled(providerId, enabled) {
     mutateSettingsDraft(function (d) {
-      return Core.setProviderEnabled(d, providerId, enabled)
+      return Settings.setProviderEnabled(d, providerId, enabled)
     })
   }
 
   function moveProvider(providerId, delta) {
     mutateSettingsDraft(function (d) {
-      return Core.moveProvider(d, providerId, delta)
+      return Settings.moveProvider(d, providerId, delta)
     })
   }
 
   function setDisplayMetric(metric) {
     mutateSettingsDraft(function (d) {
-      return Core.setDisplayMetric(d, metric)
+      return Settings.setDisplayMetric(d, metric)
     })
   }
 
   function setRefreshInterval(seconds) {
     mutateSettingsDraft(function (d) {
-      return Core.setRefreshInterval(d, seconds)
+      return Settings.setRefreshInterval(d, seconds)
     })
   }
 
   function setNotificationsEnabled(enabled) {
     mutateSettingsDraft(function (d) {
-      return Core.setNotificationsEnabled(d, enabled)
+      return Settings.setNotificationsEnabled(d, enabled)
     })
   }
 
   function restoreSettingsDefaults() {
     if (settingsLocked())
       return
-    settingsState = Core.settingsRestoreDefaults(settingsState)
+    settingsState = Settings.settingsRestoreDefaults(settingsState)
     settingsDraft = settingsState ? settingsState.draft : null
   }
 
   function cancelSettings() {
     if (settingsLocked() && settingsState && settingsState.phase === "saving")
       return
-    settingsState = Core.settingsCancel(settingsState)
+    settingsState = Settings.settingsCancel(settingsState)
     settingsDraft = settingsState ? settingsState.draft : null
   }
 
   function canSaveSettings() {
-    return Core.settingsCanSave(settingsState, settingsDraft)
+    return Settings.settingsCanSave(settingsState, settingsDraft)
   }
 
   function saveSettings() {
@@ -255,14 +258,14 @@ Item {
       return false
     // SET-018: capture immutable payload before process start.
     var payloadObj = JSON.parse(JSON.stringify(settingsDraft))
-    var validation = Core.validateSettingsDraft(payloadObj)
+    var validation = Settings.validateSettingsDraft(payloadObj)
     if (!validation.ok)
       return false
     // SET-016: every save gets a new generation id.
     settingsGeneration++
     var gen = settingsGeneration
     pendingSettingsPayload = JSON.stringify(payloadObj)
-    settingsState = Core.settingsBeginSave(settingsState, gen, payloadObj)
+    settingsState = Settings.settingsBeginSave(settingsState, gen, payloadObj)
     settingsDraft = settingsState.draft
     activeSettingsWriteGeneration = gen
     settingsSaveCount++
@@ -283,7 +286,7 @@ Item {
     var rootPath = pluginRoot
     if (!rootPath || !rootPath.length)
       return
-    var argv = Core.loginDetachedArgv(rootPath, providerId)
+    var argv = Maintenance.loginDetachedArgv(rootPath, providerId)
     if (!argv)
       return
     lastLoginProviderId = String(providerId)
@@ -300,11 +303,11 @@ Item {
   function syncMaintenanceVersion() {
     var ver = helperVersion || manifestVersion || ""
     if (!maintenanceUi || !maintenanceUi.phase || maintenanceUi.phase === "idle") {
-      maintenanceUi = Core.maintenanceUiIdle(ver)
+      maintenanceUi = Maintenance.maintenanceUiIdle(ver)
       return
     }
     if (ver && (!maintenanceUi.installedVersion || !String(maintenanceUi.installedVersion).length)) {
-      var next = Core.cloneMaintenanceUi(maintenanceUi)
+      var next = Maintenance.cloneMaintenanceUi(maintenanceUi)
       next.installedVersion = ver
       maintenanceUi = next
     }
@@ -316,23 +319,23 @@ Item {
     if (!Core.canStartLane(maintenanceCheckBusy))
       return
     syncMaintenanceVersion()
-    maintenanceUi = Core.maintenanceUiChecking(maintenanceUi)
+    maintenanceUi = Maintenance.maintenanceUiChecking(maintenanceUi)
     maintenanceCheckBusy = true
     if (testMode)
       return
     var helper = resolvedHelperPath()
     if (!helper.length) {
       maintenanceCheckBusy = false
-      maintenanceUi = Core.maintenanceUiFromCheck(maintenanceUi, "", 1, helperVersion)
+      maintenanceUi = Maintenance.maintenanceUiFromCheck(maintenanceUi, "", 1, helperVersion)
       return
     }
-    maintenanceCheckProcess.command = Core.updateCheckArgv(helper)
+    maintenanceCheckProcess.command = Maintenance.updateCheckArgv(helper)
     maintenanceCheckProcess.running = true
   }
 
   function applyUpdateCheckResult(stdout, exitCode) {
     maintenanceCheckBusy = false
-    maintenanceUi = Core.maintenanceUiFromCheck(
+    maintenanceUi = Maintenance.maintenanceUiFromCheck(
       maintenanceUi,
       stdout,
       exitCode,
@@ -341,48 +344,48 @@ Item {
   }
 
   function openUpdateConfirm() {
-    maintenanceUi = Core.maintenanceUiOpenUpdateConfirm(maintenanceUi)
+    maintenanceUi = Maintenance.maintenanceUiOpenUpdateConfirm(maintenanceUi)
   }
 
   function closeUpdateConfirm() {
-    maintenanceUi = Core.maintenanceUiCloseUpdateConfirm(maintenanceUi)
+    maintenanceUi = Maintenance.maintenanceUiCloseUpdateConfirm(maintenanceUi)
   }
 
   function confirmUpdateApply() {
     if (!maintenanceUi || !maintenanceUi.targetVersion)
       return false
-    var intention = Core.maintenanceIntention("update_apply", maintenanceUi)
+    var intention = Maintenance.maintenanceIntention("update_apply", maintenanceUi)
     if (!intention || !intention.version.length)
       return false
     pendingMaintenanceIntention = intention
     pendingMaintenancePayload = ""
-    maintenanceUi = Core.maintenanceUiApplying(maintenanceUi)
+    maintenanceUi = Maintenance.maintenanceUiApplying(maintenanceUi)
     beginMaintenanceHandoff()
     return true
   }
 
   function openUninstallConfirm() {
-    maintenanceUi = Core.maintenanceUiOpenUninstallConfirm(maintenanceUi)
+    maintenanceUi = Maintenance.maintenanceUiOpenUninstallConfirm(maintenanceUi)
   }
 
   function closeUninstallConfirm() {
-    maintenanceUi = Core.maintenanceUiCloseUninstallConfirm(maintenanceUi)
+    maintenanceUi = Maintenance.maintenanceUiCloseUninstallConfirm(maintenanceUi)
   }
 
   function setUninstallPurge(purge) {
-    maintenanceUi = Core.maintenanceUiSetPurge(maintenanceUi, purge)
+    maintenanceUi = Maintenance.maintenanceUiSetPurge(maintenanceUi, purge)
   }
 
   // UX-047: first click arms, second confirms.
   function armOrConfirmUninstall() {
-    var result = Core.maintenanceUiArmOrConfirmUninstall(maintenanceUi)
+    var result = Maintenance.maintenanceUiArmOrConfirmUninstall(maintenanceUi)
     maintenanceUi = result.ui
     if (!result.confirmed)
       return false
-    var intention = Core.maintenanceIntention("uninstall", maintenanceUi)
+    var intention = Maintenance.maintenanceIntention("uninstall", maintenanceUi)
     pendingMaintenanceIntention = intention
     pendingMaintenancePayload = JSON.stringify(intention.payload)
-    maintenanceUi = Core.maintenanceUiUninstalling(maintenanceUi)
+    maintenanceUi = Maintenance.maintenanceUiUninstalling(maintenanceUi)
     beginMaintenanceHandoff()
     return true
   }
@@ -409,7 +412,7 @@ Item {
   function dispatchAction(providerId, action) {
     if (!action)
       return
-    var kind = Core.mapActionKind(action.kind)
+    var kind = View.mapActionKind(action.kind)
     if (!kind)
       return
     if (kind === "retry") {
@@ -586,7 +589,7 @@ Item {
     settingsReadBusy = true
     if (testMode)
       return
-    settingsReadProcess.command = Core.settingsArgvShow(helper)
+    settingsReadProcess.command = Settings.settingsArgvShow(helper)
     settingsReadProcess.running = true
   }
 
@@ -598,9 +601,9 @@ Item {
       return
     try {
       var doc = JSON.parse(String(stdout || "").trim())
-      if (!Core.validateSettingsDraft(doc).ok)
+      if (!Settings.validateSettingsDraft(doc).ok)
         return
-      settingsState = Core.settingsFinishLoad(settingsState, generation, doc)
+      settingsState = Settings.settingsFinishLoad(settingsState, generation, doc)
       settingsDraft = settingsState.draft
       appliedSettings = doc
     } catch (e) {
@@ -619,7 +622,7 @@ Item {
     settingsWriteBusy = true
     if (testMode)
       return
-    settingsWriteProcess.command = Core.settingsArgvApplyStdin(helper)
+    settingsWriteProcess.command = Settings.settingsArgvApplyStdin(helper)
     settingsWriteProcess.running = true
   }
 
@@ -628,7 +631,7 @@ Item {
       return
     settingsWriteBusy = false
     pendingSettingsPayload = ""
-    settingsState = Core.settingsFinishSave(settingsState, generation, ok, canonical)
+    settingsState = Settings.settingsFinishSave(settingsState, generation, ok, canonical)
     settingsDraft = settingsState ? settingsState.draft : null
     if (ok && canonical)
       appliedSettings = canonical
@@ -640,14 +643,14 @@ Item {
   // -------------------------------------------------------------------------
 
   function beginMaintenanceHandoff() {
-    maintenanceState = Core.maintenanceBeginHandoff(maintenanceState)
+    maintenanceState = Maintenance.maintenanceBeginHandoff(maintenanceState)
     pollEnabled = false
     pollTimer.stop()
     tryMaintenanceDetach()
   }
 
   function tryMaintenanceDetach() {
-    if (!Core.maintenanceCanDetach(maintenanceState, statusBusy, settingsWriteBusy))
+    if (!Maintenance.maintenanceCanDetach(maintenanceState, statusBusy, settingsWriteBusy))
       return
     if (!Core.canStartLane(maintenanceHandoffBusy))
       return
@@ -656,9 +659,9 @@ Item {
     var intention = pendingMaintenanceIntention
     var argv = null
     if (intention && intention.kind === "update_apply")
-      argv = Core.updateApplyArgv(helper, intention.version)
+      argv = Maintenance.updateApplyArgv(helper, intention.version)
     else if (intention && intention.kind === "uninstall")
-      argv = Core.uninstallArgv(helper, intention.purge)
+      argv = Maintenance.uninstallArgv(helper, intention.purge)
     else
       argv = helper && helper.length ? [helper, "doctor", "scan"] : null
 
@@ -683,25 +686,25 @@ Item {
     var intention = pendingMaintenanceIntention
     pendingMaintenanceIntention = null
     pendingMaintenancePayload = ""
-    maintenanceState = Core.maintenanceIdle()
+    maintenanceState = Maintenance.maintenanceIdle()
     pollEnabled = true
     if (versionReady)
       pollTimer.restart()
     if (intention && intention.kind === "update_apply") {
       if (exitCode === 0) {
-        maintenanceUi = Core.maintenanceUiIdle(helperVersion || intention.version)
+        maintenanceUi = Maintenance.maintenanceUiIdle(helperVersion || intention.version)
         maintenanceUi.message = "Update applied."
       } else {
-        maintenanceUi = Core.cloneMaintenanceUi(maintenanceUi)
+        maintenanceUi = Maintenance.cloneMaintenanceUi(maintenanceUi)
         maintenanceUi.phase = "error"
         maintenanceUi.message = "Update failed."
       }
     } else if (intention && intention.kind === "uninstall") {
       if (exitCode === 0) {
-        maintenanceUi = Core.maintenanceUiIdle(helperVersion)
+        maintenanceUi = Maintenance.maintenanceUiIdle(helperVersion)
         maintenanceUi.message = "Uninstall completed."
       } else {
-        maintenanceUi = Core.cloneMaintenanceUi(maintenanceUi)
+        maintenanceUi = Maintenance.cloneMaintenanceUi(maintenanceUi)
         maintenanceUi.phase = "error"
         maintenanceUi.message = "Uninstall failed."
       }
@@ -761,7 +764,7 @@ Item {
       if (ok) {
         try {
           canonical = JSON.parse(String(settingsWriteOut.text || "").trim())
-          if (!Core.validateSettingsDraft(canonical).ok)
+          if (!Settings.validateSettingsDraft(canonical).ok)
             ok = false
         } catch (e) {
           ok = false

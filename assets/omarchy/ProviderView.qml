@@ -1,6 +1,6 @@
 import QtQuick
 import qs.Commons
-import "ServiceCore.js" as Core
+import "CoreView.js" as Core
 import "components"
 
 // Single selected-provider content pane, "Camadas" (Fase 2):

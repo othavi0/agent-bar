@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "ServiceCore.js" as Core
+import "CoreView.js" as Core
 import "components"
 
 // Race-safe Settings UI (SET-014..022, UX-033..039). Mutations go through Service.

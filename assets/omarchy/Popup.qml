@@ -2,7 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import qs.Ui
 import qs.Commons
-import "ServiceCore.js" as Core
+import "CoreService.js" as Service
+import "CoreView.js" as Core
+import "CoreScroll.js" as Scroll
 import "components"
 
 // Monitor-local consolidated popup (UX-013..025, A11Y-001..023).
@@ -32,7 +34,7 @@ KeyboardPanel {
   readonly property var appliedSettings: {
     if (agentService && agentService.appliedSettings)
       return agentService.appliedSettings
-    return Core.defaultSettings()
+    return Service.defaultSettings()
   }
 
   readonly property var railProviders: Core.visibleProviders(
@@ -63,9 +65,9 @@ KeyboardPanel {
     appliedSettings
   )
 
-  readonly property string view: Core.popupView(agentService ? agentService.popupOwner : null)
+  readonly property string view: Service.popupView(agentService ? agentService.popupOwner : null)
 
-  readonly property bool isOpen: Core.popupOpenForOwner(
+  readonly property bool isOpen: Service.popupOpenForOwner(
     agentService ? agentService.popupOwner : null,
     owner
   )
@@ -82,7 +84,7 @@ KeyboardPanel {
 
   open: isOpen
   contentWidth: maxContentWidth
-  contentHeight: Core.fittedPopupContentHeight(
+  contentHeight: Scroll.fittedPopupContentHeight(
     measuredBodyHeight + padding * 2,
     minContentHeight,
     maxContentHeight
@@ -136,13 +138,13 @@ KeyboardPanel {
   }
 
   function stepProvider(delta) {
-    var next = Core.routeProviderDelta(providerIds(), root.selectedId, delta)
+    var next = Scroll.routeProviderDelta(providerIds(), root.selectedId, delta)
     if (next)
       root.selectProvider(next)
   }
 
   function handleTextKey(text) {
-    var route = Core.routePanelTextKey(text, keyCatcher.blocked)
+    var route = Scroll.routePanelTextKey(text, keyCatcher.blocked)
     if (route.action === "openSettings") {
       root.openSettings()
       return
@@ -281,19 +283,19 @@ KeyboardPanel {
           clip: true
           boundsBehavior: Flickable.StopAtBounds
           flickableDirection: Flickable.VerticalFlick
-          interactive: Core.flickableInteractive(contentHeight, height)
+          interactive: Scroll.flickableInteractive(contentHeight, height)
           ScrollBar.vertical: ScrollBar {
             policy: contentFlick.interactive ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
           }
 
           onContentHeightChanged: {
-            if (!Core.flickableInteractive(contentHeight, height))
+            if (!Scroll.flickableInteractive(contentHeight, height))
               contentY = 0
             else if (focusController && typeof focusController.clampScroll === "function")
               focusController.clampScroll()
           }
           onHeightChanged: {
-            if (!Core.flickableInteractive(contentHeight, height))
+            if (!Scroll.flickableInteractive(contentHeight, height))
               contentY = 0
             else if (focusController && typeof focusController.clampScroll === "function")
               focusController.clampScroll()

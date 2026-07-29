@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreService.js" as Core
+import "../../assets/omarchy/CoreMaintenance.js" as Maintenance
 
 TestCase {
   id: testCase
@@ -21,7 +22,7 @@ TestCase {
     property int statusGeneration: 0
     property int activeStatusGeneration: 0
     property var snapshot: null
-    property var maintenanceState: Core.maintenanceIdle()
+    property var maintenanceState: Maintenance.maintenanceIdle()
     property bool versionReady: true
     property bool versionFailed: false
     property string helperVersion: "10.0.0"
@@ -54,7 +55,7 @@ TestCase {
     }
 
     function kickSettingsWrite() {
-      if (!Core.maintenanceCanStartWrite(maintenanceState))
+      if (!Maintenance.maintenanceCanStartWrite(maintenanceState))
         return false
       if (!Core.canStartLane(settingsWriteBusy))
         return false
@@ -95,7 +96,7 @@ TestCase {
     h.statusGeneration = 0
     h.activeStatusGeneration = 0
     h.snapshot = null
-    h.maintenanceState = Core.maintenanceIdle()
+    h.maintenanceState = Maintenance.maintenanceIdle()
     h.versionReady = true
     h.versionFailed = false
   }
@@ -146,7 +147,7 @@ TestCase {
 
   function test_maintenance_blocks_new_writes_and_status() {
     reset()
-    h.maintenanceState = Core.maintenanceBeginHandoff(h.maintenanceState)
+    h.maintenanceState = Maintenance.maintenanceBeginHandoff(h.maintenanceState)
     compare(h.kickStatus(false), false)
     compare(h.kickSettingsWrite(), false)
     // Read/check may still be allowed by policy; write/status blocked.
@@ -157,12 +158,12 @@ TestCase {
     reset()
     h.statusBusy = true
     h.settingsWriteBusy = true
-    h.maintenanceState = Core.maintenanceBeginHandoff(h.maintenanceState)
-    compare(Core.maintenanceCanDetach(h.maintenanceState, h.statusBusy, h.settingsWriteBusy), false)
+    h.maintenanceState = Maintenance.maintenanceBeginHandoff(h.maintenanceState)
+    compare(Maintenance.maintenanceCanDetach(h.maintenanceState, h.statusBusy, h.settingsWriteBusy), false)
     h.statusBusy = false
-    compare(Core.maintenanceCanDetach(h.maintenanceState, h.statusBusy, h.settingsWriteBusy), false)
+    compare(Maintenance.maintenanceCanDetach(h.maintenanceState, h.statusBusy, h.settingsWriteBusy), false)
     h.settingsWriteBusy = false
-    compare(Core.maintenanceCanDetach(h.maintenanceState, h.statusBusy, h.settingsWriteBusy), true)
+    compare(Maintenance.maintenanceCanDetach(h.maintenanceState, h.statusBusy, h.settingsWriteBusy), true)
   }
 
   function test_stale_status_callback_does_not_apply() {

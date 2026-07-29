@@ -1,4 +1,4 @@
-//! ServiceCore.js hand-copies closed enums from the Rust schema. This test
+//! CoreService.js hand-copies closed enums from the Rust schema. This test
 //! keeps them in lock-step: a new state/action/provider added on one side
 //! fails here instead of silently freezing the popup at runtime.
 
@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 fn extract_keys(source: &str, var_name: &str) -> BTreeSet<String> {
     let start = source
         .find(&format!("var {var_name} = {{"))
-        .unwrap_or_else(|| panic!("{var_name} not found in ServiceCore.js"));
+        .unwrap_or_else(|| panic!("{var_name} not found in CoreService.js"));
     let rest = &source[start..];
     let end = rest.find('}').expect("unterminated const object");
     let body = &rest[..end];
@@ -24,7 +24,7 @@ fn extract_keys(source: &str, var_name: &str) -> BTreeSet<String> {
 
 #[test]
 fn servicecore_enums_match_schema() {
-    let js = std::fs::read_to_string("assets/omarchy/ServiceCore.js").expect("read ServiceCore.js");
+    let js = std::fs::read_to_string("assets/omarchy/CoreService.js").expect("read CoreService.js");
 
     let states = extract_keys(&js, "PROVIDER_STATES");
     let expected_states: BTreeSet<String> = [

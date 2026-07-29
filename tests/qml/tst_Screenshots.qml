@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "TestPalette.js" as Core
 
 // Deterministic UI evidence captures for CP2 (TEST screenshot inventory).
 TestCase {

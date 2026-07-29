@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreSettings.js" as Core
+import "../../assets/omarchy/CoreService.js" as Service
+import "../../assets/omarchy/CoreMaintenance.js" as Maintenance
 
 TestCase {
   id: testCase
@@ -21,10 +23,10 @@ TestCase {
     property string pendingSettingsPayload: ""
     property int settingsSaveCount: 0
     property var popupOwner: null
-    property var maintenanceState: Core.maintenanceIdle()
+    property var maintenanceState: Maintenance.maintenanceIdle()
 
     function openSettings(owner) {
-      popupOwner = Core.requestPopup(popupOwner, owner, null, "settings")
+      popupOwner = Service.requestPopup(popupOwner, owner, null, "settings")
       if (!settingsState || settingsState.phase === "closed") {
         settingsGeneration++
         activeSettingsReadGeneration = settingsGeneration
@@ -35,7 +37,7 @@ TestCase {
     }
 
     function applyRead(generation, doc, exitCode) {
-      if (!Core.shouldApplyGeneration(activeSettingsReadGeneration, generation))
+      if (!Service.shouldApplyGeneration(activeSettingsReadGeneration, generation))
         return
       settingsReadBusy = false
       if (exitCode !== 0 || !settingsState || settingsState.phase === "closed")
@@ -62,7 +64,7 @@ TestCase {
         return false
       if (!Core.settingsCanSave(settingsState, settingsDraft))
         return false
-      if (!Core.canStartLane(settingsWriteBusy))
+      if (!Service.canStartLane(settingsWriteBusy))
         return false
       var payloadObj = JSON.parse(JSON.stringify(settingsDraft))
       settingsGeneration++
@@ -77,7 +79,7 @@ TestCase {
     }
 
     function applyWrite(generation, ok, canonical) {
-      if (!Core.shouldApplyGeneration(activeSettingsWriteGeneration, generation))
+      if (!Service.shouldApplyGeneration(activeSettingsWriteGeneration, generation))
         return
       settingsWriteBusy = false
       pendingSettingsPayload = ""
@@ -88,7 +90,7 @@ TestCase {
     }
 
     function closePopup(owner) {
-      popupOwner = Core.closePopup(popupOwner, owner)
+      popupOwner = Service.closePopup(popupOwner, owner)
       if (!popupOwner && !Core.settingsShouldRetainOnClose(settingsState)) {
         settingsState = Core.settingsClosed()
         settingsDraft = null
@@ -107,7 +109,7 @@ TestCase {
       pendingSettingsPayload = ""
       settingsSaveCount = 0
       popupOwner = null
-      maintenanceState = Core.maintenanceIdle()
+      maintenanceState = Maintenance.maintenanceIdle()
     }
   }
 
@@ -116,9 +118,9 @@ TestCase {
     h.openSettings("mon-a")
     compare(h.settingsState.phase, "loading")
     compare(Core.settingsControlsLocked(h.settingsState), true)
-    h.mutate(function (d) { return Core.setDisplayMetric(d || Core.defaultSettings(), "used") })
+    h.mutate(function (d) { return Core.setDisplayMetric(d || Service.defaultSettings(), "used") })
     compare(h.settingsDraft, null)
-    h.applyRead(h.activeSettingsReadGeneration, Core.defaultSettings(), 0)
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
     compare(h.settingsState.phase, "clean")
     compare(Core.settingsControlsLocked(h.settingsState), false)
   }
@@ -132,9 +134,9 @@ TestCase {
     h.openSettings("a")
     var gen2 = h.activeSettingsReadGeneration
     verify(gen2 > gen1)
-    h.applyRead(gen1, Core.setDisplayMetric(Core.defaultSettings(), "used"), 0)
+    h.applyRead(gen1, Core.setDisplayMetric(Service.defaultSettings(), "used"), 0)
     compare(h.settingsState.phase, "loading")
-    h.applyRead(gen2, Core.defaultSettings(), 0)
+    h.applyRead(gen2, Service.defaultSettings(), 0)
     compare(h.settingsState.phase, "clean")
     compare(h.settingsDraft.display.metric, "remaining")
   }
@@ -142,7 +144,7 @@ TestCase {
   function test_close_during_save_retains_busy_then_completes() {
     h.reset()
     h.openSettings("a")
-    h.applyRead(h.activeSettingsReadGeneration, Core.defaultSettings(), 0)
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
     h.mutate(function (d) { return Core.setNotificationsEnabled(d, false) })
     compare(h.save(), true)
     var gen = h.activeSettingsWriteGeneration
@@ -160,7 +162,7 @@ TestCase {
   function test_reopen_during_save_reflects_busy() {
     h.reset()
     h.openSettings("a")
-    h.applyRead(h.activeSettingsReadGeneration, Core.defaultSettings(), 0)
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
     h.mutate(function (d) { return Core.setDisplayMetric(d, "used") })
     h.save()
     var gen = h.settingsGeneration
@@ -173,7 +175,7 @@ TestCase {
   function test_two_saves_second_rejected_while_busy() {
     h.reset()
     h.openSettings("a")
-    h.applyRead(h.activeSettingsReadGeneration, Core.defaultSettings(), 0)
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
     h.mutate(function (d) { return Core.setRefreshInterval(d, 120) })
     compare(h.save(), true)
     compare(h.settingsSaveCount, 1)
@@ -187,7 +189,7 @@ TestCase {
   function test_stale_write_callback_ignored() {
     h.reset()
     h.openSettings("a")
-    h.applyRead(h.activeSettingsReadGeneration, Core.defaultSettings(), 0)
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
     h.mutate(function (d) { return Core.setDisplayMetric(d, "used") })
     h.save()
     var gen1 = h.activeSettingsWriteGeneration
@@ -205,7 +207,7 @@ TestCase {
   function test_second_save_generation_monotonic_and_stale_first_ignored() {
     h.reset()
     h.openSettings("a")
-    h.applyRead(h.activeSettingsReadGeneration, Core.defaultSettings(), 0)
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
 
     h.mutate(function (d) { return Core.setDisplayMetric(d, "used") })
     h.save()
@@ -232,7 +234,7 @@ TestCase {
   function test_payload_immutable_after_edit_during_save() {
     h.reset()
     h.openSettings("a")
-    h.applyRead(h.activeSettingsReadGeneration, Core.defaultSettings(), 0)
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
     h.mutate(function (d) { return Core.setDisplayMetric(d, "used") })
     h.save()
     var captured = JSON.parse(h.pendingSettingsPayload)

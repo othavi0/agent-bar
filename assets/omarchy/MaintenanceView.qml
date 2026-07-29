@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "ServiceCore.js" as Core
+import "CoreMaintenance.js" as Core
 import "components"
 
 // Maintenance section: version, update check/apply, uninstall (UX-040..047).

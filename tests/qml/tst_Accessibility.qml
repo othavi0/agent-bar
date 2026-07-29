@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/ServiceCore.js" as Core
+import "../../assets/omarchy/CoreView.js" as Core
+import "TestPalette.js" as Palette
 
 TestCase {
   id: testCase
@@ -100,8 +101,8 @@ TestCase {
   }
 
   function test_theme_palette_light_dark() {
-    var light = Core.themePalette("light")
-    var dark = Core.themePalette("dark")
+    var light = Palette.themePalette("light")
+    var dark = Palette.themePalette("dark")
     compare(light.mode, "light")
     compare(dark.mode, "dark")
     verify(light.background !== dark.background)
