@@ -622,6 +622,8 @@ Item {
     settingsWriteBusy = true
     if (testMode)
       return
+    // Re-arm stdin: each save closes it after writing (EOF delivery below).
+    settingsWriteProcess.stdinEnabled = true
     settingsWriteProcess.command = Settings.settingsArgvApplyStdin(helper)
     settingsWriteProcess.running = true
   }
@@ -755,8 +757,12 @@ Item {
     stderr: StdioCollector { id: settingsWriteErr; waitForEnd: true }
     onStarted: {
       // Write the immutable captured payload; never re-read live draft (SET-018).
-      if (root.pendingSettingsPayload && root.pendingSettingsPayload.length)
+      // config apply stdin reads until EOF — write() alone does not deliver it;
+      // stdinEnabled=false closes the write channel (same as maintenance handoff).
+      if (root.pendingSettingsPayload && root.pendingSettingsPayload.length) {
         write(root.pendingSettingsPayload + "\n")
+        settingsWriteProcess.stdinEnabled = false
+      }
     }
     onExited: function (exitCode) {
       var ok = exitCode === 0
