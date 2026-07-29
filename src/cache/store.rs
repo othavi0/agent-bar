@@ -105,7 +105,7 @@ impl CacheStore {
         &self,
         id: ProviderId,
         entry: CachedProvider,
-        now: OffsetDateTime,
+        _now: OffsetDateTime,
     ) -> Result<CacheDocument, CacheStoreError> {
         let _guard = self
             .gate
@@ -117,8 +117,8 @@ impl CacheStore {
         doc.providers.insert(id.as_str().to_owned(), entry);
         doc.revision = doc.revision.saturating_add(1);
         doc.validate()?;
-        // Expiry is caller-provided; `now` used only for logging/tests.
-        let _ = now;
+        // Expiry is caller-provided; `_now` is accepted for call-site symmetry
+        // with the collection timestamp but is not read here.
         let bytes = serde_json::to_vec_pretty(&doc).map_err(|err| {
             CacheStoreError::Schema(CacheSchemaError::InvalidJson(err.to_string()))
         })?;

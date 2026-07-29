@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::cache::{entry_from_status, CacheCoordinator, CachePaths, CacheStore, ForcedTargets};
+use crate::cache::{entry_from_status, CacheCoordinator, CachePaths, CacheStore};
 use crate::cli::{CacheMode, NotificationMode, ProviderId, StatusFormat};
 use crate::notifications::{
     NotificationEvaluator, NotificationPaths, NotificationStateStore, NotifySendDispatcher,
@@ -201,10 +201,7 @@ where
         )
         .map_err(StatusCoordError::Schema)?;
 
-        let pending = self.cache_coord.complete_collection();
-        if !pending.is_empty() {
-            log::debug!("pending forced targets after collection: {pending:?}");
-        }
+        self.cache_coord.complete_collection();
 
         if request.notifications == NotificationMode::Evaluate {
             let dispatcher = NotifySendDispatcher::new(TokioProcessRunner);
@@ -218,7 +215,6 @@ where
             }
         }
 
-        let _ = ForcedTargets::empty();
         Ok(envelope)
     }
 
