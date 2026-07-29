@@ -10,7 +10,6 @@ Item {
 
   property string name: ""
   property string plan: ""
-  property string connection: ""
   property bool refreshing: false
   property bool showStale: false
   property color foreground: Color.foreground

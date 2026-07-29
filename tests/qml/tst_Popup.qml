@@ -51,8 +51,15 @@ TestCase {
     verify(src.indexOf("iconSource") < 0)
     verify(src.indexOf("name") >= 0)
     verify(src.indexOf("plan") >= 0)
-    verify(src.indexOf("connection") >= 0)
     verify(src.indexOf("󰑐") >= 0)
+    // Connection moved out of the header into ProviderView's meta footer
+    // (Fase 2 slim-down) — the header no longer owns that prop/text at all.
+    verify(src.indexOf("connection") < 0)
+  }
+
+  function test_footer_shows_connection() {
+    var src = read("assets/omarchy/ProviderView.qml")
+    verify(src.indexOf("connection") >= 0)
   }
 
   function test_full_width_separator_present() {

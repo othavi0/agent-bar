@@ -119,7 +119,7 @@ TestCase {
     } else if (name.indexOf("cli-missing-dark") === 0) {
       stage.titleText = "Amp"
       stage.badgeText = "CLI missing"
-      stage.bodyText = "Amp CLI was not found. View installation · Check again"
+      stage.bodyText = "Amp CLI was not found. View installation"
     } else if (name.indexOf("unauthenticated-dark") === 0) {
       stage.titleText = "Claude"
       stage.badgeText = "Not connected"
