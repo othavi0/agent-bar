@@ -616,6 +616,24 @@ git commit -m "fix: bind secondary text to theme alpha"
 
 The values differ slightly from the tokens — 0.12 against the theme's 0.18, 0.22 against 0.4. That is the point: the tokens track the installed theme, the literals never did.
 
+**The scrim needs an exception, and it must be declared.** Task 4 added
+`test_no_third_alpha_value`, which asserts every `Util.alpha` opacity across the
+scanned files is `0.72` or `0.55`. Those two are the *secondary text* scale. The
+modal scrim is neither text nor control chrome — it is a full-screen wash with
+no host token, which is why it gets a name of its own. Declaring it as
+`Util.alpha(Color.foreground, 0.45)` therefore fails that assertion on sight.
+
+Do not weaken the assertion to accommodate it. Give it the same shape the
+language gate uses for `src/support/redact.rs`: an explicit exception carrying
+its reason, so the strict rule keeps applying everywhere else. Extend the test
+with a per-file exception set — for example a `textAlphaExceptions()` returning
+`{"assets/omarchy/components/ConfirmDialog.qml": ["0.45"]}` with a comment
+saying why — and have `test_no_third_alpha_value` subtract a file's exceptions
+before comparing. An undeclared third value must still fail.
+
+Task 7 adds the second and final exception, `0.12` for the usage track, the
+same way.
+
 - [ ] **Step 1: Add the failing test**
 
 Append to `tests/qml/tst_Tokens.qml`, inside the `TestCase`:
@@ -784,6 +802,8 @@ git commit -m "refactor: use PanelSeparator for panel rules"
 - Produces: `UsageWindow.trackColor` — a `readonly property color`. Plan 03 reuses it for the compact rows so both track shapes tint from one place.
 
 The track background has no host token: it is not control chrome, it is a data surface. That does not license repeating the literal. It is declared once, named, and referenced.
+
+**This is the second and last text-alpha exception.** `Util.alpha(root.foreground, 0.12)` is not one of the two secondary-text levels, so `test_no_third_alpha_value` rejects it until it is declared. Add `"0.12"` to `UsageWindow.qml`'s entry in the exception set Task 5 introduced, with a comment saying it is the usage track — a data surface with no host token. After this task the exception set is closed: two entries, the scrim and the track, and any further third value is a real defect.
 
 - [ ] **Step 1: Tighten the test to its final shape**
 
