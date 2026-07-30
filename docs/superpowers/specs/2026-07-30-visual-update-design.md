@@ -12,7 +12,7 @@ model, and the v10 removal contract are preserved.
 
 Agent Bar renders correct data through an accidental parallel design system.
 Sixteen `Qt.darker(foreground, n)` calls and nineteen hardcoded
-`Qt.rgba(foreground…, α)` alphas reimplement, badly, a token vocabulary the
+`Qt.rgba(foreground…, alpha)` calls reimplement, badly, a token vocabulary the
 host already exports. That single root cause produces the visible defects:
 icons off the bar grid, a rail that does not align with its own content,
 severity that never appears, and a text hierarchy that inverts on light
@@ -122,7 +122,7 @@ This is the backbone of the change. Most of the work is deletion.
 
 | Current | Replacement |
 | --- | --- |
-| `Qt.darker(fg, 1.2…1.4)` — 16 sites | `Util.alpha(Color.foreground, α)`. The five existing factors collapse to two roles: supporting text and labels at `0.72`, meta and caption text at `0.55`. The mapping is by role, resolved per call site; no call site keeps a third value. |
+| `Qt.darker(fg, 1.2…1.4)` — 16 sites | `Util.alpha(Color.foreground, a)`. The five existing factors collapse to two roles: supporting text and labels at `0.72`, meta and caption text at `0.55`. The mapping is by role, resolved per call site; no call site keeps a third value. |
 | `Qt.rgba(fg…, 0.05)` + `0.22` — rail frame | deleted with the frame |
 | `Qt.rgba(fg…, 0.12)` — selected rail plate | `Style.selectedFill` |
 | `Qt.rgba(fg…, 0.3)` — selected rail border | `Style.selectedBorderColor` |
