@@ -18,12 +18,7 @@ const ALLOWLIST: &[(&str, &str)] = &[(
 )];
 
 /// Files awaiting translation. Task 3 empties this and locks it shut.
-const PENDING_TRANSLATION: &[&str] = &[
-    "CHANGELOG.md",
-    "docs/adr/0001-omarchy-right-click-settings.md",
-    "docs/adr/0002-config-cli-dual-write.md",
-    "docs/adr/0003-cli-help-hide-internals.md",
-];
+const PENDING_TRANSLATION: &[&str] = &["CHANGELOG.md"];
 
 const BINARY_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "svg", "ico", "lock"];
 
