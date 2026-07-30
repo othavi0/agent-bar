@@ -106,19 +106,52 @@ function chipPercentText(provider, metric) {
   return Math.round(v) + "%"
 }
 
-// UX-012: text cue beyond color for stale/error/loading.
+// UX-012: text cue beyond color for stale/error. No leading space — the
+// chip separates cue from numeral with layout spacing (visual design §5).
+// 󰅐 is U+F0150 from the bar's Nerd Font family, replacing the emoji-font
+// ⌛ that broke the monospace surface.
 function chipStateCue(provider) {
   if (!provider)
     return ""
   var state = String(provider.state || "")
   if (state === "stale")
-    return " ⌛"
-  if (state === "loading")
-    return "\u2026"
+    return "󰅐"
   if (state === "cli_missing" || state === "unauthenticated" || state === "rate_limited"
       || state === "network_error" || state === "provider_error")
-    return " !"
+    return "!"
   return ""
+}
+
+// Copy design §5.4: lowercase trailing qualifier for the chip tooltip.
+// Plan 03 deletes connectionLabel with the meta footer; this function is
+// the humaniser that replaces it.
+function stateQualifier(state) {
+  var s = String(state || "")
+  if (s === "ready")
+    return ""
+  if (s === "stale")
+    return "stale"
+  if (s === "loading")
+    return "loading"
+  if (s === "cli_missing")
+    return "no CLI"
+  if (s === "unauthenticated")
+    return "signed out"
+  if (s === "rate_limited")
+    return "rate limited"
+  if (s === "network_error")
+    return "offline"
+  if (s === "provider_error")
+    return "failed"
+  return "unknown"
+}
+
+// Numeral box content: loading renders the loading cue in place of the
+// number so the cue is visually distinct from the — no-data glyph (§5).
+function chipNumeralText(provider, metric) {
+  if (provider && String(provider.state || "") === "loading")
+    return "···"
+  return chipPercentText(provider, metric)
 }
 
 function chipDimmed(provider) {
@@ -128,17 +161,37 @@ function chipDimmed(provider) {
   return state !== "ready"
 }
 
-// UX-011: provider and displayed percentage; typed state only when it is
-// actionable (anything but ready). Reset detail lives in the popup.
+// UX-011 (amended by this plan): provider, displayed percentage when one
+// exists, and a plain-language qualifier when not ready. The raw enum
+// value never renders (copy design §5.4).
 function chipTooltip(provider, metric) {
   if (!provider)
     return ""
   var name = provider.name ? String(provider.name) : providerDisplayName(provider.id)
-  var parts = [name, chipPercentText(provider, metric)]
+  var parts = [name]
   var state = provider.state ? String(provider.state) : "unknown"
-  if (state !== "ready")
-    parts.push(state)
+  var pct = chipPercentText(provider, metric)
+  if (pct !== "—" || state === "ready")
+    parts.push(pct)
+  var qualifier = stateQualifier(state)
+  if (qualifier.length)
+    parts.push(qualifier)
   return parts.join(" \u00b7 ")
+}
+
+// Visual design §5/§10: per-provider optical scale on the shared 16px
+// canvas. Grok's mark is a thin ring that fills its own box edge to edge.
+function iconOpticalScale(id) {
+  if (String(id || "") === "grok")
+    return 0.875
+  return 1.0
+}
+
+// §10: monochrome brands inherit the theme ink at render time; polychrome
+// brands keep their official color and are never tinted.
+function iconTinted(id) {
+  var key = String(id || "")
+  return key === "codex" || key === "grok"
 }
 
 // Map mouse button to typed service intention (UX-004..009).

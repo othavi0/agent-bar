@@ -21,8 +21,10 @@ verified Quattro-native glyphs or explicit English text labels.
 - `UX-009`: Mouse wheel over a bar chip has no effect.
 - `UX-010`: Each chip registers and unregisters a Quattro bar click target and
   implements the host trigger protocol.
-- `UX-011`: Tooltip copy includes provider, displayed percentage, state, and
-  reset summary.
+- `UX-011`: Tooltip copy includes the provider name, the displayed
+  percentage when one exists, and a plain-language state qualifier when the
+  provider is not ready. Raw state identifiers never render. Reset detail
+  lives in the popup.
 - `UX-012`: Stale and error states use an icon/text cue in addition to color.
 
 ## Popup layout
