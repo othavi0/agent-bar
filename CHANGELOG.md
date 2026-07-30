@@ -176,8 +176,8 @@ Product milestone — no JSON contract change.
 - **Native settings in omarchy-shell.** Right click on the widget opens
   the same popup in settings mode (`model-usage`-style): per-provider
   toggles, ↑↓ reordering, remaining/used display, notify on/off, and
-  refresh interval. Left = usage (wider popup); middle = refresh. "Open
-  menu (TUI)" link in the footer; the full TUI still lives at
+  refresh interval. Left = usage (wider popup); middle = refresh. A
+  “Abrir menu (TUI)” link in the footer; the full TUI still lives at
   `agent-bar menu`.
 - **`agent-bar config show` / `config apply`.** JSON mini-API for the
   editable subset (`providers`, `providerOrder`, `displayMode`, `notify`)
