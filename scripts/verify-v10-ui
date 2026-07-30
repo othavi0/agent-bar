@@ -9,6 +9,7 @@ QML_TEST="${ROOT}/tests/qml/tst_Screenshots.qml"
 REQUIRED=(
   ready-light.png
   ready-dark.png
+  ready-white.png
   loading-dark.png
   refreshing-with-data-dark.png
   stale-dark.png
