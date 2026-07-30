@@ -51,6 +51,68 @@ TestCase {
     }
   }
 
+  // Every numeric literal that appears in the opacity slot of a
+  // Util.alpha(color, opacity) call, read from source. Handles both plain
+  // literals and conditional expressions (the showStale ternary).
+  function alphaArgValues(code) {
+    var values = []
+    var callRe = /Util\.alpha\(([^()]*)\)/g
+    var m
+    while ((m = callRe.exec(code)) !== null) {
+      var args = m[1]
+      var commaIdx = args.indexOf(",")
+      if (commaIdx < 0)
+        continue
+      var opacityArg = args.slice(commaIdx + 1)
+      var numRe = /\d+(?:\.\d+)?/g
+      var nm
+      while ((nm = numRe.exec(opacityArg)) !== null)
+        values.push(nm[0])
+    }
+    return values
+  }
+
+  function convertedFiles() {
+    return [
+      "assets/omarchy/ProviderView.qml",
+      "assets/omarchy/SettingsView.qml",
+      "assets/omarchy/MaintenanceView.qml",
+      "assets/omarchy/components/UsageWindow.qml",
+      "assets/omarchy/components/ProviderHeader.qml",
+      "assets/omarchy/components/StateMessage.qml",
+      "assets/omarchy/components/ConfirmDialog.qml"
+    ]
+  }
+
+  // The "exactly two levels, no third value" contract that Tasks 5-8 build
+  // on. Values are extracted from the call sites themselves, not hardcoded,
+  // so a future task introducing a third alpha value fails here. Does not
+  // assert a call-site count: later plans legitimately add/remove sites.
+  function test_no_third_alpha_value() {
+    var files = tokenScannedFiles()
+    var seen = {}
+    for (var i = 0; i < files.length; i++) {
+      var code = read(files[i]).replace(/\/\/[^\n]*/g, "")
+      var values = alphaArgValues(code)
+      for (var j = 0; j < values.length; j++)
+        seen[values[j]] = true
+    }
+    var distinct = Object.keys(seen).sort()
+    compare(distinct.join(","), "0.55,0.72",
+            "Util.alpha opacity must be exactly 0.55 or 0.72, found: " + distinct.join(","))
+  }
+
+  // Closes the substitution hole: a hardcoded Qt.rgba(...) literal would
+  // satisfy test_no_qt_darker without ever using Util.alpha.
+  function test_util_alpha_used_in_converted_files() {
+    var files = convertedFiles()
+    for (var i = 0; i < files.length; i++) {
+      var code = read(files[i]).replace(/\/\/[^\n]*/g, "")
+      verify(code.indexOf("Util.alpha(") >= 0,
+             files[i] + " has no Util.alpha( call; conversion must use Util.alpha")
+    }
+  }
+
   // Composite a translucent foreground over a background, the way the
   // compositor does, then compare WCAG contrast.
   function composite(fg, bg, a) {
