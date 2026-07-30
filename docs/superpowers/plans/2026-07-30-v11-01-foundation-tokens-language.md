@@ -917,20 +917,41 @@ In `tests/qml/TestPalette.js`, delete the `muted` key from both the `light` and
 `dark` return objects. A fixture that hardcodes the value it is meant to verify
 cannot verify it.
 
-Then in `tests/qml/tst_Screenshots.qml`, add `import qs.Commons` at the top if
-it is absent, and replace `applyTheme` at line 85:
+**Do not import `qs.Commons` to reach `Util.alpha`.** The bare Qt6
+`qmltestrunner` this gate uses cannot resolve that module, and a file carrying
+the import fails to compile entirely — it does not merely lose the symbol. The
+constraint is documented at `tests/qml/tst_ProviderStates.qml:220-227` and was
+reproduced independently during Task 4. Every test in this repository reads QML
+as text for exactly this reason.
+
+Compute the same colour inline instead. `Util.alpha(c, o)` returns
+`Qt.rgba(c.r, c.g, c.b, clampAlpha(o))`, and `clampAlpha` is the identity for a
+value already inside `0..1`, so the expression below is that function's exact
+output. Replace `applyTheme` in `tests/qml/tst_Screenshots.qml` at line 85:
 
 ```qml
   function applyTheme(mode) {
     var p = Core.themePalette(mode)
     stage.color = p.background
     stage.fg = p.foreground
-    // Same expression the shipped components use, so this fixture actually
-    // exercises the token binding instead of a hand-picked stand-in.
-    stage.muted = Util.alpha(p.foreground, 0.72)
+    // Derived from this palette's own foreground at the supporting-text level,
+    // which is what the shipped components compute through Util.alpha. The
+    // literal 0.72 is pinned by tst_Tokens.qml's test_no_third_alpha_value;
+    // Util itself is unreachable here because qs.Commons will not compile
+    // under the bare Qt6 runner.
+    var fg = Qt.color(p.foreground)
+    stage.muted = Qt.rgba(fg.r, fg.g, fg.b, 0.72)
     stage.badgeColor = p.urgent
   }
 ```
+
+This is a smaller improvement than reaching the real function would be, and it
+is worth being precise about what it does and does not buy. It does not prove
+the components call `Util.alpha` — `tst_Tokens.qml` already does that. What it
+fixes is the fixture's independence from the palette: the muted colour now
+derives from the same foreground the theme supplies, so the light and white
+renders finally show the real relationship between primary and secondary text
+instead of two unrelated hand-picked hexes.
 
 - [ ] **Step 4: Render the white case**
 
