@@ -983,7 +983,7 @@ The contrast test proves the ordering arithmetically; a human confirms it reads
 right.
 
 ```bash
-ls tests/qml/screenshots/ready-{dark,light,white}.png
+ls target/v10-ui-evidence/ready-{dark,light,white}.png
 ```
 
 Open all three. In every one, `Session (5h) 58% left · Max plan` must read
