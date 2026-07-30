@@ -270,7 +270,7 @@ Product milestone — no JSON contract change.
 ## [8.2.1] - 2026-07-19
 
 ### Fixed
-- **Grok's Waybar icon** — replaced the "G" placeholder with the official
+- **Grok's Waybar icon** — replaced the “G” placeholder with the official
   `Grok_Logomark_Light` logomark from the xAI brand pack
   (`SpaceXAI_Grok_Assets.zip`). No CSS/file-contract change
   (`grok-icon.svg`).

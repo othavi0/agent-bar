@@ -631,8 +631,9 @@ with a per-file exception set — for example a `textAlphaExceptions()` returnin
 saying why — and have `test_no_third_alpha_value` subtract a file's exceptions
 before comparing. An undeclared third value must still fail.
 
-Task 7 adds the second and final exception, `0.12` for the usage track, the
-same way.
+Task 7 adds the usage-track exception, `0.12`, the same way — and it turned out
+to be the only one. The scrim never needed an entry: Task 5 bound it to the host
+token `Color.menu.scrim` instead, which removed its literal entirely.
 
 - [ ] **Step 1: Add the failing test**
 
@@ -804,7 +805,7 @@ git commit -m "refactor: use PanelSeparator for panel rules"
 
 The track background has no host token: it is not control chrome, it is a data surface. That does not license repeating the literal. It is declared once, named, and referenced.
 
-**This is the second and last text-alpha exception.** `Util.alpha(root.foreground, 0.12)` is not one of the two secondary-text levels, so `test_no_third_alpha_value` rejects it until it is declared. Add `"0.12"` to `UsageWindow.qml`'s entry in the exception set Task 5 introduced, with a comment saying it is the usage track — a data surface with no host token. After this task the exception set is closed: two entries, the scrim and the track, and any further third value is a real defect.
+**This is the only text-alpha exception.** `Util.alpha(root.foreground, 0.12)` is not one of the two secondary-text levels, so `test_no_third_alpha_value` rejects it until it is declared. Add `"0.12"` to `UsageWindow.qml`'s entry in the exception set Task 5 introduced, with a comment saying it is the usage track — a data surface with no host token. Task 5 built that mechanism for the modal scrim and then emptied it again, because binding the scrim to `Color.menu.scrim` removed its literal outright; the track is what finally populates it. After this task the exception set is closed at one entry, and any further value is a real defect.
 
 - [ ] **Step 1: Tighten the test to its final shape**
 
