@@ -109,11 +109,12 @@ Product milestone — no JSON contract change.
 
 ### Added
 - **Redesigned Widget.qml**: hero % per provider matching the chip,
-  `agent-bar` title + relative "Xm ago", top actions become real Unicode
-  buttons (↻ refresh, ⚙︎ settings, ❯ open TUI) instead of text/link. One
-  card per provider, fixed-column grid (label · bar · % · reset),
-  countdown (`1h 46m · 18:30` / `7d 0h · Mon 16:43`) across every window.
-  Width `540` (previously `370`), the same in both modes.
+  `agent-bar` title + a relative last-updated label (elapsed minutes), top
+  actions become real Unicode buttons (↻ refresh, ⚙︎ settings, ❯ open TUI)
+  instead of text/link. One card per provider, fixed-column grid
+  (label · bar · % · reset), countdown (`1h 46m · 18:30` /
+  `7d 0h · seg 16:43`) across every window. Width `540` (previously `370`),
+  the same in both modes.
 - **`extra` visible in the popup**: Amp credits (`$X · replenish`),
   Grok's sessions/turns/model, Claude's extra usage when present —
   previously these only existed in `--format json`, never reaching the
@@ -297,15 +298,16 @@ after 8.0.0).
 - Dual token label in Detail's totals: primary = input+output, suffix
   `(+N cache)` when cache exists.
 - Chart legend with a `…+N` indicator when series don't fit the width.
-- Help discoverability: `? help` chip in Detail and a hint on the
+- Help discoverability: `? ajuda` chip in Detail and a hint on the
   frame's bottom border.
 - Specs: foundations/trust, product hardening, TUI polish.
 
 ### Changed
 - **Codex / TUI update / Detail** modularized (no product-contract change
   from the splits).
-- TUI config with human labels (`Providers`, `Order`, `Display`,
-  `Exchange rate R$`…); the technical key stays in the field's hint.
+- TUI config now shows human-readable field labels in Portuguese (at the
+  time) instead of raw setting keys; the technical key still appears in
+  the field's hint.
 - Collapsed sidebar uses `≡` / `→` / `⚙` instead of H/L/C.
 - Detail's chart uses `Min(6)` on narrow panels (&lt; 72 cols); `Min(9)`
   otherwise.
@@ -372,7 +374,7 @@ Complete TUI redesign (v8) + reliable usage numbers.
 Round of TUI visual adjustments after real hands-on testing of the redesign.
 
 ### Added
-- **"Today (24h)" panel on Overview**: when height remains below the cards,
+- **"Hoje (24h)" panel on Overview**: when height remains below the cards,
   the space becomes the last-24h braille chart (same visualization as
   History) with today/7d totals in the footer. On short terminals the old
   layout stays intact.
@@ -384,14 +386,13 @@ Round of TUI visual adjustments after real hands-on testing of the redesign.
 - The help popup (`?`) now sizes itself to its content (it used to be
   60%x70% of the frame and cut off the final sections on smaller
   terminals) and dims the screen underneath while open.
-- TUI copy revised: fixed accent bugs in words like "instructions",
-  "comma", "invalid", "configuration"… and localized the "Waybar Config"
-  label to Portuguese.
+- TUI copy revised: fixed accent bugs across several Portuguese labels,
+  and localized the "Waybar Config" label to Portuguese.
 
 ### Fixed
-- **"today 0 tok" / "no token usage" during loading**: while session-log
+- **"hoje 0 tok" / "sem uso de tokens" during loading**: while session-log
   parsing hasn't finished, History, Detail, and the cards now say
-  "collecting…" instead of asserting zero about data that simply hasn't
+  "coletando…" instead of asserting zero about data that simply hasn't
   arrived yet.
 - Session-log parsing now runs **once** per refresh (it used to run twice —
   once for today's window, once for the 7-day one), cutting history
@@ -463,15 +464,15 @@ Complete redesign of the `agent-bar menu` TUI (spec and plan in
 - **Fetch, login, and save moved off the event loop**: the TUI never freezes
   anymore — spinner and per-provider progress genuinely appear, keys respond
   during the fetch, and the post-login refetch is automatic.
-- **Login state derived from a real fetch** (5 states, including `error`
-  distinct from `logged-out`) — the end of `[ok]` based on file existence.
+- **Login state derived from a real fetch** (5 states, including `erro`
+  distinct from `deslogado`) — the end of `[ok]` based on file existence.
 - **Terminal helper cascade** (`agent-bar-open-terminal`): honors
   `$TERMINAL` (launches the preferred terminal with font flags when
   supported; unknown → xdg path); direct alacritty now comes before the
   uwsm/xdg path to apply the font while preserving Hyprland's float.
 - **MSRV corrected to 1.88** (the dependencies' real floor); new
   dependencies: `tachyonfx`, `tui-scrollview`; `tui-popup` removed.
-- History's "peak HHh" and axis labels are now in local time (previously UTC).
+- History's "pico HHh" and axis labels are now in local time (previously UTC).
 
 ### Fixed
 - **The `r` (refresh) key never worked** — it set "Loading" without
@@ -489,7 +490,7 @@ Complete redesign of the `agent-bar menu` TUI (spec and plan in
 - Race between overlapping fetch waves corrupting spinner/`last_update`.
 - Token `abbrev` overflowed the unit boundary ("1000.0K" → "1.0M").
 - Extra usage enabled without a configured limit rendered a
-  self-contradictory gauge ("$X of $0.00") — now "used · no limit".
+  self-contradictory gauge ("$X de $0.00") — now "usado · sem limite".
 
 ## [6.0.1] - 2026-06-21
 
