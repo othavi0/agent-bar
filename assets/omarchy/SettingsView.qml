@@ -144,10 +144,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     // Display metric
@@ -242,10 +241,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     // Actions — English text labels (UX-036..038)
@@ -296,10 +294,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     MaintenanceView {

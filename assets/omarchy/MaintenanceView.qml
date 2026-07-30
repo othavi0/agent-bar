@@ -123,10 +123,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     // Danger zone — visually separated (UX-044)

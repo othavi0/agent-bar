@@ -65,8 +65,10 @@ TestCase {
 
   function test_full_width_separator_present() {
     var src = read("assets/omarchy/ProviderView.qml")
+    // Separator is the host's PanelSeparator (fixed 1px height internally);
+    // this file only needs to place it full-width.
+    verify(src.indexOf("PanelSeparator") >= 0)
     verify(src.indexOf("width: parent.width") >= 0)
-    verify(src.indexOf("height: 1") >= 0)
   }
 
   function test_plain_text_only_no_rich_text() {

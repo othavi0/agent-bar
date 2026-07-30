@@ -170,12 +170,7 @@ TestCase {
   // Raw foreground alphas are allowed only where no host token exists.
   // Every other surface must read the theme's state vocabulary.
   function allowedRawAlphaFiles() {
-    return [
-      "assets/omarchy/components/UsageWindow.qml",   // usage track, Task 7
-      "assets/omarchy/ProviderView.qml",             // separators, Task 6
-      "assets/omarchy/SettingsView.qml",             // separators, Task 6
-      "assets/omarchy/MaintenanceView.qml"           // separators, Task 6
-    ]
+    return ["assets/omarchy/components/UsageWindow.qml"] // usage track, Task 7
   }
 
   function test_control_chrome_uses_style_tokens() {

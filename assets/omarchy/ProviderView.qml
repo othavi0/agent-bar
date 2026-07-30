@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Ui
 import "CoreView.js" as Core
 import "components"
 
@@ -66,10 +67,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     // Stale banner: glyph + typed message + Retry (never color-only).
@@ -158,10 +158,10 @@ Item {
       visible: (root.mode === "windows" || root.mode === "stale_windows")
           && root.groups.secondary.length > 0
 
-      Rectangle {
+      PanelSeparator {
         width: parent.width
-        height: 1
-        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+        foreground: root.foreground
+        strength: 0.08
       }
 
       Repeater {
