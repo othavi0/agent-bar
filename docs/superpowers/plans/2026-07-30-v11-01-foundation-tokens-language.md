@@ -281,7 +281,7 @@ Expected: PASS, 2 tests.
 - [ ] **Step 6: Verify links still resolve**
 
 Run: `cargo test --test active_docs`
-Expected: PASS, 4 tests. `active_docs_internal_links_resolve` is the one that matters — a translated heading can break an anchor link.
+Expected: PASS, 5 tests. `active_docs_internal_links_resolve` is the one that matters — a translated heading can break an anchor link.
 
 - [ ] **Step 7: Commit**
 
