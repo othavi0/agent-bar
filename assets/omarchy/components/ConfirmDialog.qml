@@ -22,10 +22,11 @@ Item {
   signal canceled()
   signal confirmed()
 
-  // Full-screen wash behind the card. Not control chrome and not text, so it
-  // carries no host token — declared once here with the one raw alpha this
-  // file is allowed (see tst_Tokens.qml textAlphaExceptions).
-  readonly property color scrimColor: Util.alpha(Color.foreground, 0.45)
+  // Full-screen dim layer behind the card. The host already exposes this
+  // exact surface — Color.menu.scrim composes the theme's background at a
+  // fixed alpha, so it dims regardless of whether foreground is light or
+  // dark. A foreground-based wash would invert on light-foreground themes.
+  readonly property color scrimColor: Color.menu.scrim
 
   anchors.fill: parent
   visible: opened

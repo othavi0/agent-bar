@@ -88,11 +88,12 @@ TestCase {
   // token, declared once with its reason so the strict rule keeps applying
   // everywhere else. An undeclared third value still fails — exceptions only
   // subtract the exact values listed, only for the file listed.
+  //
+  // Empty today: the modal scrim that motivated this mechanism now binds to
+  // the host's Color.menu.scrim token instead of a raw alpha, so it needs no
+  // entry. The mechanism stays — Task 7 adds "0.12" for the usage track.
   function textAlphaExceptions() {
-    return {
-      // Modal scrim: full-screen wash, not text or control chrome (Task 5).
-      "assets/omarchy/components/ConfirmDialog.qml": ["0.45"]
-    }
+    return {}
   }
 
   // The "exactly two levels, no third value" contract that Tasks 5-8 build
@@ -171,7 +172,6 @@ TestCase {
   function allowedRawAlphaFiles() {
     return [
       "assets/omarchy/components/UsageWindow.qml",   // usage track, Task 7
-      "assets/omarchy/components/ConfirmDialog.qml", // modal scrim
       "assets/omarchy/ProviderView.qml",             // separators, Task 6
       "assets/omarchy/SettingsView.qml",             // separators, Task 6
       "assets/omarchy/MaintenanceView.qml"           // separators, Task 6
