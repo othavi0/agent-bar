@@ -89,11 +89,15 @@ TestCase {
   // everywhere else. An undeclared third value still fails — exceptions only
   // subtract the exact values listed, only for the file listed.
   //
-  // Empty today: the modal scrim that motivated this mechanism now binds to
-  // the host's Color.menu.scrim token instead of a raw alpha, so it needs no
-  // entry. The mechanism stays — Task 7 adds "0.12" for the usage track.
+  // The modal scrim that motivated this mechanism ended up binding to the
+  // host's Color.menu.scrim token instead of a raw alpha, so it needs no
+  // entry. The usage track's trackColor is the one real holdout: a data
+  // surface with no host token. Exactly one entry — a second would mean the
+  // mechanism grew into a loophole instead of staying a documented rarity.
   function textAlphaExceptions() {
-    return {}
+    return {
+      "assets/omarchy/components/UsageWindow.qml": ["0.12"]
+    }
   }
 
   // The "exactly two levels, no third value" contract that Tasks 5-8 build
@@ -167,10 +171,22 @@ TestCase {
            data.tag + ": meta " + meta + " must be under supporting " + supporting)
   }
 
-  // Raw foreground alphas are allowed only where no host token exists.
-  // Every other surface must read the theme's state vocabulary.
+  // Empty: after this task no file keeps a raw foreground alpha. ConfirmDialog
+  // left the list in Task 5 when its scrim bound to Color.menu.scrim, and the
+  // usage track is the last holdout.
   function allowedRawAlphaFiles() {
-    return ["assets/omarchy/components/UsageWindow.qml"] // usage track, Task 7
+    return []
+  }
+
+  // The track tint has no host token, so it gets a name and exactly one
+  // declaration. Two would be a parallel system starting over.
+  function test_usage_track_declared_once() {
+    var code = read("assets/omarchy/components/UsageWindow.qml")
+        .replace(/\/\/[^\n]*/g, "")
+    var declarations = code.split("readonly property color trackColor").length - 1
+    compare(declarations, 1, "trackColor must be declared exactly once")
+    verify(code.indexOf("Qt.rgba(") < 0,
+           "UsageWindow must reference trackColor, not a literal alpha")
   }
 
   function test_control_chrome_uses_style_tokens() {

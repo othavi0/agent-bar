@@ -23,6 +23,9 @@ Item {
   readonly property real fillRatio: hasPercent
       ? Math.max(0, Math.min(1, root.percent / 100))
       : 0
+  // Data surface, not control chrome — no host token covers it. Declared
+  // once here so plan 03's compact rows tint from the same place.
+  readonly property color trackColor: Util.alpha(root.foreground, 0.12)
 
   width: parent ? parent.width : implicitWidth
   implicitHeight: root.emphasis ? bigCol.implicitHeight : compactRow.implicitHeight
@@ -74,7 +77,7 @@ Item {
       width: parent.width
       height: Style.space(5)
       radius: height / 2
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      color: root.trackColor
       Accessible.ignored: true
 
       Rectangle {
