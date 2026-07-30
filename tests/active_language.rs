@@ -17,8 +17,8 @@ const ALLOWLIST: &[(&str, &str)] = &[(
     "accented fixture for the ANSI and control-character stripper",
 )];
 
-/// Files awaiting translation. Task 3 empties this and locks it shut.
-const PENDING_TRANSLATION: &[&str] = &["CHANGELOG.md"];
+/// Empty, and it stays empty. See `translation_backlog_is_empty`.
+const PENDING_TRANSLATION: &[&str] = &[];
 
 const BINARY_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "svg", "ico", "lock"];
 
@@ -111,4 +111,12 @@ fn allowlisted_files_still_need_their_exemption() {
              non-ASCII letters; remove the entry"
         );
     }
+}
+
+#[test]
+fn translation_backlog_is_empty() {
+    assert!(
+        PENDING_TRANSLATION.is_empty(),
+        "translation backlog must stay empty; still pending: {PENDING_TRANSLATION:?}"
+    );
 }
