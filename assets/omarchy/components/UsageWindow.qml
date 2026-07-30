@@ -38,7 +38,7 @@ Item {
     Text {
       width: parent.width
       text: root.label
-      color: Qt.darker(root.foreground, 1.35)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.capitalization: Font.AllUppercase
@@ -62,7 +62,7 @@ Item {
       Text {
         anchors.baseline: parent.children[0].baseline
         text: root.unitText
-        color: Qt.darker(root.foreground, 1.35)
+        color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         textFormat: Text.PlainText
@@ -95,7 +95,7 @@ Item {
       spacing: Style.space(4)
       Text {
         text: "resets"
-        color: Qt.darker(root.foreground, 1.35)
+        color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         textFormat: Text.PlainText
@@ -123,7 +123,7 @@ Item {
       id: compactLabel
       width: Math.max(0, parent.width * 0.5)
       text: root.label
-      color: Qt.darker(root.foreground, 1.2)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight

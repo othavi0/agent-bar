@@ -68,7 +68,7 @@ Column {
       width: Math.max(0, parent.width)
       visible: root.body.length > 0
       text: root.body
-      color: Qt.darker(root.foreground, 1.25)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       wrapMode: Text.Wrap

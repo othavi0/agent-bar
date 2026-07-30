@@ -75,7 +75,7 @@ Item {
       Text {
         width: parent.width
         text: root.message
-        color: Qt.darker(root.foreground, 1.15)
+        color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         wrapMode: Text.WordWrap

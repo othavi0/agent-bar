@@ -219,7 +219,7 @@ Item {
             parts.push("refreshing…")
           return parts.join(" · ")
         }
-        color: Qt.darker(root.foreground, 1.4)
+        color: Util.alpha(root.foreground, 0.55)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         elide: Text.ElideRight
@@ -229,7 +229,7 @@ Item {
       Text {
         width: Math.max(0, parent.width - footerLeft.width)
         text: root.header.connection
-        color: Qt.darker(root.foreground, root.header.showStale ? 1.0 : 1.15)
+        color: Util.alpha(root.foreground, root.header.showStale ? 0.72 : 0.55)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         font.bold: root.header.showStale
