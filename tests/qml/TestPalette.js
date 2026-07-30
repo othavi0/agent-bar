@@ -6,6 +6,7 @@ function requiredScreenshotNames() {
   return [
     "ready-light.png",
     "ready-dark.png",
+    "ready-white.png",
     "loading-dark.png",
     "refreshing-with-data-dark.png",
     "stale-dark.png",
@@ -23,12 +24,20 @@ function requiredScreenshotNames() {
 }
 
 function themePalette(mode) {
+  if (mode === "white") {
+    return {
+      mode: "white",
+      background: "#ffffff",
+      foreground: "#000000",
+      accent: "#0057d8",
+      urgent: "#c31432"
+    }
+  }
   if (mode === "light") {
     return {
       mode: "light",
       background: "#f4f4f5",
       foreground: "#18181b",
-      muted: "#52525b",
       border: "#d4d4d8",
       urgent: "#b91c1c"
     }
@@ -37,7 +46,6 @@ function themePalette(mode) {
     mode: "dark",
     background: "#18181b",
     foreground: "#e4e4e7",
-    muted: "#a1a1aa",
     border: "#3f3f46",
     urgent: "#f87171"
   }
