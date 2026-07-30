@@ -51,9 +51,32 @@ tuning.
 This paragraph names those characters by code point rather than by glyph on
 purpose: a document that defines the gate should survive it.
 
-A word-list approach was tried first and rejected: it under-reported by more
-than an order of magnitude because unaccented Portuguese passes straight
-through it.
+### 3.1.1 What the rule does not catch
+
+A Portuguese-word-list approach was tried first. It reported an order of
+magnitude fewer lines, which is why the character rule is the primary signal —
+but the two methods fail in opposite directions, and the character rule has a
+blind spot that must be stated rather than glossed over: **unaccented
+Portuguese passes straight through it.**
+
+Measured on the files this design translates:
+
+| File | Lines the rule catches | Portuguese lines it cannot see |
+| --- | --- | --- |
+| `CHANGELOG.md` | 206 | 16 |
+| `docs/adr/0001..0003` | 14 | 0 |
+
+So the rule finds roughly 93% of the Portuguese in the worst file and all of it
+in the rest. Two consequences follow, and both are requirements, not caveats:
+
+1. **The one-time cleanup is done by reading, not by chasing the gate.** A
+   translator who stops when the test turns green leaves those sixteen lines
+   behind. The implementation plan states this explicitly and pairs the gate
+   with a word-list sweep as a second pass.
+2. **For regression prevention the blind spot is tolerable.** New Portuguese
+   prose entering the repository is a paragraph, not a line, and a Portuguese
+   paragraph carries an accent with near-certainty. The rule is a tripwire
+   against drift, not a translator.
 
 ### 3.2 Configuration
 

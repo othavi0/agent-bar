@@ -316,12 +316,26 @@ Expected: FAIL on `active_files_contain_no_non_english_letters`, listing the `CH
 
 - [ ] **Step 3: Translate `CHANGELOG.md`**
 
+**Read every line of the file. Do not let the gate decide when you are finished.**
+The gate detects alphabetic non-ASCII characters, so it sees accented
+Portuguese and is blind to unaccented Portuguese. Measured on this file:
+206 lines carry an accent and 16 do not, such as
+
+```
+- Clique esquerdo com settings aberto volta ao usage sem fechar o popup.
+```
+
+which the gate will never report. Translating until the test turns green
+would leave those sixteen in place and call the job done. Green is necessary,
+not sufficient.
+
 Work release by release, oldest first, so a partial run is still coherent. Rules:
 
 - Version headings, dates, links, code spans, file paths, command names and commit-type prefixes stay byte-identical.
 - Translate only the prose describing what changed.
 - Do not merge, reorder, reword-for-brevity, or delete entries. This is a published record; the meaning must survive, and nothing else may.
-- After each release section, re-run the scan to see the remaining count fall:
+- After each release section, re-run the scan to watch the accented count fall,
+  while still reading every line of the section you just finished:
   ```bash
   cargo test --test active_language 2>&1 | rg -c 'CHANGELOG.md:'
   ```
@@ -330,6 +344,17 @@ Work release by release, oldest first, so a partial run is still coherent. Rules
 
 Run: `cargo test --test active_language`
 Expected: PASS, 3 tests.
+
+Then confirm what the gate cannot: search for unaccented Portuguese that
+survived the pass.
+
+```bash
+rg -in '\b(nao|voce|para|que|uma|dos|das|pelo|pela|arquivo|erro|atualizar|instalar|usuario|falhou|verifique|remover|adicionar|corrigir|quando|sobre|agora|ainda)\b' CHANGELOG.md
+```
+
+Expected: only false positives — `com` inside a hostname, `para` inside an
+English word broken across a line, and similar. Every genuine Portuguese hit
+is a line you missed; translate it and run again.
 
 - [ ] **Step 5: Update the contract in `CLAUDE.md`**
 
