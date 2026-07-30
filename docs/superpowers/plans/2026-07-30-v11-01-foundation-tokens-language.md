@@ -732,12 +732,13 @@ In `tests/qml/tst_Tokens.qml`, reduce `allowedRawAlphaFiles()` to:
 
 ```qml
   function allowedRawAlphaFiles() {
-    return [
-      "assets/omarchy/components/UsageWindow.qml",   // usage track, Task 7
-      "assets/omarchy/components/ConfirmDialog.qml"  // modal scrim
-    ]
+    return ["assets/omarchy/components/UsageWindow.qml"] // usage track, Task 7
   }
 ```
+
+`ConfirmDialog.qml` is already absent from that list. Task 5 bound its scrim to the
+host token `Color.menu.scrim`, which removed the file's last raw alpha, so it left
+the exemption early. Do not add it back.
 
 - [ ] **Step 2: Run the suite and verify it fails**
 
@@ -810,8 +811,11 @@ The track background has no host token: it is not control chrome, it is a data s
 In `tests/qml/tst_Tokens.qml`, reduce the exemption to the scrim alone and add a declaration-count assertion:
 
 ```qml
+  // Empty: after this task no file keeps a raw foreground alpha. ConfirmDialog
+  // left the list in Task 5 when its scrim bound to Color.menu.scrim, and the
+  // usage track is the last holdout.
   function allowedRawAlphaFiles() {
-    return ["assets/omarchy/components/ConfirmDialog.qml"] // modal scrim
+    return []
   }
 
   // The track tint has no host token, so it gets a name and exactly one
@@ -990,7 +994,7 @@ git commit -m "test: bind theme fixture to real token"
 
 - `cargo test` reports 286 passing; `qmltestrunner` reports 0 failed.
 - `rg -c 'Qt.darker' assets/omarchy` returns nothing.
-- `rg -c 'Qt.rgba' assets/omarchy` matches only `ConfirmDialog.qml`.
+- `rg -c 'Qt.rgba' assets/omarchy` returns nothing: no file keeps a raw foreground alpha.
 - `tests/qml/TestPalette.js` no longer defines a `muted` colour anywhere.
 - No tracked file outside `docs/superpowers/**` contains an alphabetic non-ASCII character, except the one allowlisted fixture.
 - `A11Y-013` and `TEST-029` still pass, untouched.
