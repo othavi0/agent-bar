@@ -49,7 +49,7 @@ Item {
       radius: height / 2
       color: "transparent"
       border.width: 1
-      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.25)
+      border.color: Style.normalBorderColor
       Text {
         id: planText
         anchors.centerIn: parent

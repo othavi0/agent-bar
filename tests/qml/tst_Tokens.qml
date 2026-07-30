@@ -84,18 +84,34 @@ TestCase {
     ]
   }
 
+  // Per-file exceptions to the two-level rule: a raw alpha with no host
+  // token, declared once with its reason so the strict rule keeps applying
+  // everywhere else. An undeclared third value still fails — exceptions only
+  // subtract the exact values listed, only for the file listed.
+  function textAlphaExceptions() {
+    return {
+      // Modal scrim: full-screen wash, not text or control chrome (Task 5).
+      "assets/omarchy/components/ConfirmDialog.qml": ["0.45"]
+    }
+  }
+
   // The "exactly two levels, no third value" contract that Tasks 5-8 build
   // on. Values are extracted from the call sites themselves, not hardcoded,
   // so a future task introducing a third alpha value fails here. Does not
   // assert a call-site count: later plans legitimately add/remove sites.
   function test_no_third_alpha_value() {
     var files = tokenScannedFiles()
+    var exceptions = textAlphaExceptions()
     var seen = {}
     for (var i = 0; i < files.length; i++) {
       var code = read(files[i]).replace(/\/\/[^\n]*/g, "")
       var values = alphaArgValues(code)
-      for (var j = 0; j < values.length; j++)
+      var excepted = exceptions[files[i]] || []
+      for (var j = 0; j < values.length; j++) {
+        if (excepted.indexOf(values[j]) >= 0)
+          continue
         seen[values[j]] = true
+      }
     }
     var distinct = Object.keys(seen).sort()
     compare(distinct.join(","), "0.55,0.72",
@@ -148,5 +164,29 @@ TestCase {
            data.tag + ": supporting " + supporting + " must be under primary " + primary)
     verify(meta < supporting,
            data.tag + ": meta " + meta + " must be under supporting " + supporting)
+  }
+
+  // Raw foreground alphas are allowed only where no host token exists.
+  // Every other surface must read the theme's state vocabulary.
+  function allowedRawAlphaFiles() {
+    return [
+      "assets/omarchy/components/UsageWindow.qml",   // usage track, Task 7
+      "assets/omarchy/components/ConfirmDialog.qml", // modal scrim
+      "assets/omarchy/ProviderView.qml",             // separators, Task 6
+      "assets/omarchy/SettingsView.qml",             // separators, Task 6
+      "assets/omarchy/MaintenanceView.qml"           // separators, Task 6
+    ]
+  }
+
+  function test_control_chrome_uses_style_tokens() {
+    var files = tokenScannedFiles()
+    var allowed = allowedRawAlphaFiles()
+    for (var i = 0; i < files.length; i++) {
+      if (allowed.indexOf(files[i]) >= 0)
+        continue
+      var code = read(files[i]).replace(/\/\/[^\n]*/g, "")
+      verify(code.indexOf("Qt.rgba(") < 0,
+             files[i] + " still hardcodes an alpha; use a Style state token")
+    }
   }
 }

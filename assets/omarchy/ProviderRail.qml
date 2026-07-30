@@ -85,9 +85,9 @@ Item {
     id: frame
     anchors.fill: parent
     anchors.margins: root.outerMargin
-    color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.05)
+    color: Style.normalFill
     border.width: 1
-    border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22)
+    border.color: Style.normalBorderColor
     radius: Style.cornerRadius
     clip: true
   }
@@ -143,11 +143,11 @@ Item {
           anchors.fill: parent
           radius: Style.cornerRadius
           color: railItem.selected
-              ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+              ? Style.selectedFill
               : "transparent"
           border.width: railItem.selected ? 1 : 0
           border.color: railItem.selected
-              ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.3)
+              ? Style.selectedBorderColor
               : "transparent"
         }
 
@@ -205,7 +205,7 @@ Item {
         anchors.fill: parent
         radius: Style.cornerRadius
         color: (settingsItem.activeFocus || settingsMouse.containsMouse)
-            ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+            ? Style.hoverFill
             : "transparent"
         border.width: settingsItem.activeFocus ? 1 : 0
         border.color: Color.accent

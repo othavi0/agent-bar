@@ -22,13 +22,18 @@ Item {
   signal canceled()
   signal confirmed()
 
+  // Full-screen wash behind the card. Not control chrome and not text, so it
+  // carries no host token — declared once here with the one raw alpha this
+  // file is allowed (see tst_Tokens.qml textAlphaExceptions).
+  readonly property color scrimColor: Util.alpha(Color.foreground, 0.45)
+
   anchors.fill: parent
   visible: opened
   z: 100
 
   Rectangle {
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.45)
+    color: root.scrimColor
     MouseArea {
       anchors.fill: parent
       onClicked: root.canceled()
@@ -43,9 +48,12 @@ Item {
     radius: Style.cornerRadius
     color: Color.popups.background
     border.width: 1
+    // Destructive keeps its urgent-tinted border (UX-044: danger actions stay
+    // visually separated); a Style state token would erase that signal, so
+    // only the non-destructive branch moves to the shared token.
     border.color: root.destructive
-        ? Qt.rgba(Color.urgent.r, Color.urgent.g, Color.urgent.b, 0.55)
-        : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.28)
+        ? Util.alpha(Color.urgent, 0.55)
+        : Style.normalBorderColor
 
     MouseArea {
       anchors.fill: parent

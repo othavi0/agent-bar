@@ -28,19 +28,19 @@ Column {
       width: parent.width * 0.55
       height: Style.space(14)
       radius: Style.cornerRadius
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      color: Style.selectedFill
     }
     Rectangle {
       width: parent.width * 0.9
       height: Style.space(12)
       radius: Style.cornerRadius
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+      color: Style.hoverFill
     }
     Rectangle {
       width: parent.width * 0.7
       height: Style.space(12)
       radius: Style.cornerRadius
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+      color: Style.hoverFill
     }
   }
 
