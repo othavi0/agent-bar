@@ -21,6 +21,7 @@ TestCase {
 
   property string widgetUrl: "file://" + repoRoot + "/assets/omarchy/BarWidget.qml"
   property string chipUrl: "file://" + repoRoot + "/assets/omarchy/components/ProviderChip.qml"
+  property string coreViewUrl: "file://" + repoRoot + "/assets/omarchy/CoreView.js"
 
   // Minimal shell stand-in with Quattro serviceFor API.
   Item {
@@ -384,7 +385,7 @@ TestCase {
       bar: fakeBar,
       providerId: "claude",
       displayName: "Claude",
-      percentText: "90%",
+      numeralText: "90%",
       tooltipText: "Claude · 90% · ready"
     })
     verify(chip !== null)
@@ -402,7 +403,7 @@ TestCase {
     var chip = providerChipComp.createObject(testCase, {
       bar: fakeBar,
       providerId: "codex",
-      percentText: "80%"
+      numeralText: "80%"
     })
     var seen = -1
     chip.pressed.connect(function (button) { seen = button })
@@ -429,30 +430,58 @@ TestCase {
     }
   }
 
-  function test_source_has_click_protocol_no_wheel() {
+  function test_source_chip_is_widgetbutton_no_wheel() {
     var xhr = new XMLHttpRequest()
     xhr.open("GET", chipUrl, false)
     xhr.send()
-    var src = String(xhr.responseText)
-    verify(src.indexOf("registerClickTarget") >= 0)
-    verify(src.indexOf("unregisterClickTarget") >= 0)
-    verify(src.indexOf("function triggerPress") >= 0)
-    verify(src.indexOf("onWheel") < 0)
+    var chip = String(xhr.responseText)
+    // UX-010: the protocol is inherited from WidgetButton — exactly one
+    // registration, owned by the host component. Our source must not add a
+    // second protocol layer or a second mouse layer.
+    verify(chip.indexOf("WidgetButton {") >= 0)
+    verify(chip.indexOf("registerClickTarget") < 0)
+    verify(chip.indexOf("MouseArea") < 0)
+    // UX-009: wheel stays a no-op — no handler in our source.
+    verify(chip.indexOf("onWheel") < 0)
+    verify(chip.indexOf("wheelMoved") < 0)
+    // A11Y-013: no plugin-authored motion (tst_Accessibility also guards).
+    verify(chip.indexOf("Behavior") < 0)
+    // §5: fixed-width numeral measured on "100%", host icon canvas, tint.
+    verify(chip.indexOf("TextMetrics") >= 0)
+    verify(chip.indexOf('"100%"') >= 0)
+    verify(chip.indexOf("Style.bar.iconCanvas") >= 0)
+    verify(chip.indexOf("MultiEffect") >= 0)
+    verify(chip.indexOf("colorization") >= 0)
+    verify(chip.indexOf("width: 13") < 0)
+    verify(chip.indexOf("⌛") < 0)
 
     xhr.open("GET", widgetUrl, false)
     xhr.send()
-    src = String(xhr.responseText)
-    verify(src.indexOf("ProviderChip") >= 0)
-    verify(src.indexOf("refreshAll") >= 0)
-    verify(src.indexOf("openSettings") >= 0)
-    verify(src.indexOf("requestPopup") >= 0)
+    var widget = String(xhr.responseText)
+    verify(widget.indexOf("ProviderChip") >= 0)
+    verify(widget.indexOf("refreshAll") >= 0)
+    verify(widget.indexOf("openSettings") >= 0)
+    verify(widget.indexOf("requestPopup") >= 0)
     // UX-021: Popup is a direct child (Loader+Component left KeyboardPanel
     // required props unset → no panel on chip click).
-    verify(src.indexOf("sourceComponent") < 0)
-    verify(src.indexOf("Popup {") >= 0)
+    verify(widget.indexOf("sourceComponent") < 0)
+    verify(widget.indexOf("Popup {") >= 0)
     // UX-003: no product brand chip label
-    verify(src.indexOf("\"AB\"") < 0)
-    verify(src.indexOf("Agent Bar") < 0)
+    verify(widget.indexOf("\"AB\"") < 0)
+    verify(widget.indexOf("Agent Bar") < 0)
+    // Task 1 functions actually wired:
+    verify(widget.indexOf("chipNumeralText") >= 0)
+    verify(widget.indexOf("iconTinted") >= 0)
+    verify(widget.indexOf("iconOpticalScale") >= 0)
+  }
+
+  // Plan 03 extends this repo-wide when the popup banner drops its ⌛.
+  function test_chip_path_has_no_emoji_hourglass() {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", coreViewUrl, false)
+    xhr.send()
+    var core = String(xhr.responseText)
+    verify(core.indexOf("⌛") < 0)
   }
 
   function test_icon_files_exist_with_approved_names() {
@@ -482,13 +511,19 @@ TestCase {
     ProviderChipHost {}
   }
 
-  // Inline host mirrors ProviderChip.qml without loading relative file URL issues.
+  // Inline host mirrors WidgetButton's click-target/triggerPress contract
+  // (registerClickTarget/unregisterClickTarget/triggerPress) plus
+  // ProviderChip's own visual props, since the real ProviderChip.qml (built
+  // on the host WidgetButton) cannot be instantiated here \u2014 qs.Commons/qs.Ui
+  // are unresolvable in this pure Qt 6 runner. It exists to prove
+  // BarWidget-side routing (refreshAll/openSettings/requestPopup), not the
+  // chip's rendering.
   component ProviderChipHost: Item {
     id: chipRoot
     property var bar: null
     property string providerId: ""
     property string displayName: ""
-    property string percentText: "\u2014"
+    property string numeralText: "\u2014"
     property string stateCue: ""
     property string tooltipText: ""
     property var registeredBar: null

@@ -108,8 +108,8 @@ function chipPercentText(provider, metric) {
 
 // UX-012: text cue beyond color for stale/error. No leading space — the
 // chip separates cue from numeral with layout spacing (visual design §5).
-// 󰅐 is U+F0150 from the bar's Nerd Font family, replacing the emoji-font
-// ⌛ that broke the monospace surface.
+// 󰅐 is U+F0150 from the bar's Nerd Font family, replacing the old
+// emoji-font hourglass glyph that broke the monospace surface.
 function chipStateCue(provider) {
   if (!provider)
     return ""
