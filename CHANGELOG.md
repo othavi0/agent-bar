@@ -104,513 +104,528 @@ Authored release notes live at `docs/releases/10.0.0.md`.
 
 ## [9.0.0] - 2026-07-21
 
-Redesign completo do popup (Omarchy-shell) + Waybar rebaixada a tier
-legado. Marco de produto — sem mudança de contrato JSON.
+Complete popup redesign (Omarchy-shell) + Waybar demoted to legacy tier.
+Product milestone — no JSON contract change.
 
 ### Added
-- **Widget.qml redesenhado**: hero % por provider igual ao chip, título
-  `agent-bar` + "há Xm" relativo, ações de topo viram botões Unicode
-  reais (↻ refresh, ⚙︎ settings, ❯ abrir TUI) em vez de texto/link. Um
-  cartão por provider, grade de colunas fixas (rótulo · barra · % ·
-  reset), countdown (`1h 46m · 18:30` / `7d 0h · seg 16:43`) em toda
-  janela. Largura `540` (antes `370`), igual nos dois modos.
-- **`extra` visível no popup**: créditos do Amp (`$X · replenish`),
-  sessões/turnos/modelo do Grok, extra usage do Claude quando existir —
-  antes só existiam no `--format json`, nunca chegavam à tela.
-- **Motion no popup**: barras preenchem na abertura (M1, stagger),
-  `↻` gira durante o fetch (M2), hover nos botões (M4) — gated por
-  `menu.animations` (exposto read-only em `config show` como
-  `menuAnimations`).
+- **Redesigned Widget.qml**: hero % per provider matching the chip,
+  `agent-bar` title + a relative last-updated label (elapsed minutes), top
+  actions become real Unicode buttons (↻ refresh, ⚙︎ settings, ❯ open TUI)
+  instead of text/link. One card per provider, fixed-column grid
+  (label · bar · % · reset), countdown (`1h 46m · 18:30` /
+  `7d 0h · seg 16:43`) across every window. Width `540` (previously `370`),
+  the same in both modes.
+- **`extra` visible in the popup**: Amp credits (`$X · replenish`),
+  Grok's sessions/turns/model, Claude's extra usage when present —
+  previously these only existed in `--format json`, never reaching the
+  screen.
+- **Popup motion**: bars fill on open (M1, stagger), `↻` spins during the
+  fetch (M2), button hover (M4) — gated by `menu.animations` (exposed
+  read-only in `config show` as `menuAnimations`).
 - **`windowKind`** (`"fiveHour" | "sevenDay" | "daily" | "context" |
-  "other"`) em `QuotaWindow`, decidido uma vez no Rust por cada
-  provider; dedup display-level (`(windowKind, resetsAt, remaining)`)
-  consumido pela TUI e por Widget.qml — some o "Weekly" triplicado do
-  Codex no plano Plus.
-- **Countdown e fuso local na TUI**: `fmt_reset` do Detail passa a usar
-  `format_reset_time`/`format_eta` (antes fatiava o ISO em UTC cru, sem
-  contagem regressiva).
-- Settings do popup ganham Providers (toggle + reordenar), Exibição
-  (segmentado remaining/used + prévia ao vivo da barra) e Alertas &
-  atualização (notify + intervalo) como painéis próprios.
-- **`platform::detect()`** (`src/platform.rs`) único ponto de decisão
-  Omarchy/Waybar, usado por `setup`, `update` (os dois ramos) e pelo Save
-  da TUI Config — nenhum dos três cria mais `~/.config/waybar/` do zero
-  numa máquina Omarchy-only.
-- **`agent-bar update` reinstala o plugin Omarchy** quando o shell é
-  detectado, eliminando o drift binário↔QML que antes exigia rodar
-  `setup` manualmente. `doctor` ganhou checagem de versão do manifest
-  instalado vs binário.
-- Módulo `src/waybar/` agrupando o contrato Waybar (antigo
-  `waybar_contract.rs`/`waybar_integration.rs`) como tier legado isolado.
+  "other"`) on `QuotaWindow`, decided once in Rust per provider;
+  display-level dedup (`(windowKind, resetsAt, remaining)`) consumed by
+  the TUI and by Widget.qml — makes the tripled "Weekly" on Codex's Plus
+  plan disappear.
+- **Countdown and local timezone in the TUI**: Detail's `fmt_reset` now
+  uses `format_reset_time`/`format_eta` (previously it sliced the raw
+  UTC ISO string, with no countdown).
+- Popup settings gain Providers (toggle + reorder), Display (segmented
+  remaining/used + live bar preview), and Alerts & update (notify +
+  interval) as their own panels.
+- **`platform::detect()`** (`src/platform.rs`) the single Omarchy/Waybar
+  decision point, used by `setup`, `update` (both branches), and TUI
+  Config's Save — none of the three creates `~/.config/waybar/` from
+  scratch anymore on an Omarchy-only machine.
+- **`agent-bar update` reinstalls the Omarchy plugin** when the shell is
+  detected, eliminating the binary↔QML drift that previously required
+  manually running `setup`. `doctor` gained a check of the installed
+  manifest version vs the binary.
+- `src/waybar/` module grouping the Waybar contract (formerly
+  `waybar_contract.rs`/`waybar_integration.rs`) as an isolated legacy
+  tier.
 
 ### Changed
-- **Fix do mislabeling do Codex**: `build_model_windows` não força mais
-  `primary→fiveHour`/`secondary→sevenDay` quando a classificação diverge
-  — uma janela fora de tolerância vira `other` com rótulo pela duração
-  real (ex.: "1h window").
-- **Settings mode do popup**: salvar passa a ser **só pelo botão** — o
-  atalho de teclado `s` para salvar foi removido; o rodapé de dicas em
-  texto vira botões clicáveis de verdade.
-- Migração de settings **v2 → v3**: `waybar.show_percentage` é dropada
-  silenciosamente e o arquivo é regravado na versão nova.
-- TUI Config esconde os campos exclusivos de Waybar (separadores,
-  signal, intervalo do Waybar) quando `platform::detect()` reporta
-  Omarchy-only.
-- `docs/waybar-contract.md` e `README.md` marcam Waybar como **tier
-  legado**: funciona, recebe fix, não recebe feature nova.
+- **Fixed Codex mislabeling**: `build_model_windows` no longer forces
+  `primary→fiveHour`/`secondary→sevenDay` when classification diverges
+  — a window outside tolerance becomes `other` with a label from its
+  real duration (e.g. "1h window").
+- **Popup settings mode**: saving is now **button-only** — the `s`
+  keyboard shortcut for saving was removed; the text hint footer becomes
+  real clickable buttons.
+- Settings migration **v2 → v3**: `waybar.show_percentage` is silently
+  dropped and the file is rewritten at the new version.
+- TUI Config hides the Waybar-exclusive fields (separators, signal,
+  Waybar interval) when `platform::detect()` reports Omarchy-only.
+- `docs/waybar-contract.md` and `README.md` mark Waybar as **legacy
+  tier**: it works, receives fixes, gets no new features.
 
 ### Removed
-- Legado morto: variante `Command::Terminal`,
+- Dead legacy: `Command::Terminal` variant,
   `waybar_contract::get_all_provider_ids`, `install::ensure_amp_cli`,
-  `amp_cli::AMP_INSTALL_COMMAND` duplicada, dependência `tokio-util`,
-  `ConfigField::settings_key()`, 7 variantes órfãs de `Icon`.
+  duplicated `amp_cli::AMP_INSTALL_COMMAND`, the `tokio-util` dependency,
+  `ConfigField::settings_key()`, 7 orphaned `Icon` variants.
 
 ### Breaking
-- Nenhuma no contrato `--format json` — `windowKind` é aditivo,
-  `schemaVersion` continua `1`.
+- None to the `--format json` contract — `windowKind` is additive,
+  `schemaVersion` stays `1`.
 
 ## [8.5.0] - 2026-07-21
 
 ### Added
-- **Settings nativo no omarchy-shell.** Clique direito no widget abre o
-  mesmo popup em modo settings (estilo `model-usage`): toggles por
-  provider, reordenação ↑↓, display remaining/used, notify on/off e
-  intervalo de refresh. Esquerdo = usage (popup mais largo); meio =
-  refresh. Link “Abrir menu (TUI)” no rodapé; a TUI completa continua em
+- **Native settings in omarchy-shell.** Right click on the widget opens
+  the same popup in settings mode (`model-usage`-style): per-provider
+  toggles, ↑↓ reordering, remaining/used display, notify on/off, and
+  refresh interval. Left = usage (wider popup); middle = refresh. A
+  “Abrir menu (TUI)” link in the footer; the full TUI still lives at
   `agent-bar menu`.
-- **`agent-bar config show` / `config apply`.** Mini-API JSON do subset
-  editável (`providers`, `providerOrder`, `displayMode`, `notify`) em
-  `settings.json`, com normalização e validação. O plugin grava o
-  intervalo só via `updateEntryInline` no `shell.json` (dual-write).
-  `config apply` **não** recarrega Waybar.
+- **`agent-bar config show` / `config apply`.** JSON mini-API for the
+  editable subset (`providers`, `providerOrder`, `displayMode`, `notify`)
+  of `settings.json`, with normalization and validation. The plugin
+  writes the interval only via `updateEntryInline` in `shell.json`
+  (dual-write). `config apply` **does not** reload Waybar.
 
 ### Changed
-- **Help da CLI enxuto.** Vitrine: menu, status, config, setup, update,
-  uninstall, doctor. Internos (`action-right`, `assets`, `export`,
-  `menu-font`) continuam parseáveis mas fora do help. `remove` vira
-  alias de `uninstall --yes`; `-t`/`--terminal` vira alias de `status`.
+- **Trimmed CLI help.** Showcase: menu, status, config, setup, update,
+  uninstall, doctor. Internal commands (`action-right`, `assets`,
+  `export`, `menu-font`) remain parseable but stay out of help. `remove`
+  becomes an alias for `uninstall --yes`; `-t`/`--terminal` becomes an
+  alias for `status`.
 - **Docs** (`commands.md`, `omarchy-shell.md`, `architecture.md`, README)
-  alinhados aos clicks Omarchy e à taxonomia da CLI.
+  aligned with the Omarchy clicks and the CLI taxonomy.
 
 ### Fixed
-- Clique esquerdo com settings aberto volta ao usage sem fechar o popup.
-- Barreira de flush do stdout no `config apply` do QML (evita race
-  `onExited` vs `StdioCollector`).
+- Left click with settings open goes back to usage without closing the
+  popup.
+- stdout flush barrier in the QML `config apply` (avoids an `onExited`
+  vs `StdioCollector` race).
 
 ## [8.4.1] - 2026-07-21
 
 ### Fixed
-- **Widget omarchy-shell:** `refreshIntervalSec` agora respeita também o teto
-  do schema (3600s) quando o `shell.json` é editado à mão — antes só o piso
-  (30s) era aplicado.
+- **omarchy-shell widget:** `refreshIntervalSec` now also respects the
+  schema ceiling (3600s) when `shell.json` is edited by hand — previously
+  only the floor (30s) was applied.
 
 ### Changed
-- **Publicação automática no AUR.** O workflow de release ganhou o job
-  `publish-aur`: a cada GitHub Release, o CI preenche
-  `pkgver`/`pkgrel`/`sha256sums` e pusha o `agent-bar-bin` para o AUR
-  (versão nova → `pkgrel=1`; mesma versão com packaging alterado →
-  `pkgrel+1`; sem mudança → skip). `pkgdesc` e mensagens de
-  install/upgrade do pacote agora citam o omarchy-shell.
-- Dedup interno do scan de PATH pela CLI `omarchy`
+- **Automatic AUR publishing.** The release workflow gained a
+  `publish-aur` job: on every GitHub Release, CI fills in
+  `pkgver`/`pkgrel`/`sha256sums` and pushes `agent-bar-bin` to the AUR
+  (new version → `pkgrel=1`; same version with changed packaging →
+  `pkgrel+1`; no change → skip). The package's `pkgdesc` and
+  install/upgrade messages now mention omarchy-shell.
+- Internal dedup of the PATH scan for the `omarchy` CLI
   (`omarchy_integration::cli_on_path`).
 
 ## [8.4.0] - 2026-07-21
 
 ### Added
-- **Suporte ao Omarchy 4 (omarchy-shell/Quickshell).** O Omarchy 4 substituiu
-  a Waybar pelo omarchy-shell; o agent-bar agora se instala como bar-widget
-  plugin nativo de terceiro (`agent-bar.usage`): um chip por provider
-  (ícone + % restante, cores do tema do shell, severidade espelhando o TUI)
-  e popup nativo com janelas primária/secundária, breakdown por modelo e
-  reset times. Clique esquerdo abre o popup, direito abre o TUI, meio força
-  refresh. `agent-bar setup` detecta o bar disponível (Waybar, omarchy-shell
-  ou ambos) e escreve o plugin como drop-in em
-  `~/.config/omarchy/plugins/agent-bar.usage/` — arquivos QML embutidos no
-  binário, version-locked com o schema de `--format json`.
-  `uninstall`/`remove` desregistram e apagam o drop-in; `update` avisa para
-  re-rodar `setup` quando o drop-in existe. Flag nova
-  `--omarchy-plugins-dir <path>` (setup, para testes/CI). Docs:
+- **Omarchy 4 support (omarchy-shell/Quickshell).** Omarchy 4 replaced
+  Waybar with omarchy-shell; agent-bar now installs as a native third-party
+  bar-widget plugin (`agent-bar.usage`): one chip per provider (icon + %
+  remaining, shell-theme colors, severity mirroring the TUI) and a native
+  popup with primary/secondary windows, per-model breakdown, and reset
+  times. Left click opens the popup, right click opens the TUI, middle click
+  forces a refresh. `agent-bar setup` detects the available bar (Waybar,
+  omarchy-shell, or both) and writes the plugin as a drop-in at
+  `~/.config/omarchy/plugins/agent-bar.usage/` — QML files embedded in the
+  binary, version-locked to the `--format json` schema.
+  `uninstall`/`remove` unregister and delete the drop-in; `update` warns to
+  re-run `setup` when the drop-in exists. New flag
+  `--omarchy-plugins-dir <path>` (setup, for tests/CI). Docs:
   `docs/omarchy-shell.md`.
-- **`severity` documentado no contrato JSON** (`docs/json-output.md`): campo
-  opcional de `Window`, vindo da API do provider, com fallback de threshold
-  local (≥60/30/10) para consumidores.
+- **`severity` documented in the JSON contract** (`docs/json-output.md`):
+  optional `Window` field, coming from the provider's API, with a local
+  threshold fallback (≥60/30/10) for consumers.
 
 ### Fixed
-- Integração Waybar intocada; contrato existente segue como estava.
+- Waybar integration untouched; the existing contract stays as it was.
 
 ## [8.3.0] - 2026-07-21
 
 ### Fixed
-- **Falso "disconnected" com usuário logado.** O Grok considera logado quem
-  tem `key` no `auth.json` — o access token de 6h (renovado pelo Grok CLI via
-  refresh token) não desloga mais a barra. Timeout do `amp usage` virou erro
-  transitório em vez de "Not logged in".
+- **False "disconnected" with a logged-in user.** Grok considers a user
+  logged in when `auth.json` has a `key` — the 6h access token (renewed by
+  the Grok CLI via refresh token) no longer logs the bar out. An
+  `amp usage` timeout became a transient error instead of "Not logged in".
 
 ### Added
-- **Fallback de cache stale:** em erro transitório (timeout de rede, token
-  expirado do Claude), a barra serve o último dado bom do cache com o aviso
-  `⚠️ Cached data — {motivo}` no tooltip, em vez do ícone de desconectado.
-  `disconnected` ficou reservado a logout real. Novo campo opcional
-  `staleReason` no `--format json` (docs/json-output.md).
-- **Amp:** ETA de reset diário (meia-noite UTC, regra do frontend oficial) no
-  free tier, indicador `↻ auto-replenish` e fallback de linhas cruas do
-  servidor no tooltip para formatos futuros do `amp usage`.
+- **Stale cache fallback:** on a transient error (network timeout, expired
+  Claude token), the bar serves the last good cached data with the warning
+  `⚠️ Cached data — {motivo}` in the tooltip, instead of the disconnected
+  icon. `disconnected` is now reserved for a real logout. New optional
+  `staleReason` field in `--format json` (docs/json-output.md).
+- **Amp:** daily reset ETA (midnight UTC, the official frontend's rule) on
+  the free tier, an `↻ auto-replenish` indicator, and a fallback to the
+  server's raw lines in the tooltip for future `amp usage` formats.
 
 ## [8.2.2] - 2026-07-19
 
 ### Changed
-- **Standalone `agent-bar update`** re-copia icons e o terminal helper para os
-  paths da Waybar (`~/.config/waybar/agent-bar/icons` e `…/scripts`) após
-  baixar o release. Não re-patcha config/modules/CSS (use `setup` se a
-  integração mudou).
+- **Standalone `agent-bar update`** now re-copies icons and the terminal
+  helper to the Waybar paths (`~/.config/waybar/agent-bar/icons` and
+  `…/scripts`) after downloading the release. Does not re-patch
+  config/modules/CSS (use `setup` if the integration changed).
 
 ## [8.2.1] - 2026-07-19
 
 ### Fixed
-- **Ícone Waybar do Grok** — substituído o placeholder “G” pelo logomark
-  oficial `Grok_Logomark_Light` do pack de brand xAI
-  (`SpaceXAI_Grok_Assets.zip`). Sem mudança de CSS/contrato de arquivo
+- **Grok's Waybar icon** — replaced the “G” placeholder with the official
+  `Grok_Logomark_Light` logomark from the xAI brand pack
+  (`SpaceXAI_Grok_Assets.zip`). No CSS/file-contract change
   (`grok-icon.svg`).
 
 ## [8.2.0] - 2026-07-17
 
-Provider **Grok** (Grok Build CLI) na barra e na TUI.
+**Grok** provider (Grok Build CLI) in the bar and the TUI.
 
 ### Added
-- **Provider Grok (Grok Build CLI)** — OAuth em `~/.grok/auth.json` e
-  `signals.json` das sessões; o % da barra é **contexto restante da sessão
-  recente** (não cota de plano xAI). Login via `grok login` na TUI.
-  Módulo Waybar, ícone, builder e fixtures de regressão.
-  **Novos installs** listam `grok` por default; **settings existentes**
-  precisam habilitar em Config (não há auto-inserção).
+- **Grok provider (Grok Build CLI)** — OAuth via `~/.grok/auth.json` and
+  the sessions' `signals.json`; the bar's % is the **remaining context of
+  the recent session** (not an xAI plan quota). Login via `grok login` in
+  the TUI. Waybar module, icon, builder, and regression fixtures.
+  **New installs** list `grok` by default; **existing settings** need to
+  enable it in Config (no auto-insertion).
 
 ## [8.1.0] - 2026-07-17
 
-Fundações de código, hardening de legibilidade e polish da TUI
-(trilhas A/B/C pós-8.0.0).
+Code foundations, readability hardening, and TUI polish (tracks A/B/C
+after 8.0.0).
 
 ### Added
-- Fixtures de regressão do Amp (`tests/fixtures/amp/`) para formatos
-  legado `$X/$Y` e free-tier em `% remaining`.
-- Rótulo dual de tokens nos totais do Detail: principal = input+output,
-  sufixo `(+N cache)` quando há cache.
-- Legenda do chart com indicador `…+N` quando séries não cabem na largura.
-- Discoverability de ajuda: chip `? ajuda` no Detail e hint na borda
-  inferior da moldura.
-- Specs: fundações/confiança, hardening de produto, polish TUI.
+- Amp regression fixtures (`tests/fixtures/amp/`) for the legacy `$X/$Y`
+  format and free-tier `% remaining`.
+- Dual token label in Detail's totals: primary = input+output, suffix
+  `(+N cache)` when cache exists.
+- Chart legend with a `…+N` indicator when series don't fit the width.
+- Help discoverability: `? ajuda` chip in Detail and a hint on the
+  frame's bottom border.
+- Specs: foundations/trust, product hardening, TUI polish.
 
 ### Changed
-- **Codex / TUI update / Detail** modularizados (sem mudança de contrato de
-  produto nos splits).
-- Config da TUI com rótulos humanos (`Provedores`, `Ordem`, `Exibição`,
-  `Câmbio R$`…); chave técnica permanece na dica do campo.
-- Sidebar colapsada usa `≡` / `→` / `⚙` em vez de H/L/C.
-- Chart no Detail usa `Min(6)` em painel estreito (&lt; 72 cols); `Min(9)` no resto.
-- Tokens de cor com contraste ≥4.5:1 sobre o fundo (`Comment`, `Red`,
-  séries do chart).
-- Pricing revalidado contra a tabela oficial Anthropic (2026-07-17).
+- **Codex / TUI update / Detail** modularized (no product-contract change
+  from the splits).
+- TUI config now shows human-readable field labels in Portuguese (at the
+  time) instead of raw setting keys; the technical key still appears in
+  the field's hint.
+- Collapsed sidebar uses `≡` / `→` / `⚙` instead of H/L/C.
+- Detail's chart uses `Min(6)` on narrow panels (&lt; 72 cols); `Min(9)`
+  otherwise.
+- Color tokens with ≥4.5:1 contrast against the background (`Comment`,
+  `Red`, chart series).
+- Pricing revalidated against the official Anthropic table (2026-07-17).
 
 ### Fixed
-- **Amp Free em `% remaining`** (CLI atual): parseava só o formato `$X/$Y`
-  e deixava a janela primary vazia no free tier percentual.
-- Serialização Waybar em falha de serde: nunca mais stdout vazio; payload
-  degradado com `class: agent-bar disconnected`.
-- Docs de arquitetura sem residual TypeScript (`main.rs` / `notify.rs`).
+- **Amp Free in `% remaining`** (current CLI): only parsed the `$X/$Y`
+  format and left the primary window empty in the percentage free tier.
+- Waybar serialization on serde failure: stdout is never empty again;
+  degraded payload with `class: agent-bar disconnected`.
+- Architecture docs no longer carry TypeScript residue (`main.rs` /
+  `notify.rs`).
 
 ## [8.0.0] - 2026-07-11
 
-Redesign completo da TUI (v8) + números confiáveis no usage.
+Complete TUI redesign (v8) + reliable usage numbers.
 
-> **Os números históricos exibidos MUDAM neste update**: o dedup de
-> streaming corrige a contagem de tokens do Claude (a mesma request era
-> somada N vezes — queda esperada de ~1/3 nos totais) e o pricing novo
-> corrige o custo. É correção, não perda de dado.
+> **The historical numbers shown CHANGE in this update**: streaming dedup
+> corrects Claude's token count (the same request was being summed N
+> times — an expected ~1/3 drop in totals) and the new pricing corrects
+> the cost. This is a correction, not data loss.
 
 ### Added
-- **Chart de colunas por modelo** no Detail e no Histórico (escala √,
-  série mínima sempre visível, cores One Dark Turbo validadas CVD).
-- **Histórico com dias expandíveis e sessões**: cada dia abre a lista de
-  sessões (hora, projeto, modelo, tokens, custo), derivadas dos session
-  logs.
-- **Cache persistente de parse** (`usage.redb`): warm-start do histórico
-  cai de ~8s para ~150ms; versão de cache invalida tudo quando a
-  semântica do parse muda; degradação segura em corrupção/lock.
-- **Right-click no módulo Waybar abre a TUI** focada no provider, com
-  cache invalidado antes de rotear.
-- Config da TUI com seções waybar/tui e hint do signal de reload.
-- Preços 2026-07: Fable/Mythos, Sonnet 5 com virada automática do preço
-  introdutório em 2026-09-01, Opus legado (≤4.1) separado do 4.5+, tiers
-  de cache 5m/1h, fast mode (Opus 4.7/4.8) e `inference_geo`.
-- Nomes de modelo humanizados nas telas ("Fable 5", "Opus 4.8"…).
+- **Per-model column chart** in Detail and History (√ scale, minimum
+  series always visible, CVD-validated One Dark Turbo colors).
+- **History with expandable days and sessions**: each day opens the
+  session list (time, project, model, tokens, cost), derived from the
+  session logs.
+- **Persistent parse cache** (`usage.redb`): history warm-start drops from
+  ~8s to ~150ms; the cache version invalidates everything when parse
+  semantics change; safe degradation on corruption/lock.
+- **Right-click on the Waybar module opens the TUI** focused on the
+  provider, with the cache invalidated before routing.
+- TUI config with waybar/tui sections and a reload-signal hint.
+- 2026-07 pricing: Fable/Mythos, Sonnet 5 with automatic switchover from
+  the introductory price on 2026-09-01, legacy Opus (≤4.1) separated from
+  4.5+, 5m/1h cache tiers, fast mode (Opus 4.7/4.8), and `inference_geo`.
+- Humanized model names on screen ("Fable 5", "Opus 4.8"…).
 
 ### Changed
-- **Overview removida — a TUI boota direto no provider** (navegação pela
-  sidebar; sem abas).
-- **`waybar.interval` das settings agora chega ao config do Waybar**;
-  default efetivo 60s — quem nunca configurou o valor verá o intervalo
-  mudar de 120s para 60s.
-- Paleta One Dark Turbo em toda a TUI; gauge sólido com precisão de
-  oitavos.
-- README reescrito em pt-BR; URLs migradas para `othavi0/agent-bar`.
+- **Overview removed — the TUI now boots straight into the provider**
+  (sidebar navigation; no tabs).
+- **The `waybar.interval` setting now reaches the Waybar config**;
+  effective default 60s — anyone who never configured the value will see
+  the interval change from 120s to 60s.
+- One Dark Turbo palette throughout the TUI; solid gauge with eighth-step
+  precision.
+- README rewritten in Portuguese; URLs migrated to `othavi0/agent-bar`.
 
 ### Fixed
-- **Dedup de streaming no parser do Claude**: 1 record por request
-  (a última entrada vence) — antes cada entrada parcial do streaming
-  contava de novo.
-- **Codex logado com token expirado**: resposta de erro JSON-RPC do
-  app-server agora falha rápido em vez de girar até o timeout de 4s.
-- Semana downsampled do chart cobre os 7 dias; empty-state do chart
-  centralizado; colapso limpo em terminal baixo.
-- Flake raro de testes que tocam PATH (serializados via lock comum).
+- **Streaming dedup in the Claude parser**: 1 record per request (the
+  last entry wins) — previously every partial streaming entry counted
+  again.
+- **Codex logged in with an expired token**: the app-server's JSON-RPC
+  error response now fails fast instead of spinning until the 4s timeout.
+- The chart's downsampled week covers all 7 days; chart empty-state
+  centered; clean collapse on short terminals.
+- Rare test flake touching PATH (now serialized via a shared lock).
 
 ## [7.1.0] - 2026-07-02
 
-Leva de ajustes visuais da TUI pós-teste real do redesign.
+Round of TUI visual adjustments after real hands-on testing of the redesign.
 
 ### Added
-- **Painel "Hoje (24h)" no Overview**: quando sobra altura abaixo dos cards,
-  o espaço vira o chart braille das últimas 24h (mesma visualização do
-  Histórico) com totais de hoje/7d no rodapé. Em terminal baixo o layout
-  antigo permanece intacto.
+- **"Hoje (24h)" panel on Overview**: when height remains below the cards,
+  the space becomes the last-24h braille chart (same visualization as
+  History) with today/7d totals in the footer. On short terminals the old
+  layout stays intact.
 
 ### Changed
-- **Animação de transição de tela (coalesce) removida** — reprovada em uso
-  real; a navegação agora troca de tela instantaneamente. Sweep no fetch,
-  pulse crítico e count-up de custo permanecem.
-- Popup de ajuda (`?`) se dimensiona pelo conteúdo (antes era 60%x70% do
-  frame e cortava as seções finais em terminais menores) e escurece a tela
-  por baixo enquanto aberto.
-- Copy da TUI revisada: acentos corrigidos ("instruções", "vírgula",
-  "inválido", "configuração"…) e "Waybar Config" → "Config do Waybar".
+- **Screen-transition animation (coalesce) removed** — it failed in real
+  use; navigation now switches screens instantly. Fetch sweep, critical
+  pulse, and cost count-up remain.
+- The help popup (`?`) now sizes itself to its content (it used to be
+  60%x70% of the frame and cut off the final sections on smaller
+  terminals) and dims the screen underneath while open.
+- TUI copy revised: fixed accent bugs across several Portuguese labels,
+  and localized the "Waybar Config" label to Portuguese.
 
 ### Fixed
-- **"hoje 0 tok" / "sem uso de tokens" durante o carregamento**: enquanto o
-  parse dos session logs não terminou, Histórico, Detail e cards agora dizem
-  "coletando…" em vez de afirmar zero sobre dado que só não chegou.
-- Parse dos session logs roda **uma vez** por refresh (rodava duas — uma pra
-  janela de hoje, outra pra de 7 dias), cortando o tempo de carregamento do
-  histórico pela metade.
-- Rodapé do painel novo usa o mesmo vocabulário de tokens da tabela do
-  Histórico (input+output), evitando totais contraditórios entre telas.
+- **"hoje 0 tok" / "sem uso de tokens" during loading**: while session-log
+  parsing hasn't finished, History, Detail, and the cards now say
+  "coletando…" instead of asserting zero about data that simply hasn't
+  arrived yet.
+- Session-log parsing now runs **once** per refresh (it used to run twice —
+  once for today's window, once for the 7-day one), cutting history
+  load time in half.
+- The new panel's footer uses the same token vocabulary as the History
+  table (input+output), avoiding contradictory totals between screens.
 
 ## [7.0.1] - 2026-07-02
 
-Hotfix de distribuição: `agent-bar update` e `install.sh`.
+Distribution hotfix: `agent-bar update` and `install.sh`.
 
 ### Fixed
-- **`agent-bar update` estava quebrado em todo install standalone** desde a
-  6.0.0: a detecção usava um path de compile-time (`CARGO_MANIFEST_DIR`, o
-  diretório do runner do CI) e caía num modo npm legado tentando ler
-  `package.json` inexistente. A detecção agora parte do binário real
-  (`current_exe`): checkout de dev → fluxo git; instalação de sistema/AUR →
-  orienta o gerenciador de pacotes; standalone → **self-update real** (baixa
-  a última release, verifica sha256 obrigatoriamente, substitui o binário de
-  forma atômica e espelha os assets).
-- **`agent-bar setup` avulso falhava em install standalone** — a resolução
-  de assets ganhou o candidato `~/.local/share/agent-bar` (respeitando
-  `AGENT_BAR_DATA`/`XDG_DATA_HOME`), unificada entre update e setup.
-- **`install.sh` agora migra instalações antigas sozinho**: upgrade
-  automático quando a versão difere (sem exigir `--force`), detecção sã de
-  binários da era TypeScript (que respondiam `--version` com o JSON do
-  módulo), remoção best-effort do pacote npm legado
-  (`@noctuacore/agent-bar`) e de symlinks antigos. `--force` fica só para
-  reinstalar a mesma versão.
+- **`agent-bar update` was broken on every standalone install** since
+  6.0.0: detection used a compile-time path (`CARGO_MANIFEST_DIR`, the CI
+  runner's directory) and fell into a legacy npm mode trying to read a
+  nonexistent `package.json`. Detection now starts from the real binary
+  (`current_exe`): dev checkout → git flow; system/AUR install → points to
+  the package manager; standalone → **real self-update** (downloads the
+  latest release, mandatorily verifies sha256, atomically replaces the
+  binary, and mirrors the assets).
+- **A standalone `agent-bar setup` failed on standalone installs** — asset
+  resolution gained the `~/.local/share/agent-bar` candidate (respecting
+  `AGENT_BAR_DATA`/`XDG_DATA_HOME`), unified between update and setup.
+- **`install.sh` now migrates old installations on its own**: automatic
+  upgrade when the version differs (without requiring `--force`), sound
+  detection of TypeScript-era binaries (which responded to `--version` with
+  the module's JSON), best-effort removal of the legacy npm package
+  (`@noctuacore/agent-bar`) and of old symlinks. `--force` now only serves
+  to reinstall the same version.
 
 ### Changed
-- Caminho de update npm/bun removido por completo (legado morto).
-- Diretório temporário do self-update via `tempfile` (0700, criação
-  atômica) em vez de path manual em `/tmp`.
+- The npm/bun update path removed entirely (dead legacy code).
+- Self-update temporary directory now via `tempfile` (0700, atomic
+  creation) instead of a manual path in `/tmp`.
 
 ## [7.0.0] - 2026-07-02
 
-Redesign completo da TUI do `agent-bar menu` (spec e plano em
-`docs/superpowers/`). O contrato Waybar (módulos, JSON, CSS, tooltips) está
-**intacto** — a mudança é toda no menu interativo.
+Complete redesign of the `agent-bar menu` TUI (spec and plan in
+`docs/superpowers/`). The Waybar contract (modules, JSON, CSS, tooltips) is
+**intact** — the change is entirely in the interactive menu.
 
 ### Added
-- **Navegação por sidebar única** (Geral / providers / Histórico / Login /
-  Waybar) com drill-down por provider — as 4 abas antigas foram removidas.
-- **Suporte completo a mouse**: click seleciona/ativa (sidebar, cards, chips),
-  hover destaca, wheel rola (cards e tabela do histórico).
-- **Cobertura completa do `/usage` do Claude**: provider migrado pros blocos
-  novos `limits[]` + `spend` da API OAuth — sessão, semana, limite semanal
-  por-modelo (nome vindo da API) e extra usage/créditos, com severidade
-  oficial da API e fallback transparente pros campos legados.
-- **Tela Overview** com um card denso por provider: gauges com gradiente por
-  célula, sparkline real de tokens/h (24h), custo do dia e estado de login
-  confiável; estados desenhados pra deslogado/carregando/vazio.
-- **Tela Histórico** com chart braille de área (24h/7d via tecla `t`) e
-  tabela dia × provider × tokens × custo com scroll; linha do Amp com saldo
-  real e nota de ausência de logs locais.
-- **Bucketing horário** do histórico (`usage::buckets`) — gráficos com dado
-  real por hora em vez de 7 pontos diários esticados.
-- **Motion** gated por `menu.animations`: sweep no fetch iniciado pelo
-  usuário, coalesce na troca de tela, pulse/blink em quota crítica (<10%) e
-  count-up no custo (tachyonfx).
-- **Ícones Nerd Font** com fallback Unicode via `glyphMode`.
-- **Fonte configurável do menu**: `menu.fontFamily` (default "IBM Plex Mono")
-  e `menu.fontSize`, aplicadas pelo helper via flags do terminal
-  (alacritty/kitty/foot/ghostty); comando interno `agent-bar menu-font`.
-- Settings novas: `menu.animations`, `menu.fontFamily`, `menu.fontSize`.
+- **Single sidebar navigation** (General / providers / History / Login /
+  Waybar) with per-provider drill-down — the old 4 tabs were removed.
+- **Full mouse support**: click selects/activates (sidebar, cards, chips),
+  hover highlights, wheel scrolls (cards and the history table).
+- **Full coverage of Claude's `/usage`**: provider migrated to the new
+  OAuth API blocks `limits[]` + `spend` — session, week, per-model weekly
+  limit (name from the API), and extra usage/credits, with official API
+  severity and transparent fallback to the legacy fields.
+- **Overview screen** with one dense card per provider: gauges with a
+  per-cell gradient, real tokens/h sparkline (24h), day's cost, and a
+  reliable login state; states designed for logged-out/loading/empty.
+- **History screen** with a braille area chart (24h/7d via the `t` key) and
+  a day × provider × tokens × cost table with scroll; Amp's row with a real
+  balance and a note on the absence of local logs.
+- **Hourly bucketing** for history (`usage::buckets`) — charts with real
+  hourly data instead of 7 stretched daily points.
+- **Motion** gated by `menu.animations`: user-initiated fetch sweep,
+  coalesce on screen change, pulse/blink on critical quota (<10%), and
+  cost count-up (tachyonfx).
+- **Nerd Font icons** with Unicode fallback via `glyphMode`.
+- **Configurable menu font**: `menu.fontFamily` (default "IBM Plex Mono")
+  and `menu.fontSize`, applied by the helper via terminal flags
+  (alacritty/kitty/foot/ghostty); internal command `agent-bar menu-font`.
+- New settings: `menu.animations`, `menu.fontFamily`, `menu.fontSize`.
 
 ### Changed
-- **Fetch, login e save saíram do event loop**: a TUI nunca mais congela —
-  spinner e progresso por provider aparecem de verdade, teclas respondem
-  durante o fetch, e o refetch pós-login é automático.
-- **Estado de login derivado do fetch real** (5 estados, incluindo `erro`
-  distinto de `deslogado`) — fim do `[ok]` baseado em existência de arquivo.
-- **Cascata do helper de terminal** (`agent-bar-open-terminal`): honra
-  `$TERMINAL` (lança o terminal preferido com flags de fonte quando
-  suportado; desconhecido → caminho xdg); alacritty direto vem antes do
-  caminho uwsm/xdg pra aplicar fonte preservando o float do Hyprland.
-- **MSRV corrigida para 1.88** (piso real das dependências); dependências
-  novas: `tachyonfx`, `tui-scrollview`; `tui-popup` removida.
-- "pico HHh" e labels de eixo do histórico em hora local (antes UTC).
+- **Fetch, login, and save moved off the event loop**: the TUI never freezes
+  anymore — spinner and per-provider progress genuinely appear, keys respond
+  during the fetch, and the post-login refetch is automatic.
+- **Login state derived from a real fetch** (5 states, including `erro`
+  distinct from `deslogado`) — the end of `[ok]` based on file existence.
+- **Terminal helper cascade** (`agent-bar-open-terminal`): honors
+  `$TERMINAL` (launches the preferred terminal with font flags when
+  supported; unknown → xdg path); direct alacritty now comes before the
+  uwsm/xdg path to apply the font while preserving Hyprland's float.
+- **MSRV corrected to 1.88** (the dependencies' real floor); new
+  dependencies: `tachyonfx`, `tui-scrollview`; `tui-popup` removed.
+- History's "pico HHh" and axis labels are now in local time (previously UTC).
 
 ### Fixed
-- **Tecla `r` (refresh) nunca funcionou** — setava "Loading" sem disparar
-  fetch; agora dispara refetch real (com guard contra fetch duplicado).
-- **Comando de login do Codex era inválido** (`codex auth login` não existe
-  na CLI; corrigido para `codex login`).
-- **Tela corrompida ao voltar do login** — repaint completo ressincroniza o
-  buffer do terminal.
-- **Help overlay corrompia a tabela por baixo** (texto vazando "pr"/"sto") —
-  área limpa com `Clear` antes do popup.
-- Sparkline "tokens/h" do detalhe era um placeholder hardcoded idêntico para
-  todos os providers — substituído por dado real por provider.
-- Nomes truncados com corte seco ("Free Tie") — truncagem com `…`.
-- Race de ondas de fetch sobrepostas corrompendo spinner/`last_update`.
-- `abbrev` de tokens estourava a fronteira de unidade ("1000.0K" → "1.0M").
-- Extra usage habilitado sem limite configurado renderizava gauge
-  autocontraditório ("$X de $0.00") — agora "usado · sem limite".
+- **The `r` (refresh) key never worked** — it set "Loading" without
+  triggering a fetch; it now triggers a real refetch (with a guard against
+  duplicate fetches).
+- **The Codex login command was invalid** (`codex auth login` doesn't exist
+  in the CLI; fixed to `codex login`).
+- **Screen corrupted when returning from login** — a full repaint
+  resynchronizes the terminal buffer.
+- **Help overlay corrupted the table underneath** (text leaking "pr"/"sto")
+  — area cleared with `Clear` before the popup.
+- The detail's "tokens/h" sparkline was an identical hardcoded placeholder
+  for every provider — replaced with real per-provider data.
+- Truncated names with an abrupt cut ("Free Tie") — truncation now uses `…`.
+- Race between overlapping fetch waves corrupting spinner/`last_update`.
+- Token `abbrev` overflowed the unit boundary ("1000.0K" → "1.0M").
+- Extra usage enabled without a configured limit rendered a
+  self-contradictory gauge ("$X de $0.00") — now "usado · sem limite".
 
 ## [6.0.1] - 2026-06-21
 
 ### Fixed
-- **`install.sh` corrompia o binário no `setup`.** `create_symlink` criava um symlink
-  `~/.local/bin/agent-bar` apontando pra si mesmo (dangling) quando o binário já
-  estava nesse caminho — caso do `install.sh` —, destruindo o executável. Agora
-  detecta (via `canonicalize`) que o binário já está no destino e pula o symlink.
-  `cargo install` / `cargo binstall` (instalam em `~/.cargo/bin`) não eram afetados.
+- **`install.sh` corrupted the binary during `setup`.** `create_symlink` created
+  a symlink `~/.local/bin/agent-bar` pointing to itself (dangling) when the
+  binary was already at that path — the `install.sh` case — destroying the
+  executable. Now it detects (via `canonicalize`) that the binary is already
+  at the destination and skips the symlink. `cargo install` / `cargo binstall`
+  (which install to `~/.cargo/bin`) were unaffected.
 
 ## [6.0.0] - 2026-06-21
 
-Reescrita completa de TypeScript/Bun para **Rust** (binário único), preservando
-paridade byte-exact do contrato Waybar/Pango e da saída `--format json`.
+Complete rewrite from TypeScript/Bun to **Rust** (single binary), preserving
+byte-exact parity of the Waybar/Pango contract and the `--format json` output.
 
 ### Changed
-- **Runtime Rust.** O monitor agora é um binário Rust único (tokio + reqwest/rustls)
-  no lugar do runtime TypeScript/Bun. Comportamento de Waybar/CLI inalterado —
-  paridade byte-exact travada por golden snapshots vs a saída do TS.
-- **TUI full-screen** reescrita em ratatui (abas Dashboard / Waybar / History /
-  Login) com engine de custo via session logs locais (US$/R$). O event loop faz o
-  parse de logs em background, mantendo a UI responsiva desde o boot.
-- **Distribuição via binário musl estático.** `install.sh` baixa o tarball prebuilt
-  do GitHub Release (verificado por sha256); o AUR (`agent-bar-bin`) e
-  `cargo binstall` também instalam o binário. Build de release via `cargo-zigbuild`.
+- **Rust runtime.** The monitor is now a single Rust binary (tokio +
+  reqwest/rustls) replacing the TypeScript/Bun runtime. Waybar/CLI behavior
+  unchanged — byte-exact parity locked by golden snapshots against the TS
+  output.
+- **Full-screen TUI** rewritten in ratatui (Dashboard / Waybar / History /
+  Login tabs) with a cost engine via local session logs (US$/R$). The event
+  loop parses logs in the background, keeping the UI responsive from boot.
+- **Distribution via static musl binary.** `install.sh` downloads the
+  prebuilt tarball from the GitHub Release (sha256-verified); the AUR
+  (`agent-bar-bin`) and `cargo binstall` also install the binary. Release
+  build via `cargo-zigbuild`.
 
 ### Removed
-- **Bun / Node / npm no runtime.** Sem dependência de runtime JS. O pacote npm
-  `@noctuacore/agent-bar` foi descontinuado — a última versão TypeScript está
-  preservada na tag `v5.3.0-ts-final`.
+- **Bun / Node / npm at runtime.** No JS runtime dependency. The
+  `@noctuacore/agent-bar` npm package was discontinued — the last TypeScript
+  version is preserved at tag `v5.3.0-ts-final`.
 
-### Migração
-- Instalações npm antigas: `agent-bar doctor` detecta e limpa os resíduos;
-  reinstale via `install.sh`, AUR ou `cargo binstall`.
+### Migration
+- Old npm installations: `agent-bar doctor` detects and cleans up the
+  leftovers; reinstall via `install.sh`, AUR, or `cargo binstall`.
 
 ## [5.3.0] - 2026-06-18
 
 ### Added
-- **Pacote AUR `agent-bar-bin`** (Arch). Instala um binário standalone
-  (`bun build --compile`) baixado do GitHub Release e verificado por sha256 — sem
-  exigir Bun no runtime do usuário e **sem build no PKGBUILD** (mitigação do vetor
-  de supply-chain "Atomic Arch"). Uso: `paru -S agent-bar-bin && agent-bar setup`.
-  O workflow de release agora compila e anexa o tarball
-  `agent-bar-<ver>-x86_64.tar.gz` (+ `.sha256`) ao GitHub Release. PKGBUILD,
-  `.install` e `.SRCINFO` versionados em `packaging/aur/`.
+- **AUR package `agent-bar-bin`** (Arch). Installs a standalone binary
+  (`bun build --compile`) downloaded from the GitHub Release and sha256-verified
+  — without requiring Bun at the user's runtime and **without building in the
+  PKGBUILD** (mitigating the "Atomic Arch" supply-chain vector). Usage:
+  `paru -S agent-bar-bin && agent-bar setup`. The release workflow now builds
+  and attaches the `agent-bar-<ver>-x86_64.tar.gz` tarball (+ `.sha256`) to the
+  GitHub Release. PKGBUILD, `.install`, and `.SRCINFO` are versioned in
+  `packaging/aur/`.
 
 ### Changed
-- **Install de sistema reconhecido em todo o app.** Um binário compilado é
-  detectado por `isCompiledBinary()` (marcador `/$bunfs` do `bun --compile`):
-  `agent-bar setup` lê os assets de `/usr/share/agent-bar`, gera o módulo Waybar
-  com `exec: agent-bar` (resolvido via PATH) e **pula** o symlink `~/.local/bin`;
-  `agent-bar update` orienta o gerenciador de pacotes (ex.: `paru -Syu`) em vez de
-  tentar `bun add -g`. Os installs existentes (managed/npm/dev) ficam inalterados.
+- **System install recognized throughout the app.** A compiled binary is
+  detected by `isCompiledBinary()` (the `/$bunfs` marker from
+  `bun --compile`): `agent-bar setup` reads assets from
+  `/usr/share/agent-bar`, generates the Waybar module with
+  `exec: agent-bar` (resolved via PATH), and **skips** the `~/.local/bin`
+  symlink; `agent-bar update` points to the package manager (e.g.
+  `paru -Syu`) instead of trying `bun add -g`. Existing installs
+  (managed/npm/dev) are unchanged.
 
 ## [5.2.0] - 2026-06-18
 
 ### Added
-- **Saída Waybar single-provider expõe `percentage` e `alt`** para desbloquear
-  `format-icons`. `alt` carrega o health state (`ok` / `low` / `warn` /
-  `critical`, ou `disconnected`) para `format-icons` keyed por estado;
-  `percentage` é o valor displayMode-aware (o mesmo número do `text`), clampado
-  a `0..100`, para `{percentage}` no `format` ou `format-icons` em array. Ambos
-  são **omitidos** quando o provider está conectado mas sem dados de quota — um
-  window ausente nunca reporta `ok`. O módulo agregado e o contrato
-  `--format json` permanecem inalterados.
-- **Refresh sob demanda via `signal`** (opt-in). O novo setting `waybar.signal`
-  (`1..30`, default off) injeta `signal: N` em cada módulo gerado; o Waybar
-  re-executa o módulo ao receber `SIGRTMIN+N`. Como o `exec` do módulo lê o cache
-  de 5 min, um signal puro só re-renderiza dados cacheados — para forçar um fetch
-  **fresco** use o recipe documentado:
-  `agent-bar -p <provider> -r && pkill -RTMIN+<N> waybar` (com exemplo de Stop
-  hook do Claude Code em `docs/waybar-contract.md`).
+- **Single-provider Waybar output exposes `percentage` and `alt`** to unlock
+  `format-icons`. `alt` carries the health state (`ok` / `low` / `warn` /
+  `critical`, or `disconnected`) for `format-icons` keyed by state;
+  `percentage` is the displayMode-aware value (the same number as `text`),
+  clamped to `0..100`, for `{percentage}` in `format` or `format-icons` as an
+  array. Both are **omitted** when the provider is connected but has no
+  quota data — a missing window never reports `ok`. The aggregated module and
+  the `--format json` contract remain unchanged.
+- **On-demand refresh via `signal`** (opt-in). The new `waybar.signal` setting
+  (`1..30`, default off) injects `signal: N` into every generated module;
+  Waybar re-executes the module on receiving `SIGRTMIN+N`. Since the module's
+  `exec` reads the 5-minute cache, a plain signal only re-renders cached data —
+  to force a **fresh** fetch use the documented recipe:
+  `agent-bar -p <provider> -r && pkill -RTMIN+<N> waybar` (with a Claude Code
+  Stop-hook example in `docs/waybar-contract.md`).
 
 ### Docs
-- `docs/waybar-contract.md`: campos de saída `percentage`/`alt`, exemplos de
-  `format-icons` (por estado via `alt` e por percentual via array), e a
-  configuração + recipe de refresh do `signal`.
+- `docs/waybar-contract.md`: `percentage`/`alt` output fields, `format-icons`
+  examples (by state via `alt` and by percentage via array), and the
+  `signal` refresh configuration + recipe.
 
 ## [5.1.0] - 2026-06-17
 
 ### Added
-- **Claude: tier do plano no tooltip** (`Max 5x` / `Max 20x`). O cabeçalho do
-  tooltip do Claude agora lê `rateLimitTier` do `~/.claude/.credentials.json`
-  (ex.: `default_claude_max_5x`) e surfa o multiplicador que o `subscriptionType`
-  ("max") descartava — antes mostrava só "Max". Planos sem multiplicador (Pro,
-  Free) ficam inalterados. Lógica isolada em `deriveClaudePlan()`.
-- **`docs/architecture.md`**: data-flow completo (poll do Waybar → provider →
-  cache → formatter → saída JSON/Pango), a distinção entre os dois caches
-  (quota 5 min cross-process em `cache.ts` vs settings 5 s in-process em
-  `formatters/waybar.ts`), e `BaseProvider` vs `ClaudeProvider` direto. Passa a
-  ser publicado no pacote npm.
-- Documentação do comando interno `action-right` (right-click do Waybar) em
-  `docs/commands.md` e `docs/waybar-contract.md`, com a lógica de
-  refresh-ou-login e os campos do módulo gerado.
+- **Claude: plan tier in the tooltip** (`Max 5x` / `Max 20x`). The Claude
+  tooltip header now reads `rateLimitTier` from `~/.claude/.credentials.json`
+  (e.g. `default_claude_max_5x`) and surfaces the multiplier that
+  `subscriptionType` ("max") discarded — it previously showed just "Max".
+  Plans without a multiplier (Pro, Free) are unchanged. Logic isolated in
+  `deriveClaudePlan()`.
+- **`docs/architecture.md`**: complete data-flow (Waybar poll → provider →
+  cache → formatter → JSON/Pango output), the distinction between the two
+  caches (5 min cross-process quota cache in `cache.ts` vs 5 s in-process
+  settings cache in `formatters/waybar.ts`), and `BaseProvider` vs direct
+  `ClaudeProvider`. Now published in the npm package.
+- Documentation for the internal `action-right` command (Waybar right-click)
+  in `docs/commands.md` and `docs/waybar-contract.md`, with the
+  refresh-or-login logic and the generated module's fields.
 
 ### Changed
-- **Claude: short-circuit de token expirado.** Quando o `expiresAt` (epoch-ms
-  das credenciais) já passou, o provider devolve o erro de token expirado **sem**
-  chamar a API da Anthropic — a chamada falharia de qualquer forma e o agent-bar
-  nunca renova o token (o refresh single-use corre com o Claude Code). Mesma
-  string de erro e mesmo roteamento de login do `action-right`; apenas mais
-  rápido e funcional offline.
+- **Claude: expired-token short-circuit.** When `expiresAt` (epoch-ms from
+  the credentials) has already passed, the provider returns the expired-token
+  error **without** calling the Anthropic API — the call would fail anyway
+  and agent-bar never refreshes the token (the single-use refresh runs with
+  Claude Code). Same error string and same login routing as `action-right`;
+  just faster and works offline.
 
 ## [5.0.0] - 2026-06-17
 
 ### Removed
-- **Provider Copilot removido por inteiro** (breaking). A interface
-  `--headless --stdio` do Copilot CLI é oculta/frágil (some sem aviso em
-  auto-updates) e não estava em uso. Saíram: provider, CLI locator, builder,
-  ícone, tipos `CopilotQuota*`, paths de config, registries (tooltip/terminal/
-  TUI), entrada em `WAYBAR_PROVIDERS`, e a migração de settings v1→v2 que só
-  existia para injetar Copilot. Providers suportados agora: Claude, Codex, Amp.
+- **Copilot provider removed entirely** (breaking). The Copilot CLI's
+  `--headless --stdio` interface is hidden/fragile (disappears without notice
+  in auto-updates) and was unused. Removed: provider, CLI locator, builder,
+  icon, `CopilotQuota*` types, config paths, registries (tooltip/terminal/
+  TUI), the `WAYBAR_PROVIDERS` entry, and the v1→v2 settings migration that
+  only existed to inject Copilot. Supported providers now: Claude, Codex, Amp.
 
 ### Added
-- **Notificações desktop de quota baixa/crítica** via `notify-send`: alerta
-  quando qualquer janela de quota cruza 90% usado (low) ou 95% (critical),
-  incluindo as semanais por-modelo do Claude. Piggyback no poll do Waybar com
-  dedup por estado (`~/.cache/agent-bar/notify-<provider>.json`), re-arma ao
-  recuperar, escala low→critical. Best-effort: não faz nada se `notify-send`
-  estiver ausente e só dispara quando a saída é consumida pelo Waybar.
-  Controlado por `notify.enabled` no settings.
+- **Desktop notifications for low/critical quota** via `notify-send`: alerts
+  when any quota window crosses 90% used (low) or 95% (critical), including
+  Claude's per-model weekly windows. Piggybacks on the Waybar poll with
+  dedup by state (`~/.cache/agent-bar/notify-<provider>.json`), re-arms on
+  recovery, escalates low→critical. Best-effort: does nothing if `notify-send`
+  is absent and only fires when the output is consumed by Waybar.
+  Controlled by `notify.enabled` in settings.
 
 ### Breaking
-- O provider `copilot` não existe mais. Settings que listavam `copilot` têm a
-  entrada removida automaticamente na carga; nenhuma ação necessária.
-- **Notificações vêm ligadas por padrão** (`notify.enabled: true`). Após
-  atualizar, alertas de quota baixa passam a aparecer sem opt-in — desligue com
-  `"notify": { "enabled": false }` em `~/.config/agent-bar/settings.json`.
+- The `copilot` provider no longer exists. Settings that listed `copilot`
+  have the entry removed automatically on load; no action needed.
+- **Notifications are enabled by default** (`notify.enabled: true`). After
+  updating, low-quota alerts start appearing without opt-in — disable with
+  `"notify": { "enabled": false }` in `~/.config/agent-bar/settings.json`.
 
 ## [4.2.0] - 2026-06-17
 
@@ -688,19 +703,19 @@ paridade byte-exact do contrato Waybar/Pango e da saída `--format json`.
 
 ### Changed
 
-- `agent-bar update` agora detecta instalações npm/Bun e atualiza o pacote
-  global com `bun add -g`, em vez de tratar apenas o checkout legado
-  `~/.agent-bar`.
+- `agent-bar update` now detects npm/Bun installations and updates the
+  global package with `bun add -g`, instead of only handling the legacy
+  `~/.agent-bar` checkout.
 
 ### Fixed
 
-- Logo da TUI exibia `QBAR` (nome antigo do projeto) ao abrir o menu. Substituído pela block-art `AGENT BAR`.
+- TUI logo showed `QBAR` (the project's old name) when opening the menu. Replaced with the `AGENT BAR` block-art.
 
 ## [4.0.0] - 2026-05-15
 
 ### Added
 
-- Setting `waybar.displayMode` (`remaining` | `used`) com toggle via TUI Configure Layout. Quando `used`, percentuais e barra refletem quota consumida (0% = nada usado, 100% = esgotado); cores e classes CSS continuam baseadas em saúde. Default: `remaining` (comportamento anterior preservado).
+- Setting `waybar.displayMode` (`remaining` | `used`) with toggle via TUI Configure Layout. When `used`, percentages and the bar reflect consumed quota (0% = nothing used, 100% = exhausted); colors and CSS classes remain based on health. Default: `remaining` (previous behavior preserved).
 
 ### Changed
 

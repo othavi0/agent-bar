@@ -1,13 +1,13 @@
-# Help público enxuto; internos ainda parseáveis
+# Lean public help; internals still parseable
 
-A CLI misturava primários com paths de packager/Waybar (`assets`, `export`,
-`action-right`) e aliases redundantes. Decidimos **opção A**: reorganizar o
-help (menu, status, config, setup, update, uninstall, doctor); esconder
-internos do help mas **manter o parse** (módulos Waybar e scripts dependem);
-`remove` → `uninstall --yes`; `-t` → `status`. Sem hard-cut Omarchy-only nem
-deletar `action-right`.
+The CLI mixed primary commands with packager/Waybar paths (`assets`,
+`export`, `action-right`) and redundant aliases. We decided on **option A**:
+reorganize help (menu, status, config, setup, update, uninstall, doctor);
+hide internals from help but **keep them parseable** (Waybar modules and
+scripts depend on them); `remove` → `uninstall --yes`; `-t` → `status`. No
+Omarchy-only hard cut, and `action-right` is not deleted.
 
-**Considered:** (B) unificar action-right em `menu --provider`; (C) default
-JSON e Waybar explícito. Deferidos para não quebrar contrato gerado.
+**Considered:** (B) unify action-right into `menu --provider`; (C) default
+JSON with Waybar explicit. Deferred to avoid breaking the generated contract.
 
 **Status:** accepted (v8.5.0)

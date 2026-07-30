@@ -22,13 +22,19 @@ Item {
   signal canceled()
   signal confirmed()
 
+  // Full-screen dim layer behind the card. The host already exposes this
+  // exact surface — Color.menu.scrim composes the theme's background at a
+  // fixed alpha, so it dims regardless of whether foreground is light or
+  // dark. A foreground-based wash would invert on light-foreground themes.
+  readonly property color scrimColor: Color.menu.scrim
+
   anchors.fill: parent
   visible: opened
   z: 100
 
   Rectangle {
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.45)
+    color: root.scrimColor
     MouseArea {
       anchors.fill: parent
       onClicked: root.canceled()
@@ -43,9 +49,12 @@ Item {
     radius: Style.cornerRadius
     color: Color.popups.background
     border.width: 1
+    // Destructive keeps its urgent-tinted border (UX-044: danger actions stay
+    // visually separated); a Style state token would erase that signal, so
+    // only the non-destructive branch moves to the shared token.
     border.color: root.destructive
-        ? Qt.rgba(Color.urgent.r, Color.urgent.g, Color.urgent.b, 0.55)
-        : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.28)
+        ? Util.alpha(Color.urgent, 0.55)
+        : Style.normalBorderColor
 
     MouseArea {
       anchors.fill: parent
@@ -75,7 +84,7 @@ Item {
       Text {
         width: parent.width
         text: root.message
-        color: Qt.darker(root.foreground, 1.15)
+        color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         wrapMode: Text.WordWrap

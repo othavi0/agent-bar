@@ -28,19 +28,19 @@ Column {
       width: parent.width * 0.55
       height: Style.space(14)
       radius: Style.cornerRadius
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      color: Style.selectedFill
     }
     Rectangle {
       width: parent.width * 0.9
       height: Style.space(12)
       radius: Style.cornerRadius
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+      color: Style.hoverFill
     }
     Rectangle {
       width: parent.width * 0.7
       height: Style.space(12)
       radius: Style.cornerRadius
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+      color: Style.hoverFill
     }
   }
 
@@ -68,7 +68,7 @@ Column {
       width: Math.max(0, parent.width)
       visible: root.body.length > 0
       text: root.body
-      color: Qt.darker(root.foreground, 1.25)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       wrapMode: Text.Wrap

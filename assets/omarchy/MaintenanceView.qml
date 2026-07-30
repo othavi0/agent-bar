@@ -34,7 +34,7 @@ Item {
 
     Text {
       text: "Maintenance"
-      color: Qt.darker(root.foreground, 1.35)
+      color: Util.alpha(root.foreground, 0.55)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.bold: true
@@ -57,7 +57,7 @@ Item {
     Text {
       width: parent.width
       text: "Installation type: " + (ui.installType || "Plugin bundle")
-      color: Qt.darker(root.foreground, 1.25)
+      color: Util.alpha(root.foreground, 0.55)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       textFormat: Text.PlainText
@@ -67,7 +67,7 @@ Item {
       width: parent.width
       visible: ui.message && ui.message.length > 0
       text: ui.message
-      color: ui.phase === "error" ? Color.urgent : Qt.darker(root.foreground, 1.2)
+      color: ui.phase === "error" ? Color.urgent : Util.alpha(root.foreground, 0.55)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       wrapMode: Text.WordWrap
@@ -123,10 +123,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     // Danger zone — visually separated (UX-044)

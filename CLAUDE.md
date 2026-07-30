@@ -132,9 +132,10 @@ ready PR. Grok may not merge.
 
 ## Documentation
 
-Active docs and public copy are English. Historical changelog entries, ADR
-bodies 0001–0003, and `docs/superpowers/**` remain historical and are excluded
-from active legacy/language scans.
+Active docs and public copy are English, enforced by
+`tests/active_language.rs`. Only `docs/superpowers/**` is excluded: it holds
+past session plans and specs, which are a build record rather than
+documentation. New files written there are English.
 
 ## Pointers
 

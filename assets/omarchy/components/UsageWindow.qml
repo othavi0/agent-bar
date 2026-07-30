@@ -23,6 +23,9 @@ Item {
   readonly property real fillRatio: hasPercent
       ? Math.max(0, Math.min(1, root.percent / 100))
       : 0
+  // Data surface, not control chrome — no host token covers it. Declared
+  // once here so plan 03's compact rows tint from the same place.
+  readonly property color trackColor: Util.alpha(root.foreground, 0.12)
 
   width: parent ? parent.width : implicitWidth
   implicitHeight: root.emphasis ? bigCol.implicitHeight : compactRow.implicitHeight
@@ -38,7 +41,7 @@ Item {
     Text {
       width: parent.width
       text: root.label
-      color: Qt.darker(root.foreground, 1.35)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.capitalization: Font.AllUppercase
@@ -62,7 +65,7 @@ Item {
       Text {
         anchors.baseline: parent.children[0].baseline
         text: root.unitText
-        color: Qt.darker(root.foreground, 1.35)
+        color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         textFormat: Text.PlainText
@@ -74,7 +77,7 @@ Item {
       width: parent.width
       height: Style.space(5)
       radius: height / 2
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      color: root.trackColor
       Accessible.ignored: true
 
       Rectangle {
@@ -95,7 +98,7 @@ Item {
       spacing: Style.space(4)
       Text {
         text: "resets"
-        color: Qt.darker(root.foreground, 1.35)
+        color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         textFormat: Text.PlainText
@@ -123,7 +126,7 @@ Item {
       id: compactLabel
       width: Math.max(0, parent.width * 0.5)
       text: root.label
-      color: Qt.darker(root.foreground, 1.2)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight

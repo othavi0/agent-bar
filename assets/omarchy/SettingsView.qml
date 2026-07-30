@@ -80,7 +80,7 @@ Item {
       visible: root.loading
       width: parent.width
       text: "Loading settings\u2026"
-      color: Qt.darker(root.foreground, 1.3)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       textFormat: Text.PlainText
@@ -90,7 +90,7 @@ Item {
       visible: root.saving
       width: parent.width
       text: "Saving\u2026"
-      color: Qt.darker(root.foreground, 1.3)
+      color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       textFormat: Text.PlainText
@@ -105,7 +105,7 @@ Item {
 
       Text {
         text: "Providers"
-        color: Qt.darker(root.foreground, 1.35)
+        color: Util.alpha(root.foreground, 0.55)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         font.bold: true
@@ -144,10 +144,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     // Display metric
@@ -159,7 +158,7 @@ Item {
 
       Text {
         text: "Chip number"
-        color: Qt.darker(root.foreground, 1.35)
+        color: Util.alpha(root.foreground, 0.55)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         font.bold: true
@@ -242,10 +241,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     // Actions — English text labels (UX-036..038)
@@ -296,10 +294,9 @@ Item {
       }
     }
 
-    Rectangle {
+    PanelSeparator {
       width: parent.width
-      height: 1
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+      foreground: root.foreground
     }
 
     MaintenanceView {

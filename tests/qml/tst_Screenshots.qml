@@ -86,7 +86,13 @@ TestCase {
     var p = Core.themePalette(mode)
     stage.color = p.background
     stage.fg = p.foreground
-    stage.muted = p.muted
+    // Derived from this palette's own foreground at the supporting-text level,
+    // which is what the shipped components compute through Util.alpha. The
+    // literal 0.72 is pinned by tst_Tokens.qml's test_no_third_alpha_value;
+    // Util itself is unreachable here because qs.Commons will not compile
+    // under the bare Qt6 runner.
+    var fg = Qt.color(p.foreground)
+    stage.muted = Qt.rgba(fg.r, fg.g, fg.b, 0.72)
     stage.badgeColor = p.urgent
   }
 
@@ -94,6 +100,13 @@ TestCase {
     // Map evidence basename → deterministic fixture panel
     if (name.indexOf("ready-light") === 0) {
       applyTheme("light")
+      stage.titleText = "Claude"
+      stage.badgeText = "Connected"
+      stage.bodyText = "Session (5h) 58% left · Max plan"
+      return
+    }
+    if (name.indexOf("ready-white") === 0) {
+      applyTheme("white")
       stage.titleText = "Claude"
       stage.badgeText = "Connected"
       stage.bodyText = "Session (5h) 58% left · Max plan"
@@ -191,8 +204,9 @@ TestCase {
 
   function test_required_names_match_spec() {
     var names = Core.requiredScreenshotNames()
-    compare(names.length, 15)
+    compare(names.length, 16)
     verify(names.indexOf("ready-light.png") >= 0)
+    verify(names.indexOf("ready-white.png") >= 0)
     verify(names.indexOf("uninstall-confirmation-dark.png") >= 0)
   }
 }
