@@ -37,10 +37,22 @@ fn tracked_files(root: &Path) -> Vec<String> {
         .current_dir(root)
         .output()
         .expect("git ls-files must run inside the repository");
-    String::from_utf8_lossy(&output.stdout)
+    assert!(
+        output.status.success(),
+        "git ls-files exited with {}, stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(str::to_owned)
-        .collect()
+        .collect();
+    assert!(
+        !files.is_empty(),
+        "git ls-files returned zero tracked files; the gate would silently \
+         scan nothing"
+    );
+    files
 }
 
 fn is_scannable(rel: &str) -> bool {
