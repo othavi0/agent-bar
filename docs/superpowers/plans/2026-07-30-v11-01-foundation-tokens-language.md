@@ -107,11 +107,26 @@ fn tracked_files(root: &Path) -> Vec<String> {
         .arg("ls-files")
         .current_dir(root)
         .output()
-        .expect("git ls-files must run inside the repository");
-    String::from_utf8_lossy(&output.stdout)
+        .expect("git ls-files must be spawnable");
+    // `.expect` above only covers a failure to spawn. Outside a checkout git
+    // spawns fine and exits non-zero, which would leave an empty list and let
+    // the gate pass having read nothing — the same defect as a gate that never
+    // fails on purpose, arriving through a different door.
+    assert!(
+        output.status.success(),
+        "git ls-files failed ({}): {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(str::to_owned)
-        .collect()
+        .collect();
+    assert!(
+        !files.is_empty(),
+        "git ls-files returned nothing; the gate would scan an empty set"
+    );
+    files
 }
 
 fn is_scannable(rel: &str) -> bool {
