@@ -1031,3 +1031,53 @@ Layout, copy, assets, severity, notifications, and the CLI. Those are:
 | 03 — popup | rail alignment, header tags, footer removal, stale banner, typed-state copy |
 | 04 — severity | thresholds shared with Rust, lead-window election, `UX-017`/`UX-020A`/`UX-028`/`UX-054` amendments |
 | 05 — notifications and CLI | Rust countdown humaniser, notification metric and copy, CLI and `install.sh` copy |
+
+---
+
+## Execution record
+
+Executed 2026-07-30 on branch `feat/v11-foundation`, 23 commits, all eight tasks
+reviewed and the branch reviewed whole. Final state: `cargo test` 287 across 14
+suites, `qmltestrunner` 187 passed 0 failed, clippy and fmt clean,
+`scripts/verify-v10-ui` exit 0. Started from 283 and 177.
+
+### Deferred minors carried forward
+
+Recorded during execution, triaged at the final review, none blocking. Kept here
+because the working ledger does not survive the plan.
+
+1. The Nerd Font glyph exclusion in the language gate is correct by Unicode
+   semantics but no tracked file exercises it.
+2. `alphaArgValues` in `tst_Tokens.qml` cannot match a `Util.alpha` call whose
+   first argument nests parentheses. No call site does today.
+3. The same test's comment strip handles `//` but not `/* */`.
+4. The text-alpha exception mechanism constrains values, not growth of the list
+   itself. A later task could add a second entry with nothing flagging it —
+   **the one item plans 02 through 05 should watch.**
+5. `allowedRawAlphaFiles()` is permanently `[]` and could be removed with its
+   last caller.
+6. The Settings focus ring at `ProviderRail.qml:210-211` keeps a hardcoded width
+   and a raw `Color.accent`. Not converted deliberately:
+   `Style.focusBorderColor` resolves from the theme's `focus-color`, which is
+   the foreground, so binding it would change the ring's colour.
+7. `test_full_width_separator_present` does not actually prove `UX-019` — its
+   `width: parent.width` check matches ten unrelated sites. Pre-existing.
+8. `tests/screenshot_inventory.rs` parses both lists by line; a reformat of
+   either side degrades it. It fails loud rather than silently passing.
+9. `tst_Screenshots.qml` keeps an inert `muted` default, always overwritten.
+
+### What the plan got wrong
+
+Five defects originated in this document and were caught during execution: a
+sample sentence that was pure ASCII and could not trip the gate it demonstrated;
+an unchecked `git` exit status that let the gate pass having read nothing; a
+table row describing a ternary border as a single fill; a scrim described as
+foreground-derived when it was pure black, which inverted a modal dim into a
+brighten; a token swap that resolved to alpha 1.0 where a 0.3 literal had been;
+and an instruction to import `qs.Commons` into a test file, which makes that
+file uncompilable under this repository's runner.
+
+They share one shape: **correct-looking source that behaves differently at
+runtime, invisible to tests that read code as text.** Every one was caught by
+comparing against the original or by resolving a value, never by a test. Plans
+02 through 05 touch the same surfaces and should assume the same failure mode.
