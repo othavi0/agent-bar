@@ -145,7 +145,7 @@ Item {
           color: railItem.selected
               ? Style.selectedFill
               : "transparent"
-          border.width: railItem.selected ? 1 : 0
+          border.width: railItem.selected ? Style.selectedBorderWidth : 0
           border.color: railItem.selected
               ? Style.selectedBorderColor
               : "transparent"
