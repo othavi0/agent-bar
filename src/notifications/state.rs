@@ -15,6 +15,13 @@ use crate::support::maintenance_gate::SharedMaintenanceGate;
 
 pub const NOTIFICATION_STATE_VERSION: u32 = 1;
 
+/// Severity thresholds on `usedPercent`. Duplicated in
+/// `assets/omarchy/CoreView.js` because the status schema is frozen at v2 and
+/// must not gain a field; `tests/severity_parity.rs` fails the build if the
+/// two sides drift.
+pub const CRITICAL_USED_PERCENT: f64 = 95.0;
+pub const WARNING_USED_PERCENT: f64 = 90.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum NotificationLevel {
@@ -31,9 +38,9 @@ impl NotificationLevel {
     }
 
     pub fn from_used_percent(used: f64) -> Option<Self> {
-        if used >= 95.0 {
+        if used >= CRITICAL_USED_PERCENT {
             Some(Self::Critical)
-        } else if used >= 90.0 {
+        } else if used >= WARNING_USED_PERCENT {
             Some(Self::Warning)
         } else {
             None
