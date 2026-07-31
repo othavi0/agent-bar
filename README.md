@@ -31,9 +31,10 @@ window, the chip shows `—`.
 | Right click | Open Settings |
 | Mouse wheel on chip | No action |
 
-The popup has a bordered vertical icon rail, one provider view at a time,
-percentage windows with a usage track, content-fit height, overflow-only
-scrolling, complete keyboard navigation, and active Omarchy theme tokens.
+The popup has a vertical icon rail, one provider view at a time, one lead
+percentage window with every other window as a compact row, a usage track on
+every row, content-fit height, overflow-only scrolling, complete keyboard
+navigation, and active Omarchy theme tokens.
 
 ## Requirements
 

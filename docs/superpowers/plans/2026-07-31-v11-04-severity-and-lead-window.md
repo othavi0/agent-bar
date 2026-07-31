@@ -1632,3 +1632,107 @@ Known deferrals, deliberately not touched here:
 
 - `ProviderHeader.showStale` is set by `ProviderView` and never read by the header — dead since plan 03 moved stale into the banner. Removing it also touches `headerModel` and its test, which is churn this plan does not need; it belongs with whoever next edits `headerModel`.
 - The popup rebuilds every window delegate on each 30-second `nowMs` tick, because `windowLayout` returns fresh objects. Pre-existing behaviour, unchanged here.
+
+## Execution record
+
+Executed 2026-07-31 on branch `feat/v11-foundation`, task order 1 → 2 → 3 → 4
+→ 5 → 6, 7 implementation/fix commits across Tasks 1–5 plus this record:
+`7d4a004` (Task 1), `74314ee` (Task 2), `4700250` (Task 3), `e339ebc` (Task 4
+implement), `d003377` (Task 4 fix round 1), `5d67382` (Task 5 implement),
+`1f89936` (Task 5 fix round 1). Tasks 4 and 5 each needed exactly one fix
+round; Tasks 1, 2, and 3 went clean on first review. Task 6 produced no
+product-behavior commit — screenshot mirror sync, docs sweep, full checkpoint,
+and this record only.
+
+Final state: `cargo test` 292 passed across 16 suites, including the
+`severity_parity` suite added in Task 2 (unchanged by Task 6 — the new
+`critical-dark` capture extends an existing test's body, not a new test
+function). `qmltestrunner` 228 passed / 0 failed (also unchanged in count for
+the same reason). `cargo fmt --check`, `cargo clippy --all-targets -- -D
+warnings`, and `git diff --check` all clean. `qmllint -I
+/usr/share/omarchy/shell` over every `assets/omarchy/**/*.qml` file: 0 errors
+(367 unqualified-access/unresolved-import warnings, 126 info notes —
+pre-existing `qs.Commons`/`qs.Ui` noise across the whole plugin tree, see
+"What the plan got wrong" §4, not a regression from this plan). `omarchy
+plugin validate assets/omarchy` clean. `scripts/verify-v10-ui`:
+`verify-v10-ui: 17 PNGs ok → …/SHA256SUMS`, exit 0 (up from 16 — this task's
+new `critical-dark.png`). No GPU probe was run — this plan touches no shader
+or tint path; `MultiEffect` is untouched.
+
+Every Step 5 hygiene grep returned nothing beyond the self-referential guard
+assertions in `tests/qml/tst_Popup.qml`: `test_primary_window_allowlist_is_gone`
+and `test_absolute_clock_humaniser_is_gone` must name `PRIMARY_WINDOW_IDS`,
+`windowGroups`, `formatResetText`, and `WEEKDAYS` as string literals to assert
+their absence from `CoreView.js`, and the same test names `groups.primary`/
+`groups.secondary` to assert their absence from `ProviderView.qml` — those are
+the only matches, all inside the guard tests themselves, zero in `assets`,
+`src`, or `scripts` outside `tests/`. `Qt.darker`/`Qt.rgba`, `resetText`, and
+`⌛` under `assets/omarchy` returned nothing at all.
+
+Per Step 2's ruling: `stale-dark`'s all-caps `badgeText = "STALE"` in the
+screenshot mirror is left as it was. The shipped header tag uppercases its
+text (`Font.AllUppercase`), so the mirror's all-caps badge is now consistent
+with the product rather than the taste outlier plan 03 flagged — the product
+caught up to the mirror, not the other way around.
+
+### What the plan got wrong
+
+Four defects surfaced during execution, all confirmed and resolved by the
+controller:
+
+1. The plan's own sample comment for `electLeadIndex` (Task 1) named the
+   literal string `PRIMARY_WINDOW_IDS` — the exact identifier Task 1's own
+   Step 3 deletion guard (`test_primary_window_allowlist_is_gone`) bans from
+   the file outright. The plan contradicted itself before a single line was
+   implemented. Caught during Task 1's implementation and worded around with
+   zero functional change, which is why Task 1 needed no separate fix round.
+   Same shape as plan 02's stray-glyph-in-a-comment defect: a literal
+   surviving inside a comment, not a rendering claim, propagating forward
+   into a later guard test.
+2. The header spacer formula (Task 4, `ProviderHeader.qml`) charged three
+   inter-child gaps for a `Row` of five children (name label, plan tag,
+   severity tag, flexible spacer, refresh button) that renders four gaps
+   between consecutive visible items once both tags are visible. The
+   corrected trailing term is `row.spacing * 2`, covering the two gaps that
+   exist unconditionally — before the spacer and after it — on top of the
+   two gaps already charged conditionally per visible tag. This lands right
+   for zero, one, and two visible tags. Fixed in `d003377`.
+3. `countdownMetrics` (Task 5) was specified against the mockup's sample data
+   `23h 1m`, not the widest countdown string the shipped format function
+   actually renders. `countdownText` pads no digits, so the widest sub-24h
+   string is `23h 59m` — one character wider — and the compact row's reset
+   column was sized one monospace character too narrow. The plan's own test
+   encoded the same `23h 1m` literal, so it could not have caught the gap by
+   construction; it surfaced only by checking the format function's actual
+   output range against the column width, not the plan's sample value.
+   Fixed in `1f89936`.
+4. A measured verification gap, not a code defect. `/usr/bin/qmllint` is a
+   stub that reports version "1.0" and stays completely silent even on a
+   file that contains an undefined type. The real binary,
+   `/usr/lib/qt6/bin/qmllint` 6.11.1, does not share that silent-stub defect,
+   but it also cannot resolve the `qs.*` module namespace (`qs.Commons`,
+   `qs.Ui`) that every plugin QML file imports — so this task's run, like
+   every prior plan's run, emits only unresolved-import and "Unqualified
+   access" warnings across every file under `assets/omarchy`, including
+   files this plan never touched. In effect, the `qmllint` line in the
+   repository's documented verification gate type-checks nothing for plugin
+   QML; `qmltestrunner`, `omarchy plugin validate`, and the owner's live QA
+   carry that weight instead. This is a finding recorded for the owner to
+   decide on — no change was made to `CLAUDE.md` or the v10 spec here.
+
+### Deferred minors carried forward
+
+None blocking; triaged here for whoever next touches these files.
+
+1. `test_lead_election_ties_keep_delivered_order` uses ids that also sort
+   alphabetically, so it cannot distinguish an index tiebreak from an id
+   tiebreak.
+2. `HeaderTag.qml` is deliberately outside `tst_Tokens.convertedFiles()`, so
+   no test requires it to call `Util.alpha(`.
+3. `leadReset` stays a visible `Row` child with empty text when a window has
+   no reset, reserving one `Style.spacing.sm` of trailing dead space.
+4. Below roughly 120–130px of content width the compact row's fixed columns
+   can overlap once the track floors to zero, which the popup's
+   `Style.space(540)` content width makes unreachable in practice.
+5. `ProviderHeader.showStale` is set by `ProviderView` but never read, dead
+   since an earlier plan moved staleness into the banner.
