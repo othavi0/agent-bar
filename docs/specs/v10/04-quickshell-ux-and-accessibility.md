@@ -63,8 +63,23 @@ not literal UI.
 - `UX-020`: Popup dimensions use Quattro fitting helpers and the current screen
   geometry; fixed sizes are maximum intentions, not unconditional dimensions.
   Content-fit height has a small compact floor only; no large empty minimum.
-- `UX-020A`: Each percentage window row shows a horizontal usage track filled
-  by the displayed metric (used or remaining).
+- `UX-020A`: Every percentage window row shows a horizontal usage track
+  filled by the displayed metric (used or remaining), in both the lead window
+  and the compact rows, so secondary windows stay comparable.
+- `UX-020C`: Severity is computed from `usedPercent`, independent of the
+  displayed metric, using the notification thresholds: at or above 95 the
+  window is Critical, at or above 90 it is Warning. The popup header shows a
+  severity tag reading `Critical` or `Low` when the provider has one, the
+  critical lead window renders its numeral and track in the urgent theme
+  colour, and a ready provider with a critical window shows the `!` cue on its
+  bar chip. Every level carries a word; no level is colour-only.
+- `UX-020D`: The popup renders exactly one lead window, elected
+  deterministically: a critical window wins, and among criticals the one with
+  the lowest remaining percentage; otherwise the window whose reset comes
+  soonest; ties keep the delivered order; when no window has a future reset
+  the first delivered window leads. Every other window renders as a compact
+  row in delivered order. Reset times render as a countdown, in hours below
+  24 hours.
 - `UX-020B`: The selected rail icon uses a neutral soft plate only for the
   provider that owns the open content; no accent edge tick; Settings has no
   idle selected-looking border.

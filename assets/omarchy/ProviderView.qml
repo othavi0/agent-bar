@@ -4,8 +4,8 @@ import qs.Ui
 import "CoreView.js" as Core
 import "components"
 
-// Single selected-provider content pane, "Camadas" (Fase 2):
-// header -> [stale banner] -> primary windows (large) -> model list (quiet)
+// Single selected-provider content pane, visual design §3.4/§8:
+// header -> [stale banner] -> lead window (large) -> compact rows
 // -> state message (non-window, non-stale modes). Plan 03 removed the meta
 // footer; last-success age now lives in the stale banner and is otherwise
 // implied structurally (windows render only when ready).
@@ -41,6 +41,7 @@ Item {
   readonly property var header: Core.headerModel(provider, refreshing)
   readonly property string mode: Core.contentMode(provider)
   readonly property var windows: Core.windowLayout(provider, displayMetric, nowMs)
+  readonly property string severity: Core.providerSeverity(provider)
   readonly property var actions: Core.stateActions(provider)
   // Adjusted (plan 03): was mode === "stale_windows" only, which fed the
   // banner's Retry Repeater and left the no-windows stale mode ("state")
@@ -67,6 +68,8 @@ Item {
       plan: root.header.plan
       refreshing: root.header.refreshing
       showStale: root.header.showStale
+      severityText: Core.severityTagText(root.severity)
+      severityUrgent: root.severity === "critical"
       foreground: root.foreground
       fontFamily: root.fontFamily
       onRefreshClicked: {
@@ -143,10 +146,12 @@ Item {
       }
     }
 
-    // Primary windows, large.
+    // §3.4/§8: one elected lead window rendered large, every other window as
+    // a compact row in delivered order. No rule between them — the size
+    // difference is the hierarchy (approved mockup).
     Column {
       width: parent.width
-      spacing: Style.space(12)
+      spacing: Style.spacing.xxxl
       visible: root.mode === "windows" || root.mode === "stale_windows"
 
       Repeater {
@@ -158,7 +163,9 @@ Item {
           percentText: modelData.percentText
           percent: modelData.percent !== undefined && modelData.percent !== null
               ? Number(modelData.percent) : -1
-          resetText: modelData.resetText ? modelData.resetText : ""
+          resetCountdown: modelData.resetCountdown ? modelData.resetCountdown : ""
+          resetPhrase: modelData.resetPhrase ? modelData.resetPhrase : ""
+          severity: modelData.severity ? modelData.severity : ""
           unitText: root.unitText
           emphasis: true
           dimmed: root.isStale
@@ -167,36 +174,31 @@ Item {
           fontFamily: root.fontFamily
         }
       }
-    }
 
-    // Secondary (per-model) windows, quiet list.
-    Column {
-      width: parent.width
-      spacing: Style.space(2)
-      visible: (root.mode === "windows" || root.mode === "stale_windows")
-          && root.windows.rest.length > 0
-
-      PanelSeparator {
+      Column {
         width: parent.width
-        foreground: root.foreground
-        strength: 0.08
-      }
+        spacing: Style.spacing.xl
+        visible: root.windows.rest.length > 0
 
-      Repeater {
-        model: root.windows.rest
-        UsageWindow {
-          required property var modelData
-          width: parent.width
-          label: modelData.label
-          percentText: modelData.percentText
-          percent: modelData.percent !== undefined && modelData.percent !== null
-              ? Number(modelData.percent) : -1
-          resetText: ""
-          unitText: root.unitText
-          emphasis: false
-          dimmed: root.isStale
-          foreground: root.foreground
-          fontFamily: root.fontFamily
+        Repeater {
+          model: root.windows.rest
+          UsageWindow {
+            required property var modelData
+            width: parent.width
+            label: modelData.label
+            percentText: modelData.percentText
+            percent: modelData.percent !== undefined && modelData.percent !== null
+                ? Number(modelData.percent) : -1
+            resetCountdown: modelData.resetCountdown ? modelData.resetCountdown : ""
+            resetPhrase: modelData.resetPhrase ? modelData.resetPhrase : ""
+            severity: modelData.severity ? modelData.severity : ""
+            unitText: root.unitText
+            emphasis: false
+            dimmed: root.isStale
+            foreground: root.foreground
+            accent: root.accentColor
+            fontFamily: root.fontFamily
+          }
         }
       }
     }

@@ -234,6 +234,52 @@ TestCase {
     compare(Core.mapActionKind("bash"), null)
   }
 
+  // §6: the lead window is 2.5x the body size with the reset promoted into
+  // its label line; the old bottom "resets" row is gone.
+  function test_lead_window_geometry_and_label_line() {
+    var win = read("assets/omarchy/components/UsageWindow.qml")
+    verify(win.indexOf("Math.round(Style.font.body * 2.5)") >= 0)
+    verify(win.indexOf("Style.font.body * 1.8") < 0)
+    verify(win.indexOf("root.resetPhrase") >= 0)
+    verify(win.indexOf("root.resetCountdown") >= 0)
+    verify(win.indexOf("property string resetText") < 0,
+           "resetText is replaced by the countdown pair")
+    verify(win.indexOf('text: "resets"') < 0,
+           "the reset row moved into the label line")
+  }
+
+  // UX-020A extended: every window row carries a track, not just the lead.
+  function test_compact_rows_carry_their_own_track() {
+    var win = read("assets/omarchy/components/UsageWindow.qml")
+    var compact = win.slice(win.indexOf("id: compactRow"))
+    verify(compact.length > 0, "compactRow must still exist")
+    verify(compact.indexOf("color: root.trackColor") >= 0,
+           "the compact row needs a track of its own (UX-020A)")
+    verify(compact.indexOf("root.resetCountdown") >= 0,
+           "the compact row needs its reset column")
+    verify(win.indexOf('text: "23h 1m"') >= 0,
+           "the reset column is measured with TextMetrics, never hardcoded px")
+  }
+
+  // §7: critical paints the numeral and the fill in Color.urgent; nothing
+  // else in this file may introduce a colour.
+  function test_critical_window_uses_the_urgent_token() {
+    var win = read("assets/omarchy/components/UsageWindow.qml")
+    verify(win.indexOf("Color.urgent") >= 0)
+    verify(win.indexOf('root.severity === "critical"') >= 0)
+    verify(win.indexOf("Qt.rgba(") < 0)
+  }
+
+  function test_provider_view_leads_with_one_window() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("Core.windowLayout(") >= 0)
+    verify(view.indexOf("emphasis: true") >= 0)
+    verify(view.indexOf("emphasis: false") >= 0)
+    verify(view.indexOf("severityText: ") >= 0)
+    // The quiet rule between lead and rows is gone (approved mockup).
+    verify(view.indexOf("strength: 0.08") < 0)
+  }
+
   // The three QML gates never compile a file that imports qs.*, so a dangling
   // reference to a deleted function is invisible to them. These guards ban the
   // exact dead identifiers by name.
