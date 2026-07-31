@@ -334,6 +334,8 @@ function stateBody(provider) {
     return ""
   var name = plainText(provider.name || providerDisplayName(provider.id))
   var s = String(provider.state || "")
+  if (s === "loading" || s === "stale")
+    return ""
   if (s === "ready" && (!provider.windows || provider.windows.length === 0))
     return emptyWindowsMessage()
   var err = errorMessage(provider)

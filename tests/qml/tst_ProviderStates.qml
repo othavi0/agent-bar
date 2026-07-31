@@ -57,6 +57,7 @@ TestCase {
     var p = firstProvider("valid-stale.json")
     compare(Core.contentMode(p), "stale_windows")
     compare(Core.stateTitle(p), "")
+    compare(Core.stateBody(p), "")
     verify(Core.errorMessage(p).length > 0)
     var acts = Core.stateActions(p)
     var kinds = acts.map(function (a) { return a.kind })

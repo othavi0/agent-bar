@@ -80,10 +80,10 @@ Notifications: enabled
 3. Middle-clicking any bar chip bypasses cache for all enabled providers once.
 4. Concurrent forced requests are coalesced without being discarded.
 
-### Connect
+### Sign in
 
-1. A detected but unauthenticated provider shows `Connect` when login
-   discovery succeeds; otherwise it shows `View installation`.
+1. A detected but unauthenticated provider shows `Sign in` when login
+   discovery succeeds; otherwise it shows `Install guide`.
 2. The action opens the configured terminal through the bundled Bash helper.
 3. The private Rust helper delegates to the provider's official login command.
 4. Success preserves the provider command's meaningful status and forces a
