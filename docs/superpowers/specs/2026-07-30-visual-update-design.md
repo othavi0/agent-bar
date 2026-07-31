@@ -186,6 +186,12 @@ as a named readonly property on `UsageWindow`, and never repeated.
   provider state is `ready`, so a pane showing windows with no stale banner is
   by definition connected. The label was redundant. See section 9.
 
+> Correction (2026-07-31, plan 04 execution): `23h 1m` is sample data from
+> the mockup, not the widest countdown. `CoreView.countdownText` pads no
+> digits, so the widest string it can produce below 24 hours is two-digit
+> hours plus two-digit minutes — `23h 59m`. The compact reset column is
+> measured against that string instead.
+
 ## 7. Severity model
 
 Severity reuses the existing Rust thresholds in

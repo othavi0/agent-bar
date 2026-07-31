@@ -46,13 +46,15 @@ Item {
   opacity: root.dimmed ? 0.6 : 1.0
 
   // §6: the compact reset column is sized for the widest countdown the
-  // humaniser produces below 24 hours, and the value column for a full 100%.
-  // Never a hardcoded pixel: both scale with [font] base-size.
+  // humaniser produces below 24 hours — countdownText() pads no digits, so
+  // two-digit hours plus two-digit minutes is the worst case — and the
+  // value column for a full 100%. Never a hardcoded pixel: both scale with
+  // [font] base-size.
   TextMetrics {
     id: countdownMetrics
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
-    text: "23h 1m"
+    text: "23h 59m"
   }
 
   TextMetrics {

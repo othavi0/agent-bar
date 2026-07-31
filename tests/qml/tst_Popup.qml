@@ -257,7 +257,7 @@ TestCase {
            "the compact row needs a track of its own (UX-020A)")
     verify(compact.indexOf("root.resetCountdown") >= 0,
            "the compact row needs its reset column")
-    verify(win.indexOf('text: "23h 1m"') >= 0,
+    verify(win.indexOf('text: "23h 59m"') >= 0,
            "the reset column is measured with TextMetrics, never hardcoded px")
   }
 
