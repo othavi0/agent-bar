@@ -183,7 +183,7 @@ function updateConfirmMessage(ui) {
   var current = ui && ui.installedVersion ? String(ui.installedVersion) : "current"
   var target = ui && ui.targetVersion ? String(ui.targetVersion) : "new"
   return "Updates " + current + " \u2192 " + target
-      + ". Settings stay. Automatic rollback if it fails."
+      + ". Settings stay. Rolls back if it fails."
 }
 
 function maintenanceUiOpenUninstallConfirm(ui) {

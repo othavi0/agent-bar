@@ -99,7 +99,11 @@ TestCase {
     verify(msg.indexOf("10.0.0") >= 0)
     verify(msg.indexOf("10.2.0") >= 0)
     verify(msg.toLowerCase().indexOf("settings") >= 0)
-    verify(msg.toLowerCase().indexOf("roll back") >= 0 || msg.toLowerCase().indexOf("rollback") >= 0)
+    // Checks that rollback is communicated, not the exact phrasing — any of
+    // these three forms says it.
+    verify(msg.toLowerCase().indexOf("roll back") >= 0
+        || msg.toLowerCase().indexOf("rollback") >= 0
+        || msg.toLowerCase().indexOf("rolls back") >= 0)
     // §5.6 shortened it; the old sentence must not come back.
     verify(msg.indexOf("This replaces the plugin bundle") < 0)
   }

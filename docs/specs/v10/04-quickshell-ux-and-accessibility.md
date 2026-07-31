@@ -140,8 +140,8 @@ Requirements:
 - `UX-041`: `Check for updates` performs an explicit network request.
 - `UX-042`: When available, show `Update to <version>` and a release-notes
   link.
-- `UX-043`: Update confirmation names current version, target version, bundle
-  replacement, settings preservation, and rollback behavior.
+- `UX-043`: Update confirmation names current version, target version,
+  settings preservation, and rollback behavior.
 - `UX-044`: `Uninstall Agent Bar` is visually separated as a danger action.
 - `UX-045`: Uninstall confirmation defaults to preserving settings.
 - `UX-046`: `Also delete saved settings and backups` is unchecked by default.
