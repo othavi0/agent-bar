@@ -10,6 +10,15 @@ use time::{Duration, OffsetDateTime};
 /// `"2d 18h"` | `"3h 1m"` | `"5m"`. Truncates like the QML original: whole
 /// minutes first, then whole days and hours out of those. Never rounds up, so
 /// a countdown never claims more time than remains.
+///
+/// The parity contract with `CoreView.countdownText` holds for non-negative
+/// durations only: a negative `remaining` clamps to `"0m"` here, where the
+/// QML original's `Math.floor` would keep counting past zero into negative
+/// minutes. Neither side can reach that input in the product today — this
+/// side is only ever called through `reset_countdown`, which returns `"now"`
+/// before a negative duration gets here, and the QML side is only ever
+/// called through `resetCountdownText`, which does the same. A caller that
+/// skips that sign check would see this function and the popup disagree.
 pub fn countdown_text(remaining: Duration) -> String {
     let total_minutes = remaining.whole_minutes().max(0);
     let days = total_minutes / 1440;
