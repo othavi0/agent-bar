@@ -32,9 +32,15 @@ Item {
       : 0
   readonly property bool isCritical: root.severity === "critical"
   readonly property color valueColor: root.isCritical ? Color.urgent : root.foreground
-  readonly property color fillColor: root.dimmed
-      ? root.foreground
-      : (root.isCritical ? Color.urgent : root.accent)
+  // Severity describes the numbers on screen, so it outranks dimming: a
+  // stale window still shows the last reading, and a critical last reading
+  // is still critical. Staleness is carried by the root opacity, the reduced
+  // fill opacity, and the stale banner — not by hiding the severity colour.
+  // valueColor and fillColor must agree on this; they disagreed once, and
+  // the numeral and its own track rendered two different verdicts.
+  readonly property color fillColor: root.isCritical
+      ? Color.urgent
+      : (root.dimmed ? root.foreground : root.accent)
   readonly property real fillOpacity: root.dimmed ? 0.45 : (root.isCritical ? 1.0 : 0.9)
   // Data surface, not control chrome — no host token covers it. Declared
   // once here; both layouts tint from the same place.

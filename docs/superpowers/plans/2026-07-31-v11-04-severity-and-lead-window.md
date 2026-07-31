@@ -1614,7 +1614,7 @@ git commit -m "docs: record execution outcome in plan"
 
 ## Done when
 
-- `qmltestrunner` 0 failed, with these named tests printing `PASS`: `test_severity_level_thresholds`, `test_severity_tag_words`, `test_provider_severity_is_the_worst_window`, `test_severity_ignores_the_display_metric`, the seven `test_lead_election_*`, `test_single_window_leads_with_no_rest`, `test_no_windows_means_no_lead`, `test_unknown_window_id_can_lead`, `test_lines_carry_raw_percentages_and_countdown`, the six `test_reset_countdown_*`/`test_reset_phrase_follows_the_countdown`, `test_primary_window_allowlist_is_gone`, `test_absolute_clock_humaniser_is_gone`, `test_chip_severity_urgent_only_when_ready_and_critical`, `test_chip_cue_label_is_a_word`, `test_chip_source_binds_severity`, `test_header_renders_plan_and_severity_tags`, `test_header_spacer_accounts_for_both_tags`, `test_lead_window_geometry_and_label_line`, `test_compact_rows_carry_their_own_track`, `test_critical_window_uses_the_urgent_token`, `test_provider_view_leads_with_one_window`.
+- `qmltestrunner` 0 failed, with these named tests printing `PASS`: `test_severity_level_thresholds`, `test_severity_tag_words`, `test_provider_severity_is_the_worst_window`, `test_severity_ignores_the_display_metric`, the six `test_lead_election_*`, `test_single_window_leads_with_no_rest`, `test_no_windows_means_no_lead`, `test_unknown_window_id_can_lead`, `test_lines_carry_raw_percentages_and_countdown`, the six `test_reset_countdown_*`/`test_reset_phrase_follows_the_countdown`, `test_primary_window_allowlist_is_gone`, `test_absolute_clock_humaniser_is_gone`, `test_chip_severity_urgent_only_when_ready_and_critical`, `test_chip_cue_label_is_a_word`, `test_chip_source_binds_severity`, `test_header_renders_plan_and_severity_tags`, `test_header_spacer_accounts_for_both_tags`, `test_lead_window_geometry_and_label_line`, `test_compact_rows_carry_their_own_track`, `test_critical_window_uses_the_urgent_token`, `test_provider_view_leads_with_one_window`.
 - `cargo test` green at **292 across 16 suites**, including the new `severity_parity` suite; `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `git diff --check` clean.
 - `qmllint`, `omarchy plugin validate assets/omarchy`, and `scripts/verify-v10-ui` (17 PNGs) all pass.
 - Every hygiene grep in Task 6 Step 5 returns nothing: no `PRIMARY_WINDOW_IDS`, no `windowGroups`, no `formatResetText`, no `WEEKDAYS`, no `resetText`, no `Qt.darker`/`Qt.rgba` under `assets/omarchy`.
@@ -1678,7 +1678,7 @@ caught up to the mirror, not the other way around.
 ### What the plan got wrong
 
 Four defects surfaced during execution, all confirmed and resolved by the
-controller:
+controller; a fifth surfaced later, in the final whole-branch review:
 
 1. The plan's own sample comment for `electLeadIndex` (Task 1) named the
    literal string `PRIMARY_WINDOW_IDS` — the exact identifier Task 1's own
@@ -1719,6 +1719,21 @@ controller:
    QML; `qmltestrunner`, `omarchy plugin validate`, and the owner's live QA
    carry that weight instead. This is a finding recorded for the owner to
    decide on — no change was made to `CLAUDE.md` or the v10 spec here.
+5. The plan authored `valueColor` and `fillColor` in the same Task 5 step
+   (`UsageWindow.qml`) with opposite treatments of `dimmed`: `valueColor`
+   ignored it and stayed on `isCritical` alone, while `fillColor` gave
+   `dimmed` precedence over `isCritical`. A stale window whose last reading
+   was critical therefore rendered an urgent numeral beside a plain,
+   non-urgent track — the two halves of the same window disagreeing about
+   its own severity. No gate in this plan could catch it: the QML tests read
+   the file as text and never instantiate the real components, and the
+   screenshot mirror has no capture that is both stale and critical at once.
+   It surfaced only in the final whole-branch review, reading the two
+   `readonly property color` lines side by side. The rule the fix settles
+   on: in the popup, severity describes the numbers currently on screen, so
+   severity outranks dimming; `dimmed` only chooses between the accent and
+   the plain foreground for a window that is not critical. Fixed in the
+   whole-branch review's single fix commit for this plan.
 
 ### Deferred minors carried forward
 
@@ -1736,3 +1751,19 @@ None blocking; triaged here for whoever next touches these files.
    `Style.space(540)` content width makes unreachable in practice.
 5. `ProviderHeader.showStale` is set by `ProviderView` but never read, dead
    since an earlier plan moved staleness into the banner.
+
+## Open question for the owner
+
+- The popup header shows the severity tag whenever the provider has one,
+  including while the provider is stale, so a stale account whose last
+  reading was critical shows an urgent `CRITICAL` tag above the stale
+  banner. The bar chip deliberately does the opposite: `chipSeverityUrgent`
+  requires `state === "ready"`, because the chip has a single cue slot that
+  the state already owns. The two surfaces differ on purpose under the rule
+  above — the popup has a dedicated tag slot with no collision to arbitrate,
+  and it renders the actual last-known numbers next to the tag, while the
+  chip's one slot must choose between showing state and showing severity. If
+  the owner prefers the header to go quiet while stale instead, the change
+  is to gate `severityText`/`severityUrgent` in `ProviderView.qml` on
+  `provider.state === "ready"`, the same way the chip is gated. Not
+  implemented here.

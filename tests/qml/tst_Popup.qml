@@ -268,6 +268,19 @@ TestCase {
     verify(win.indexOf("Color.urgent") >= 0)
     verify(win.indexOf('root.severity === "critical"') >= 0)
     verify(win.indexOf("Qt.rgba(") < 0)
+
+    // The numeral and its track must agree about severity. They disagreed
+    // once: valueColor ignored `dimmed` while fillColor gave it precedence,
+    // so a stale critical window painted an urgent number beside a neutral
+    // track. Both must reach Color.urgent from `isCritical` alone.
+    var value = win.slice(win.indexOf("readonly property color valueColor"))
+    value = value.slice(0, value.indexOf("\n"))
+    verify(value.indexOf("root.dimmed") < 0,
+           "valueColor must not consult dimmed: " + value)
+    var fill = win.slice(win.indexOf("readonly property color fillColor"))
+    fill = fill.slice(0, fill.indexOf("readonly property real fillOpacity"))
+    verify(fill.indexOf("root.isCritical") < fill.indexOf("root.dimmed"),
+           "fillColor must test isCritical before dimmed: " + fill)
   }
 
   function test_provider_view_leads_with_one_window() {

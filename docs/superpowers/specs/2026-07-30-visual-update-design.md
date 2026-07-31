@@ -229,6 +229,13 @@ This replaces the `PRIMARY_WINDOW_IDS` allowlist (`session`, `weekly`,
 `daily`), which is deleted. The allowlist silently demoted any window whose id
 was not in the set; election handles new window ids without a code change.
 
+> Correction (2026-07-31, plan 04 execution): the `then by window id`
+> tiebreak in step 3 is NOT implemented in `electLeadIndex`. Measured during
+> plan 04 execution, the delivered-order index is already unique per window,
+> so it is already a total tiebreak and the id step is unreachable. Writing
+> it would be dead code; it is deliberately not implemented rather than
+> shipped as dead code.
+
 ## 9. Specification amendments required
 
 - **`UX-017`** currently reads: "The header shows name, plan badge, connection
