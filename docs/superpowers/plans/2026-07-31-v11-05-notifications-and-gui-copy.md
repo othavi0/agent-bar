@@ -963,3 +963,176 @@ Deliberately untouched here:
 - Notification triggering, dedup, re-arm, and persistence (`NOTIFY-001`…`008`, `010`…`012`).
 - `ProviderHeader.showStale`, dead since plan 03 and still carried in `headerModel`.
 - The `Installed version` row, `Danger zone`, `Release notes`, and the confirm-button texts, which the copy design does not change.
+
+## Execution record
+
+Executed 2026-07-31 on branch `feat/v11-foundation`, task order 1 → 2 → 3 → 4
+→ 5 → 6, 10 implementation/fix commits across Tasks 1–5 plus this record:
+`64f261a` + `e9a9ce6` (Task 1: humaniser, shared fixture, both-side parity,
+doc precondition), `3b77a4c` + `0840638` (Task 2: notification copy and
+display metric, clock-threading test), `27e0790` + `a6b9b14` (Task 3:
+settings labels, frame-independent `seconds` suffix), `99f38ea` + `bc09c84`
+(Task 4: maintenance copy, `installType` deletion, rollback copy and
+`UX-043` amended), `109e63f` + `3d65be1` (Task 5: vocabulary guard, widened
+to every quoted literal). All five tasks needed exactly one fix round. Task 6
+produced no product-behavior commit — screenshot mirror sync, hygiene greps,
+full checkpoint, and this record only.
+
+Final state: `cargo test` **301 passed across 18 suites** — one more than the
+plan's own "300 across 18 suites" arithmetic (292 baseline + 3 countdown unit
+tests + 2 `countdown_parity` + 2 new notification tests + 1 `gui_vocabulary`).
+The extra test is not lost work, it is uncounted work: that arithmetic was
+written against Task 2's first commit and never revised for Task 2's own fix
+round, `0840638`, which added a fourth lib-suite test,
+`evaluate_threads_its_own_clock_into_the_dispatched_countdown`. Verified
+suite-by-suite (this environment's RTK hook condenses a bare `cargo test` to
+a one-line summary; `rtk proxy cargo test` was used for the real per-suite
+counts): lib 242, `src/main.rs` 0, `agent-bar-bundle` 0, `active_docs` 5,
+`active_language` 3, `active_legacy_scan` 4, `agent_bar_bundle_cli` 4, `cli`
+19, `countdown_parity` 2, `gui_vocabulary` 1, `icon_assets` 1, `login` 6,
+`schema_contract` 5, `screenshot_inventory` 1, `servicecore_contract` 1,
+`severity_parity` 2, `terminal_helper` 5, doc-tests 0 — 18 suites, 301 passed,
+0 failed. `qmltestrunner` **231 passed / 0 failed** (228 baseline +
+`test_countdown_matches_the_shared_table` from Task 1 +
+`test_install_type_is_gone_from_the_model` and
+`test_update_check_failure_has_one_string` from Task 4), with every named
+test from the "Done when" list printing `PASS`:
+`test_countdown_matches_the_shared_table`,
+`test_settings_view_source_contracts`, `test_maintenance_view_ux_copy`,
+`test_install_type_is_gone_from_the_model`,
+`test_update_check_failure_has_one_string`, and
+`test_update_confirm_message_names_versions`. `cargo fmt --check`, `cargo
+clippy --all-targets -- -D warnings`, and `git diff --check` all clean.
+`qmllint -I /usr/share/omarchy/shell` over every `assets/omarchy/**/*.qml`
+file: 0 errors (365 unqualified-access/unresolved-import warnings, 125 info
+notes — the same pre-existing `qs.Commons`/`qs.Ui` noise across the whole
+plugin tree that plan 04 recorded, not a regression here). `omarchy plugin
+validate assets/omarchy` clean. `scripts/verify-v10-ui`: `verify-v10-ui: 17
+PNGs ok → …/SHA256SUMS`, exit 0 — unchanged at 17, since this plan adds and
+removes no capture.
+
+Every Step 2 hygiene grep returned nothing beyond self-referential guard
+assertions and one explanatory source comment. `Uninstall agent-bar|
+Installation type|installType` matches three negative assertions inside
+`tests/qml/tst_Maintenance.qml` (`verify(src.indexOf(…) < 0)`), which assert
+the strings' *absence* rather than use them. `Final confirmation|Click
+Uninstall again` matches the arming message `CoreMaintenance.js:219` still
+sets (`next.message = "Click Uninstall again to confirm."`), carried forward
+below as a deferred minor since nothing renders it. `usage warning|usage
+critical` matches one line, a comment at `src/notifications/mod.rs:68`
+(`// Copy design §5.5: the title names what is running out. The old
+"{Name} usage warning" said the category, not the thing.`) that documents
+the retired title format rather than shipping it — this exact comment is in
+the plan's own Task 2 Step 3 sample code. `Chip number|Refresh interval
+\(seconds\)|Usage threshold alerts|Loading settings` and `Update check
+returned an unusable response` returned nothing at all.
+
+### What the plan got wrong
+
+Five defects surfaced during execution, all confirmed and resolved by the
+controller:
+
+1. Copy design §5.7 asked for `seconds` as a `NumberField` "field suffix".
+   The host component has no such property — it exposes twelve properties
+   (`label`, `value`, `from`, `to`, `stepSize`, `foreground`, `accent`,
+   `fontFamily`, `fontSize`, `fieldWidth`, `hasCursor`, `_hovered`) plus
+   `property alias field: spin`, none of them a suffix. Caught at planning
+   time by resolving the component rather than trusting the spec (Global
+   Constraints, measured fact 4), so it cost a design decision — a sibling
+   `Text` positioned against the spin box — instead of a defect. Task 3
+   implemented that decision in `27e0790`; its one fix round, `a6b9b14`,
+   corrected the sibling label's `y` binding to compose `intervalField`'s own
+   offset within the `Row` with the spin box's offset inside
+   `intervalField`'s `Column`, instead of reading the spin box's `y` alone —
+   a coordinate-frame bug in the first cut of the same decision, not a second
+   problem.
+2. Task 4's sample copy for the update-confirmation sentence, taken verbatim
+   from the approved design (`"…Settings stay. Rolls back if it fails."`),
+   collided with `test_update_confirm_message_names_versions`, a test that
+   predates this plan and still asserted the substring `roll back` or
+   `rollback` — inherited from the old sentence ("…and can roll back on
+   failure.") the copy design replaced. `Rolls back if it fails.` matches
+   neither: the `s` in `Rolls` breaks the two-word form, and there is no
+   unspaced `rollback` anywhere in the sentence. The first implementer's
+   commit, `99f38ea`, resolved the collision by changing the shipped copy to
+   `Automatic rollback if it fails.` — never approved, invented to satisfy
+   the test. The controller reversed that in `bc09c84`: restored the
+   approved sentence verbatim and widened the test to accept a third form,
+   `rolls back`, alongside the two it already had. The precedence rule this
+   settles: when a test and owner-approved copy disagree, the test moves,
+   not the copy — the test exists to protect the copy's meaning (that
+   rollback is communicated), not one exact phrasing of it.
+3. The plan missed that `UX-043` required the update confirmation to name
+   "bundle replacement" specifically — wording the shortened §5.6 sentence
+   deliberately drops, since `bundle` is one of the eight words
+   `tests/gui_vocabulary.rs` (Task 5) bans from GUI copy. Naming it would
+   have meant either violating the vocabulary guard or leaving `UX-043`
+   unsatisfiable by any compliant sentence. Found by the implementer while
+   writing `test_update_confirm_message_names_versions`, and amended in the
+   same commit as item 2's fix, `bc09c84`: `UX-043` now reads current
+   version, target version, settings preservation, and rollback behavior —
+   the four things the shipped sentence actually names.
+4. Measured fact 12 states the vocabulary scan returns "exactly six
+   violations" before the Task 4 rewrite. Run today, it reports five, because
+   `gui_copy_has_no_internal_vocabulary`'s `violations` is a
+   `BTreeSet<String>` keyed by `"{file}: {word} in {literal}"`, and
+   `CoreMaintenance.js:90` and `:113` both carried the byte-identical literal
+   `"Plugin bundle"` (`installType: "Plugin bundle"` in both
+   `maintenanceUiIdle` and `cloneMaintenanceUi`) — the set collapses the two
+   into one entry. Six line-level leaks, five unique messages: the plan's
+   "exactly six" language conflated the occurrence count with the assertion's
+   own reported count. Found during Task 5's Step 3 exercise (checking out
+   the pre-Task-4 files and re-running the test); no code changed, since the
+   mechanism is correct and only the plan's prose miscounted —
+   `tests/gui_vocabulary.rs`'s own doc comment still correctly says "six GUI
+   strings carried it", the line-level count, not the five-message count a
+   failing run prints.
+5. The vocabulary scanner as specified (Task 5 Step 1) treated a quoted
+   literal as copy only when it contained a space, on the theory that
+   single-token strings in this codebase are ids, enum values, and glyphs.
+   Final review found two shapes that theory missed, both already present in
+   the codebase: single-word literals that are genuine copy, and single-word
+   continuation fragments of a multi-line string concatenation. Before
+   directing the fix, the controller measured the cure: removing the space
+   filter entirely (`3d65be1`) yields zero violations on the current tree, so
+   the wider scan was free. A related gap, plural forms such as `bundles`,
+   was found at the same time and left open on purpose — closing it needs
+   prefix matching, which would cost two false positives against
+   `schemaVersion`, a legitimate JSON field name in diagnostic strings in
+   `CoreService.js` and `CoreSettings.js`. The scanner's own doc comment
+   records the trade-off.
+
+### Deferred minors carried forward
+
+None blocking; triaged here for whoever next touches these files.
+
+1. The countdown fixture (`tests/fixtures/countdown-table.json`) has no
+   three-digit-days row, despite the plan's own commentary calling its 12
+   rows full boundary coverage; the widest row is `10080` minutes / `7d 0h`,
+   two digits.
+2. `countdown_text`'s doc comment (`src/support/countdown.rs`) says this side
+   is "only ever called through `reset_countdown`", but both
+   `tests/countdown_parity.rs::countdown_matches_the_shared_table` and
+   `tst_Format.qml::test_countdown_matches_the_shared_table` call
+   `countdown_text` directly, by design — that call is the parity seam
+   itself.
+3. `evaluate_threads_its_own_clock_into_the_dispatched_countdown`'s comment
+   claims its fixed instants are "already years behind the real wall clock
+   this suite runs under"; the fixture uses `2026-07-26`, about five days
+   behind the date this plan executed on, not years.
+4. Used and remaining percentages round independently (`value.round() as
+   i64` per metric in `build_spec`; `Math.round` per metric in
+   `windowDisplayLines`), so a window at 45.5% used / 54.5% remaining renders
+   `46%`/`55%` — the two never appear together in one body, and their sum can
+   drift from 100 by a point.
+5. `CoreMaintenance.js` still sets `next.message = "Click Uninstall again to
+   confirm."` when arming the uninstall confirmation, though
+   `MaintenanceView.qml`'s message binding no longer reads that field for the
+   armed state — Task 4's rewrite replaced it with the `ui.uninstallArmed ?
+   … : …` ternary. Dead by the no-dormant-code standard; left untouched here
+   because Task 6's file list does not include `CoreMaintenance.js`.
+6. Single-quoted JS strings are outside `tests/gui_vocabulary.rs`'s scanner
+   (it splits only on `"`), and a trailing `//` comment on an otherwise-live
+   code line is not filtered — only a line whose trimmed start is `//` is
+   skipped — so a quoted example inside a trailing comment could trip a
+   false failure.

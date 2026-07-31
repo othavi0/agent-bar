@@ -159,7 +159,7 @@ TestCase {
     } else if (name.indexOf("settings-clean-dark") === 0) {
       stage.titleText = "Settings"
       stage.badgeText = "clean"
-      stage.bodyText = "Providers · Remaining · Interval 60 · Notifications on"
+      stage.bodyText = "Providers · Remaining · Refresh every 60 seconds · Notifications on"
     } else if (name.indexOf("settings-dirty-dark") === 0) {
       stage.titleText = "Settings"
       stage.badgeText = "dirty"
@@ -167,13 +167,13 @@ TestCase {
     } else if (name.indexOf("settings-invalid-dark") === 0) {
       stage.titleText = "Settings"
       stage.badgeText = "invalid"
-      stage.bodyText = "Refresh interval out of range · Save changes disabled"
+      stage.bodyText = "Refresh every out of range · Save changes disabled"
     } else if (name.indexOf("maintenance-update-dark") === 0) {
       stage.titleText = "Maintenance"
       stage.badgeText = "Update to 10.1.0"
-      stage.bodyText = "Plugin bundle · Check for updates · Release notes"
+      stage.bodyText = "Check for updates · Release notes"
     } else if (name.indexOf("uninstall-confirmation-dark") === 0) {
-      stage.titleText = "Uninstall agent-bar"
+      stage.titleText = "Uninstall Agent Bar"
       stage.badgeText = "Confirm"
       stage.bodyText = "Also delete saved settings and backups (unchecked) · second click required"
     } else {
