@@ -127,28 +127,31 @@ TestCase {
       stage.bodyText = "Weekly (7d) 74% left (prior data kept)"
     } else if (name.indexOf("stale-dark") === 0) {
       stage.titleText = "Grok"
-      stage.badgeText = "Stale"
-      stage.bodyText = "Showing the last successful result. Temporary network failure."
+      stage.badgeText = "STALE"
+      stage.bodyText = "Last data 14m ago · Temporary network failure."
     } else if (name.indexOf("cli-missing-dark") === 0) {
       stage.titleText = "Amp"
       stage.badgeText = "CLI missing"
-      stage.bodyText = "Amp CLI was not found. View installation"
+      stage.bodyText = "Amp CLI is not installed. Agent Bar reads the quota through it. Install guide"
     } else if (name.indexOf("unauthenticated-dark") === 0) {
       stage.titleText = "Claude"
       stage.badgeText = "Not connected"
-      stage.bodyText = "Claude is not authenticated. Connect"
+      stage.bodyText = "Not signed in to Claude. Signing in opens the official Claude CLI. Sign in"
     } else if (name.indexOf("rate-limited-dark") === 0) {
       stage.titleText = "Codex"
       stage.badgeText = "Rate limited"
-      stage.bodyText = "The provider rate-limited this request. Retry"
+      stage.bodyText = "Codex hit a rate limit. Try again in a few minutes. Retry"
     } else if (name.indexOf("network-error-dark") === 0) {
-      stage.titleText = "Grok"
-      stage.badgeText = "Network error"
-      stage.bodyText = "A temporary network error prevented collection. Retry"
-    } else if (name.indexOf("provider-error-dark") === 0) {
+      // Provider swapped Grok -> Amp to keep the fixture internally
+      // consistent with the shipped copy (task brief names Amp here).
       stage.titleText = "Amp"
+      stage.badgeText = "Network error"
+      stage.bodyText = "Cannot reach Amp. Check your connection. Retry"
+    } else if (name.indexOf("provider-error-dark") === 0) {
+      // Provider swapped Amp -> Grok to match, same reason as above.
+      stage.titleText = "Grok"
       stage.badgeText = "Provider error"
-      stage.bodyText = "The provider returned an unusable response. Retry"
+      stage.bodyText = "Grok returned no limits. Retry"
     } else if (name.indexOf("settings-clean-dark") === 0) {
       stage.titleText = "Settings"
       stage.badgeText = "clean"

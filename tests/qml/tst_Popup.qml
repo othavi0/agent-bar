@@ -82,9 +82,28 @@ TestCase {
     verify(popup.indexOf("Style.space(14)") < 0)
   }
 
-  function test_footer_shows_connection() {
-    var src = read("assets/omarchy/ProviderView.qml")
-    verify(src.indexOf("connection") >= 0)
+  function test_no_meta_footer() {
+    // NOTE: repoRoot (above) already pops to the repo root, matching every
+    // sibling read() call in this file ("assets/omarchy/..."); the brief's
+    // literal "../../assets/omarchy/ProviderView.qml" resolves outside the
+    // repo, so XHR returns "" and both new tests would pass/fail vacuously
+    // forever regardless of ProviderView.qml's contents. Fixed to match the
+    // established convention.
+    var view = read("assets/omarchy/ProviderView.qml")
+    // §6/§9: the meta footer is removed in all states; its age moved to the
+    // stale banner and connection state is structural.
+    verify(view.indexOf("connection") < 0)
+    verify(view.indexOf('"Updated "') < 0)
+    verify(view.indexOf('"Cache"') < 0)
+    verify(view.indexOf('"Live"') < 0)
+  }
+
+  function test_stale_banner_carries_age_and_retry() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("󰅐") >= 0)
+    verify(view.indexOf('"Last data "') >= 0)
+    verify(view.indexOf("formatAgoText") >= 0)
+    verify(view.indexOf("⌛") < 0)
   }
 
   function test_full_width_separator_present() {

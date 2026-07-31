@@ -6,7 +6,9 @@ import "components"
 
 // Single selected-provider content pane, "Camadas" (Fase 2):
 // header -> [stale banner] -> primary windows (large) -> model list (quiet)
-// -> state message (non-window modes) -> meta footer.
+// -> state message (non-window, non-stale modes). Plan 03 removed the meta
+// footer; last-success age now lives in the stale banner and is otherwise
+// implied structurally (windows render only when ready).
 Item {
   id: root
 
@@ -40,7 +42,13 @@ Item {
   readonly property string mode: Core.contentMode(provider)
   readonly property var groups: Core.windowGroups(provider, displayMetric, nowMs)
   readonly property var actions: Core.stateActions(provider)
-  readonly property bool isStale: root.mode === "stale_windows"
+  // Adjusted (plan 03): was mode === "stale_windows" only, which fed the
+  // banner's Retry Repeater and left the no-windows stale mode ("state")
+  // without a Retry control. Both stale modes share one provider.state
+  // check; dimmed: root.isStale on the windows Column is unaffected since
+  // that Column is only visible in the "windows"/"stale_windows" modes,
+  // where state === "stale" iff mode === "stale_windows" anyway.
+  readonly property bool isStale: String(root.provider && root.provider.state || "") === "stale"
   readonly property string unitText: root.displayMetric === "used" ? "used" : "left"
   readonly property color accentColor: Color.accent
 
@@ -72,15 +80,17 @@ Item {
       foreground: root.foreground
     }
 
-    // Stale banner: glyph + typed message + Retry (never color-only).
+    // Stale banner (UX-028): carries last-success age + safe error + Retry.
+    // Never color-only (A11Y-012): glyph and words, urgent-tinted per the
+    // approved mockup.
     Row {
-      visible: root.isStale
+      visible: root.provider && String(root.provider.state || "") === "stale"
       width: parent.width
       spacing: Style.space(8)
 
       Text {
-        text: "⌛"
-        color: root.foreground
+        text: "󰅐"
+        color: Color.urgent
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
         textFormat: Text.PlainText
@@ -88,8 +98,16 @@ Item {
       }
       Text {
         width: Math.max(0, parent.width - Style.space(120))
-        text: "Stale — " + Core.errorMessage(root.provider)
-        color: root.foreground
+        text: {
+          var age = Core.formatAgoText(
+            root.header.lastSuccessAt ? root.header.lastSuccessAt : "", root.nowMs)
+          var line = "Last data " + (age.length ? age : "unknown")
+          var err = Core.errorMessage(root.provider)
+          if (err.length)
+            line += " · " + err
+          return line
+        }
+        color: Color.urgent
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         wrapMode: Text.WordWrap
@@ -185,7 +203,8 @@ Item {
 
     StateMessage {
       width: parent.width
-      visible: root.mode === "skeleton" || root.mode === "empty_windows" || root.mode === "state"
+      visible: (root.mode === "skeleton" || root.mode === "empty_windows" || root.mode === "state")
+          && String(root.provider && root.provider.state || "") !== "stale"
       skeleton: root.mode === "skeleton"
       title: root.mode === "skeleton" ? "" : Core.stateTitle(root.provider)
       body: root.mode === "skeleton" ? "" : Core.stateBody(root.provider)
@@ -196,47 +215,6 @@ Item {
         if (!root.provider)
           return
         root.actionRequested(String(root.provider.id), kind, target)
-      }
-    }
-
-    // Meta footer: age + source left, connection right (was header noise).
-    Row {
-      width: parent.width
-      visible: root.mode === "windows" || root.mode === "stale_windows"
-
-      Text {
-        id: footerLeft
-        width: Math.max(0, parent.width * 0.6)
-        text: {
-          var parts = []
-          var age = Core.formatAgoText(
-            root.header.lastSuccessAt ? root.header.lastSuccessAt : "", root.nowMs)
-          if (age.length)
-            parts.push("Updated " + age)
-          if (root.provider && root.provider.source)
-            parts.push(String(root.provider.source) === "cache" ? "Cache" : "Live")
-          if (root.header.refreshing)
-            parts.push("refreshing…")
-          return parts.join(" · ")
-        }
-        color: Util.alpha(root.foreground, 0.55)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        elide: Text.ElideRight
-        textFormat: Text.PlainText
-        Accessible.name: text
-      }
-      Text {
-        width: Math.max(0, parent.width - footerLeft.width)
-        text: root.header.connection
-        color: Util.alpha(root.foreground, root.header.showStale ? 0.72 : 0.55)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        font.bold: root.header.showStale
-        horizontalAlignment: Text.AlignRight
-        elide: Text.ElideRight
-        textFormat: Text.PlainText
-        Accessible.name: text
       }
     }
   }

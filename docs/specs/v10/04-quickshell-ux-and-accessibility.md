@@ -49,8 +49,9 @@ not literal UI.
 
 - `UX-013`: The left rail is visually separate and uses provider icons only.
 - `UX-014`: Provider names are available through tooltips and accessibility.
-- `UX-015`: Settings is the last control in the rail stack (equal frame
-  padding top and bottom; not overlaid with `anchors.bottom` on short cards).
+- `UX-015`: Settings is the last control in the rail stack (the stack shares
+  the popup content inset top and bottom; not overlaid with
+  `anchors.bottom` on short cards).
 - `UX-016`: The provider header does not repeat the provider icon.
 - `UX-017`: The header shows the provider name, the plan tag, severity when
   present, and the provider refresh control. Connection state is implied
@@ -79,8 +80,9 @@ not literal UI.
 - `UX-026`: Initial collection with no prior data uses skeleton placeholders.
 - `UX-027`: Refresh with prior data keeps content and shows a subtle progress
   indicator.
-- `UX-028`: Stale content stays visible with a visible `Stale` label, last
-  success age, and safe error summary.
+- `UX-028`: Stale content stays visible. The stale banner carries the
+  `󰅐` cue, the last success age, the safe error summary, and Retry; it
+  renders whenever the provider state is stale.
 - `UX-029`: Missing CLI keeps the enabled provider icon dimmed and shows
   `Install guide` and `Check again`.
 - `UX-030`: Unauthenticated shows `Sign in` when login discovery succeeds;
@@ -89,8 +91,7 @@ not literal UI.
   not imply authentication failure.
 - `UX-032`: Provider errors never render raw stderr or rich text.
 - `UX-032A`: A ready provider with no normalized percentage window shows `—`
-  in its chip and `Percentage usage is not available for this account` in the
-  popup.
+  in its chip and `This account is billed another way.` in the popup.
 
 ## Settings
 
