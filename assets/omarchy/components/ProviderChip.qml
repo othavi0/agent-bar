@@ -18,6 +18,11 @@ WidgetButton {
   property url iconSource: ""
   property bool tinted: false
   property real iconScale: 1.0
+  property bool severityUrgent: false
+  property string cueLabel: ""
+
+  // §7: Color.urgent is the single severity colour; no new colour exists.
+  readonly property color numeralColor: root.severityUrgent ? Color.urgent : root.foreground
 
   readonly property int paintedIconSize: Math.round(Style.bar.iconCanvas * iconScale)
 
@@ -82,7 +87,7 @@ WidgetButton {
       width: numeralMetrics.advanceWidth
       horizontalAlignment: Text.AlignRight
       text: root.numeralText
-      color: root.foreground
+      color: root.numeralColor
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
       anchors.verticalCenter: parent.verticalCenter
@@ -95,13 +100,13 @@ WidgetButton {
     Text {
       visible: !root.vertical && root.stateCue.length > 0
       text: root.stateCue
-      color: root.foreground
+      color: root.numeralColor
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
       anchors.verticalCenter: parent.verticalCenter
       renderType: Text.NativeRendering
       textFormat: Text.PlainText
-      Accessible.name: root.stateCue
+      Accessible.name: root.cueLabel.length > 0 ? root.cueLabel : root.stateCue
       Accessible.role: Accessible.StaticText
     }
   }

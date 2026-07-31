@@ -93,6 +93,8 @@ BarWidget {
         displayName: modelData.name ? String(modelData.name) : Core.providerDisplayName(providerId)
         numeralText: Core.chipNumeralText(modelData, root.displayMetric)
         stateCue: Core.chipStateCue(modelData)
+        cueLabel: Core.chipCueLabel(modelData)
+        severityUrgent: Core.chipSeverityUrgent(modelData)
         tooltipText: Core.chipTooltip(modelData, root.displayMetric)
         iconSource: root.iconUrl(providerId)
         tinted: Core.iconTinted(providerId)
