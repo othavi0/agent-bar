@@ -2,6 +2,7 @@
 
 pub mod atomic_file;
 mod clock;
+pub mod countdown;
 mod fs;
 pub mod maintenance_gate;
 pub mod redact;

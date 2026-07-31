@@ -1,0 +1,14 @@
+[
+  { "minutes": 0, "text": "0m" },
+  { "minutes": 1, "text": "1m" },
+  { "minutes": 59, "text": "59m" },
+  { "minutes": 60, "text": "1h 0m" },
+  { "minutes": 61, "text": "1h 1m" },
+  { "minutes": 181, "text": "3h 1m" },
+  { "minutes": 1439, "text": "23h 59m" },
+  { "minutes": 1440, "text": "1d 0h" },
+  { "minutes": 1500, "text": "1d 1h" },
+  { "minutes": 3960, "text": "2d 18h" },
+  { "minutes": 10079, "text": "6d 23h" },
+  { "minutes": 10080, "text": "7d 0h" }
+]
