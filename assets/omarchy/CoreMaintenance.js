@@ -87,7 +87,6 @@ function maintenanceUiIdle(installedVersion) {
   return {
     phase: "idle",
     installedVersion: installedVersion ? String(installedVersion) : "",
-    installType: "Plugin bundle",
     targetVersion: "",
     releaseNotesUrl: "",
     purgeSettings: false,
@@ -110,7 +109,6 @@ function cloneMaintenanceUi(ui) {
   return {
     phase: ui && ui.phase ? ui.phase : "idle",
     installedVersion: ui && ui.installedVersion ? String(ui.installedVersion) : "",
-    installType: "Plugin bundle",
     targetVersion: ui && ui.targetVersion ? String(ui.targetVersion) : "",
     releaseNotesUrl: ui && ui.releaseNotesUrl ? String(ui.releaseNotesUrl) : "",
     purgeSettings: !!(ui && ui.purgeSettings),
@@ -163,7 +161,7 @@ function maintenanceUiFromCheck(ui, stdout, exitCode, fallbackVersion) {
     // fall through
   }
   next.phase = "error"
-  next.message = "Update check returned an unusable response."
+  next.message = "Update check failed."
   return next
 }
 
@@ -184,8 +182,8 @@ function maintenanceUiCloseUpdateConfirm(ui) {
 function updateConfirmMessage(ui) {
   var current = ui && ui.installedVersion ? String(ui.installedVersion) : "current"
   var target = ui && ui.targetVersion ? String(ui.targetVersion) : "new"
-  return "Update Agent Bar from " + current + " to " + target
-      + ". This replaces the plugin bundle, preserves settings, and can roll back on failure."
+  return "Updates " + current + " \u2192 " + target
+      + ". Settings stay. Rolls back if it fails."
 }
 
 function maintenanceUiOpenUninstallConfirm(ui) {

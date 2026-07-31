@@ -8,6 +8,23 @@ TestCase {
   // 2026-07-28T15:00:00Z as fixed "now".
   readonly property double nowMs: Date.parse("2026-07-28T15:00:00Z")
 
+  property string repoRoot: {
+    var u = Qt.resolvedUrl(".")
+    var path = String(u).replace("file://", "")
+    if (path.endsWith("/"))
+      path = path.slice(0, -1)
+    var parts = path.split("/")
+    parts.pop(); parts.pop()
+    return parts.join("/")
+  }
+
+  function read(rel) {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", "file://" + repoRoot + "/" + rel, false)
+    xhr.send()
+    return String(xhr.responseText || "")
+  }
+
   function test_reset_countdown_under_1h() {
     compare(Core.resetCountdownText("2026-07-28T15:37:00Z", nowMs), "37m")
   }
@@ -44,5 +61,16 @@ TestCase {
     compare(Core.formatAgoText("2026-07-28T12:00:00Z", nowMs), "3h ago")
     compare(Core.formatAgoText("2026-07-26T12:00:00Z", nowMs), "2d ago")
     compare(Core.formatAgoText("nope", nowMs), "")
+  }
+
+  // The other half of the Rust seam: same table, same expectations, read from
+  // the same file. See tests/countdown_parity.rs.
+  function test_countdown_matches_the_shared_table() {
+    var rows = JSON.parse(read("tests/fixtures/countdown-table.json"))
+    verify(rows.length >= 12, "the shared table must not shrink")
+    for (var i = 0; i < rows.length; i++) {
+      compare(Core.countdownText(rows[i].minutes * 60000), rows[i].text,
+              "minutes = " + rows[i].minutes)
+    }
   }
 }

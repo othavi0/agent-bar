@@ -98,7 +98,7 @@ TestCase {
     verify(settings.indexOf("Restore defaults") >= 0)
     var maint = read("assets/omarchy/MaintenanceView.qml")
     verify(maint.indexOf("Check for updates") >= 0)
-    verify(maint.indexOf("Uninstall agent-bar") >= 0)
+    verify(maint.indexOf("Uninstall Agent Bar") >= 0)
   }
 
   function test_theme_palette_light_dark() {

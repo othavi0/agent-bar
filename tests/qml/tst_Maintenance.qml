@@ -99,7 +99,22 @@ TestCase {
     verify(msg.indexOf("10.0.0") >= 0)
     verify(msg.indexOf("10.2.0") >= 0)
     verify(msg.toLowerCase().indexOf("settings") >= 0)
-    verify(msg.toLowerCase().indexOf("roll back") >= 0 || msg.toLowerCase().indexOf("rollback") >= 0)
+    // Checks that rollback is communicated, not the exact phrasing — any of
+    // these three forms says it.
+    verify(msg.toLowerCase().indexOf("roll back") >= 0
+        || msg.toLowerCase().indexOf("rollback") >= 0
+        || msg.toLowerCase().indexOf("rolls back") >= 0)
+    // §5.6 shortened it; the old sentence must not come back.
+    verify(msg.indexOf("This replaces the plugin bundle") < 0)
+  }
+
+  function test_update_check_failure_has_one_string() {
+    var src = read("assets/omarchy/CoreMaintenance.js")
+    verify(src.indexOf("Update check returned an unusable response.") < 0)
+    var first = src.indexOf("Update check failed.")
+    verify(first >= 0)
+    verify(src.indexOf("Update check failed.", first + 1) > first,
+           "both failure branches must use the one string")
   }
 
   function test_uninstall_double_confirm() {
@@ -168,13 +183,28 @@ TestCase {
 
   function test_maintenance_view_ux_copy() {
     var src = read("assets/omarchy/MaintenanceView.qml")
-    verify(src.indexOf("Plugin bundle") >= 0)
     verify(src.indexOf("Check for updates") >= 0)
-    verify(src.indexOf("Uninstall agent-bar") >= 0)
+    verify(src.indexOf("Uninstall Agent Bar") >= 0)
     verify(src.indexOf("Also delete saved settings and backups") >= 0)
     verify(src.indexOf("ConfirmDialog") >= 0)
     verify(src.indexOf("Release notes") >= 0)
     verify(src.indexOf("Text.RichText") < 0)
+    // §5.6: the package name is `agent-bar`; every surface says `Agent Bar`.
+    verify(src.indexOf("Uninstall agent-bar") < 0)
+    // The installation-type row is gone — it only ever had one value.
+    verify(src.indexOf("Installation type") < 0)
+    verify(src.indexOf("Plugin bundle") < 0)
+    // Ceremony removed: no "Final confirmation:", no "Click Uninstall again."
+    verify(src.indexOf("Final confirmation") < 0)
+    verify(src.indexOf("Deletes Agent Bar, your settings and every backup.") >= 0)
+    verify(src.indexOf("Deletes Agent Bar. Your settings stay.") >= 0)
+    verify(src.indexOf("Removes Agent Bar. Your settings stay.") >= 0)
+  }
+
+  function test_install_type_is_gone_from_the_model() {
+    var src = read("assets/omarchy/CoreMaintenance.js")
+    // Dead the moment the row was deleted; the contract forbids keeping it.
+    verify(src.indexOf("installType") < 0)
   }
 
   function test_settings_hosts_maintenance_view() {

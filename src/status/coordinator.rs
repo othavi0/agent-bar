@@ -209,6 +209,7 @@ where
                 store: &self.notification_store,
                 dispatcher: &dispatcher,
                 settings: &settings,
+                now: requested_at,
             };
             if let Err(err) = evaluator.evaluate(&envelope).await {
                 eprintln!("notification dispatch failed: {err}");

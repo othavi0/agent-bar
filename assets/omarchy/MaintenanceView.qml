@@ -56,15 +56,6 @@ Item {
 
     Text {
       width: parent.width
-      text: "Installation type: " + (ui.installType || "Plugin bundle")
-      color: Util.alpha(root.foreground, 0.55)
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      textFormat: Text.PlainText
-    }
-
-    Text {
-      width: parent.width
       visible: ui.message && ui.message.length > 0
       text: ui.message
       color: ui.phase === "error" ? Color.urgent : Util.alpha(root.foreground, 0.55)
@@ -143,13 +134,13 @@ Item {
       }
 
       Button {
-        text: "Uninstall agent-bar"
+        text: "Uninstall Agent Bar"
         bordered: true
         focusable: true
         enabled: !root.blocked && !root.applying
         foreground: Color.urgent
         fontFamily: root.fontFamily
-        Accessible.name: "Uninstall agent-bar"
+        Accessible.name: "Uninstall Agent Bar"
         onClicked: {
           if (root.agentService)
             root.agentService.openUninstallConfirm()
@@ -181,12 +172,12 @@ Item {
   // Uninstall confirmation (UX-045..047)
   ConfirmDialog {
     opened: !!ui.uninstallConfirmOpen
-    title: "Uninstall agent-bar"
+    title: "Uninstall Agent Bar"
     message: ui.uninstallArmed
         ? (ui.purgeSettings
-            ? "Final confirmation: uninstall will remove the plugin, settings, and backups. Click Uninstall again."
-            : "Final confirmation: uninstall will remove the plugin bundle. Settings stay. Click Uninstall again.")
-        : "This removes the Agent Bar plugin bundle. Settings are preserved by default."
+            ? "Deletes Agent Bar, your settings and every backup."
+            : "Deletes Agent Bar. Your settings stay.")
+        : "Removes Agent Bar. Your settings stay."
     cancelText: "Cancel"
     confirmText: ui.uninstallArmed ? "Uninstall now" : "Uninstall"
     destructive: true

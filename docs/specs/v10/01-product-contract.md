@@ -104,7 +104,7 @@ Notifications: enabled
 1. Settings shows installed plugin version and `Check for updates`.
 2. An available release requires explicit confirmation before download.
 3. Update validates and atomically replaces one complete plugin bundle.
-4. `Uninstall agent-bar` requires confirmation.
+4. `Uninstall Agent Bar` requires confirmation.
 5. Settings are preserved by default; deleting settings requires an additional
    explicit selection.
 
