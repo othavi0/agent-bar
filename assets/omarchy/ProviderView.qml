@@ -40,7 +40,7 @@ Item {
 
   readonly property var header: Core.headerModel(provider, refreshing)
   readonly property string mode: Core.contentMode(provider)
-  readonly property var groups: Core.windowGroups(provider, displayMetric, nowMs)
+  readonly property var windows: Core.windowLayout(provider, displayMetric, nowMs)
   readonly property var actions: Core.stateActions(provider)
   // Adjusted (plan 03): was mode === "stale_windows" only, which fed the
   // banner's Retry Repeater and left the no-windows stale mode ("state")
@@ -150,7 +150,7 @@ Item {
       visible: root.mode === "windows" || root.mode === "stale_windows"
 
       Repeater {
-        model: root.groups.primary
+        model: root.windows.lead ? [root.windows.lead] : []
         UsageWindow {
           required property var modelData
           width: parent.width
@@ -174,7 +174,7 @@ Item {
       width: parent.width
       spacing: Style.space(2)
       visible: (root.mode === "windows" || root.mode === "stale_windows")
-          && root.groups.secondary.length > 0
+          && root.windows.rest.length > 0
 
       PanelSeparator {
         width: parent.width
@@ -183,7 +183,7 @@ Item {
       }
 
       Repeater {
-        model: root.groups.secondary
+        model: root.windows.rest
         UsageWindow {
           required property var modelData
           width: parent.width

@@ -199,4 +199,29 @@ TestCase {
     compare(Core.mapActionKind("rm -rf"), null)
     compare(Core.mapActionKind("bash"), null)
   }
+
+  // The three QML gates never compile a file that imports qs.*, so a dangling
+  // reference to a deleted function is invisible to them. These guards ban the
+  // exact dead identifiers by name.
+  function test_primary_window_allowlist_is_gone() {
+    var core = read("assets/omarchy/CoreView.js")
+    verify(core.indexOf("PRIMARY_WINDOW_IDS") < 0,
+           "the id allowlist must be deleted, not left dormant")
+    verify(core.indexOf("windowGroups") < 0,
+           "windowGroups is replaced by windowLayout")
+    verify(core.indexOf("function electLeadIndex") >= 0)
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("groups.primary") < 0)
+    verify(view.indexOf("groups.secondary") < 0)
+  }
+
+  // §6/§3.7: the popup shows the countdown only. The absolute-clock humaniser
+  // is deleted with its weekday table and its only Qt.formatDateTime call.
+  function test_absolute_clock_humaniser_is_gone() {
+    var core = read("assets/omarchy/CoreView.js")
+    verify(core.indexOf("formatResetText") < 0)
+    verify(core.indexOf("WEEKDAYS") < 0)
+    verify(core.indexOf("Qt.formatDateTime") < 0)
+    verify(core.indexOf("function resetCountdownText") >= 0)
+  }
 }

@@ -116,6 +116,67 @@ var ERROR_STATES = {
   "provider_error": true
 }
 
+// Severity thresholds on usedPercent (visual design §7). These duplicate
+// NotificationLevel::from_used_percent (src/notifications/state.rs): the
+// status schema is frozen at v2 and must not gain a field, so the numbers
+// live on both sides and tests/severity_parity.rs fails the build if either
+// side moves alone. Change one, change both.
+var SEVERITY_CRITICAL_USED_PERCENT = 95
+var SEVERITY_WARNING_USED_PERCENT = 90
+
+// "critical" | "warning" | "". Always from usedPercent, never from the
+// displayed metric — switching to `used` must not change what is critical.
+function severityLevel(usedPercent) {
+  var v = Number(usedPercent)
+  if (!isFinite(v))
+    return ""
+  if (v >= SEVERITY_CRITICAL_USED_PERCENT)
+    return "critical"
+  if (v >= SEVERITY_WARNING_USED_PERCENT)
+    return "warning"
+  return ""
+}
+
+// The word the header tag renders. Warning shows as "Low" (§7 table);
+// "warning" stays the internal level name shared with the Rust notifier.
+function severityTagText(level) {
+  if (level === "critical")
+    return "Critical"
+  if (level === "warning")
+    return "Low"
+  return ""
+}
+
+// The provider's worst window. A11Y-012: this drives a word, never a colour
+// on its own.
+function providerSeverity(provider) {
+  if (!provider || !Kernel.isArrayLike(provider.windows))
+    return ""
+  var worst = ""
+  for (var i = 0; i < provider.windows.length; i++) {
+    var w = provider.windows[i]
+    if (!w)
+      continue
+    var level = severityLevel(w.usedPercent)
+    if (level === "critical")
+      return "critical"
+    if (level === "warning")
+      worst = "warning"
+  }
+  return worst
+}
+
+// Severity tints the bar only for a ready provider: any other state already
+// dims the whole chip and spends the cue on the state itself, so an urgent
+// tint there would mean two things at once. Approved mockup: critical Claude
+// is urgent, disconnected Grok is not.
+function chipSeverityUrgent(provider) {
+  if (!provider)
+    return false
+  return String(provider.state || "") === "ready"
+      && providerSeverity(provider) === "critical"
+}
+
 // UX-012: text cue beyond color for stale/error. No leading space — the
 // chip separates cue from numeral with layout spacing (visual design §5).
 // 󰅐 is U+F0150 from the bar's Nerd Font family, replacing the old
@@ -128,6 +189,22 @@ function chipStateCue(provider) {
     return "󰅐"
   if (ERROR_STATES[state])
     return "!"
+  if (chipSeverityUrgent(provider))
+    return "!"
+  return ""
+}
+
+// Plan 02 deferred minor: the cue exposed its raw glyph to screen readers.
+// It now carries a word — the severity when severity produced the cue,
+// otherwise the same qualifier the tooltip already speaks.
+function chipCueLabel(provider) {
+  if (!provider)
+    return ""
+  if (chipSeverityUrgent(provider))
+    return "critical"
+  var state = String(provider.state || "")
+  if (state === "stale" || ERROR_STATES[state])
+    return stateQualifier(state)
   return ""
 }
 
@@ -141,9 +218,9 @@ var STATE_QUALIFIERS = {
   "provider_error": "failed"
 }
 
-// Copy design §5.4: lowercase trailing qualifier for the chip tooltip.
-// Plan 03 deletes connectionLabel with the meta footer; this function is
-// the humaniser that replaces it.
+// Copy design §5.4: lowercase trailing qualifier for the chip tooltip and
+// for the cue's accessible name. It replaced `connectionLabel`, which plan 03
+// deleted together with the meta footer.
 function stateQualifier(state) {
   var s = String(state || "")
   if (s === "ready")
@@ -425,8 +502,6 @@ function parseIsoMs(iso) {
   return isFinite(ms) ? ms : NaN
 }
 
-var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
 function countdownText(diffMs) {
   var totalMinutes = Math.floor(diffMs / 60000)
   var days = Math.floor(totalMinutes / 1440)
@@ -439,19 +514,25 @@ function countdownText(diffMs) {
   return minutes + "m"
 }
 
-// "2h 30m · 14:59" (<24h) | "2d 18h · Fri 09:00" (>=24h) | "now" | "".
-function formatResetText(iso, nowMs) {
+// §6: the popup renders the countdown alone — no absolute clock, no weekday.
+// "" when there is no usable timestamp, "now" once the reset has passed.
+function resetCountdownText(iso, nowMs) {
   var ms = parseIsoMs(iso)
   if (!isFinite(ms))
     return ""
   var diff = ms - nowMs
   if (diff <= 0)
     return "now"
-  var date = new Date(ms)
-  var absolute = diff >= 86400000
-      ? WEEKDAYS[date.getDay()] + " " + Qt.formatDateTime(date, "hh:mm")
-      : Qt.formatDateTime(date, "hh:mm")
-  return countdownText(diff) + " · " + absolute
+  return countdownText(diff)
+}
+
+// The muted lead-in the lead window prints before the countdown:
+// "Session (5h) · resets in 3h 1m" / "Session (5h) · resets now".
+function resetPhrase(countdown) {
+  var c = String(countdown || "")
+  if (!c.length)
+    return ""
+  return c === "now" ? "resets" : "resets in"
 }
 
 // "just now" | "5m ago" | "3h ago" | "2d ago" | "".
@@ -481,35 +562,99 @@ function windowDisplayLines(provider, metric, nowMs) {
     var w = provider.windows[i]
     if (!w)
       continue
-    var pct = mode === "used" ? Number(w.usedPercent) : Number(w.remainingPercent)
+    var used = Number(w.usedPercent)
+    var remaining = Number(w.remainingPercent)
+    var pct = mode === "used" ? used : remaining
     var finite = isFinite(pct)
     var rounded = finite ? Math.round(pct) : null
+    // Keep the escaped form the rest of this file already uses.
     var pctText = finite ? (rounded + "%") : "\u2014"
+    var countdown = w.resetsAt
+        ? resetCountdownText(String(w.resetsAt), effectiveNowMs)
+        : ""
     lines.push({
       id: String(w.id || ("w" + i)),
       label: plainText(w.label || w.id || "Window"),
       percentText: pctText,
       // 0–100 for progress track; -1 when unavailable.
       percent: finite ? Math.max(0, Math.min(100, rounded)) : -1,
+      // Raw percentages drive severity (§7) and election (§8); they never
+      // follow the displayed metric. null when the provider omitted them.
+      usedPercent: isFinite(used) ? used : null,
+      remainingPercent: isFinite(remaining) ? remaining : null,
+      severity: severityLevel(used),
       resetsAt: w.resetsAt ? String(w.resetsAt) : null,
-      resetText: w.resetsAt ? formatResetText(String(w.resetsAt), effectiveNowMs) : ""
+      resetCountdown: countdown,
+      resetPhrase: resetPhrase(countdown)
     })
   }
   return lines
 }
 
-var PRIMARY_WINDOW_IDS = { "session": true, "weekly": true, "daily": true }
+// A critical window with no usable remainingPercent sorts last among its
+// peers instead of winning the comparison by accident.
+function remainingRank(line) {
+  return line.remainingPercent === null ? Infinity : line.remainingPercent
+}
 
-function windowGroups(provider, metric, nowMs) {
-  var lines = windowDisplayLines(provider, metric, nowMs)
-  var groups = { primary: [], secondary: [] }
-  for (var i = 0; i < lines.length; i++) {
-    if (PRIMARY_WINDOW_IDS[lines[i].id])
-      groups.primary.push(lines[i])
-    else
-      groups.secondary.push(lines[i])
+// §8: deterministic lead election, replacing the old id allowlist that
+// silently demoted any window id it did not know. Returns an index into
+// `lines`, or -1 when there is nothing to lead.
+//
+// Delivered order is unique per line, so `<` on the index is already a total
+// tiebreak; the spec's further "then by window id" step is unreachable and is
+// deliberately not written as dead code.
+function electLeadIndex(lines) {
+  if (!lines || !lines.length)
+    return -1
+
+  var i
+  var best = -1
+
+  // 1. Any critical window leads; among criticals, the lowest remaining.
+  for (i = 0; i < lines.length; i++) {
+    if (lines[i].severity !== "critical")
+      continue
+    if (best < 0 || remainingRank(lines[i]) < remainingRank(lines[best]))
+      best = i
   }
-  return groups
+  if (best >= 0)
+    return best
+
+  // 2. Otherwise the nearest reset still in the future. A missing timestamp
+  //    or one that already elapsed ("now") does not compete.
+  var bestMs = NaN
+  for (i = 0; i < lines.length; i++) {
+    if (!lines[i].resetCountdown.length || lines[i].resetCountdown === "now")
+      continue
+    var ms = parseIsoMs(lines[i].resetsAt)
+    if (!isFinite(ms))
+      continue
+    if (best < 0 || ms < bestMs) {
+      best = i
+      bestMs = ms
+    }
+  }
+  if (best >= 0)
+    return best
+
+  // 3. Nothing has a future reset: the first delivered window leads.
+  return 0
+}
+
+// §3.4: the popup leads with one window; every other window renders as a
+// compact row, in delivered order.
+function windowLayout(provider, metric, nowMs) {
+  var lines = windowDisplayLines(provider, metric, nowMs)
+  var leadIndex = electLeadIndex(lines)
+  var layout = { lead: null, rest: [] }
+  for (var i = 0; i < lines.length; i++) {
+    if (i === leadIndex)
+      layout.lead = lines[i]
+    else
+      layout.rest.push(lines[i])
+  }
+  return layout
 }
 
 function headerModel(provider, refreshing) {

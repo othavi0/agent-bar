@@ -8,34 +8,34 @@ TestCase {
   // 2026-07-28T15:00:00Z as fixed "now".
   readonly property double nowMs: Date.parse("2026-07-28T15:00:00Z")
 
-  function test_reset_under_1h() {
-    // 37 minutes ahead.
-    var text = Core.formatResetText("2026-07-28T15:37:00Z", nowMs)
-    verify(text.indexOf("37m") === 0, "countdown: " + text)
-    verify(text.indexOf("\u00b7") > 0, "has absolute separator: " + text)
+  function test_reset_countdown_under_1h() {
+    compare(Core.resetCountdownText("2026-07-28T15:37:00Z", nowMs), "37m")
   }
 
-  function test_reset_under_24h_has_hours_minutes() {
-    var text = Core.formatResetText("2026-07-28T17:30:00Z", nowMs)
-    verify(text.indexOf("2h 30m") === 0, text)
+  function test_reset_countdown_under_24h_keeps_hours() {
+    compare(Core.resetCountdownText("2026-07-28T17:30:00Z", nowMs), "2h 30m")
   }
 
-  function test_reset_over_24h_uses_days_and_weekday() {
-    var text = Core.formatResetText("2026-07-31T09:00:00Z", nowMs)
-    verify(text.indexOf("2d 18h") === 0, text)
-    // 2026-07-31 is a Friday; weekday token must be hardcoded English,
-    // never locale-dependent.
-    verify(text.indexOf("Fri ") > 0, "weekday absolute: " + text)
+  function test_reset_countdown_over_24h_uses_days() {
+    compare(Core.resetCountdownText("2026-07-31T09:00:00Z", nowMs), "2d 18h")
   }
 
-  function test_reset_past_is_now() {
-    compare(Core.formatResetText("2026-07-28T14:00:00Z", nowMs), "now")
+  function test_reset_countdown_past_is_now() {
+    compare(Core.resetCountdownText("2026-07-28T14:00:00Z", nowMs), "now")
   }
 
-  function test_reset_invalid_is_empty() {
-    compare(Core.formatResetText("", nowMs), "")
-    compare(Core.formatResetText("garbage", nowMs), "")
-    compare(Core.formatResetText(null, nowMs), "")
+  function test_reset_countdown_invalid_is_empty() {
+    compare(Core.resetCountdownText("", nowMs), "")
+    compare(Core.resetCountdownText("garbage", nowMs), "")
+    compare(Core.resetCountdownText(null, nowMs), "")
+  }
+
+  // The lead window's label line reads "Session (5h) \u00b7 resets in 3h 1m", and
+  // "resets in now" is not English.
+  function test_reset_phrase_follows_the_countdown() {
+    compare(Core.resetPhrase("3h 1m"), "resets in")
+    compare(Core.resetPhrase("now"), "resets")
+    compare(Core.resetPhrase(""), "")
   }
 
   function test_ago_variants() {

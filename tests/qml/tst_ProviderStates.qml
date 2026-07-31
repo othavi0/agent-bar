@@ -163,25 +163,155 @@ TestCase {
     compare(Core.mapActionKind("shell"), null)
   }
 
-  function test_window_groups_split_primary_and_models() {
-    var provider = {
-      id: "claude", name: "Claude", state: "ready",
-      windows: [
-        { id: "session", label: "Session (5h)", usedPercent: 31, remainingPercent: 69,
-          resetsAt: "2026-07-28T17:59:59Z" },
-        { id: "weekly", label: "Weekly (7d)", usedPercent: 6, remainingPercent: 94,
-          resetsAt: "2026-07-31T11:59:59Z" },
-        { id: "weekly-model:opus", label: "Opus", usedPercent: 2, remainingPercent: 98,
-          resetsAt: "2026-07-31T11:59:59Z" }
-      ]
-    }
+  function readyWith(windows) {
+    return { id: "claude", name: "Claude", state: "ready", windows: windows }
+  }
+
+  function layoutOf(windows, nowIso) {
+    return Core.windowLayout(readyWith(windows), "remaining", Date.parse(nowIso))
+  }
+
+  function test_severity_level_thresholds() {
+    compare(Core.severityLevel(89.9), "")
+    compare(Core.severityLevel(90), "warning")
+    compare(Core.severityLevel(94.9), "warning")
+    compare(Core.severityLevel(95), "critical")
+    compare(Core.severityLevel(100), "critical")
+    compare(Core.severityLevel("nope"), "")
+  }
+
+  // The Warning level renders as "Low" (visual design §7); "warning" is the
+  // internal name it shares with Rust.
+  function test_severity_tag_words() {
+    compare(Core.severityTagText("critical"), "Critical")
+    compare(Core.severityTagText("warning"), "Low")
+    compare(Core.severityTagText(""), "")
+  }
+
+  function test_provider_severity_is_the_worst_window() {
+    compare(Core.providerSeverity(null), "")
+    compare(Core.providerSeverity({ windows: [] }), "")
+    compare(Core.providerSeverity({ windows: [{ usedPercent: 10 }, { usedPercent: 92 }] }),
+            "warning")
+    compare(Core.providerSeverity({ windows: [{ usedPercent: 92 }, { usedPercent: 97 }] }),
+            "critical")
+  }
+
+  // §7: severity is computed from usedPercent, so switching the displayed
+  // metric never changes what counts as critical.
+  function test_severity_ignores_the_display_metric() {
+    var provider = readyWith([{ id: "s", label: "S", usedPercent: 96, remainingPercent: 4,
+                                resetsAt: "2026-07-28T18:00:00Z" }])
     var now = Date.parse("2026-07-28T15:00:00Z")
-    var groups = Core.windowGroups(provider, "remaining", now)
-    compare(groups.primary.length, 2)
-    compare(groups.secondary.length, 1)
-    compare(groups.primary[0].label, "Session (5h)")
-    verify(groups.primary[0].resetText.indexOf("2h 59m") === 0, groups.primary[0].resetText)
-    compare(groups.secondary[0].label, "Opus")
+    compare(Core.windowLayout(provider, "remaining", now).lead.severity, "critical")
+    compare(Core.windowLayout(provider, "used", now).lead.severity, "critical")
+  }
+
+  function test_lead_election_critical_beats_nearest_reset() {
+    var layout = layoutOf([
+      { id: "session", label: "Session (5h)", usedPercent: 10, remainingPercent: 90,
+        resetsAt: "2026-07-28T15:30:00Z" },
+      { id: "weekly", label: "Weekly (7d)", usedPercent: 96, remainingPercent: 4,
+        resetsAt: "2026-07-31T11:59:59Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "weekly")
+    compare(layout.lead.severity, "critical")
+    compare(layout.rest.length, 1)
+    compare(layout.rest[0].id, "session")
+  }
+
+  function test_lead_election_lowest_remaining_among_criticals() {
+    var layout = layoutOf([
+      { id: "a", label: "A", usedPercent: 96, remainingPercent: 4,
+        resetsAt: "2026-07-28T15:30:00Z" },
+      { id: "b", label: "B", usedPercent: 99, remainingPercent: 1,
+        resetsAt: "2026-07-31T11:59:59Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "b")
+  }
+
+  function test_lead_election_nearest_future_reset_when_healthy() {
+    var layout = layoutOf([
+      { id: "weekly", label: "Weekly (7d)", usedPercent: 40, remainingPercent: 60,
+        resetsAt: "2026-07-31T11:59:59Z" },
+      { id: "session", label: "Session (5h)", usedPercent: 4, remainingPercent: 96,
+        resetsAt: "2026-07-28T18:00:00Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "session")
+    // The rest keeps delivered order, not election order.
+    compare(layout.rest.length, 1)
+    compare(layout.rest[0].id, "weekly")
+  }
+
+  function test_lead_election_ignores_elapsed_and_missing_resets() {
+    var layout = layoutOf([
+      { id: "past", label: "Past", usedPercent: 10, remainingPercent: 90,
+        resetsAt: "2026-07-28T14:00:00Z" },
+      { id: "none", label: "None", usedPercent: 20, remainingPercent: 80, resetsAt: null },
+      { id: "future", label: "Future", usedPercent: 30, remainingPercent: 70,
+        resetsAt: "2026-07-29T09:00:00Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "future")
+    compare(layout.rest.length, 2)
+    compare(layout.rest[0].id, "past")
+  }
+
+  function test_lead_election_without_any_reset_takes_first_delivered() {
+    var layout = layoutOf([
+      { id: "first", label: "First", usedPercent: 20, remainingPercent: 80, resetsAt: null },
+      { id: "second", label: "Second", usedPercent: 10, remainingPercent: 90, resetsAt: null }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "first")
+    compare(layout.rest.length, 1)
+  }
+
+  function test_lead_election_ties_keep_delivered_order() {
+    var layout = layoutOf([
+      { id: "first", label: "First", usedPercent: 50, remainingPercent: 50,
+        resetsAt: "2026-07-28T18:00:00Z" },
+      { id: "second", label: "Second", usedPercent: 50, remainingPercent: 50,
+        resetsAt: "2026-07-28T18:00:00Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "first")
+  }
+
+  function test_single_window_leads_with_no_rest() {
+    var layout = layoutOf([
+      { id: "session", label: "Session (5h)", usedPercent: 42, remainingPercent: 58,
+        resetsAt: "2026-07-28T18:00:00Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "session")
+    compare(layout.rest.length, 0)
+  }
+
+  function test_no_windows_means_no_lead() {
+    var layout = layoutOf([], "2026-07-28T15:00:00Z")
+    compare(layout.lead, null)
+    compare(layout.rest.length, 0)
+  }
+
+  // A window id outside the old allowlist is now electable — the exact bug
+  // the allowlist caused (it silently demoted anything unknown).
+  function test_unknown_window_id_can_lead() {
+    var layout = layoutOf([
+      { id: "weekly-model:opus", label: "Opus", usedPercent: 97, remainingPercent: 3,
+        resetsAt: "2026-07-31T11:59:59Z" },
+      { id: "session", label: "Session (5h)", usedPercent: 10, remainingPercent: 90,
+        resetsAt: "2026-07-28T15:30:00Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.id, "weekly-model:opus")
+  }
+
+  function test_lines_carry_raw_percentages_and_countdown() {
+    var layout = layoutOf([
+      { id: "session", label: "Session (5h)", usedPercent: 31, remainingPercent: 69,
+        resetsAt: "2026-07-28T17:59:59Z" }
+    ], "2026-07-28T15:00:00Z")
+    compare(layout.lead.usedPercent, 31)
+    compare(layout.lead.remainingPercent, 69)
+    compare(layout.lead.percentText, "69%")
+    compare(layout.lead.resetCountdown, "2h 59m")
+    compare(layout.lead.resetPhrase, "resets in")
   }
 
   function test_chip_state_cue_stale_is_clock_glyph() {
