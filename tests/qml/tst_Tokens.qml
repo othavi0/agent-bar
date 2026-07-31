@@ -32,6 +32,7 @@ TestCase {
       "assets/omarchy/MaintenanceView.qml",
       "assets/omarchy/components/ProviderChip.qml",
       "assets/omarchy/components/ProviderHeader.qml",
+      "assets/omarchy/components/HeaderTag.qml",
       "assets/omarchy/components/UsageWindow.qml",
       "assets/omarchy/components/StateMessage.qml",
       "assets/omarchy/components/SettingsProviderRow.qml",
@@ -78,12 +79,18 @@ TestCase {
   // Color.urgent directly and the separators are PanelSeparator. It stays
   // in tokenScannedFiles() above — the no-raw-Qt.rgba and closed-alpha-set
   // scans still apply — but drops out of this REQUIRES-Util.alpha list.
+  //
+  // Task 4 moved ProviderHeader.qml's only Util.alpha( call site into the
+  // extracted HeaderTag.qml component (deliberately excluded from this list
+  // per its own file header: it was never "converted", it was born using
+  // Util.alpha). ProviderHeader.qml now composes HeaderTag and has no direct
+  // alpha call of its own, so it drops out of this list for the same reason
+  // ProviderView.qml did; it stays in tokenScannedFiles() above.
   function convertedFiles() {
     return [
       "assets/omarchy/SettingsView.qml",
       "assets/omarchy/MaintenanceView.qml",
       "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/components/ProviderHeader.qml",
       "assets/omarchy/components/StateMessage.qml",
       "assets/omarchy/components/ConfirmDialog.qml"
     ]

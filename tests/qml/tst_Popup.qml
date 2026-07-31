@@ -58,8 +58,40 @@ TestCase {
     // deleted the meta footer) — the header no longer owns that prop/text.
     verify(src.indexOf("connection") < 0)
     // §6: the plan pill becomes an uppercase tag — no more pill radius.
-    verify(src.indexOf("AllUppercase") >= 0)
+    // Task 4 extracted the tag shape into HeaderTag.qml (its own uppercase
+    // assertion lives in test_header_renders_plan_and_severity_tags below),
+    // so this file only needs to prove it delegates to that component.
+    verify(src.indexOf("HeaderTag") >= 0)
     verify(src.indexOf("radius: height / 2") < 0)
+  }
+
+  // §6: name · plan tag · [severity tag] · spacer · refresh. One tag shape,
+  // one urgent variant — not two hand-copied Rectangles.
+  function test_header_renders_plan_and_severity_tags() {
+    var hdr = read("assets/omarchy/components/ProviderHeader.qml")
+    verify(hdr.indexOf("HeaderTag {") >= 0)
+    verify(hdr.indexOf("id: planTag") >= 0)
+    verify(hdr.indexOf("id: severityTag") >= 0)
+    verify(hdr.indexOf("property string severityText") >= 0)
+    verify(hdr.indexOf("property bool severityUrgent") >= 0)
+    // The pill's own Rectangle is gone; the tag lives in one file now.
+    verify(hdr.indexOf("border.color: Style.normalBorderColor") < 0)
+
+    var tag = read("assets/omarchy/components/HeaderTag.qml")
+    verify(tag.indexOf("Color.urgent") >= 0)
+    verify(tag.indexOf("radius: Style.cornerRadius") >= 0)
+    verify(tag.indexOf("Font.AllUppercase") >= 0)
+    verify(tag.indexOf("Qt.rgba(") < 0)
+  }
+
+  // The refresh glyph must stay inside the pane when both tags render; the
+  // spacer subtracts the real tag widths instead of a lump constant.
+  function test_header_spacer_accounts_for_both_tags() {
+    var hdr = read("assets/omarchy/components/ProviderHeader.qml")
+    verify(hdr.indexOf("planTag.visible ? planTag.width") >= 0)
+    verify(hdr.indexOf("severityTag.visible ? severityTag.width") >= 0)
+    verify(hdr.indexOf("Style.space(60)") < 0,
+           "the old lump constant hid the second tag's width")
   }
 
   function test_rail_has_no_own_frame() {
