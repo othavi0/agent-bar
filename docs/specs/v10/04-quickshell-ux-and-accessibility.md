@@ -52,8 +52,10 @@ not literal UI.
 - `UX-015`: Settings is the last control in the rail stack (equal frame
   padding top and bottom; not overlaid with `anchors.bottom` on short cards).
 - `UX-016`: The provider header does not repeat the provider icon.
-- `UX-017`: The header shows name, plan badge, connection state, update age,
-  and provider refresh.
+- `UX-017`: The header shows the provider name, the plan tag, severity when
+  present, and the provider refresh control. Connection state is implied
+  structurally (windows render only when ready) and update age lives in the
+  stale banner.
 - `UX-018`: Only one provider's content is visible at a time.
 - `UX-019`: Section backgrounds and separators extend through the full content
   width.

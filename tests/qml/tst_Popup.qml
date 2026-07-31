@@ -56,6 +56,25 @@ TestCase {
     // Connection moved out of the header into ProviderView's meta footer
     // (Fase 2 slim-down) — the header no longer owns that prop/text at all.
     verify(src.indexOf("connection") < 0)
+    // §6: the plan pill becomes an uppercase tag — no more pill radius.
+    verify(src.indexOf("AllUppercase") >= 0)
+    verify(src.indexOf("radius: height / 2") < 0)
+  }
+
+  function test_rail_has_no_own_frame() {
+    var rail = read("assets/omarchy/ProviderRail.qml")
+    // §6: the rail draws no fill or border of its own inside an already
+    // bordered card; the selected plate is the only chrome.
+    verify(rail.indexOf("normalFill") < 0)
+    verify(rail.indexOf("normalBorderColor") < 0)
+    verify(rail.indexOf("selectedFill") >= 0)
+    verify(rail.indexOf("Style.spacing.popupPadding") >= 0)
+  }
+
+  function test_content_and_rail_share_inset_token() {
+    var popup = read("assets/omarchy/Popup.qml")
+    verify(popup.indexOf("contentMargins: Style.spacing.popupPadding") >= 0)
+    verify(popup.indexOf("Style.space(14)") < 0)
   }
 
   function test_footer_shows_connection() {

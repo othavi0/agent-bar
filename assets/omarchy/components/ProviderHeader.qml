@@ -46,7 +46,7 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       width: planText.implicitWidth + Style.space(10)
       height: planText.implicitHeight + Style.space(4)
-      radius: height / 2
+      radius: Style.cornerRadius
       color: "transparent"
       border.width: 1
       border.color: Style.normalBorderColor
@@ -57,6 +57,8 @@ Item {
         color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
+        font.capitalization: Font.AllUppercase
+        font.letterSpacing: 0.5
         textFormat: Text.PlainText
         Accessible.name: "plan " + root.plan
       }

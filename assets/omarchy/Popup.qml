@@ -24,7 +24,7 @@ KeyboardPanel {
   // Compact floor: header + one window row + rail stack — not a 280px void.
   property int minContentHeight: Style.space(160)
   property int contentLineHeight: Style.font.body + Style.space(8)
-  property int contentMargins: Style.space(14)
+  property int contentMargins: Style.spacing.popupPadding
 
   // A11Y-008: Settings/NumberField can raise this while editing.
   property bool editorActive: contentLoader.item && contentLoader.item.editorOwnsFocus
