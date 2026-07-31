@@ -224,11 +224,15 @@ Item {
         }
 
         // The host NumberField exposes no suffix property (measured), so the
-        // unit is a sibling label. It aligns with the spin box, not with the
-        // field's own label above it — and it cannot use anchors, because the
+        // unit is a sibling label, and it cannot use anchors, because the
         // spin box is a child of a sibling, which QML refuses to anchor to.
+        // The y binding composes intervalField's own offset within this Row
+        // with the spin box's offset inside intervalField's Column, so the
+        // label tracks the spin box from whatever frame the Row places the
+        // field in.
         Text {
-          y: intervalField.field.y + (intervalField.field.height - height) / 2
+          y: intervalField.y + intervalField.field.y
+             + (intervalField.field.height - height) / 2
           text: "seconds"
           color: Util.alpha(root.foreground, 0.72)
           font.family: root.fontFamily
