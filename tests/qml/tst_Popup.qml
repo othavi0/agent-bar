@@ -92,6 +92,8 @@ TestCase {
     verify(hdr.indexOf("severityTag.visible ? severityTag.width") >= 0)
     verify(hdr.indexOf("Style.space(60)") < 0,
            "the old lump constant hid the second tag's width")
+    verify(hdr.indexOf("row.spacing * 2") >= 0,
+           "the spacer must charge both unconditional gaps: before it and after it")
   }
 
   function test_rail_has_no_own_frame() {

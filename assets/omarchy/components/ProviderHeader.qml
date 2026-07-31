@@ -73,7 +73,7 @@ Item {
           - (planTag.visible ? planTag.width + row.spacing : 0)
           - (severityTag.visible ? severityTag.width + row.spacing : 0)
           - Style.space(22)
-          - row.spacing)
+          - row.spacing * 2)
       height: 1
     }
 
