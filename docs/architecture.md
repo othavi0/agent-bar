@@ -46,10 +46,10 @@ Each `BarWidget.qml` exists per monitor and owns:
   (`dismissPopup()` clears ownership on outside click);
 - rendering derived from the shared service.
 
-The consolidated popup uses a bordered icon rail (providers + Settings), a
-content-fit card height, overflow-gated vertical scrolling, and percentage
-window rows with a progress track. Widgets do not own polling, provider
-state, settings persistence, or cache.
+The consolidated popup uses an icon rail (providers + Settings), a
+content-fit card height, overflow-gated vertical scrolling, one lead
+percentage window, and compact rows with a progress track. Widgets do not own
+polling, provider state, settings persistence, or cache.
 
 ## Rust boundaries
 

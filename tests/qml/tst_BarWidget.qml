@@ -260,6 +260,50 @@ TestCase {
     compare(Core.chipStateCue({ state: "rate_limited" }), "!")
     compare(Core.chipStateCue({ state: "network_error" }), "!")
     compare(Core.chipStateCue({ state: "provider_error" }), "!")
+    // §7: a ready provider over the critical threshold earns the same cue.
+    compare(Core.chipStateCue({ state: "ready", windows: [{ usedPercent: 96 }] }), "!")
+    compare(Core.chipStateCue({ state: "ready", windows: [{ usedPercent: 92 }] }), "")
+    // A state cue outranks severity: the clock keeps the stale meaning.
+    compare(Core.chipStateCue({ state: "stale", windows: [{ usedPercent: 96 }] }), "󰅐")
+  }
+
+  // The urgent tint belongs to severity, never to the error cue — the
+  // approved mockup shows critical Claude urgent and disconnected Grok plain.
+  function test_chip_severity_urgent_only_when_ready_and_critical() {
+    compare(Core.chipSeverityUrgent(null), false)
+    compare(Core.chipSeverityUrgent({ state: "ready", windows: [{ usedPercent: 96 }] }), true)
+    compare(Core.chipSeverityUrgent({ state: "ready", windows: [{ usedPercent: 92 }] }), false)
+    compare(Core.chipSeverityUrgent({ state: "stale", windows: [{ usedPercent: 96 }] }), false)
+    compare(Core.chipSeverityUrgent({ state: "network_error", windows: [] }), false)
+  }
+
+  // Plan 02 deferred minor: the cue used to expose its raw glyph.
+  function test_chip_cue_label_is_a_word() {
+    compare(Core.chipCueLabel({ state: "ready", windows: [{ usedPercent: 96 }] }), "critical")
+    compare(Core.chipCueLabel({ state: "stale", windows: [] }), "stale")
+    compare(Core.chipCueLabel({ state: "cli_missing", windows: [] }), "no CLI")
+    compare(Core.chipCueLabel({ state: "unauthenticated", windows: [] }), "signed out")
+    compare(Core.chipCueLabel({ state: "ready", windows: [{ usedPercent: 10 }] }), "")
+  }
+
+  function sourceAt(url) {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", url, false)
+    xhr.send()
+    return String(xhr.responseText)
+  }
+
+  function test_chip_source_binds_severity() {
+    var chip = sourceAt(chipUrl)
+    verify(chip.indexOf("property bool severityUrgent") >= 0)
+    verify(chip.indexOf("property string cueLabel") >= 0)
+    verify(chip.indexOf("Color.urgent") >= 0,
+           "severity uses the host urgent token, never a literal")
+    verify(chip.indexOf("Accessible.name: root.stateCue") < 0,
+           "the cue must speak a word, not its glyph")
+    var widget = sourceAt(widgetUrl)
+    verify(widget.indexOf("chipSeverityUrgent") >= 0)
+    verify(widget.indexOf("chipCueLabel") >= 0)
   }
 
   function test_chip_tooltip_humanized() {

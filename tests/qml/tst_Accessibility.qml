@@ -36,6 +36,7 @@ TestCase {
       "assets/omarchy/Service.qml",
       "assets/omarchy/components/ProviderChip.qml",
       "assets/omarchy/components/ProviderHeader.qml",
+      "assets/omarchy/components/HeaderTag.qml",
       "assets/omarchy/components/UsageWindow.qml",
       "assets/omarchy/components/StateMessage.qml",
       "assets/omarchy/components/SettingsProviderRow.qml",

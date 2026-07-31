@@ -2,9 +2,9 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Provider content header — name, plan pill, refresh only (Fase 2 slim-down).
-// Connection state is implied structurally (UX-017); last-success age
-// appears in the stale banner, not here.
+// Provider content header — name, plan tag, severity tag, refresh only
+// (Fase 2 slim-down). Connection state is implied structurally (UX-017);
+// last-success age appears in the stale banner, not here.
 // UX-016: deliberately no provider icon here (icon lives only on the rail).
 Item {
   id: root
@@ -13,6 +13,8 @@ Item {
   property string plan: ""
   property bool refreshing: false
   property bool showStale: false
+  property string severityText: ""
+  property bool severityUrgent: false
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
 
@@ -42,35 +44,36 @@ Item {
       Accessible.role: Accessible.Heading
     }
 
-    Rectangle {
-      visible: root.plan.length > 0
+    HeaderTag {
+      id: planTag
       anchors.verticalCenter: parent.verticalCenter
-      width: planText.implicitWidth + Style.space(10)
-      height: planText.implicitHeight + Style.space(4)
-      radius: Style.cornerRadius
-      color: "transparent"
-      border.width: 1
-      border.color: Style.normalBorderColor
-      Text {
-        id: planText
-        anchors.centerIn: parent
-        text: root.plan
-        color: Util.alpha(root.foreground, 0.72)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        font.capitalization: Font.AllUppercase
-        font.letterSpacing: 0.5
-        textFormat: Text.PlainText
-        Accessible.name: "plan " + root.plan
-      }
+      label: root.plan
+      accessibleName: "plan " + root.plan
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+    }
+
+    HeaderTag {
+      id: severityTag
+      anchors.verticalCenter: parent.verticalCenter
+      label: root.severityText
+      urgent: root.severityUrgent
+      accessibleName: "severity " + root.severityText
+      foreground: root.foreground
+      fontFamily: root.fontFamily
     }
 
     Item {
       // Flexible spacer; never negative. Pushes the refresh glyph right.
+      // Subtracts what is actually rendered — an invisible tag takes no
+      // room in the Row, so it must take none here either.
       width: Math.max(Style.space(4),
           parent.width
           - nameLabel.width
-          - Style.space(60))
+          - (planTag.visible ? planTag.width + row.spacing : 0)
+          - (severityTag.visible ? severityTag.width + row.spacing : 0)
+          - Style.space(22)
+          - row.spacing * 2)
       height: 1
     }
 

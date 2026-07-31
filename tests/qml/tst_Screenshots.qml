@@ -102,21 +102,21 @@ TestCase {
       applyTheme("light")
       stage.titleText = "Claude"
       stage.badgeText = "Connected"
-      stage.bodyText = "Session (5h) 58% left · Max plan"
+      stage.bodyText = "Session (5h) · resets in 3h 1m · 58% left · Weekly (7d) 60% · 23h 1m"
       return
     }
     if (name.indexOf("ready-white") === 0) {
       applyTheme("white")
       stage.titleText = "Claude"
       stage.badgeText = "Connected"
-      stage.bodyText = "Session (5h) 58% left · Max plan"
+      stage.bodyText = "Session (5h) · resets in 3h 1m · 58% left · Weekly (7d) 60% · 23h 1m"
       return
     }
     applyTheme("dark")
     if (name.indexOf("ready-dark") === 0) {
       stage.titleText = "Claude"
       stage.badgeText = "Connected"
-      stage.bodyText = "Session (5h) 58% left · Max plan"
+      stage.bodyText = "Session (5h) · resets in 3h 1m · 58% left · Weekly (7d) 60% · 23h 1m"
     } else if (name.indexOf("loading-dark") === 0) {
       stage.titleText = "Loading"
       stage.badgeText = "Loading"
@@ -124,11 +124,15 @@ TestCase {
     } else if (name.indexOf("refreshing-with-data-dark") === 0) {
       stage.titleText = "Codex"
       stage.badgeText = "Connected · refreshing"
-      stage.bodyText = "Weekly (7d) 74% left (prior data kept)"
+      stage.bodyText = "Weekly (7d) · resets in 23h 1m · 74% left (prior data kept)"
     } else if (name.indexOf("stale-dark") === 0) {
       stage.titleText = "Grok"
       stage.badgeText = "STALE"
       stage.bodyText = "Last data 14m ago · Temporary network failure."
+    } else if (name.indexOf("critical-dark") === 0) {
+      stage.titleText = "Claude"
+      stage.badgeText = "CRITICAL"
+      stage.bodyText = "Session (5h) · resets in 41m · 3% left · Weekly (7d) 60% · 23h 1m"
     } else if (name.indexOf("cli-missing-dark") === 0) {
       stage.titleText = "Amp"
       stage.badgeText = "CLI missing"
@@ -207,7 +211,7 @@ TestCase {
 
   function test_required_names_match_spec() {
     var names = Core.requiredScreenshotNames()
-    compare(names.length, 16)
+    compare(names.length, 17)
     verify(names.indexOf("ready-light.png") >= 0)
     verify(names.indexOf("ready-white.png") >= 0)
     verify(names.indexOf("uninstall-confirmation-dark.png") >= 0)

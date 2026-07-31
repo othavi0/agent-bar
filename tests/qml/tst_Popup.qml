@@ -58,8 +58,42 @@ TestCase {
     // deleted the meta footer) — the header no longer owns that prop/text.
     verify(src.indexOf("connection") < 0)
     // §6: the plan pill becomes an uppercase tag — no more pill radius.
-    verify(src.indexOf("AllUppercase") >= 0)
+    // Task 4 extracted the tag shape into HeaderTag.qml (its own uppercase
+    // assertion lives in test_header_renders_plan_and_severity_tags below),
+    // so this file only needs to prove it delegates to that component.
+    verify(src.indexOf("HeaderTag") >= 0)
     verify(src.indexOf("radius: height / 2") < 0)
+  }
+
+  // §6: name · plan tag · [severity tag] · spacer · refresh. One tag shape,
+  // one urgent variant — not two hand-copied Rectangles.
+  function test_header_renders_plan_and_severity_tags() {
+    var hdr = read("assets/omarchy/components/ProviderHeader.qml")
+    verify(hdr.indexOf("HeaderTag {") >= 0)
+    verify(hdr.indexOf("id: planTag") >= 0)
+    verify(hdr.indexOf("id: severityTag") >= 0)
+    verify(hdr.indexOf("property string severityText") >= 0)
+    verify(hdr.indexOf("property bool severityUrgent") >= 0)
+    // The pill's own Rectangle is gone; the tag lives in one file now.
+    verify(hdr.indexOf("border.color: Style.normalBorderColor") < 0)
+
+    var tag = read("assets/omarchy/components/HeaderTag.qml")
+    verify(tag.indexOf("Color.urgent") >= 0)
+    verify(tag.indexOf("radius: Style.cornerRadius") >= 0)
+    verify(tag.indexOf("Font.AllUppercase") >= 0)
+    verify(tag.indexOf("Qt.rgba(") < 0)
+  }
+
+  // The refresh glyph must stay inside the pane when both tags render; the
+  // spacer subtracts the real tag widths instead of a lump constant.
+  function test_header_spacer_accounts_for_both_tags() {
+    var hdr = read("assets/omarchy/components/ProviderHeader.qml")
+    verify(hdr.indexOf("planTag.visible ? planTag.width") >= 0)
+    verify(hdr.indexOf("severityTag.visible ? severityTag.width") >= 0)
+    verify(hdr.indexOf("Style.space(60)") < 0,
+           "the old lump constant hid the second tag's width")
+    verify(hdr.indexOf("row.spacing * 2") >= 0,
+           "the spacer must charge both unconditional gaps: before it and after it")
   }
 
   function test_rail_has_no_own_frame() {
@@ -198,5 +232,89 @@ TestCase {
     }
     compare(Core.mapActionKind("rm -rf"), null)
     compare(Core.mapActionKind("bash"), null)
+  }
+
+  // §6: the lead window is 2.5x the body size with the reset promoted into
+  // its label line; the old bottom "resets" row is gone.
+  function test_lead_window_geometry_and_label_line() {
+    var win = read("assets/omarchy/components/UsageWindow.qml")
+    verify(win.indexOf("Math.round(Style.font.body * 2.5)") >= 0)
+    verify(win.indexOf("Style.font.body * 1.8") < 0)
+    verify(win.indexOf("root.resetPhrase") >= 0)
+    verify(win.indexOf("root.resetCountdown") >= 0)
+    verify(win.indexOf("property string resetText") < 0,
+           "resetText is replaced by the countdown pair")
+    verify(win.indexOf('text: "resets"') < 0,
+           "the reset row moved into the label line")
+  }
+
+  // UX-020A extended: every window row carries a track, not just the lead.
+  function test_compact_rows_carry_their_own_track() {
+    var win = read("assets/omarchy/components/UsageWindow.qml")
+    var compact = win.slice(win.indexOf("id: compactRow"))
+    verify(compact.length > 0, "compactRow must still exist")
+    verify(compact.indexOf("color: root.trackColor") >= 0,
+           "the compact row needs a track of its own (UX-020A)")
+    verify(compact.indexOf("root.resetCountdown") >= 0,
+           "the compact row needs its reset column")
+    verify(win.indexOf('text: "23h 59m"') >= 0,
+           "the reset column is measured with TextMetrics, never hardcoded px")
+  }
+
+  // §7: critical paints the numeral and the fill in Color.urgent; nothing
+  // else in this file may introduce a colour.
+  function test_critical_window_uses_the_urgent_token() {
+    var win = read("assets/omarchy/components/UsageWindow.qml")
+    verify(win.indexOf("Color.urgent") >= 0)
+    verify(win.indexOf('root.severity === "critical"') >= 0)
+    verify(win.indexOf("Qt.rgba(") < 0)
+
+    // The numeral and its track must agree about severity. They disagreed
+    // once: valueColor ignored `dimmed` while fillColor gave it precedence,
+    // so a stale critical window painted an urgent number beside a neutral
+    // track. Both must reach Color.urgent from `isCritical` alone.
+    var value = win.slice(win.indexOf("readonly property color valueColor"))
+    value = value.slice(0, value.indexOf("\n"))
+    verify(value.indexOf("root.dimmed") < 0,
+           "valueColor must not consult dimmed: " + value)
+    var fill = win.slice(win.indexOf("readonly property color fillColor"))
+    fill = fill.slice(0, fill.indexOf("readonly property real fillOpacity"))
+    verify(fill.indexOf("root.isCritical") < fill.indexOf("root.dimmed"),
+           "fillColor must test isCritical before dimmed: " + fill)
+  }
+
+  function test_provider_view_leads_with_one_window() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("Core.windowLayout(") >= 0)
+    verify(view.indexOf("emphasis: true") >= 0)
+    verify(view.indexOf("emphasis: false") >= 0)
+    verify(view.indexOf("severityText: ") >= 0)
+    // The quiet rule between lead and rows is gone (approved mockup).
+    verify(view.indexOf("strength: 0.08") < 0)
+  }
+
+  // The three QML gates never compile a file that imports qs.*, so a dangling
+  // reference to a deleted function is invisible to them. These guards ban the
+  // exact dead identifiers by name.
+  function test_primary_window_allowlist_is_gone() {
+    var core = read("assets/omarchy/CoreView.js")
+    verify(core.indexOf("PRIMARY_WINDOW_IDS") < 0,
+           "the id allowlist must be deleted, not left dormant")
+    verify(core.indexOf("windowGroups") < 0,
+           "windowGroups is replaced by windowLayout")
+    verify(core.indexOf("function electLeadIndex") >= 0)
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("groups.primary") < 0)
+    verify(view.indexOf("groups.secondary") < 0)
+  }
+
+  // §6/§3.7: the popup shows the countdown only. The absolute-clock humaniser
+  // is deleted with its weekday table and its only Qt.formatDateTime call.
+  function test_absolute_clock_humaniser_is_gone() {
+    var core = read("assets/omarchy/CoreView.js")
+    verify(core.indexOf("formatResetText") < 0)
+    verify(core.indexOf("WEEKDAYS") < 0)
+    verify(core.indexOf("Qt.formatDateTime") < 0)
+    verify(core.indexOf("function resetCountdownText") >= 0)
   }
 }

@@ -10,6 +10,7 @@ function requiredScreenshotNames() {
     "loading-dark.png",
     "refreshing-with-data-dark.png",
     "stale-dark.png",
+    "critical-dark.png",
     "cli-missing-dark.png",
     "unauthenticated-dark.png",
     "rate-limited-dark.png",
