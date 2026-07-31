@@ -473,6 +473,11 @@ TestCase {
     verify(widget.indexOf("chipNumeralText") >= 0)
     verify(widget.indexOf("iconTinted") >= 0)
     verify(widget.indexOf("iconOpticalScale") >= 0)
+    // WidgetButton's vertical/barSize are readonly; qmllint is verifiably
+    // silent on assigning them (plan-02 finding) — failure would be runtime-only.
+    verify(widget.indexOf("vertical: root.vertical") < 0)
+    verify(widget.indexOf("barSize: root.barSize") < 0)
+    verify(widget.indexOf("fontPixelSize:") < 0)
   }
 
   // Plan 03 extends this repo-wide when the popup banner drops its ⌛.

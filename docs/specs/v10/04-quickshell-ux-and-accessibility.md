@@ -80,9 +80,9 @@ not literal UI.
 - `UX-028`: Stale content stays visible with a visible `Stale` label, last
   success age, and safe error summary.
 - `UX-029`: Missing CLI keeps the enabled provider icon dimmed and shows
-  `View installation` and `Check again`.
-- `UX-030`: Unauthenticated shows `Connect` when login discovery succeeds;
-  otherwise it shows `View installation`.
+  `Install guide` and `Check again`.
+- `UX-030`: Unauthenticated shows `Sign in` when login discovery succeeds;
+  otherwise it shows `Install guide`.
 - `UX-031`: Network and rate-limit screens distinguish retryable state and do
   not imply authentication failure.
 - `UX-032`: Provider errors never render raw stderr or rich text.
@@ -147,7 +147,7 @@ Requirements:
 - `UX-051`: Refresh uses `󰑐`.
 - `UX-052`: Settings uses `󰒓`.
 - `UX-053`: Navigation uses Quattro's verified native chevrons.
-- `UX-054`: `Connect`, `Save changes`, and `Restore defaults` use text labels.
+- `UX-054`: `Sign in`, `Save changes`, and `Restore defaults` use text labels.
 - `UX-055`: Delete the v9 custom `IconButton` and its mixed Unicode/Font
   Awesome codepoint table.
 - `UX-056`: Color, typography, spacing, radius, and focus use the values and
