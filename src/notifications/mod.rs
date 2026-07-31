@@ -291,6 +291,33 @@ mod tests {
         .unwrap()
     }
 
+    /// Sibling of `envelope_with_used` for tests that need a window with a
+    /// real `resets_at`, since `envelope_with_used` hardcodes `None`.
+    fn envelope_with_reset(used: f64, resets_at: time::OffsetDateTime) -> StatusEnvelope {
+        let window =
+            UsageWindow::try_new("session", "Session", used, 100.0 - used, Some(resets_at))
+                .unwrap();
+        let provider = ProviderStatus::ready(
+            ProviderId::Claude,
+            "Claude",
+            DataSource::Live,
+            None,
+            None,
+            vec![window],
+            datetime!(2026-07-26 18:42:00 UTC),
+        )
+        .unwrap();
+        StatusEnvelope::try_new_for_package(
+            datetime!(2026-07-26 18:42:00 UTC),
+            StatusRequest {
+                provider: None,
+                cache: CacheMode::Use,
+            },
+            vec![provider],
+        )
+        .unwrap()
+    }
+
     #[tokio::test]
     async fn escalates_warning_then_critical_once_each() {
         let dir = tempfile::tempdir().unwrap();
@@ -377,6 +404,50 @@ mod tests {
         };
         eval.evaluate(&envelope_with_used(99.0)).await.unwrap();
         assert!(dispatcher.runner.specs.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn evaluate_threads_its_own_clock_into_the_dispatched_countdown() {
+        // Every other evaluate()-driven test above uses envelope_with_used(),
+        // whose window carries resets_at: None, so the reset_in closure in
+        // the pending push (`reset_countdown(self.now, ts)`) never runs.
+        // This test gives the window a real reset timestamp and asserts the
+        // exact dispatched body, so it fails if the arguments to
+        // reset_countdown were ever swapped, or if self.now were ever
+        // replaced by a fresh OffsetDateTime::now_utc() call.
+        let dir = tempfile::tempdir().unwrap();
+        let store = NotificationStateStore::new(
+            NotificationPaths {
+                state: dir.path().join("nstate.json"),
+                lock: dir.path().join("n.lock"),
+            },
+            Arc::new(MaintenanceGate::open(dir.path().join("m.lock")).unwrap()),
+        );
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        // Fixed instants, both already years behind the real wall clock this
+        // suite runs under, so a stray OffsetDateTime::now_utc() would land
+        // the reset far in the past and read "now", not "3h 1m" — it cannot
+        // coincidentally reproduce the expected string.
+        let now = datetime!(2026-07-26 18:42:00 UTC);
+        let resets_at = datetime!(2026-07-26 21:43:00 UTC); // now + 3h 1m
+        let eval = NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now,
+        };
+        eval.evaluate(&envelope_with_reset(92.0, resets_at))
+            .await
+            .unwrap();
+        let specs = dispatcher.runner.specs.lock().unwrap();
+        assert_eq!(specs.len(), 1);
+        // Default display metric is Remaining: 100 - 92 = 8% left.
+        assert_eq!(specs[0].args[3], "8% left. Resets in 3h 1m.");
     }
 
     #[test]
