@@ -140,7 +140,7 @@ TestCase {
       windows: [],
       action: {
         kind: "view_installation",
-        label: "View installation",
+        label: "Install guide",
         target: "https://example.com/install"
       }
     }

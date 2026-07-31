@@ -546,7 +546,7 @@ mod tests {
             ProviderId::Claude,
             "Claude",
             ProviderError::new(ErrorCode::AuthenticationRequired, "expired", true),
-            ProviderAction::login("Log in"),
+            ProviderAction::login("Sign in"),
         )
         .unwrap();
         let out = apply_stale_retention(live, Some(&prior)).unwrap();
@@ -563,7 +563,7 @@ mod tests {
             ProviderId::Claude,
             "Claude",
             ProviderError::new(ErrorCode::AuthenticationRequired, "auth", false),
-            ProviderAction::login("Log in"),
+            ProviderAction::login("Sign in"),
         )
         .unwrap();
         let out = apply_stale_retention(live.clone(), Some(&prior)).unwrap();
