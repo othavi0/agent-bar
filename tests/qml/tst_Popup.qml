@@ -68,7 +68,12 @@ TestCase {
     verify(rail.indexOf("normalFill") < 0)
     verify(rail.indexOf("normalBorderColor") < 0)
     verify(rail.indexOf("selectedFill") >= 0)
-    verify(rail.indexOf("Style.spacing.popupPadding") >= 0)
+    verify(rail.indexOf("anchors.topMargin: Style.spacing.popupPadding") >= 0)
+    // The frame deletion's failure shape is a dangling id — runtime-only,
+    // invisible to qmllint/qmltestrunner/plugin-validate (all three verified
+    // blind to it). Ban the id and any anchor to it outright.
+    verify(rail.indexOf("id: frame") < 0)
+    verify(rail.indexOf("anchors.fill: frame") < 0)
   }
 
   function test_content_and_rail_share_inset_token() {
