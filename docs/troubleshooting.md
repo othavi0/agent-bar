@@ -26,8 +26,8 @@ Interpret the typed state:
 
 | State | Action |
 | --- | --- |
-| `cli_missing` | Use `View installation`; Agent Bar does not install it |
-| `unauthenticated` | Use `Connect` when login is available; otherwise use `View installation` |
+| `cli_missing` | Use `Install guide`; Agent Bar does not install it |
+| `unauthenticated` | Use `Sign in` when login is available; otherwise use `Install guide` |
 | `rate_limited` | Wait for the provider or reset; do not relogin blindly |
 | `network_error` | Check network, then `Check again` |
 | `provider_error` | Inspect safe stderr diagnostics with `RUST_LOG` |

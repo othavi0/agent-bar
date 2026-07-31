@@ -12,7 +12,7 @@ collection, cache, settings, and safe maintenance.
 
 - One bar chip per enabled provider.
 - Used or remaining percentage.
-- Plan and connection state.
+- Plan tag and typed provider states.
 - Normalized quota windows and reset times.
 - Loading, stale, missing CLI, unauthenticated, rate-limit, network, and
   provider-error states.

@@ -68,8 +68,9 @@ Notifications: enabled
 
 1. The bar shows one compact chip per enabled provider.
 2. Left-clicking a chip opens that provider in the consolidated popup.
-3. The popup shows plan, connection state, usage windows, reset times, update
-   age, and typed error/action state.
+3. The popup shows plan, usage windows, reset times, and typed error/action
+   state; connection state is implied structurally and the last-success age
+   appears in the stale banner.
 4. Clicking the same chip closes the popup; clicking another chip switches
    provider without closing it.
 

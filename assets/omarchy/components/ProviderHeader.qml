@@ -3,7 +3,8 @@ import qs.Commons
 import qs.Ui
 
 // Provider content header — name, plan pill, refresh only (Fase 2 slim-down).
-// Connection and "Updated" age moved to ProviderView's meta footer.
+// Connection state is implied structurally (UX-017); last-success age
+// appears in the stale banner, not here.
 // UX-016: deliberately no provider icon here (icon lives only on the rail).
 Item {
   id: root

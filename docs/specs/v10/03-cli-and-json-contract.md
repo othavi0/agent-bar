@@ -253,7 +253,7 @@ to `cli_missing`.
   },
   "action": {
     "kind": "view_installation",
-    "label": "View installation",
+    "label": "Install guide",
     "target": "https://ampcode.com/manual"
   }
 }
