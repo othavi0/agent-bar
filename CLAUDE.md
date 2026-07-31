@@ -93,8 +93,10 @@ git diff --check
 QML/plugin changes also run:
 
 ```bash
+# PATH qmllint is a stub reporting version 1.0 that stays SILENT even on an
+# undefined type — the Qt6 binary path is mandatory here too
 find assets/omarchy -type f -name '*.qml' -exec \
-  qmllint -I /usr/share/omarchy/shell {} +
+  /usr/lib/qt6/bin/qmllint -I /usr/share/omarchy/shell {} +
 omarchy plugin validate assets/omarchy
 # PATH qmltestrunner is Qt5 and fails SILENTLY (errors only in journald) —
 # the Qt6 binary path and both env vars below are mandatory
@@ -105,6 +107,14 @@ QT_QPA_PLATFORM=offscreen QML_XHR_ALLOW_FILE_READ=1 QT_LOGGING_TO_CONSOLE=1 \
   -import assets/omarchy \
   -o -,txt
 ```
+
+`qmllint` catches syntax and structure only. It cannot resolve the `qs.*`
+module namespace, so every plugin QML file — including files a change never
+touched — emits unresolved-import and unqualified-access warnings. Read its
+output for what a change introduced, never as a type check, and never treat
+its exit code as a verdict: it exits 0 while printing warnings. Type errors,
+dangling references, and readonly-property assignments in plugin QML reach
+only `qmltestrunner`, `omarchy plugin validate`, and live QA.
 
 Shell changes run ShellCheck. Bundle changes run the complete archive,
 inventory, mode, architecture, version, traversal, and rollback matrix in the
