@@ -42,8 +42,14 @@ fn gui_files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Double-quoted string literals, minus the ones that are not user copy:
-/// property lookups, enum values, and glyphs never reach a label.
+/// Double-quoted string literals, minus comment lines. Every quoted piece
+/// is scanned, including single-token ids, enum values, and glyphs — there
+/// is no length or shape filter. What keeps identifiers like
+/// `schemaVersion` from tripping the guard is exact whole-token matching
+/// against `BANNED`, not a filter on the literal here. Plural forms
+/// (`bundles`) are a known gap: prefix matching would close it, but at the
+/// cost of a false positive on `schemaVersion`, a legitimate JSON field
+/// name in diagnostic strings in `CoreService.js` and `CoreSettings.js`.
 fn user_facing_literals(source: &str) -> Vec<String> {
     let mut out = Vec::new();
     for line in source.lines() {
@@ -51,12 +57,8 @@ fn user_facing_literals(source: &str) -> Vec<String> {
         if trimmed.starts_with("//") {
             continue;
         }
-        // A literal is copy only when it contains a space: single-token
-        // strings in this codebase are ids, enum values, and glyphs.
         for piece in line.split('"').skip(1).step_by(2) {
-            if piece.contains(' ') {
-                out.push(piece.to_owned());
-            }
+            out.push(piece.to_owned());
         }
     }
     out
