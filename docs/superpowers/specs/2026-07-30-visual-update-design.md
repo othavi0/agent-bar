@@ -257,6 +257,14 @@ removal. This section records that decision, not a proposal.
   first-party Omarchy plugins (`plugins/background/Background.qml:250`). The
   same treatment applies to Codex. Claude and Amp are never tinted.
 
+> Correction (2026-07-30, plan 02 execution): `fill="white"` is NOT removed
+> from `grok.svg`. Measured on the GPU backend, `MultiEffect` colorization
+> multiplies source luminance by `colorizationColor` — a black source stays
+> black and cannot take the theme ink. White is therefore the required mask
+> convention for tinted monochrome marks, and the UX-057 concern is resolved
+> by the tint itself: the hardcoded white never reaches the screen raw. The
+> asset actions reduce to adopting the Codex mark; `grok.svg` is unchanged.
+
 ## 11. Copy
 
 All shipped UI copy remains English, per the engineering contract. The

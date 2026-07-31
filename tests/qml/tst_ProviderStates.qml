@@ -190,7 +190,7 @@ TestCase {
   }
 
   function test_chip_state_cue_stale_is_hourglass() {
-    compare(Core.chipStateCue({ state: "stale" }), " ⌛")
+    compare(Core.chipStateCue({ state: "stale" }), "󰅐")
   }
 
   function test_state_actions_respect_retryable() {

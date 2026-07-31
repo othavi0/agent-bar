@@ -78,8 +78,8 @@ BarWidget {
     id: chips
     anchors.centerIn: parent
     columns: root.vertical ? 1 : Math.max(1, root.chipProviders.length)
-    columnSpacing: Style.space(10)
-    rowSpacing: Style.space(6)
+    columnSpacing: Style.spacing.xxl
+    rowSpacing: Style.spacing.md
 
     Repeater {
       model: root.chipProviders
@@ -91,15 +91,14 @@ BarWidget {
         bar: root.bar
         providerId: String(modelData.id || "")
         displayName: modelData.name ? String(modelData.name) : Core.providerDisplayName(providerId)
-        percentText: Core.chipPercentText(modelData, root.displayMetric)
+        numeralText: Core.chipNumeralText(modelData, root.displayMetric)
         stateCue: Core.chipStateCue(modelData)
         tooltipText: Core.chipTooltip(modelData, root.displayMetric)
         iconSource: root.iconUrl(providerId)
+        tinted: Core.iconTinted(providerId)
+        iconScale: Core.iconOpticalScale(providerId)
         foreground: root.chipForeground
         fontFamily: root.chipFontFamily
-        fontPixelSize: Style.font.body
-        vertical: root.vertical
-        barSize: root.barSize
         dimmed: Core.chipDimmed(modelData)
 
         onPressed: function (button) {

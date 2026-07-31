@@ -21,8 +21,10 @@ verified Quattro-native glyphs or explicit English text labels.
 - `UX-009`: Mouse wheel over a bar chip has no effect.
 - `UX-010`: Each chip registers and unregisters a Quattro bar click target and
   implements the host trigger protocol.
-- `UX-011`: Tooltip copy includes provider, displayed percentage, state, and
-  reset summary.
+- `UX-011`: Tooltip copy includes the provider name, the displayed
+  percentage when one exists, and a plain-language state qualifier when the
+  provider is not ready. Raw state identifiers never render. Reset detail
+  lives in the popup.
 - `UX-012`: Stale and error states use an icon/text cue in addition to color.
 
 ## Popup layout
@@ -131,7 +133,16 @@ Requirements:
 
 ## Icons and theme tokens
 
-- `UX-049`: Provider icons are the approved official assets.
+- `UX-049`: Provider icons are the official approved assets. The Codex icon
+  is the approved monochrome mark derived from the official Codex app icon
+  (knockout extraction, adopted 2026-07-30, sha256
+  `880a6d7e2fdb3ed4cb7c9f2f9c8c295050294756dd30eb951462a3b2d08c5397`);
+  OpenAI publishes no standalone monochrome mark. Monochrome marks (Codex,
+  Grok) are stored as white-on-transparency masks: the runtime always
+  renders them through `MultiEffect` colorization, which multiplies mask
+  luminance by the theme foreground, so the stored white never reaches the
+  screen raw. Claude and Amp keep their official brand colors and are never
+  tinted.
 - `UX-050`: Generic controls use Quattro controls and its active font stack.
 - `UX-051`: Refresh uses `󰑐`.
 - `UX-052`: Settings uses `󰒓`.
