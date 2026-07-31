@@ -120,4 +120,4 @@ Notifications: enabled
 - `PROD-030`: The plugin must never display an empty or silently malformed
   status result.
 - `PROD-031`: A connected provider with no percentage window shows `—` in its
-  chip and `Percentage usage is not available for this account` in its popup.
+  chip and `This account is billed another way.` in its popup.

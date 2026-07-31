@@ -84,7 +84,7 @@ Item {
     // Never color-only (A11Y-012): glyph and words, urgent-tinted per the
     // approved mockup.
     Row {
-      visible: root.provider && String(root.provider.state || "") === "stale"
+      visible: root.isStale
       width: parent.width
       spacing: Style.space(8)
 

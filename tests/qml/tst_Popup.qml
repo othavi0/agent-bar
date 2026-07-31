@@ -53,8 +53,9 @@ TestCase {
     verify(src.indexOf("name") >= 0)
     verify(src.indexOf("plan") >= 0)
     verify(src.indexOf("󰑐") >= 0)
-    // Connection moved out of the header into ProviderView's meta footer
-    // (Fase 2 slim-down) — the header no longer owns that prop/text at all.
+    // Connection state is implied structurally (windows render only when
+    // ready) and update age lives in ProviderView's stale banner (plan 03
+    // deleted the meta footer) — the header no longer owns that prop/text.
     verify(src.indexOf("connection") < 0)
     // §6: the plan pill becomes an uppercase tag — no more pill radius.
     verify(src.indexOf("AllUppercase") >= 0)
@@ -104,6 +105,10 @@ TestCase {
     verify(view.indexOf('"Last data "') >= 0)
     verify(view.indexOf("formatAgoText") >= 0)
     verify(view.indexOf("⌛") < 0)
+    // formatAgoText already returns "5m ago"/"just now" — an appended " ago"
+    // literal is the regression shape this test exists to catch.
+    verify(view.indexOf('+ " ago"') < 0)
+    verify(view.indexOf('"Last data " + (age.length ? age : "unknown")') >= 0)
   }
 
   function test_full_width_separator_present() {
