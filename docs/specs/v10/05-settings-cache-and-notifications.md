@@ -187,8 +187,11 @@ critical: used >= 95
 - `NOTIFY-007`: Disabling notifications produces no message and deletes no
   provider/cache data.
 - `NOTIFY-008`: The single settings toggle controls all Agent Bar usage alerts.
-- `NOTIFY-009`: Notification copy is safe English and identifies provider,
-  window, used percentage, and reset when known.
+- `NOTIFY-009`: Notification copy is safe English. The title names the
+  provider and the window; the body states the percentage in the metric
+  selected in Settings and, when the reset is known, the humanised time until
+  it. Trigger thresholds stay on `usedPercent` regardless of the displayed
+  metric.
 - `NOTIFY-010`: Notification state is persisted only after successful dispatch
   confirmed by process exit `0`.
 - `NOTIFY-011`: `Service.qml` requests evaluation with
@@ -239,10 +242,14 @@ notify-send
   <body>
 ```
 
-Warning title is `<Provider> usage warning`; critical title is
-`<Provider> usage critical`. Body is
-`<Window>: <rounded-used>% used. Resets <UTC timestamp>.` when reset is known,
-otherwise `<Window>: <rounded-used>% used.`. Values pass the normal plain-text
-sanitizer. Spawn failure, timeout, signal, or nonzero exit is a dispatch
-failure: report it on stderr, leave that key unadvanced, continue no later
-notifications in that evaluation, and still return the valid status envelope.
+Warning title is `<Provider> <Window> is running low`; critical title is
+`<Provider> <Window> is almost out`. Body is `<value>% <unit>. Resets in
+<countdown>.` when the reset is known and still ahead, `<value>% <unit>.
+Resets now.` once it has passed, and `<value>% <unit>.` when the window
+carries no reset timestamp. `<unit>` is `left` or `used`, following the
+Settings display metric; `<countdown>` is the same humanised form the popup
+renders, shared with QML through one pinned table. Values pass the normal
+plain-text sanitizer. Spawn failure, timeout, signal, or nonzero exit is a
+dispatch failure: report it on stderr, leave that key unadvanced, continue no
+later notifications in that evaluation, and still return the valid status
+envelope.

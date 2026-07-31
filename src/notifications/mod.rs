@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use crate::cli::ProviderId;
 use crate::providers::process::{ProcessRunner, ProcessSpec};
-use crate::settings::schema::Settings as SettingsDocument;
+use crate::settings::schema::{DisplayMetric, Settings as SettingsDocument};
 use crate::status::schema::{ProviderState, StatusEnvelope};
 use crate::support::redact::strip_ansi_and_controls;
 
@@ -23,8 +23,16 @@ pub struct PendingNotification {
     pub provider_name: String,
     pub window_id: String,
     pub window_label: String,
+    /// What fired the notification. Always the trigger, never the sentence.
     pub used_percent: f64,
+    pub remaining_percent: f64,
+    /// The unit the user chose in Settings (copy design §6.2).
+    pub metric: DisplayMetric,
     pub reset_at: Option<time::OffsetDateTime>,
+    /// Humanised countdown at evaluation time; `None` when the window carries
+    /// no reset timestamp. Precomputed by the evaluator, which owns the clock,
+    /// so `build_spec` stays a pure function of this struct.
+    pub reset_in: Option<String>,
     pub level: NotificationLevel,
 }
 
@@ -56,24 +64,31 @@ impl<R: ProcessRunner> NotifySendDispatcher<R> {
             NotificationLevel::Warning => "normal",
             NotificationLevel::Critical => "critical",
         };
+        // Copy design §5.5: the title names what is running out. The old
+        // "{Name} usage warning" said the category, not the thing.
         let title = match pending.level {
-            NotificationLevel::Warning => {
-                format!("{} usage warning", pending.provider_name)
-            }
-            NotificationLevel::Critical => {
-                format!("{} usage critical", pending.provider_name)
-            }
-        };
-        let used = pending.used_percent.round() as i64;
-        let body = match pending.reset_at {
-            Some(ts) => format!(
-                "{}: {}% used. Resets {}.",
-                pending.window_label,
-                used,
-                ts.format(&time::format_description::well_known::Rfc3339)
-                    .unwrap_or_else(|_| "unknown".into())
+            NotificationLevel::Warning => format!(
+                "{} {} is running low",
+                pending.provider_name, pending.window_label
             ),
-            None => format!("{}: {}% used.", pending.window_label, used),
+            NotificationLevel::Critical => format!(
+                "{} {} is almost out",
+                pending.provider_name, pending.window_label
+            ),
+        };
+        // §6.2: one unit across the product. The threshold that fired this is
+        // always usedPercent; the sentence follows the user's chosen metric.
+        let (value, unit) = match pending.metric {
+            DisplayMetric::Used => (pending.used_percent, "used"),
+            DisplayMetric::Remaining => (pending.remaining_percent, "left"),
+        };
+        let value = value.round() as i64;
+        let body = match pending.reset_in.as_deref() {
+            // "Resets in now." is not English; the popup avoids it the same way.
+            Some("now") => format!("{value}% {unit}. Resets now."),
+            Some(countdown) => format!("{value}% {unit}. Resets in {countdown}."),
+            // §5.5: with no timestamp the clause is omitted, not filled in.
+            None => format!("{value}% {unit}."),
         };
         let title = strip_ansi_and_controls(&title);
         let body = strip_ansi_and_controls(&body);
@@ -121,6 +136,9 @@ pub struct NotificationEvaluator<'a, D: NotificationDispatcher> {
     pub store: &'a NotificationStateStore,
     pub dispatcher: &'a D,
     pub settings: &'a SettingsDocument,
+    /// Supplied by the caller that already read the clock for this collect
+    /// cycle, so the countdown agrees with the rest of the envelope.
+    pub now: time::OffsetDateTime,
 }
 
 impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
@@ -162,7 +180,12 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                         window_id: window.id().to_owned(),
                         window_label: window.label().to_owned(),
                         used_percent: used,
+                        remaining_percent: window.remaining_percent(),
+                        metric: self.settings.display.metric,
                         reset_at: window.resets_at(),
+                        reset_in: window
+                            .resets_at()
+                            .map(|ts| crate::support::countdown::reset_countdown(self.now, ts)),
                         level,
                     });
                 }
@@ -199,6 +222,7 @@ mod tests {
     use super::*;
     use crate::cli::{CacheMode, ProviderId};
     use crate::providers::process::{ProcessError, ProcessOutput, ProcessRunner};
+    use crate::settings::schema::DisplayMetric;
     use crate::status::schema::{
         DataSource, ProviderStatus, StatusEnvelope, StatusRequest, UsageWindow,
     };
@@ -288,14 +312,15 @@ mod tests {
             store: &store,
             dispatcher: &dispatcher,
             settings: &settings,
+            now: datetime!(2026-07-26 18:42:00 UTC),
         };
         eval.evaluate(&envelope_with_used(90.0)).await.unwrap();
         eval.evaluate(&envelope_with_used(90.0)).await.unwrap(); // no second warning
         eval.evaluate(&envelope_with_used(96.0)).await.unwrap();
         let specs = dispatcher.runner.specs.lock().unwrap();
         assert_eq!(specs.len(), 2);
-        assert!(specs[0].args.iter().any(|a| a.contains("warning")));
-        assert!(specs[1].args.iter().any(|a| a.contains("critical")));
+        assert!(specs[0].args.iter().any(|a| a.contains("is running low")));
+        assert!(specs[1].args.iter().any(|a| a.contains("is almost out")));
         assert!(specs[0].args.iter().any(|a| a == "--app-name=Agent Bar"));
     }
 
@@ -319,6 +344,7 @@ mod tests {
             store: &store,
             dispatcher: &dispatcher,
             settings: &settings,
+            now: datetime!(2026-07-26 18:42:00 UTC),
         };
         let err = eval.evaluate(&envelope_with_used(92.0)).await.unwrap_err();
         assert!(!err.is_empty());
@@ -347,6 +373,7 @@ mod tests {
             store: &store,
             dispatcher: &dispatcher,
             settings: &settings,
+            now: datetime!(2026-07-26 18:42:00 UTC),
         };
         eval.evaluate(&envelope_with_used(99.0)).await.unwrap();
         assert!(dispatcher.runner.specs.lock().unwrap().is_empty());
@@ -358,17 +385,65 @@ mod tests {
             provider_id: ProviderId::Claude,
             provider_name: "Claude".into(),
             window_id: "session".into(),
-            window_label: "Session".into(),
+            window_label: "Session (5h)".into(),
             used_percent: 91.4,
+            remaining_percent: 8.6,
+            metric: DisplayMetric::Remaining,
             reset_at: Some(datetime!(2026-07-26 22:00:00 UTC)),
+            reset_in: Some("3h 1m".to_owned()),
             level: NotificationLevel::Warning,
         };
         let spec = NotifySendDispatcher::<ScriptedNotify>::build_spec(&pending);
         assert_eq!(spec.program, PathBuf::from("notify-send"));
         assert_eq!(spec.args[0], "--app-name=Agent Bar");
         assert_eq!(spec.args[1], "--urgency=normal");
-        assert_eq!(spec.args[2], "Claude usage warning");
-        assert!(spec.args[3].contains("91% used"));
-        assert!(spec.args[3].contains("Resets"));
+        assert_eq!(spec.args[2], "Claude Session (5h) is running low");
+        assert_eq!(spec.args[3], "9% left. Resets in 3h 1m.");
+    }
+
+    #[test]
+    fn notification_body_follows_the_display_metric() {
+        // The trigger is always usedPercent, but the sentence is not: the
+        // notification must not be the one surface speaking a different unit.
+        let mut pending = PendingNotification {
+            provider_id: ProviderId::Claude,
+            provider_name: "Claude".into(),
+            window_id: "session".into(),
+            window_label: "Session (5h)".into(),
+            used_percent: 96.0,
+            remaining_percent: 4.0,
+            metric: DisplayMetric::Remaining,
+            reset_at: None,
+            reset_in: None,
+            level: NotificationLevel::Critical,
+        };
+        let spec = NotifySendDispatcher::<ScriptedNotify>::build_spec(&pending);
+        assert_eq!(spec.args[1], "--urgency=critical");
+        assert_eq!(spec.args[2], "Claude Session (5h) is almost out");
+        // No timestamp: the reset clause is omitted entirely, not filled with
+        // a placeholder.
+        assert_eq!(spec.args[3], "4% left.");
+
+        pending.metric = DisplayMetric::Used;
+        let spec = NotifySendDispatcher::<ScriptedNotify>::build_spec(&pending);
+        assert_eq!(spec.args[3], "96% used.");
+    }
+
+    #[test]
+    fn elapsed_reset_never_reads_resets_in_now() {
+        let pending = PendingNotification {
+            provider_id: ProviderId::Claude,
+            provider_name: "Claude".into(),
+            window_id: "session".into(),
+            window_label: "Session (5h)".into(),
+            used_percent: 96.0,
+            remaining_percent: 4.0,
+            metric: DisplayMetric::Remaining,
+            reset_at: Some(datetime!(2026-07-26 22:00:00 UTC)),
+            reset_in: Some("now".to_owned()),
+            level: NotificationLevel::Critical,
+        };
+        let spec = NotifySendDispatcher::<ScriptedNotify>::build_spec(&pending);
+        assert_eq!(spec.args[3], "4% left. Resets now.");
     }
 }
