@@ -39,7 +39,6 @@ TestCase {
   function test_ready_windows_mode() {
     var p = firstProvider("ready.json")
     compare(Core.contentMode(p), "windows")
-    compare(Core.connectionLabel(p.state), "Connected")
     verify(Core.planBadge(p).length > 0)
     var lines = Core.windowDisplayLines(p, "remaining")
     verify(lines.length > 0)
@@ -51,14 +50,14 @@ TestCase {
     var p = firstProvider("valid-empty-windows.json")
     compare(Core.contentMode(p), "empty_windows")
     compare(Core.stateBody(p), Core.emptyWindowsMessage())
-    verify(Core.stateBody(p).indexOf("Percentage usage is not available") >= 0)
+    verify(Core.stateBody(p).indexOf("billed another way") >= 0)
   }
 
   function test_stale_retains_windows_and_label() {
     var p = firstProvider("valid-stale.json")
     compare(Core.contentMode(p), "stale_windows")
-    compare(Core.connectionLabel(p.state), "Stale")
-    compare(Core.stateTitle(p), "Stale")
+    compare(Core.stateTitle(p), "")
+    compare(Core.stateBody(p), "")
     verify(Core.errorMessage(p).length > 0)
     var acts = Core.stateActions(p)
     var kinds = acts.map(function (a) { return a.kind })
@@ -72,7 +71,6 @@ TestCase {
   function test_cli_missing_view_installation_and_check_again() {
     var p = firstProvider("valid-cli-missing.json")
     compare(Core.contentMode(p), "state")
-    compare(Core.connectionLabel(p.state), "CLI missing")
     var acts = Core.stateActions(p)
     var kinds = acts.map(function (a) { return a.kind })
     verify(kinds.indexOf("view_installation") >= 0)
@@ -84,12 +82,11 @@ TestCase {
   function test_unauthenticated_connect_or_install() {
     var p = firstProvider("valid-unauthenticated.json")
     compare(Core.contentMode(p), "state")
-    compare(Core.connectionLabel(p.state), "Not connected")
     var acts = Core.stateActions(p)
     verify(acts.length >= 1)
     var kind = acts[0].kind
     verify(kind === "login" || kind === "view_installation")
-    // Label should be user-facing Connect when login
+    // Label should be user-facing Sign in when login
     if (kind === "login")
       verify(acts[0].label.length > 0)
   }
@@ -97,8 +94,6 @@ TestCase {
   function test_network_and_rate_limit_are_retryable_not_auth() {
     var net = firstProvider("valid-network-error.json")
     var rate = firstProvider("valid-rate-limited.json")
-    compare(Core.connectionLabel(net.state), "Network error")
-    compare(Core.connectionLabel(rate.state), "Rate limited")
     verify(Core.stateBody(net).toLowerCase().indexOf("auth") < 0)
     verify(Core.stateBody(rate).toLowerCase().indexOf("auth") < 0)
     verify(Core.stateBody(net).toLowerCase().indexOf("sign in") < 0)
@@ -132,7 +127,7 @@ TestCase {
     var h = Core.headerModel(p, true)
     verify(h.name.length > 0)
     verify(h.plan.length > 0)
-    compare(h.connection, "Connected")
+    verify(h.connection === undefined)
     compare(h.refreshing, true)
     compare(h.showStale, false)
   }
@@ -189,7 +184,7 @@ TestCase {
     compare(groups.secondary[0].label, "Opus")
   }
 
-  function test_chip_state_cue_stale_is_hourglass() {
+  function test_chip_state_cue_stale_is_clock_glyph() {
     compare(Core.chipStateCue({ state: "stale" }), "󰅐")
   }
 
@@ -215,6 +210,62 @@ TestCase {
     for (i = 0; i < acts.length; i++)
       if (acts[i].kind === "retry") hasRetry = true
     verify(hasRetry, "retryable error must offer Retry")
+  }
+
+  function test_state_copy_cli_missing() {
+    var p = { id: "grok", name: "Grok", state: "cli_missing", windows: [], error: null }
+    compare(Core.stateTitle(p), "Grok CLI is not installed")
+    compare(Core.stateBody(p), "Agent Bar reads the quota through it.")
+  }
+
+  function test_state_copy_unauthenticated() {
+    var p = { id: "claude", name: "Claude", state: "unauthenticated", windows: [], error: null }
+    compare(Core.stateTitle(p), "Not signed in to Claude")
+    compare(Core.stateBody(p), "Signing in opens the official Claude CLI.")
+  }
+
+  function test_state_copy_rate_limited() {
+    var p = { id: "codex", name: "Codex", state: "rate_limited", windows: [], error: null }
+    compare(Core.stateTitle(p), "Codex hit a rate limit")
+    compare(Core.stateBody(p), "Try again in a few minutes.")
+  }
+
+  function test_state_copy_network_error() {
+    var p = { id: "amp", name: "Amp", state: "network_error", windows: [], error: null }
+    compare(Core.stateTitle(p), "Cannot reach Amp")
+    compare(Core.stateBody(p), "Check your connection.")
+  }
+
+  function test_state_copy_provider_error_and_unknown() {
+    var pe = { id: "amp", name: "Amp", state: "provider_error", windows: [], error: null }
+    compare(Core.stateTitle(pe), "Amp returned no limits")
+    compare(Core.stateBody(pe), "")
+    var unk = { id: "claude", name: "Claude", state: "weird", windows: [], error: null }
+    compare(Core.stateTitle(unk), "Claude state is unknown")
+  }
+
+  function test_state_copy_ready_no_quota() {
+    var p = { id: "claude", name: "Claude", state: "ready", windows: [], error: null }
+    compare(Core.stateTitle(p), "Claude reports no quota")
+    compare(Core.stateBody(p), "This account is billed another way.")
+  }
+
+  function test_state_body_error_message_precedence() {
+    var p = { id: "grok", name: "Grok", state: "network_error", windows: [],
+              error: { message: "DNS lookup failed.", retryable: true } }
+    compare(Core.stateBody(p), "DNS lookup failed.")
+  }
+
+  function test_action_labels_renamed() {
+    var auth = { id: "claude", name: "Claude", state: "unauthenticated", windows: [], error: null, action: null }
+    var labels = Core.stateActions(auth).map(function (a) { return a.label })
+    verify(labels.indexOf("Sign in") >= 0)
+    verify(labels.indexOf("Connect") < 0)
+    var cli = { id: "grok", name: "Grok", state: "cli_missing", windows: [], error: null,
+                action: { kind: "view_installation", label: "", target: "https://example.com" } }
+    var cliLabels = Core.stateActions(cli).map(function (a) { return a.label })
+    verify(cliLabels.indexOf("Install guide") >= 0)
+    verify(cliLabels.indexOf("Check again") >= 0)
   }
 
   // ProviderView.qml transitively imports qs.Commons/qs.Ui, which only

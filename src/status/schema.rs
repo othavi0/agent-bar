@@ -1119,11 +1119,8 @@ mod tests {
                 ProviderId::Amp,
                 "Amp",
                 ProviderError::new(ErrorCode::CliNotFound, "Amp CLI was not found.", false),
-                ProviderAction::view_installation(
-                    "View installation",
-                    "https://ampcode.com/manual",
-                )
-                .unwrap(),
+                ProviderAction::view_installation("Install guide", "https://ampcode.com/manual")
+                    .unwrap(),
             )
             .unwrap(),
             ProviderStatus::unauthenticated(
@@ -1134,7 +1131,7 @@ mod tests {
                     "Claude is not authenticated.",
                     false,
                 ),
-                ProviderAction::login("Log in"),
+                ProviderAction::login("Sign in"),
             )
             .unwrap(),
             ProviderStatus::rate_limited(
@@ -1187,7 +1184,7 @@ mod tests {
             ProviderId::Codex,
             "Codex",
             ProviderError::new(ErrorCode::CliNotFound, "missing", false),
-            ProviderAction::view_installation("View installation", "https://example.com/codex")
+            ProviderAction::view_installation("Install guide", "https://example.com/codex")
                 .unwrap(),
         )
         .unwrap();

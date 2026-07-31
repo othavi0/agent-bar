@@ -5,7 +5,8 @@ import qs.Ui
 import "CoreView.js" as Core
 
 // Left rail — stack: providers → spacer → Settings.
-// Horizontal padding is symmetric (slot fits exactly in the frame).
+// No own frame (§6): the card border already bounds the popup, so the slot
+// stack shares the popup's inset token and fits the rail width exactly.
 // Selected = brainstorming “A” plate (soft fill + thin border), only on the
 // active provider id — never a sticky focus ring on Claude.
 Item {
@@ -20,22 +21,19 @@ Item {
   signal providerSelected(string providerId)
   signal settingsClicked()
 
-  readonly property int outerMargin: Style.space(4)
-  readonly property int framePad: Style.space(8)
   readonly property int slotSize: Style.space(32)
   readonly property int iconSize: 16
   readonly property int stackGap: Style.space(8)
   readonly property int spacerMin: Style.space(4)
 
-  // outer + pad + slot + pad + outer — equal L/R inset around each icon.
-  readonly property int railWidth: outerMargin * 2 + framePad * 2 + slotSize
+  // No own frame (§6) — the slot fits exactly, horizontal inset is 0.
+  readonly property int railWidth: slotSize
 
   readonly property int minStackHeight: {
     var n = providers && providers.length ? providers.length : 0
     var slots = n + 1
     var gaps = n + 1 // n providers + spacer + settings → n+2 items → n+1 gaps
-    return outerMargin * 2
-        + framePad * 2
+    return Style.spacing.popupPadding * 2
         + slots * slotSize
         + gaps * stackGap
         + spacerMin
@@ -81,24 +79,11 @@ Item {
     _railFocusItems = next
   }
 
-  Rectangle {
-    id: frame
-    anchors.fill: parent
-    anchors.margins: root.outerMargin
-    color: Style.normalFill
-    border.width: 1
-    border.color: Style.normalBorderColor
-    radius: Style.cornerRadius
-    clip: true
-  }
-
   ColumnLayout {
     id: stack
-    anchors.fill: frame
-    anchors.topMargin: root.framePad
-    anchors.bottomMargin: root.framePad
-    anchors.leftMargin: root.framePad
-    anchors.rightMargin: root.framePad
+    anchors.fill: parent
+    anchors.topMargin: Style.spacing.popupPadding
+    anchors.bottomMargin: Style.spacing.popupPadding
     spacing: root.stackGap
 
     Repeater {

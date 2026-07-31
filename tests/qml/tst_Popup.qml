@@ -53,14 +53,62 @@ TestCase {
     verify(src.indexOf("name") >= 0)
     verify(src.indexOf("plan") >= 0)
     verify(src.indexOf("󰑐") >= 0)
-    // Connection moved out of the header into ProviderView's meta footer
-    // (Fase 2 slim-down) — the header no longer owns that prop/text at all.
+    // Connection state is implied structurally (windows render only when
+    // ready) and update age lives in ProviderView's stale banner (plan 03
+    // deleted the meta footer) — the header no longer owns that prop/text.
     verify(src.indexOf("connection") < 0)
+    // §6: the plan pill becomes an uppercase tag — no more pill radius.
+    verify(src.indexOf("AllUppercase") >= 0)
+    verify(src.indexOf("radius: height / 2") < 0)
   }
 
-  function test_footer_shows_connection() {
-    var src = read("assets/omarchy/ProviderView.qml")
-    verify(src.indexOf("connection") >= 0)
+  function test_rail_has_no_own_frame() {
+    var rail = read("assets/omarchy/ProviderRail.qml")
+    // §6: the rail draws no fill or border of its own inside an already
+    // bordered card; the selected plate is the only chrome.
+    verify(rail.indexOf("normalFill") < 0)
+    verify(rail.indexOf("normalBorderColor") < 0)
+    verify(rail.indexOf("selectedFill") >= 0)
+    verify(rail.indexOf("anchors.topMargin: Style.spacing.popupPadding") >= 0)
+    // The frame deletion's failure shape is a dangling id — runtime-only,
+    // invisible to qmllint/qmltestrunner/plugin-validate (all three verified
+    // blind to it). Ban the id and any anchor to it outright.
+    verify(rail.indexOf("id: frame") < 0)
+    verify(rail.indexOf("anchors.fill: frame") < 0)
+  }
+
+  function test_content_and_rail_share_inset_token() {
+    var popup = read("assets/omarchy/Popup.qml")
+    verify(popup.indexOf("contentMargins: Style.spacing.popupPadding") >= 0)
+    verify(popup.indexOf("Style.space(14)") < 0)
+  }
+
+  function test_no_meta_footer() {
+    // NOTE: repoRoot (above) already pops to the repo root, matching every
+    // sibling read() call in this file ("assets/omarchy/..."); the brief's
+    // literal "../../assets/omarchy/ProviderView.qml" resolves outside the
+    // repo, so XHR returns "" and both new tests would pass/fail vacuously
+    // forever regardless of ProviderView.qml's contents. Fixed to match the
+    // established convention.
+    var view = read("assets/omarchy/ProviderView.qml")
+    // §6/§9: the meta footer is removed in all states; its age moved to the
+    // stale banner and connection state is structural.
+    verify(view.indexOf("connection") < 0)
+    verify(view.indexOf('"Updated "') < 0)
+    verify(view.indexOf('"Cache"') < 0)
+    verify(view.indexOf('"Live"') < 0)
+  }
+
+  function test_stale_banner_carries_age_and_retry() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.indexOf("󰅐") >= 0)
+    verify(view.indexOf('"Last data "') >= 0)
+    verify(view.indexOf("formatAgoText") >= 0)
+    verify(view.indexOf("⌛") < 0)
+    // formatAgoText already returns "5m ago"/"just now" — an appended " ago"
+    // literal is the regression shape this test exists to catch.
+    verify(view.indexOf('+ " ago"') < 0)
+    verify(view.indexOf('"Last data " + (age.length ? age : "unknown")') >= 0)
   }
 
   function test_full_width_separator_present() {
@@ -140,7 +188,7 @@ TestCase {
       windows: [],
       action: {
         kind: "view_installation",
-        label: "View installation",
+        label: "Install guide",
         target: "https://example.com/install"
       }
     }

@@ -84,7 +84,7 @@ TestCase {
     verify(Core.chipStateCue({ state: "stale" }).length > 0)
     verify(Core.chipStateCue({ state: "cli_missing" }).length > 0)
     verify(Core.stateTitle({ state: "network_error", windows: [] }).length > 0)
-    verify(Core.connectionLabel("stale") === "Stale")
+    compare(Core.stateQualifier("stale"), "stale")
   }
 
   function test_glyphs_and_text_labels() {

@@ -3,7 +3,8 @@ import qs.Commons
 import qs.Ui
 
 // Provider content header — name, plan pill, refresh only (Fase 2 slim-down).
-// Connection and "Updated" age moved to ProviderView's meta footer.
+// Connection state is implied structurally (UX-017); last-success age
+// appears in the stale banner, not here.
 // UX-016: deliberately no provider icon here (icon lives only on the rail).
 Item {
   id: root
@@ -46,7 +47,7 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       width: planText.implicitWidth + Style.space(10)
       height: planText.implicitHeight + Style.space(4)
-      radius: height / 2
+      radius: Style.cornerRadius
       color: "transparent"
       border.width: 1
       border.color: Style.normalBorderColor
@@ -57,6 +58,8 @@ Item {
         color: Util.alpha(root.foreground, 0.72)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
+        font.capitalization: Font.AllUppercase
+        font.letterSpacing: 0.5
         textFormat: Text.PlainText
         Accessible.name: "plan " + root.plan
       }

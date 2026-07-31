@@ -106,6 +106,16 @@ function chipPercentText(provider, metric) {
   return Math.round(v) + "%"
 }
 
+// Typed error/collection-failure states shared by the chip cue and the
+// tooltip/copy qualifiers (plan 03 §5.1-5.3).
+var ERROR_STATES = {
+  "cli_missing": true,
+  "unauthenticated": true,
+  "rate_limited": true,
+  "network_error": true,
+  "provider_error": true
+}
+
 // UX-012: text cue beyond color for stale/error. No leading space — the
 // chip separates cue from numeral with layout spacing (visual design §5).
 // 󰅐 is U+F0150 from the bar's Nerd Font family, replacing the old
@@ -116,10 +126,19 @@ function chipStateCue(provider) {
   var state = String(provider.state || "")
   if (state === "stale")
     return "󰅐"
-  if (state === "cli_missing" || state === "unauthenticated" || state === "rate_limited"
-      || state === "network_error" || state === "provider_error")
+  if (ERROR_STATES[state])
     return "!"
   return ""
+}
+
+var STATE_QUALIFIERS = {
+  "stale": "stale",
+  "loading": "loading",
+  "cli_missing": "no CLI",
+  "unauthenticated": "signed out",
+  "rate_limited": "rate limited",
+  "network_error": "offline",
+  "provider_error": "failed"
 }
 
 // Copy design §5.4: lowercase trailing qualifier for the chip tooltip.
@@ -129,20 +148,8 @@ function stateQualifier(state) {
   var s = String(state || "")
   if (s === "ready")
     return ""
-  if (s === "stale")
-    return "stale"
-  if (s === "loading")
-    return "loading"
-  if (s === "cli_missing")
-    return "no CLI"
-  if (s === "unauthenticated")
-    return "signed out"
-  if (s === "rate_limited")
-    return "rate limited"
-  if (s === "network_error")
-    return "offline"
-  if (s === "provider_error")
-    return "failed"
+  if (STATE_QUALIFIERS[s] !== undefined)
+    return STATE_QUALIFIERS[s]
   return "unknown"
 }
 
@@ -262,27 +269,6 @@ function resolveSelectedProvider(snapshot, selectedProviderId, settings) {
   return chips[0]
 }
 
-function connectionLabel(state) {
-  var s = String(state || "")
-  if (s === "ready")
-    return "Connected"
-  if (s === "stale")
-    return "Stale"
-  if (s === "loading")
-    return "Loading"
-  if (s === "cli_missing")
-    return "CLI missing"
-  if (s === "unauthenticated")
-    return "Not connected"
-  if (s === "rate_limited")
-    return "Rate limited"
-  if (s === "network_error")
-    return "Network error"
-  if (s === "provider_error")
-    return "Provider error"
-  return "Unknown"
-}
-
 function planBadge(provider) {
   if (!provider || !provider.plan)
     return ""
@@ -316,67 +302,53 @@ function containsMoneyCopy(text) {
 }
 
 function emptyWindowsMessage() {
-  return "Percentage usage is not available for this account"
+  return "This account is billed another way."
 }
 
 function stateTitle(provider) {
   if (!provider)
-    return "Loading"
+    return ""
+  var name = plainText(provider.name || providerDisplayName(provider.id))
   var s = String(provider.state || "")
-  if (s === "loading")
-    return "Loading"
+  if (s === "loading" || s === "stale")
+    return ""
   if (s === "ready" && (!provider.windows || provider.windows.length === 0))
-    return "No percentage usage"
-  if (s === "stale")
-    return "Stale"
+    return name + " reports no quota"
+  if (s === "ready")
+    return ""
   if (s === "cli_missing")
-    return "CLI not found"
+    return name + " CLI is not installed"
   if (s === "unauthenticated")
-    return "Authentication required"
+    return "Not signed in to " + name
   if (s === "rate_limited")
-    return "Rate limited"
+    return name + " hit a rate limit"
   if (s === "network_error")
-    return "Network error"
+    return "Cannot reach " + name
   if (s === "provider_error")
-    return "Provider error"
-  return connectionLabel(s)
+    return name + " returned no limits"
+  return name + " state is unknown"
 }
 
 function stateBody(provider) {
   if (!provider)
-    return "Collecting provider status\u2026"
+    return ""
+  var name = plainText(provider.name || providerDisplayName(provider.id))
   var s = String(provider.state || "")
-  if (s === "loading")
-    return "Collecting provider status\u2026"
+  if (s === "loading" || s === "stale")
+    return ""
   if (s === "ready" && (!provider.windows || provider.windows.length === 0))
     return emptyWindowsMessage()
-  if (s === "stale") {
-    var base = "Showing the last successful result."
-    var err = errorMessage(provider)
-    if (err.length)
-      return base + " " + err
-    return base
-  }
-  if (s === "cli_missing") {
-    var cli = errorMessage(provider)
-    return cli.length ? cli : "Required CLI was not found."
-  }
-  if (s === "unauthenticated") {
-    var auth = errorMessage(provider)
-    return auth.length ? auth : "Sign in to collect usage."
-  }
-  if (s === "rate_limited") {
-    var rl = errorMessage(provider)
-    return rl.length ? rl : "The provider rate-limited this request. Try again shortly."
-  }
-  if (s === "network_error") {
-    var net = errorMessage(provider)
-    return net.length ? net : "A temporary network error prevented collection."
-  }
-  if (s === "provider_error") {
-    var pe = errorMessage(provider)
-    return pe.length ? pe : "The provider returned an unusable response."
-  }
+  var err = errorMessage(provider)
+  if (err.length)
+    return err
+  if (s === "cli_missing")
+    return "Agent Bar reads the quota through it."
+  if (s === "unauthenticated")
+    return "Signing in opens the official " + name + " CLI."
+  if (s === "rate_limited")
+    return "Try again in a few minutes."
+  if (s === "network_error")
+    return "Check your connection."
   return ""
 }
 
@@ -384,9 +356,9 @@ function defaultActionLabel(kind) {
   if (kind === "retry")
     return "Retry"
   if (kind === "login")
-    return "Connect"
+    return "Sign in"
   if (kind === "view_installation")
-    return "View installation"
+    return "Install guide"
   return String(kind || "")
 }
 
@@ -418,7 +390,7 @@ function stateActions(provider) {
   if (state === "stale" || state === "rate_limited" || state === "network_error" || state === "provider_error")
     pushAction("retry", "Retry", null)
   if (state === "unauthenticated" && !seen.login && !seen.view_installation)
-    pushAction("login", "Connect", null)
+    pushAction("login", "Sign in", null)
 
   // JSON-025 addendum: a typed non-retryable error must never offer Retry,
   // regardless of which branch above produced it.
@@ -545,7 +517,6 @@ function headerModel(provider, refreshing) {
     return {
       name: "",
       plan: "",
-      connection: "Loading",
       lastSuccessAt: null,
       refreshing: !!refreshing,
       showStale: false
@@ -554,7 +525,6 @@ function headerModel(provider, refreshing) {
   return {
     name: plainText(provider.name || providerDisplayName(provider.id)),
     plan: plainText(planBadge(provider)),
-    connection: connectionLabel(provider.state),
     lastSuccessAt: provider.lastSuccessAt ? String(provider.lastSuccessAt) : null,
     refreshing: !!refreshing,
     showStale: String(provider.state) === "stale"

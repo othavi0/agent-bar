@@ -23,7 +23,7 @@
       },
       "action": {
         "kind": "login",
-        "label": "Log in",
+        "label": "Sign in",
         "target": null
       }
     }

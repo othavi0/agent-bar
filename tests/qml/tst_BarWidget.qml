@@ -473,15 +473,35 @@ TestCase {
     verify(widget.indexOf("chipNumeralText") >= 0)
     verify(widget.indexOf("iconTinted") >= 0)
     verify(widget.indexOf("iconOpticalScale") >= 0)
+    // WidgetButton's vertical/barSize are readonly; qmllint is verifiably
+    // silent on assigning them (plan-02 finding) — failure would be runtime-only.
+    verify(widget.indexOf("vertical: root.vertical") < 0)
+    verify(widget.indexOf("barSize: root.barSize") < 0)
+    verify(widget.indexOf("fontPixelSize:") < 0)
   }
 
-  // Plan 03 extends this repo-wide when the popup banner drops its ⌛.
-  function test_chip_path_has_no_emoji_hourglass() {
-    var xhr = new XMLHttpRequest()
-    xhr.open("GET", coreViewUrl, false)
-    xhr.send()
-    var core = String(xhr.responseText)
-    verify(core.indexOf("⌛") < 0)
+  // Plan 03: the popup banner drops its ⌛ for 󰅐 (glyph parity with the chip
+  // stale cue) — ban the emoji repo-wide across every file that could render
+  // provider-facing copy, not just CoreView.js.
+  function test_no_emoji_hourglass_in_assets() {
+    var files = [
+      "assets/omarchy/CoreView.js",
+      "assets/omarchy/components/ProviderChip.qml",
+      "assets/omarchy/ProviderView.qml",
+      "assets/omarchy/components/ProviderHeader.qml",
+      "assets/omarchy/ProviderRail.qml",
+      "assets/omarchy/components/StateMessage.qml",
+      "assets/omarchy/components/UsageWindow.qml",
+      "assets/omarchy/Popup.qml",
+      "assets/omarchy/BarWidget.qml"
+    ]
+    for (var i = 0; i < files.length; i++) {
+      var xhr = new XMLHttpRequest()
+      xhr.open("GET", "file://" + repoRoot + "/" + files[i], false)
+      xhr.send()
+      var src = String(xhr.responseText)
+      verify(src.indexOf("⌛") < 0, files[i] + " must not use the emoji hourglass")
+    }
   }
 
   function test_icon_files_exist_with_approved_names() {

@@ -43,7 +43,7 @@ pub fn provider_status_from_result(result: ProviderResult) -> Result<ProviderSta
             id,
             name,
             ProviderError::new(ErrorCode::CliNotFound, message, false),
-            ProviderAction::view_installation("View installation", installation_url)?,
+            ProviderAction::view_installation("Install guide", installation_url)?,
         ),
         ProviderResult::Unauthenticated {
             id,
@@ -54,9 +54,9 @@ pub fn provider_status_from_result(result: ProviderResult) -> Result<ProviderSta
             retryable,
         } => {
             let action = if login_available {
-                ProviderAction::login("Log in")
+                ProviderAction::login("Sign in")
             } else {
-                ProviderAction::view_installation("View installation", installation_url)?
+                ProviderAction::view_installation("Install guide", installation_url)?
             };
             ProviderStatus::unauthenticated(
                 id,
@@ -121,5 +121,40 @@ mod tests {
         .unwrap();
         assert_eq!(missing.state(), ProviderState::CliMissing);
         assert!(missing.windows().is_empty());
+        assert_eq!(
+            missing.action().map(|a| a.label.as_str()),
+            Some("Install guide")
+        );
+    }
+
+    #[test]
+    fn unauthenticated_action_label_prefers_sign_in_when_login_available() {
+        let status = provider_status_from_result(ProviderResult::Unauthenticated {
+            id: ProviderId::Claude,
+            name: "Claude".into(),
+            message: "not authenticated".into(),
+            login_available: true,
+            installation_url: "https://claude.ai/download".into(),
+            retryable: false,
+        })
+        .unwrap();
+        assert_eq!(status.action().map(|a| a.label.as_str()), Some("Sign in"));
+    }
+
+    #[test]
+    fn unauthenticated_action_label_falls_back_to_install_guide_without_login() {
+        let status = provider_status_from_result(ProviderResult::Unauthenticated {
+            id: ProviderId::Codex,
+            name: "Codex".into(),
+            message: "not authenticated".into(),
+            login_available: false,
+            installation_url: "https://developers.openai.com/codex".into(),
+            retryable: false,
+        })
+        .unwrap();
+        assert_eq!(
+            status.action().map(|a| a.label.as_str()),
+            Some("Install guide")
+        );
     }
 }

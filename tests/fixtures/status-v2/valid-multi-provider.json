@@ -55,7 +55,7 @@
       },
       "action": {
         "kind": "view_installation",
-        "label": "View installation",
+        "label": "Install guide",
         "target": "https://developers.openai.com/codex"
       }
     }

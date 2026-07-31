@@ -72,9 +72,14 @@ TestCase {
     return values
   }
 
+  // Plan 03 removed ProviderView.qml's only two Util.alpha( call sites
+  // (the meta footer, :222/:232) along with the footer itself. The file
+  // legitimately needs no alpha role afterwards: the stale banner uses
+  // Color.urgent directly and the separators are PanelSeparator. It stays
+  // in tokenScannedFiles() above — the no-raw-Qt.rgba and closed-alpha-set
+  // scans still apply — but drops out of this REQUIRES-Util.alpha list.
   function convertedFiles() {
     return [
-      "assets/omarchy/ProviderView.qml",
       "assets/omarchy/SettingsView.qml",
       "assets/omarchy/MaintenanceView.qml",
       "assets/omarchy/components/UsageWindow.qml",

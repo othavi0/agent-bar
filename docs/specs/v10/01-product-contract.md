@@ -68,8 +68,9 @@ Notifications: enabled
 
 1. The bar shows one compact chip per enabled provider.
 2. Left-clicking a chip opens that provider in the consolidated popup.
-3. The popup shows plan, connection state, usage windows, reset times, update
-   age, and typed error/action state.
+3. The popup shows plan, usage windows, reset times, and typed error/action
+   state; connection state is implied structurally and the last-success age
+   appears in the stale banner.
 4. Clicking the same chip closes the popup; clicking another chip switches
    provider without closing it.
 
@@ -80,10 +81,10 @@ Notifications: enabled
 3. Middle-clicking any bar chip bypasses cache for all enabled providers once.
 4. Concurrent forced requests are coalesced without being discarded.
 
-### Connect
+### Sign in
 
-1. A detected but unauthenticated provider shows `Connect` when login
-   discovery succeeds; otherwise it shows `View installation`.
+1. A detected but unauthenticated provider shows `Sign in` when login
+   discovery succeeds; otherwise it shows `Install guide`.
 2. The action opens the configured terminal through the bundled Bash helper.
 3. The private Rust helper delegates to the provider's official login command.
 4. Success preserves the provider command's meaningful status and forces a
@@ -120,4 +121,4 @@ Notifications: enabled
 - `PROD-030`: The plugin must never display an empty or silently malformed
   status result.
 - `PROD-031`: A connected provider with no percentage window shows `—` in its
-  chip and `Percentage usage is not available for this account` in its popup.
+  chip and `This account is billed another way.` in its popup.
