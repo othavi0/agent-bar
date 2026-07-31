@@ -146,6 +146,19 @@ TestCase {
     verify(src.indexOf("apiKey") < 0)
     verify(!View.containsMoneyCopy(src))
     verify(src.indexOf("Text.RichText") < 0)
+    // Copy design §5.7. The old labels are banned by name so a revert fails
+    // here rather than silently shipping.
+    verify(src.indexOf("Bar shows") >= 0)
+    verify(src.indexOf("Chip number") < 0)
+    verify(src.indexOf("Refresh every") >= 0)
+    verify(src.indexOf("Refresh interval (seconds)") < 0)
+    verify(src.indexOf("Warn me before a quota runs out.") >= 0)
+    verify(src.indexOf("Usage threshold alerts") < 0)
+    verify(src.indexOf('text: "Loading\\u2026"') >= 0)
+    verify(src.indexOf("Loading settings") < 0)
+    // The host NumberField has no suffix property, so the unit is a sibling
+    // label positioned against the spin box.
+    verify(src.indexOf('text: "seconds"') >= 0)
   }
 
   function test_settings_row_has_icon_name_chevrons() {

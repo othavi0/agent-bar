@@ -79,7 +79,7 @@ Item {
     Text {
       visible: root.loading
       width: parent.width
-      text: "Loading settings\u2026"
+      text: "Loading\u2026"
       color: Util.alpha(root.foreground, 0.72)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -157,7 +157,7 @@ Item {
       enabled: !root.locked
 
       Text {
-        text: "Chip number"
+        text: "Bar shows"
         color: Util.alpha(root.foreground, 0.55)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -205,18 +205,36 @@ Item {
       opacity: root.locked ? 0.55 : 1.0
       enabled: !root.locked
 
-      NumberField {
-        id: intervalField
-        label: "Refresh interval (seconds)"
-        value: root.intervalSec
-        from: 30
-        to: 3600
-        stepSize: 5
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onModified: function (v) {
-          if (root.agentService)
-            root.agentService.setRefreshInterval(v)
+      Row {
+        spacing: Style.spacing.lg
+
+        NumberField {
+          id: intervalField
+          label: "Refresh every"
+          value: root.intervalSec
+          from: 30
+          to: 3600
+          stepSize: 5
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onModified: function (v) {
+            if (root.agentService)
+              root.agentService.setRefreshInterval(v)
+          }
+        }
+
+        // The host NumberField exposes no suffix property (measured), so the
+        // unit is a sibling label. It aligns with the spin box, not with the
+        // field's own label above it — and it cannot use anchors, because the
+        // spin box is a child of a sibling, which QML refuses to anchor to.
+        Text {
+          y: intervalField.field.y + (intervalField.field.height - height) / 2
+          text: "seconds"
+          color: Util.alpha(root.foreground, 0.72)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          textFormat: Text.PlainText
+          Accessible.ignored: true
         }
       }
     }
@@ -230,7 +248,7 @@ Item {
 
       Toggle {
         label: "Notifications"
-        description: "Usage threshold alerts for enabled providers"
+        description: "Warn me before a quota runs out."
         checked: root.notificationsOn
         foreground: root.foreground
         fontFamily: root.fontFamily
