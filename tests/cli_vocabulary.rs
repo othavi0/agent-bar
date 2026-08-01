@@ -130,3 +130,25 @@ fn cli_messages_are_defined_once() {
         violations.join("\n  - ")
     );
 }
+
+/// §7.3: a message names the fix only where the fix is short and certain.
+/// These four are the whole set — every other CLI error either states a
+/// grammar mistake the user can see from their own command line, or a
+/// condition whose remedy depends on facts the helper does not have.
+#[test]
+fn cli_messages_that_can_name_a_fix_do() {
+    let source =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli/mod.rs"))
+            .expect("read mod.rs");
+    for needle in [
+        "setup plugins-dir path does not exist: {}; create it or pass an existing parent",
+        "setup plugins-dir path is not a directory: {}; pass the parent directory",
+        "setup plugins-dir path is not writable: {}; pass a directory you own",
+        "{} login executable was not found; install the provider CLI first",
+    ] {
+        assert!(
+            source.contains(needle),
+            "missing fix-naming message: {needle}"
+        );
+    }
+}

@@ -113,13 +113,13 @@ pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
     }
     let meta = std::fs::metadata(path).map_err(|_| {
         CliFailure::validation(format!(
-            "setup plugins-dir path does not exist: {}",
+            "setup plugins-dir path does not exist: {}; create it or pass an existing parent",
             path.display()
         ))
     })?;
     if !meta.is_dir() {
         return Err(CliFailure::validation(format!(
-            "setup plugins-dir path is not a directory: {}",
+            "setup plugins-dir path is not a directory: {}; pass the parent directory",
             path.display()
         )));
     }
@@ -135,7 +135,7 @@ pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
         }
         Err(_) => {
             return Err(CliFailure::validation(format!(
-                "setup plugins-dir path is not writable: {}",
+                "setup plugins-dir path is not writable: {}; pass a directory you own",
                 path.display()
             )));
         }
@@ -898,7 +898,7 @@ fn dispatch_login(provider: ProviderId) -> Result<(), CliFailure> {
     if discovery.login_executable().is_none() {
         return Err(CliFailure {
             message: format!(
-                "{} login executable was not found",
+                "{} login executable was not found; install the provider CLI first",
                 adapter.descriptor().display_name
             ),
             exit_code: GENERIC_FAILURE,
