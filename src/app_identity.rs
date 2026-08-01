@@ -26,7 +26,7 @@ mod tests {
     #[test]
     fn package_version_is_release_identity() {
         assert_eq!(
-            VERSION, "10.2.0",
+            VERSION, "10.3.0",
             "Cargo.toml package version must match the release identity"
         );
     }

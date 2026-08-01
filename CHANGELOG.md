@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [10.3.0] - 2026-08-01
+
+The visual and copy pass over the whole product: severity you can see, one
+window that leads the popup, and every message rewritten in plain words.
+Same Omarchy Quattro plugin `agent-bar.usage` with the private Rust helper at
+`bin/agent-bar`; no breaking changes.
+
+### Added
+
+- Severity. A window at or above 95% used is Critical and at or above 90% is
+  Low. The popup header carries the word, the lead window's numeral and track
+  turn urgent, and a ready provider shows `!` on its bar chip. Every level
+  carries a word, never colour alone. The thresholds are the notification
+  ones, shared with the Rust notifier and pinned by a test that reads both
+  sides, so the bar and the alert can never disagree about what counts as
+  critical.
+- Lead-window election. The popup used to render large whichever windows
+  matched a hardcoded list of ids, silently demoting anything else. It now
+  elects: a critical window leads, otherwise the one resetting soonest, with
+  ties keeping the order the provider delivered. A window id nobody
+  anticipated can lead without a code change.
+- A usage track on every window row, not only the large one.
+- The reset countdown now exists in Rust as well as QML, pinned to one shared
+  table of inputs, so a notification and the popup can never render the same
+  duration differently.
+
+### Changed
+
+- Notifications say what is running out, in your unit: `Claude Session (5h)
+  is almost out` with a body of `4% left. Resets in 3h 1m.` The body follows
+  the used/remaining choice from Settings instead of always saying `used`.
+  What triggers the alert is still the used percentage — what fires it and
+  what it says are different questions.
+- The popup leads with one large window and renders every other as a compact
+  row: label, track, value, countdown. Reset times read as a countdown.
+- Provider states speak plainly: `Not signed in to Claude`, `Codex hit a rate
+  limit`, `This account is billed another way.` The two actions are now
+  `Sign in` and `Install guide`, end to end including the helper's payload.
+- Settings reads `Bar shows`, `Refresh every` with `seconds` beside the
+  field, and `Warn me before a quota runs out.`
+- Maintenance drops the ceremony: `Deletes Agent Bar. Your settings stay.`
+  and `Updates 10.2.0 to 10.3.0. Settings stay. Rolls back if it fails.` The
+  second destructive click is still required and is carried by the button.
+- The bar chip is built on the host's `WidgetButton`, so it sits on the same
+  icon grid as neighbouring modules and inherits the host's motion. Codex
+  ships a mark-grade icon; monochrome marks take the theme ink.
+- The plan badge is a tag, and the rail shares one inset with the content
+  instead of drawing its own frame.
+- CLI errors say `argument` where they said `clause`, and four of them now
+  name the fix. `install.sh` is rewritten for someone reading it once.
+
+### Fixed
+
+- Light themes. Sixteen `Qt.darker` calls became alpha over the foreground,
+  so secondary text stops outranking primary. On the `white` theme the two
+  had collapsed to identical pixels.
+- The stale banner carries the last-success age, the safe error summary and
+  Retry, in both stale modes rather than only one.
+
+### Removed
+
+- The popup's meta footer, and the absolute clock beside reset times.
+- `PRIMARY_WINDOW_IDS`, the window-id allowlist the election replaces.
+- The `Installation type` row, which only ever displayed one value.
+
 ## [10.2.0] - 2026-07-29
 
 ### Changed
