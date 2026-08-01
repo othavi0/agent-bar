@@ -77,6 +77,7 @@ letter-suffixed IDs are listed separately.
 | --- | --- | --- |
 | `SET-001`–`SET-013` | 1, 4, 16 | schema, read purity, atomic write, shell migration tests |
 | `SET-014`–`SET-022` | 9, 12 | QML load/save generation and race tests |
+| `SET-023` | 9, 12 | startup bootstrap read tests in `tst_Settings.qml` |
 | `CACHE-001`–`CACHE-008` | 6–7 | cache content, permissions, TTL, policy parity tests |
 | `CACHE-009`–`CACHE-019` | 7 | barrier/fake-clock singleflight and corruption tests |
 | `CACHE-019A` | 7 | bypass-writes-cache test |

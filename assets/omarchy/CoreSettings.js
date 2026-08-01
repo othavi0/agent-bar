@@ -252,6 +252,26 @@ function validateSettingsDraft(draft) {
   return { ok: true, reason: null }
 }
 
+// Startup bootstrap (SET-023): decide what appliedSettings becomes after the
+// boot-time `config show`. A dialog read/save that finished first is newer
+// than the boot read and wins; any failure keeps in-memory defaults (SET-008)
+// and never touches the dialog state machine (SET-014..022 own their own
+// snapshot and generations).
+function settingsBootstrapResult(currentApplied, stdout, exitCode) {
+  if (currentApplied)
+    return currentApplied
+  if (exitCode !== 0)
+    return null
+  try {
+    var doc = JSON.parse(String(stdout || "").trim())
+    if (!validateSettingsDraft(doc).ok)
+      return null
+    return doc
+  } catch (e) {
+    return null
+  }
+}
+
 function settingsCanSave(state, draft) {
   if (!state)
     return false

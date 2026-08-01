@@ -291,6 +291,15 @@ function canStartLane(laneBusy) {
 // Default settings (shared primitive: consumed by CoreSettings and QML)
 // ---------------------------------------------------------------------------
 
+// Poll timer interval from applied settings. The SET-005 range (30..3600) is
+// enforced by validation before anything reaches appliedSettings; null means
+// no settings applied yet and falls back to the 60 s default.
+function pollIntervalMs(settings) {
+  if (settings && settings.refreshIntervalSeconds)
+    return Number(settings.refreshIntervalSeconds) * 1000
+  return 60000
+}
+
 function defaultSettings() {
   return {
     schemaVersion: 1,

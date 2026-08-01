@@ -220,4 +220,68 @@ TestCase {
     verify(src.indexOf("SettingsView") >= 0)
     verify(src.indexOf("settingsStub") < 0)
   }
+
+  // ---- Startup bootstrap (SET-023) ----
+  // settings.json is the only product settings source (SET-001), yet the
+  // service used to read it only when the Settings popup opened: every shell
+  // restart rendered defaultSettings() while the disk held the user's
+  // choices. The payloads here are the schema-pinned fixtures in
+  // tests/fixtures/settings-v1/ — never inline a settings document.
+
+  function test_bootstrap_applies_persisted_settings() {
+    var stdout = read("tests/fixtures/settings-v1/valid-used-metric.json")
+    var applied = Core.settingsBootstrapResult(null, stdout, 0)
+    verify(applied !== null)
+    compare(applied.display.metric, "used")
+    compare(applied.providers[0].id, "claude")
+    compare(applied.providers[0].enabled, false)
+    compare(applied.refreshIntervalSeconds, 30)
+  }
+
+  function test_bootstrap_failure_keeps_defaults() {
+    var stdout = read("tests/fixtures/settings-v1/valid-used-metric.json")
+    compare(Core.settingsBootstrapResult(null, stdout, 1), null)
+    compare(Core.settingsBootstrapResult(null, "", 0), null)
+    compare(Core.settingsBootstrapResult(null, "not json", 0), null)
+    var invalid = read("tests/fixtures/settings-v1/invalid-metric.json")
+    compare(Core.settingsBootstrapResult(null, invalid, 0), null)
+  }
+
+  function test_bootstrap_never_clobbers_dialog_result() {
+    // A dialog read/save that finished first is newer than the boot read.
+    var winner = { schemaVersion: 1 }
+    var stdout = read("tests/fixtures/settings-v1/valid-used-metric.json")
+    compare(Core.settingsBootstrapResult(winner, stdout, 0), winner)
+  }
+
+  function test_poll_interval_follows_applied_settings() {
+    compare(Service.pollIntervalMs(null), 60000)
+    var doc = JSON.parse(read("tests/fixtures/settings-v1/valid-used-metric.json"))
+    compare(Service.pollIntervalMs(doc), 30000)
+  }
+
+  // Wiring lives in plugin QML the runner cannot compile (imports qs.*), so
+  // the contract is asserted on source text, the repo's standing mitigation.
+  function test_service_bootstraps_settings_at_startup() {
+    var src = read("assets/omarchy/Service.qml")
+    verify(src.indexOf("id: settingsBootstrapProcess") >= 0)
+    var probe = src.indexOf("function finishVersionProbeSuccess(")
+    verify(probe >= 0)
+    var probeEnd = src.indexOf("function finishVersionProbeFailure(", probe)
+    verify(probeEnd > probe)
+    verify(src.substring(probe, probeEnd).indexOf("kickSettingsBootstrap()") >= 0,
+           "the boot read must start once the helper is proven alive")
+    var apply = src.indexOf("function applySettingsBootstrapResult(")
+    verify(apply >= 0)
+    var applyEnd = src.indexOf("function ", apply + 10)
+    verify(applyEnd > apply)
+    var applyBody = src.substring(apply, applyEnd)
+    verify(applyBody.indexOf("settingsState") < 0,
+           "bootstrap only feeds appliedSettings; the dialog owns its snapshot")
+    verify(applyBody.indexOf("settingsDraft") < 0)
+    verify(src.indexOf("pollIntervalMs: Core.pollIntervalMs(") >= 0,
+           "the poll timer must follow applied settings")
+    verify(src.indexOf("pollIntervalMs: 60000") < 0,
+           "the hardcoded interval must not come back")
+  }
 }

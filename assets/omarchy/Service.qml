@@ -27,7 +27,7 @@ Item {
   property bool testMode: false
   property int versionProbeTimeoutMs: 2000
   property int statusTimeoutMs: 60000
-  property int pollIntervalMs: 60000
+  property int pollIntervalMs: Core.pollIntervalMs(appliedSettings)
   property int collectionDelayMs: 0
 
   // --- Public service surface (Task 9 / Task 10) ---
@@ -61,6 +61,7 @@ Item {
   // Lane busy flags (one Process per lane; never re-exec while running)
   property bool statusBusy: false
   property bool settingsReadBusy: false
+  property bool settingsBootstrapBusy: false
   property bool settingsWriteBusy: false
   property bool maintenanceCheckBusy: false
   property bool maintenanceHandoffBusy: false
@@ -481,6 +482,7 @@ Item {
     versionReady = true
     versionFailed = false
     syncMaintenanceVersion()
+    kickSettingsBootstrap()
     if (collectionDelayMs > 0) {
       collectionDelay.interval = collectionDelayMs
       collectionDelay.start()
@@ -578,6 +580,26 @@ Item {
   // -------------------------------------------------------------------------
   // Settings lanes (read / write)
   // -------------------------------------------------------------------------
+
+  // SET-023: adopt persisted settings at service start. Reads only — the
+  // dialog state machine (SET-014..022) keeps its own snapshot untouched.
+  function kickSettingsBootstrap() {
+    if (appliedSettings || settingsBootstrapBusy || maintenanceState.blocked)
+      return
+    var helper = resolvedHelperPath()
+    if (!helper.length)
+      return
+    settingsBootstrapBusy = true
+    if (testMode)
+      return
+    settingsBootstrapProcess.command = Settings.settingsArgvShow(helper)
+    settingsBootstrapProcess.running = true
+  }
+
+  function applySettingsBootstrapResult(stdout, exitCode) {
+    settingsBootstrapBusy = false
+    appliedSettings = Settings.settingsBootstrapResult(appliedSettings, stdout, exitCode)
+  }
 
   function kickSettingsRead() {
     // ARCH-024: maintenance rejects new writes/polling; reads may still start.
@@ -747,6 +769,15 @@ Item {
         settingsReadOut.text || "",
         exitCode
       )
+    }
+  }
+
+  Process {
+    id: settingsBootstrapProcess
+    stdout: StdioCollector { id: settingsBootstrapOut; waitForEnd: true }
+    stderr: StdioCollector { id: settingsBootstrapErr; waitForEnd: true }
+    onExited: function (exitCode) {
+      root.applySettingsBootstrapResult(settingsBootstrapOut.text || "", exitCode)
     }
   }
 
