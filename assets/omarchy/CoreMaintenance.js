@@ -119,46 +119,45 @@ function cloneMaintenanceUi(ui) {
   }
 }
 
-// Parse update check stdout. Accepts either:
-// { "updateAvailable": true, "currentVersion", "targetVersion", "releaseNotesUrl" }
-// or empty/up-to-date markers.
+// Parse `update check` stdout: the BUNDLE-021 document
+// { schemaVersion, checkedAt, current, available, latestCompatible }.
+// A successful check always writes exactly that JSON, so exit 0 with
+// anything else is a failed check, not an implied answer. The fixtures in
+// tests/fixtures/update-check/ are pinned byte-exactly to the Rust
+// serializer by tests/update_check_parity.rs.
 function maintenanceUiFromCheck(ui, stdout, exitCode, fallbackVersion) {
   var next = cloneMaintenanceUi(ui)
   next.updateConfirmOpen = false
-  if (exitCode !== 0) {
-    next.phase = "error"
-    next.message = "Update check failed."
-    return next
-  }
-  var text = String(stdout || "").trim()
-  if (!text.length || text.indexOf("up to date") >= 0) {
-    next.phase = "up_to_date"
-    next.targetVersion = ""
-    next.releaseNotesUrl = ""
-    next.message = "Agent Bar is up to date."
-    return next
-  }
-  try {
-    var doc = JSON.parse(text)
-    if (doc && doc.updateAvailable === false) {
-      next.phase = "up_to_date"
-      next.message = "Agent Bar is up to date."
-      if (doc.currentVersion)
-        next.installedVersion = String(doc.currentVersion)
-      return next
+  if (exitCode === 0) {
+    try {
+      var doc = JSON.parse(String(stdout || ""))
+      if (doc && doc.schemaVersion === 1) {
+        var current = doc.current && doc.current.version ? String(doc.current.version) : ""
+        next.installedVersion = current.length
+            ? current
+            : String(next.installedVersion || fallbackVersion || "")
+        var latest = doc.latestCompatible
+        if (doc.available === true && latest && latest.version) {
+          next.phase = "update_available"
+          next.targetVersion = String(latest.version)
+          next.releaseNotesUrl = latest.releaseNotesUrl ? String(latest.releaseNotesUrl) : ""
+          next.message = "Update to " + next.targetVersion + " is available."
+          return next
+        }
+        // latestCompatible may be null (nothing fits this target/contract)
+        // or describe the installed version; either way there is nothing
+        // to offer.
+        if (doc.available === false) {
+          next.phase = "up_to_date"
+          next.targetVersion = ""
+          next.releaseNotesUrl = ""
+          next.message = "Agent Bar is up to date."
+          return next
+        }
+      }
+    } catch (e) {
+      // unusable stdout falls through to the single failure exit
     }
-    if (doc && (doc.updateAvailable === true || doc.targetVersion)) {
-      next.phase = "update_available"
-      next.installedVersion = String(doc.currentVersion || next.installedVersion || fallbackVersion || "")
-      next.targetVersion = String(doc.targetVersion || doc.version || "")
-      next.releaseNotesUrl = doc.releaseNotesUrl ? String(doc.releaseNotesUrl) : ""
-      next.message = next.targetVersion.length
-          ? ("Update to " + next.targetVersion + " is available.")
-          : "An update is available."
-      return next
-    }
-  } catch (e) {
-    // fall through
   }
   next.phase = "error"
   next.message = "Update check failed."
