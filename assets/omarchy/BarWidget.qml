@@ -78,7 +78,7 @@ BarWidget {
     id: chips
     anchors.centerIn: parent
     columns: root.vertical ? 1 : Math.max(1, root.chipProviders.length)
-    columnSpacing: Style.spacing.xxl
+    columnSpacing: Style.spacing.md
     rowSpacing: Style.spacing.md
 
     Repeater {

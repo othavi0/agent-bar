@@ -554,6 +554,19 @@ TestCase {
     }
   }
 
+  // §5 amended 2026-08-01 (owner picked it on live mockups): chips sit at
+  // spacing.md (6). The old xxl (12) read as scattered once the numeral
+  // moved beside the icon and its box slack joined the inter-chip gap.
+  function test_chip_row_spacing_is_md() {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", widgetUrl, false)
+    xhr.send()
+    var src = String(xhr.responseText)
+    verify(src.indexOf("columnSpacing: Style.spacing.md") >= 0)
+    verify(src.indexOf("columnSpacing: Style.spacing.xxl") < 0,
+           "the scattered spacing must not come back")
+  }
+
   function test_icon_files_exist_with_approved_names() {
     var names = ["claude.png", "codex.png", "amp.svg", "grok.svg"]
     for (var i = 0; i < names.length; i++) {
