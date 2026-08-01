@@ -687,8 +687,8 @@ in `install.sh`.
 
 ### What the plan got wrong
 
-Five defects surfaced during execution, all confirmed live rather than
-assumed:
+Six defects surfaced — five during execution, the sixth during the final
+whole-branch review — all confirmed live rather than assumed:
 
 1. Measured fact 1 counted `clause` only in `src/cli/grammar.rs`. It missed
    a live user-facing leak: `agent-bar help status` printed `Clauses (any
