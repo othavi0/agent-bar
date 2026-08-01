@@ -630,3 +630,133 @@ This is the last plan in the v11 copy and visual track. Deliberately untouched:
 - `INTERACTIVE_UPDATE_REQUIRES_TTY`, which already names its fix and is read by script authors.
 - The GUI vocabulary guard's word list, which stays GUI-only because `bundle`, `collect`, and `schema` are legitimate CLI and installer vocabulary.
 - `ProviderHeader.showStale`, dead since plan 03 and still carried in `headerModel`.
+
+## Execution record
+
+Executed 2026-07-31–08-01 on branch `feat/v11-foundation`, task order
+1 → 2 → 3 → 4 → 5 → 6. Nine implementation/fix commits across Tasks 1–5 plus
+this record: `a01da0b` + `b25e203` + `8e8daa5` (Task 1: `clause` to
+`argument`, then the live help-text leak measured fact 1 missed, then the
+raw-string-aware scanner — two fix rounds), `ae0ae0e` (Task 2: one definition
+per message, clean on the first commit), `9c04d6a` + `ec53882` (Task 3: name
+the fix in four CLI errors, then retract the two that were not certain — one
+fix round), `d8d0534` (Task 4: the installer rewritten in plain words, clean
+on the first commit), `deefd70` (Task 5: the interactive update prompt).
+Tasks 1, 3, and 5 needed fix rounds; Task 1 needed two. This commit closes
+Task 6: it deletes the dead arming-message assignment at
+`CoreMaintenance.js:219`, adds `tst_Maintenance.qml`'s
+`test_arming_sets_no_unseen_message` guard (confirmed failing first — 231
+passed, 1 failed — before the deletion), runs the four Step 2 hygiene greps,
+the full checkpoint, and writes this record.
+
+Final state: `cargo test` **306 passed across 19 suites** — one more than
+Step 3's own "305 across 19 suites" arithmetic (301 baseline + 3 in
+`cli_vocabulary`, one per Task 1–3, + Task 5's inline prompt test). The extra
+test is not lost work, it is uncounted work: Task 3's fix round (`ec53882`)
+split its own fix-naming test into two — narrowed
+`cli_messages_that_can_name_a_fix_do` to the three needles that still name a
+remedy, and added a companion, `cli_writability_message_does_not_claim_a_fix`,
+pinning the fourth message's now-bare form — so `cli_vocabulary` carries four
+tests, not the three the plan's arithmetic assumed when it was written against
+Task 3's first commit. Verified suite-by-suite (`cargo test` piped to a file
+sidesteps this environment's condensed one-line summary and prints the real
+per-suite listing): lib 243, `src/main.rs` 0, `agent-bar-bundle` 0,
+`active_docs` 5, `active_language` 3, `active_legacy_scan` 4,
+`agent_bar_bundle_cli` 4, `cli` 19, `cli_vocabulary` 4, `countdown_parity` 2,
+`gui_vocabulary` 1, `icon_assets` 1, `login` 6, `schema_contract` 5,
+`screenshot_inventory` 1, `servicecore_contract` 1, `severity_parity` 2,
+`terminal_helper` 5, doc-tests 0 — 19 suites, 306 passed, 0 failed.
+`qmltestrunner` **232 passed / 0 failed** (231 baseline + this task's
+`test_arming_sets_no_unseen_message`). `cargo fmt --check`, `cargo clippy
+--all-targets -- -D warnings`, and `git diff --check` all clean. `shellcheck
+install.sh` clean. `qmllint -I /usr/share/omarchy/shell` over every
+`assets/omarchy/**/*.qml` file: 0 errors, 365 warnings — the same
+pre-existing `qs.*`/unqualified-access/missing-import noise the earlier
+plans recorded across the whole plugin tree, none of it in the files this
+task touches (`CoreMaintenance.js` is JS, outside qmllint's `*.qml` scope;
+`tst_Maintenance.qml` is under `tests/qml`, outside `find assets/omarchy`).
+`omarchy plugin validate assets/omarchy`: exit 0, no output. `scripts/
+verify-v10-ui`: `verify-v10-ui: 17 PNGs ok → …/SHA256SUMS`, exit 0 —
+unchanged at 17, since this task adds and removes no capture.
+
+Every Step 2 hygiene grep returned nothing: `clause '` under `src/cli`,
+`Staged bundle|Staged helper|Staged inventory` in `install.sh`, `Click
+Uninstall again` under `assets`, and `agent-bar plugin installer|Checksum OK`
+in `install.sh`.
+
+### What the plan got wrong
+
+Five defects surfaced during execution, all confirmed live rather than
+assumed:
+
+1. Measured fact 1 counted `clause` only in `src/cli/grammar.rs`. It missed
+   a live user-facing leak: `agent-bar help status` printed `Clauses (any
+   order, each at most once):` (`src/cli/mod.rs:53`), and
+   `docs/commands.md:24` said "Status clauses". Found by review, reproduced
+   by running the real binary before the fix was dispatched.
+2. The guard Task 1 specified could not have caught that leak even with the
+   word in scope: `string_literals` split each physical line on quote
+   characters, and the help text is one literal continued across nine lines
+   with trailing backslashes — line 53 itself contains no quote character at
+   all, so it was never scanned. The plural, `Clauses`, would not have
+   matched a singular-only pattern either. The fix round taught the scanner
+   to track an open string across line continuations and to match the
+   plural, alongside fixing both live texts.
+3. A reviewer stated that `src/cli/**` contains no raw strings; the
+   controller propagated that claim verbatim into the fix instruction for
+   Task 1's second round; the implementer wrote it into the new scanner's
+   doc comment as fact. A second reviewer found three `br#"..."#` fixtures in
+   `src/cli/mod.rs`'s own test module (`:1116`, `:1127`, `:1139`) that the
+   claim was false against. The lesson recorded plainly for next time: a
+   reviewer's negative claim ("none exist") deserves the same verification as
+   an implementer's positive one — neither is free just because it is easy
+   to state.
+4. Two of the four remedies Task 3's brief specified for §7.3 failed the
+   rule's own qualifier, "short **and certain**", once reproduced against the
+   real filesystem. `pass a directory you own` fired on a directory the user
+   fully owns whenever a stale `.agent-bar-write-probe` file was left behind:
+   the probe's own `create_new` also fails with `AlreadyExists`, and its
+   cleanup swallows its own error, so the message blamed ownership for a
+   condition ownership does not explain. `create it or pass an existing
+   parent` fired on `EACCES` on an ancestor directory, where creating
+   anything is not the fix. Both were reproduced live before the fix round.
+   The controller ruled per §7.3 as written: the writability message reverted
+   to bare (`setup plugins-dir path is not writable: {}`), and the
+   existence message was reworded to name both realistic causes
+   (`setup plugins-dir path cannot be read: {}; create it, or check the
+   permissions on its parents`).
+5. The controller ran two agents editing `tests/cli_vocabulary.rs` at the
+   same time — Task 1's second fix round (the raw-string-aware scanner) and
+   Task 3's fix round — a direct violation of this project's own rule against
+   parallel implementers sharing a tree. Nothing broke: the Task 3 implementer
+   noticed the foreign uncommitted diff already in the worktree, isolated its
+   own hunks with `git apply --cached`, committed only those, and left the
+   other agent's insertions untouched for its own commit. The cost was risk
+   that happened not to land, not actual breakage — the rule holds regardless.
+
+### Deferred minors carried forward
+
+None blocking; triaged here for whoever next touches these files.
+
+1. `cli_messages_are_defined_once`'s duplication guard counts raw source
+   substrings read non-recursively from `src/cli/`. A duplicate message
+   reintroduced with a different line-continuation shape would have
+   identical runtime text but different source text, so the guard's count
+   would not move and it would miss the duplicate.
+2. `opens_raw_string` finds each raw-string prefix (`r"`, `r#"`, `br"`,
+   `br#"`) with a leftmost match. A line holding a false prefix substring
+   before a genuine opener of the same prefix would report the false one and
+   miss the real opener. No such line exists in `src/cli` today.
+3. `install.sh`'s `Could not reach the release list` names a network cause,
+   but the same `die` fires on zero published releases or GitHub API
+   rate-limiting too — the same defect class as item 4 above, materially
+   weaker because the remedy it suggests (set `AGENT_BAR_VERSION`) is correct
+   whichever cause fired. Cause-agnostic fix on file: `reach` → `find`.
+4. Task 4's own report claims two `install.sh` lines gained a backslash
+   continuation; only one did. The report is inaccurate; the shipped code is
+   not.
+5. `shellcheck` was not installed on the machine that ran Task 4, and the
+   implementer installed it via `mise`, writing to the global
+   `~/.config/mise/config.toml` — outside this repository. Benign (the
+   project contract requires ShellCheck for shell changes), but a host side
+   effect the owner should know about.

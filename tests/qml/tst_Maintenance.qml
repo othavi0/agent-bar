@@ -138,6 +138,17 @@ TestCase {
     compare(ui.uninstallArmed, false)
   }
 
+  // The dialog binds its own message from uninstallArmed/purgeSettings, and
+  // the only reader of ui.message sits behind the dialog's scrim, so this
+  // string was set and never seen. The second click is communicated by the
+  // confirm button flipping to "Uninstall now".
+  function test_arming_sets_no_unseen_message() {
+    var src = read("assets/omarchy/CoreMaintenance.js")
+    verify(src.indexOf("Click Uninstall again") < 0)
+    var view = read("assets/omarchy/MaintenanceView.qml")
+    verify(view.indexOf('"Uninstall now"') >= 0)
+  }
+
   function test_maintenance_intention_shapes() {
     var ui = Core.maintenanceUiIdle("10.0.0")
     ui.targetVersion = "10.1.0"
