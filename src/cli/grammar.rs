@@ -96,14 +96,14 @@ fn parse_status(tokens: &[String]) -> Result<Command, CliFailure> {
             "notifications" => StatusClause::Notifications,
             other => {
                 return Err(CliFailure::grammar(format!(
-                    "unknown status clause '{other}'"
+                    "unknown argument '{other}' for status"
                 )));
             }
         };
         let idx = clause as usize;
         if seen[idx] {
             return Err(CliFailure::grammar(format!(
-                "duplicate status clause '{word}'"
+                "repeated argument '{word}' for status"
             )));
         }
         seen[idx] = true;
@@ -240,7 +240,7 @@ fn parse_setup(tokens: &[String]) -> Result<Command, CliFailure> {
             Err(CliFailure::grammar("setup plugins-dir requires a path"))
         }
         [other, ..] => Err(CliFailure::grammar(format!(
-            "unknown setup clause '{other}'"
+            "unknown argument '{other}' for setup"
         ))),
     }
 }
@@ -265,7 +265,7 @@ fn parse_update(tokens: &[String]) -> Result<Command, CliFailure> {
             Ok(Command::Update(UpdateCommand::Apply(release)))
         }
         [other, ..] => Err(CliFailure::grammar(format!(
-            "unknown update clause '{other}'"
+            "unknown argument '{other}' for update"
         ))),
     }
 }
@@ -275,7 +275,7 @@ fn parse_uninstall(tokens: &[String]) -> Result<Command, CliFailure> {
         [] => Ok(Command::Uninstall { purge: false }),
         [word] if word == "purge" => Ok(Command::Uninstall { purge: true }),
         [other, ..] => Err(CliFailure::grammar(format!(
-            "unknown uninstall clause '{other}'"
+            "unknown argument '{other}' for uninstall"
         ))),
     }
 }
@@ -286,7 +286,7 @@ fn parse_doctor(tokens: &[String]) -> Result<Command, CliFailure> {
         [word] if word == "clean" => Ok(Command::Doctor(DoctorCommand::Clean)),
         [] => Err(CliFailure::grammar("doctor requires scan or clean")),
         [other, ..] => Err(CliFailure::grammar(format!(
-            "unknown doctor clause '{other}'"
+            "unknown argument '{other}' for doctor"
         ))),
     }
 }
