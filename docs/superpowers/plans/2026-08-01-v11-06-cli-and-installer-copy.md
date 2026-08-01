@@ -641,9 +641,10 @@ raw-string-aware scanner — two fix rounds), `ae0ae0e` (Task 2: one definition
 per message, clean on the first commit), `9c04d6a` + `ec53882` (Task 3: name
 the fix in four CLI errors, then retract the two that were not certain — one
 fix round), `d8d0534` (Task 4: the installer rewritten in plain words, clean
-on the first commit), `deefd70` (Task 5: the interactive update prompt).
-Tasks 1, 3, and 5 needed fix rounds; Task 1 needed two. This commit closes
-Task 6: it deletes the dead arming-message assignment at
+on the first commit), `deefd70` (Task 5: the interactive update prompt,
+clean on the first commit). Tasks 1 and 3 needed fix rounds; Task 1 needed
+two. This commit closes Task 6: it deletes the dead arming-message
+assignment at
 `CoreMaintenance.js:219`, adds `tst_Maintenance.qml`'s
 `test_arming_sets_no_unseen_message` guard (confirmed failing first — 231
 passed, 1 failed — before the deletion), runs the four Step 2 hygiene greps,
@@ -733,6 +734,19 @@ assumed:
    own hunks with `git apply --cached`, committed only those, and left the
    other agent's insertions untouched for its own commit. The cost was risk
    that happened not to land, not actual breakage — the rule holds regardless.
+6. Task 5's own instruction (this file, "The GUI says `Updates 10.0.0 →
+   10.2.0. Settings stay. Rolls back if it fails.`; the CLI drops the arrow
+   for ASCII safety and drops the rollback clause, which the CLI's own
+   `update apply` path does not promise.") justified dropping the rollback
+   clause with a claim that is false. `dispatch_update_interactive` calls
+   `dispatch_update_apply`, which hands off through
+   `MaintenanceWorker::handoff_update` to the same worker the GUI spawns, and
+   `src/plugin/maintenance.rs` calls `rollback_update` on failure at five
+   call sites. The CLI's `update apply` promises exactly the rollback the
+   plan said it did not. Found in the final whole-branch review, not during
+   Task 5 itself. Fix: `confirm_interactive_update`'s stdout line now reads
+   `Updates {current} to {target}. Settings stay. Rolls back if it fails.`,
+   matching the Maintenance screen's wording for the identical operation.
 
 ### Deferred minors carried forward
 
@@ -760,3 +774,52 @@ None blocking; triaged here for whoever next touches these files.
    `~/.config/mise/config.toml` — outside this repository. Benign (the
    project contract requires ShellCheck for shell changes), but a host side
    effect the owner should know about.
+
+### Final fix wave (post-Task 6)
+
+The final whole-branch review found three things Task 6's checkpoint could
+not have caught, because none of them are new code — they are a stale claim
+in a prompt string, a stale word in an error message, and a coverage gap in
+a guard that had nothing to walk yet. One commit closes all three plus the
+Task 5 record correction above:
+
+1. `confirm_interactive_update`'s stdout line (`src/cli/mod.rs`) now reads
+   `Updates {current} to {target}. Settings stay. Rolls back if it fails.`
+   — see "What the plan got wrong" item 6. `interactive_update_prompt_speaks_plainly`
+   was updated to match; the typed phrase `update agent-bar`, the confirmation
+   logic, and the stderr prompt are untouched.
+2. `install.sh`'s `resolve_version` die message changed `reach` to `find`
+   (`Could not find the release list. Set AGENT_BAR_VERSION and run this
+   again.`), resolving deferred minor item 3 above: the old wording named a
+   network cause the failure cannot actually distinguish from zero
+   published releases or an API rate limit.
+3. `tests/cli_vocabulary.rs`'s four guards now walk `src/cli/` with an
+   explicit-stack recursive traversal (`cli_files`, shaped after
+   `tests/gui_vocabulary.rs::gui_files`) instead of a single non-recursive
+   `fs::read_dir`, so a future module split keeps every guard's coverage.
+   This resolves the recursion half of deferred minor item 1 above; the
+   line-continuation-shape gap it also describes is unrelated to recursion
+   and still stands. `src/cli/` holds exactly four files today
+   (`command.rs`, `exit.rs`, `grammar.rs`, `mod.rs`) with no subdirectories,
+   so the recursive walk finds the same four files the old scan did and the
+   `files.len() >= 4` floor needed no change. A fifth test,
+   `docs_commands_do_not_say_clause`, was added to the same file: it reads
+   `docs/commands.md` directly and asserts no whole-word `clause`/`clauses`,
+   guarding the one live leak this plan actually found (measured fact 1 —
+   "Status clauses") on the one prose surface none of the Rust-literal
+   guards can see. Verified with a live probe before committing: reintroducing
+   "clauses" into `docs/commands.md` failed the new test with `docs/commands.md
+   still says clause (1 occurrences)`; reverting made it pass again. A second
+   probe, `src/cli/tmp_probe/mod.rs` holding the string `"unknown clause here"`,
+   failed `cli_messages_do_not_say_clause` with `mod.rs: "unknown clause
+   here"` before the directory was deleted, confirming the recursive walk
+   reaches a nested file a non-recursive scan would have missed.
+
+Final state at the end of this wave: `cargo test` **307 passed across 19
+suites, 0 failed** (the 306 Task 6 left, plus the new docs guard) —
+`cli_vocabulary` alone carries 5 tests, up from 4. `qmltestrunner`
+**232 passed, 0 failed** — unchanged from Task 6, confirming nothing QML-side
+moved. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
+`git diff --check`, and `shellcheck install.sh` are all clean. This is
+`feat/v11-foundation`'s real final state before it is proposed for merge;
+nothing further is planned after this commit.

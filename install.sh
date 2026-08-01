@@ -73,7 +73,7 @@ resolve_version() {
     | grep '"tag_name"' \
     | head -1 \
     | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-  [[ -n "$tag" ]] || die "Could not reach the release list. Set AGENT_BAR_VERSION and run this again."
+  [[ -n "$tag" ]] || die "Could not find the release list. Set AGENT_BAR_VERSION and run this again."
   echo "${tag#v}"
 }
 

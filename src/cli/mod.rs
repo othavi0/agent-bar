@@ -190,8 +190,11 @@ where
             Ok(())
         }
         InteractiveUpdateOffer::Available { current, target } => {
-            writeln!(stdout, "Updates {current} to {target}. Settings stay.")
-                .map_err(|err| CliFailure::internal(err.to_string()))?;
+            writeln!(
+                stdout,
+                "Updates {current} to {target}. Settings stay. Rolls back if it fails."
+            )
+            .map_err(|err| CliFailure::internal(err.to_string()))?;
             write!(stderr, "Type update agent-bar to continue: ")
                 .map_err(|err| CliFailure::internal(err.to_string()))?;
             let _ = stderr.flush();
@@ -1099,7 +1102,10 @@ mod tests {
         .expect("confirmed");
         let out = String::from_utf8(stdout).expect("utf8");
         let err = String::from_utf8(stderr).expect("utf8");
-        assert_eq!(out, "Updates 10.0.0 to 10.2.0. Settings stay.\n");
+        assert_eq!(
+            out,
+            "Updates 10.0.0 to 10.2.0. Settings stay. Rolls back if it fails.\n"
+        );
         // The typed phrase is a safety mechanism, not copy: it must survive
         // every rewording of the sentence around it.
         assert!(err.contains("update agent-bar"));

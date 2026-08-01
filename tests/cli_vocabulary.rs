@@ -9,7 +9,7 @@
 //! `bundle` and `schema` name real things a CLI user deals with.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// True when `prefix` opens a raw string as a real token on `line` at byte
 /// offset `pos`, not merely as the tail of an ordinary word ending in `r`
@@ -77,17 +77,57 @@ fn string_literals(source: &str) -> Vec<String> {
     out
 }
 
+/// Every `.rs` file under `src/cli/`, found by walking the tree with an
+/// explicit stack rather than reading one directory. `src/cli/mod.rs` is
+/// past a thousand lines; the day it splits into submodules
+/// (`src/cli/help/mod.rs` or similar), a non-recursive `fs::read_dir` would
+/// silently stop covering the new file while every guard below kept
+/// passing. Shape matches `tests/gui_vocabulary.rs::gui_files` on purpose,
+/// so the two guards read as siblings.
+fn cli_files(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.join("src/cli")];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let is_source = path.extension().and_then(|e| e.to_str()) == Some("rs");
+            if is_source {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Concatenation of every `.rs` file under `src/cli/`, for guards that check
+/// whether a message exists anywhere in the tree rather than walking file by
+/// file themselves. A `\n` separator sits between files; none of the needles
+/// these guards check span a file boundary, so the separator only prevents
+/// two files' text from fusing into an accidental match.
+fn all_cli_source(root: &Path) -> String {
+    let mut combined = String::new();
+    for path in cli_files(root) {
+        if let Ok(source) = fs::read_to_string(&path) {
+            combined.push_str(&source);
+            combined.push('\n');
+        }
+    }
+    combined
+}
+
 #[test]
 fn cli_messages_do_not_say_clause() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut violations = Vec::new();
-    let entries = fs::read_dir(&root).expect("read src/cli");
-    let mut files: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rs"))
-        .collect();
-    files.sort();
+    let files = cli_files(&root);
     assert!(
         files.len() >= 4,
         "expected the cli module tree, found {} files",
@@ -126,7 +166,7 @@ fn cli_messages_do_not_say_clause() {
 /// validate paths before this guard existed.
 #[test]
 fn cli_messages_are_defined_once() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let watched = [
         "setup plugins-dir path must be absolute",
         "setup plugins-dir path must be the parent directory, not the plugin root",
@@ -135,14 +175,8 @@ fn cli_messages_are_defined_once() {
         "setup requires a complete plugin tree",
     ];
     let mut violations = Vec::new();
-    let entries = fs::read_dir(&root).expect("read src/cli");
+    let files = cli_files(&root);
     let mut totals = vec![0usize; watched.len()];
-    let mut files: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rs"))
-        .collect();
-    files.sort();
     for path in &files {
         let Ok(source) = fs::read_to_string(path) else {
             continue;
@@ -180,9 +214,8 @@ fn cli_messages_are_defined_once() {
 /// that message bare.
 #[test]
 fn cli_messages_that_can_name_a_fix_do() {
-    let source =
-        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli/mod.rs"))
-            .expect("read mod.rs");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = all_cli_source(&root);
     for needle in [
         "setup plugins-dir path cannot be read: {}; create it, or check the permissions on its parents",
         "setup plugins-dir path is not a directory: {}; pass the parent directory",
@@ -202,12 +235,34 @@ fn cli_messages_that_can_name_a_fix_do() {
 /// quietly bolt a remedy back onto this message.
 #[test]
 fn cli_writability_message_does_not_claim_a_fix() {
-    let source =
-        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli/mod.rs"))
-            .expect("read mod.rs");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = all_cli_source(&root);
     assert!(
         source.contains("\"setup plugins-dir path is not writable: {}\","),
         "the writability probe cannot tell a permission problem from a stale probe file, \
          so its message must not claim a fix"
+    );
+}
+
+/// `docs/commands.md` documents the same command grammar the CLI's own help
+/// text implements, and it drifted once: the v11-06 plan's own measurement
+/// found "Status clauses" live in this file after `clause` was renamed to
+/// `argument` in the help text it describes. None of the guards above can
+/// see prose in a Markdown file, so this one reads `docs/commands.md`
+/// directly rather than relying on the `src/cli/**` walk to catch prose that
+/// never lives under `src/cli/` in the first place.
+#[test]
+fn docs_commands_do_not_say_clause() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/commands.md");
+    let source = fs::read_to_string(&path).expect("read docs/commands.md");
+    let lowered = source.to_lowercase();
+    let violations: Vec<&str> = lowered
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .filter(|token| *token == "clause" || *token == "clauses")
+        .collect();
+    assert!(
+        violations.is_empty(),
+        "docs/commands.md still says clause ({} occurrences)",
+        violations.len()
     );
 }
