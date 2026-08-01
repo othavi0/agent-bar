@@ -21,7 +21,7 @@ agent-bar status cache use|bypass
 agent-bar status notifications evaluate|skip
 ```
 
-Status clauses may appear in any order and at most once. Defaults:
+Status arguments may appear in any order and at most once. Defaults:
 
 ```text
 format human

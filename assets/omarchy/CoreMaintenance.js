@@ -216,7 +216,6 @@ function maintenanceUiArmOrConfirmUninstall(ui) {
     return { ui: next, confirmed: false }
   if (!next.uninstallArmed) {
     next.uninstallArmed = true
-    next.message = "Click Uninstall again to confirm."
     return { ui: next, confirmed: false }
   }
   return { ui: next, confirmed: true }
