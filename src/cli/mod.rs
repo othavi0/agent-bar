@@ -113,7 +113,7 @@ pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
     }
     let meta = std::fs::metadata(path).map_err(|_| {
         CliFailure::validation(format!(
-            "setup plugins-dir path does not exist: {}; create it or pass an existing parent",
+            "setup plugins-dir path cannot be read: {}; create it, or check the permissions on its parents",
             path.display()
         ))
     })?;
@@ -135,7 +135,7 @@ pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
         }
         Err(_) => {
             return Err(CliFailure::validation(format!(
-                "setup plugins-dir path is not writable: {}; pass a directory you own",
+                "setup plugins-dir path is not writable: {}",
                 path.display()
             )));
         }

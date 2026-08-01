@@ -132,18 +132,25 @@ fn cli_messages_are_defined_once() {
 }
 
 /// §7.3: a message names the fix only where the fix is short and certain.
-/// These four are the whole set — every other CLI error either states a
-/// grammar mistake the user can see from their own command line, or a
-/// condition whose remedy depends on facts the helper does not have.
+/// These three are the whole set of messages that name a remedy — every
+/// other CLI error either states a grammar mistake the user can see from
+/// their own command line, or a condition whose remedy depends on facts the
+/// helper does not have.
+///
+/// The writability probe is that last case: `create_new(true)` fails both on
+/// a real permission problem and on a stale `.agent-bar-write-probe` left by
+/// an earlier run (its own cleanup swallows failure), so a directory the
+/// user fully owns can still report this error. There is no short, certain
+/// fix to name, so [`cli_writability_message_does_not_claim_a_fix`] pins
+/// that message bare.
 #[test]
 fn cli_messages_that_can_name_a_fix_do() {
     let source =
         fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli/mod.rs"))
             .expect("read mod.rs");
     for needle in [
-        "setup plugins-dir path does not exist: {}; create it or pass an existing parent",
+        "setup plugins-dir path cannot be read: {}; create it, or check the permissions on its parents",
         "setup plugins-dir path is not a directory: {}; pass the parent directory",
-        "setup plugins-dir path is not writable: {}; pass a directory you own",
         "{} login executable was not found; install the provider CLI first",
     ] {
         assert!(
@@ -151,4 +158,21 @@ fn cli_messages_that_can_name_a_fix_do() {
             "missing fix-naming message: {needle}"
         );
     }
+}
+
+/// Companion to [`cli_messages_that_can_name_a_fix_do`]: the writability
+/// probe cannot tell a permission problem from a stale probe file, so its
+/// message must not claim a fix. Checks for the literal closing quote and
+/// trailing comma right after `{}` so a future well-meaning edit cannot
+/// quietly bolt a remedy back onto this message.
+#[test]
+fn cli_writability_message_does_not_claim_a_fix() {
+    let source =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli/mod.rs"))
+            .expect("read mod.rs");
+    assert!(
+        source.contains("\"setup plugins-dir path is not writable: {}\","),
+        "the writability probe cannot tell a permission problem from a stale probe file, \
+         so its message must not claim a fix"
+    );
 }
