@@ -190,11 +190,9 @@ where
             Ok(())
         }
         InteractiveUpdateOffer::Available { current, target } => {
-            writeln!(stdout, "Current version: {current}")
+            writeln!(stdout, "Updates {current} to {target}. Settings stay.")
                 .map_err(|err| CliFailure::internal(err.to_string()))?;
-            writeln!(stdout, "Target version: {target}")
-                .map_err(|err| CliFailure::internal(err.to_string()))?;
-            write!(stderr, "Type update agent-bar to continue:")
+            write!(stderr, "Type update agent-bar to continue: ")
                 .map_err(|err| CliFailure::internal(err.to_string()))?;
             let _ = stderr.flush();
             let mut line = String::new();
@@ -1081,6 +1079,31 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.exit_code, VALIDATION);
+    }
+
+    #[test]
+    fn interactive_update_prompt_speaks_plainly() {
+        let mut stdin = std::io::Cursor::new(b"update agent-bar\n".to_vec());
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        confirm_interactive_update(
+            true,
+            InteractiveUpdateOffer::Available {
+                current: "10.0.0".into(),
+                target: "10.2.0".into(),
+            },
+            &mut stdin,
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("confirmed");
+        let out = String::from_utf8(stdout).expect("utf8");
+        let err = String::from_utf8(stderr).expect("utf8");
+        assert_eq!(out, "Updates 10.0.0 to 10.2.0. Settings stay.\n");
+        // The typed phrase is a safety mechanism, not copy: it must survive
+        // every rewording of the sentence around it.
+        assert!(err.contains("update agent-bar"));
+        assert_eq!(err, "Type update agent-bar to continue: ");
     }
 
     #[test]
