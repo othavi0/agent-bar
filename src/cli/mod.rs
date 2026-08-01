@@ -50,7 +50,7 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
         }
         Some(HelpTopic::Status) => "status — collect provider quota windows\n\
              \n\
-             Clauses (any order, each at most once):\n\
+             Arguments (any order, each at most once):\n\
                format human|json          default: human\n\
                provider <id>              single provider (even if disabled)\n\
                cache use|bypass           default: use\n\

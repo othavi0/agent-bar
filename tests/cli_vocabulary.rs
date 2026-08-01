@@ -11,16 +11,32 @@
 use std::fs;
 use std::path::PathBuf;
 
-/// Double-quoted spans, skipping whole-line `//` comments. Crude on purpose:
-/// the CLI's messages are plain literals, never built by a macro.
+/// Double-quoted spans, tracked across lines so a literal continued with a
+/// trailing `\` (the multi-line `HelpTopic` help text) is not lost. `//`
+/// comments are skipped, but only outside a literal — a continuation line
+/// never starts with `//` in this codebase. Counting quote characters per
+/// line to track in/out-of-string state is sound here because `src/cli/**`
+/// has no raw strings and no escaped quotes (checked by hand; there is
+/// nothing else crude enough to fool a bare quote count).
 fn string_literals(source: &str) -> Vec<String> {
     let mut out = Vec::new();
+    let mut in_string = false;
     for line in source.lines() {
-        if line.trim_start().starts_with("//") {
+        if !in_string && line.trim_start().starts_with("//") {
             continue;
         }
-        for piece in line.split('"').skip(1).step_by(2) {
-            out.push(piece.to_owned());
+        for (idx, piece) in line.split('"').enumerate() {
+            let is_inside = if in_string {
+                idx % 2 == 0
+            } else {
+                idx % 2 == 1
+            };
+            if is_inside {
+                out.push(piece.to_owned());
+            }
+        }
+        if line.matches('"').count() % 2 == 1 {
+            in_string = !in_string;
         }
     }
     out
@@ -55,7 +71,7 @@ fn cli_messages_do_not_say_clause() {
             if literal
                 .to_lowercase()
                 .split(|c: char| !c.is_ascii_alphabetic())
-                .any(|token| token == "clause")
+                .any(|token| token == "clause" || token == "clauses")
             {
                 violations.push(format!("{name}: {literal:?}"));
             }
