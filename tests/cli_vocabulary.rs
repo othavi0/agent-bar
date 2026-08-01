@@ -68,3 +68,49 @@ fn cli_messages_do_not_say_clause() {
         violations.join("\n  - ")
     );
 }
+
+/// A message that exists twice drifts: one copy gets fixed, the other does
+/// not, and the user sees two wordings for one condition depending on which
+/// code path noticed. These four were duplicated across the parse and
+/// validate paths before this guard existed.
+#[test]
+fn cli_messages_are_defined_once() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/cli");
+    let watched = [
+        "setup plugins-dir path must be absolute",
+        "setup plugins-dir path must be the parent directory, not the plugin root",
+        "config apply requires stdin, file <path>, or json <value>",
+        "setup plugins-dir requires a path",
+        "setup requires a complete plugin tree",
+    ];
+    let mut violations = Vec::new();
+    let entries = fs::read_dir(&root).expect("read src/cli");
+    let mut totals = vec![0usize; watched.len()];
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rs"))
+        .collect();
+    files.sort();
+    for path in &files {
+        let Ok(source) = fs::read_to_string(path) else {
+            continue;
+        };
+        // Count only literal occurrences, so the single `const` definition
+        // counts once and every use site counts zero.
+        for (idx, needle) in watched.iter().enumerate() {
+            totals[idx] += source.matches(needle).count();
+        }
+    }
+    for (idx, needle) in watched.iter().enumerate() {
+        if totals[idx] > 1 {
+            violations.push(format!("{needle:?} appears {} times", totals[idx]));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "CLI messages defined more than once ({}):\n  - {}",
+        violations.len(),
+        violations.join("\n  - ")
+    );
+}

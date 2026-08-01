@@ -100,9 +100,7 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
 /// path are rejected by the grammar before this runs.
 pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
     if !path.is_absolute() {
-        return Err(CliFailure::grammar(
-            "setup plugins-dir path must be absolute",
-        ));
+        return Err(CliFailure::grammar(grammar::SETUP_PLUGINS_DIR_ABSOLUTE));
     }
     if path
         .file_name()
@@ -110,7 +108,7 @@ pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
         .is_some_and(|n| n == "agent-bar.usage")
     {
         return Err(CliFailure::grammar(
-            "setup plugins-dir path must be the parent directory, not the plugin root",
+            grammar::SETUP_PLUGINS_DIR_NOT_PLUGIN_ROOT,
         ));
     }
     let meta = std::fs::metadata(path).map_err(|_| {
@@ -155,6 +153,12 @@ pub enum InteractiveUpdateOffer {
 /// Shared non-TTY rejection message for interactive `update` (CLI contract).
 const INTERACTIVE_UPDATE_REQUIRES_TTY: &str =
     "interactive update requires a TTY; use 'update check' and 'update apply <version>'";
+
+/// Three call sites reach this condition — a missing plugin root, a missing
+/// helper, and a non-executable helper — and all three want the same sentence.
+const SETUP_REQUIRES_PLUGIN_TREE: &str =
+    "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; \
+     use install.sh for first bootstrap from a release archive";
 
 /// Pure interactive `update` confirmation gate (CLI contract).
 ///
@@ -246,23 +250,17 @@ fn resolve_plugin_source_root() -> Result<PathBuf, CliFailure> {
         std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
     let exe = fs_canonicalize(&exe);
     let Some(bin_dir) = exe.parent() else {
-        return Err(CliFailure::plugin(
-            "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; use install.sh for first bootstrap from a release archive",
-        ));
+        return Err(CliFailure::plugin(SETUP_REQUIRES_PLUGIN_TREE));
     };
     if bin_dir
         .file_name()
         .and_then(|s| s.to_str())
         .is_none_or(|n| n != "bin")
     {
-        return Err(CliFailure::plugin(
-            "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; use install.sh for first bootstrap from a release archive",
-        ));
+        return Err(CliFailure::plugin(SETUP_REQUIRES_PLUGIN_TREE));
     }
     let Some(root) = bin_dir.parent() else {
-        return Err(CliFailure::plugin(
-            "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; use install.sh for first bootstrap from a release archive",
-        ));
+        return Err(CliFailure::plugin(SETUP_REQUIRES_PLUGIN_TREE));
     };
     if !root.join("manifest.json").is_file() {
         return Err(CliFailure::plugin(

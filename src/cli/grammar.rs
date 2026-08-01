@@ -8,6 +8,16 @@ use super::command::{
 };
 use super::exit::CliFailure;
 
+/// Shared with `super::validate_plugins_dir`, which re-checks the same two
+/// conditions after the filesystem is consulted. One definition means the
+/// parse path and the validate path can never disagree about the wording.
+pub(crate) const SETUP_PLUGINS_DIR_ABSOLUTE: &str = "setup plugins-dir path must be absolute";
+pub(crate) const SETUP_PLUGINS_DIR_NOT_PLUGIN_ROOT: &str =
+    "setup plugins-dir path must be the parent directory, not the plugin root";
+
+const CONFIG_APPLY_USAGE: &str = "config apply requires stdin, file <path>, or json <value>";
+const SETUP_PLUGINS_DIR_REQUIRES_PATH: &str = "setup plugins-dir requires a path";
+
 /// Parse argv words after the program name into a closed [`Command`].
 ///
 /// Grammar failures map to exit code 2. Parsing never touches the filesystem,
@@ -111,11 +121,9 @@ fn parse_status(tokens: &[String]) -> Result<Command, CliFailure> {
         let value = tokens
             .get(i)
             .map(String::as_str)
-            .ok_or_else(|| CliFailure::grammar(format!("missing value for status {word}")))?;
+            .ok_or_else(|| missing_status_value(word))?;
         if value.starts_with('-') {
-            return Err(CliFailure::grammar(format!(
-                "missing value for status {word}"
-            )));
+            return Err(missing_status_value(word));
         }
         match clause {
             StatusClause::Format => {
@@ -162,6 +170,12 @@ fn parse_status(tokens: &[String]) -> Result<Command, CliFailure> {
     Ok(Command::Status(opts))
 }
 
+/// Both status clause errors — no value present, and a value that looks like
+/// a flag — take the same `word` and want the same sentence.
+fn missing_status_value(word: &str) -> CliFailure {
+    CliFailure::grammar(format!("missing value for status {word}"))
+}
+
 fn parse_login(tokens: &[String]) -> Result<Command, CliFailure> {
     match tokens {
         [] => Err(CliFailure::grammar("login requires a provider id")),
@@ -185,9 +199,7 @@ fn parse_config(tokens: &[String]) -> Result<Command, CliFailure> {
     match tokens {
         [] => Err(CliFailure::grammar("config requires show or apply")),
         [cmd] if cmd == "show" => Ok(Command::Config(ConfigCommand::Show)),
-        [cmd] if cmd == "apply" => Err(CliFailure::grammar(
-            "config apply requires stdin, file <path>, or json <value>",
-        )),
+        [cmd] if cmd == "apply" => Err(CliFailure::grammar(CONFIG_APPLY_USAGE)),
         [cmd, mode] if cmd == "apply" && mode == "stdin" => {
             Ok(Command::Config(ConfigCommand::Apply(ConfigInput::Stdin)))
         }
@@ -204,9 +216,7 @@ fn parse_config(tokens: &[String]) -> Result<Command, CliFailure> {
         [cmd, mode, value] if cmd == "apply" && mode == "json" => Ok(Command::Config(
             ConfigCommand::Apply(ConfigInput::Json(value.clone())),
         )),
-        [cmd, ..] if cmd == "apply" => Err(CliFailure::grammar(
-            "config apply requires stdin, file <path>, or json <value>",
-        )),
+        [cmd, ..] if cmd == "apply" => Err(CliFailure::grammar(CONFIG_APPLY_USAGE)),
         [other, ..] => Err(CliFailure::grammar(format!(
             "unknown config command '{other}'"
         ))),
@@ -218,26 +228,22 @@ fn parse_setup(tokens: &[String]) -> Result<Command, CliFailure> {
         [] => Ok(Command::Setup(SetupOptions::Production)),
         [word, path] if word == "plugins-dir" => {
             if path.is_empty() {
-                return Err(CliFailure::grammar("setup plugins-dir requires a path"));
+                return Err(CliFailure::grammar(SETUP_PLUGINS_DIR_REQUIRES_PATH));
             }
             // Path shape checks that need no filesystem: relative and direct
             // plugin-root forms are rejected here; existence/writability are
             // validated after parse.
             let pb = PathBuf::from(path);
             if !pb.is_absolute() {
-                return Err(CliFailure::grammar(
-                    "setup plugins-dir path must be absolute",
-                ));
+                return Err(CliFailure::grammar(SETUP_PLUGINS_DIR_ABSOLUTE));
             }
             if path_ends_with_plugin_id(&pb) {
-                return Err(CliFailure::grammar(
-                    "setup plugins-dir path must be the parent directory, not the plugin root",
-                ));
+                return Err(CliFailure::grammar(SETUP_PLUGINS_DIR_NOT_PLUGIN_ROOT));
             }
             Ok(Command::Setup(SetupOptions::PluginsDir(pb)))
         }
         [word] if word == "plugins-dir" => {
-            Err(CliFailure::grammar("setup plugins-dir requires a path"))
+            Err(CliFailure::grammar(SETUP_PLUGINS_DIR_REQUIRES_PATH))
         }
         [other, ..] => Err(CliFailure::grammar(format!(
             "unknown argument '{other}' for setup"
