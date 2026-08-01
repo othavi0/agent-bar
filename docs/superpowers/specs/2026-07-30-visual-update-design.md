@@ -150,9 +150,13 @@ as a named readonly property on `UsageWindow`, and never repeated.
   `CoreView.iconOpticalScale(providerId)`, beside the existing
   `iconFileName`: Claude, Codex and Amp at `1.0`; Grok at `0.875`, because its
   mark is a thin ring that fills its own box edge to edge.
-- Numeral box is fixed width, right-aligned, measured with `TextMetrics` on
+- Numeral box is fixed width, left-aligned, measured with `TextMetrics` on
   the string `100%` at `Style.font.body`. Never a hardcoded pixel value: the
-  font scales with `[font] base-size`.
+  font scales with `[font] base-size`. (Amended 2026-08-01, owner decision on
+  live mockups: right alignment parked the box's slack between icon and
+  number — ~2 digits of air for `7%` — so the numeral now hugs the icon and
+  the slack trails into the inter-chip gap. The box stays fixed; chip widths
+  still never move.)
 - Gap inside a chip is `Style.spacing.sm` (4). Gap between chips is
   `Style.spacing.xxl` (12). The 3:1 ratio is what makes an icon and its number
   read as one unit; today's 4:10 does not.

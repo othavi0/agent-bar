@@ -493,6 +493,12 @@ TestCase {
     // §5: fixed-width numeral measured on "100%", host icon canvas, tint.
     verify(chip.indexOf("TextMetrics") >= 0)
     verify(chip.indexOf('"100%"') >= 0)
+    // §5 amended 2026-08-01 (owner picked it on live mockups): the numeral
+    // hugs the icon — left-aligned inside the still-fixed box. Right-aligned
+    // put the box's slack exactly between icon and number (~2 digits for
+    // "7%"), which read as a broken chip.
+    verify(chip.indexOf("Text.AlignLeft") >= 0)
+    verify(chip.indexOf("Text.AlignRight") < 0)
     verify(chip.indexOf("Style.bar.iconCanvas") >= 0)
     verify(chip.indexOf("MultiEffect") >= 0)
     verify(chip.indexOf("colorization") >= 0)
