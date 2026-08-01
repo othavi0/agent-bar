@@ -11,18 +11,53 @@
 use std::fs;
 use std::path::PathBuf;
 
+/// True when `prefix` opens a raw string as a real token on `line` at byte
+/// offset `pos`, not merely as the tail of an ordinary word ending in `r`
+/// right before a closing quote (`"doctor"`, `"provider"` both contain the
+/// literal bytes `r"` but do not open anything).
+fn is_token_boundary(line: &str, pos: usize) -> bool {
+    pos == 0 || {
+        let prev = line.as_bytes()[pos - 1];
+        !(prev.is_ascii_alphanumeric() || prev == b'_')
+    }
+}
+
+/// True when `line` opens one of this codebase's raw string prefixes (`r"`,
+/// `r#"`, `br"`, `br#"`) — used by the CLI test module for raw JSON
+/// payloads. See [`is_token_boundary`] for why a plain substring search is
+/// not enough.
+fn opens_raw_string(line: &str) -> bool {
+    ["br#\"", "br\"", "r#\"", "r\""]
+        .iter()
+        .any(|prefix| matches!(line.find(prefix), Some(pos) if is_token_boundary(line, pos)))
+}
+
 /// Double-quoted spans, tracked across lines so a literal continued with a
 /// trailing `\` (the multi-line `HelpTopic` help text) is not lost. `//`
 /// comments are skipped, but only outside a literal — a continuation line
-/// never starts with `//` in this codebase. Counting quote characters per
-/// line to track in/out-of-string state is sound here because `src/cli/**`
-/// has no raw strings and no escaped quotes (checked by hand; there is
-/// nothing else crude enough to fool a bare quote count).
+/// never starts with `//` in this codebase.
+///
+/// `src/cli/mod.rs`'s test module has three raw byte-string literals
+/// (`br#"..."#`, JSON confirmation payloads). Counting quote characters
+/// would misread their embedded `"` as ordinary literal boundaries, so those
+/// lines are detected by [`opens_raw_string`] and skipped rather than
+/// parsed — never scanned for content, and never allowed to flip the
+/// carried in/out-of-string state on a hunch. That skip is safe only when
+/// the line is self-contained (an even number of quote characters); it is
+/// verified per line rather than assumed, because an odd count would mean
+/// the raw string continues past this line and silently skipping it would
+/// desynchronize the parity count for every line after it. Outside of those
+/// three lines, counting quote characters is sound because no other line in
+/// this scope has an escaped quote.
 fn string_literals(source: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut in_string = false;
     for line in source.lines() {
         if !in_string && line.trim_start().starts_with("//") {
+            continue;
+        }
+        let quote_count = line.matches('"').count();
+        if !in_string && opens_raw_string(line) && quote_count % 2 == 0 {
             continue;
         }
         for (idx, piece) in line.split('"').enumerate() {
@@ -35,7 +70,7 @@ fn string_literals(source: &str) -> Vec<String> {
                 out.push(piece.to_owned());
             }
         }
-        if line.matches('"').count() % 2 == 1 {
+        if quote_count % 2 == 1 {
             in_string = !in_string;
         }
     }
