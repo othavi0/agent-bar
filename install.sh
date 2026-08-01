@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# agent-bar plugin bootstrap — installs the Omarchy Quattro plugin bundle only.
+# Installs the Agent Bar plugin for Omarchy Quattro. Nothing else.
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/othavi0/agent-bar/master/install.sh | bash
 #
 # Flags:
-#   --force      Reinstall even if already at the target version.
-#   --yes, -y    Assume yes for prompts (non-interactive enable).
+#   --force      Reinstall even if this version is already installed.
+#   --yes, -y    Answer yes to every prompt.
 #
 # Env:
-#   AGENT_BAR_VERSION  Version to install (default: latest release tag, without v).
+#   AGENT_BAR_VERSION  Version to install. Defaults to the latest release.
 #
-# Product: $HOME/.config/omarchy/plugins/agent-bar.usage
+# Installs to: $HOME/.config/omarchy/plugins/agent-bar.usage
 # No global executable is installed.
 
 set -euo pipefail
@@ -34,7 +34,7 @@ for arg in "$@"; do
       exit 0
       ;;
     *)
-      echo "agent-bar install: unknown flag: $arg" >&2
+      echo "Unknown flag: $arg" >&2
       exit 2
       ;;
   esac
@@ -48,16 +48,16 @@ die()  { echo "ERR $*" >&2; exit 1; }
 check_platform() {
   local uname_s arch
   uname_s=$(uname -s 2>/dev/null || echo unknown)
-  [[ "$uname_s" == "Linux" ]] || die "agent-bar requires Linux. Detected: $uname_s"
+  [[ "$uname_s" == "Linux" ]] || die "Agent Bar needs Linux. This is $uname_s."
   arch=$(uname -m 2>/dev/null || echo unknown)
-  [[ "$arch" == "x86_64" ]] || die "Only x86_64 plugin bundles are published. Detected: $arch"
+  [[ "$arch" == "x86_64" ]] || die "Agent Bar ships for x86_64 only. This is $arch."
 }
 
 check_deps() {
-  command -v curl >/dev/null 2>&1 || die "curl not found"
-  command -v sha256sum >/dev/null 2>&1 || die "sha256sum not found"
-  command -v tar >/dev/null 2>&1 || die "tar not found"
-  command -v zstd >/dev/null 2>&1 || die "zstd not found (required for .tar.zst)"
+  command -v curl >/dev/null 2>&1 || die "curl is missing. Install it and run this again."
+  command -v sha256sum >/dev/null 2>&1 || die "sha256sum is missing. Install coreutils and run this again."
+  command -v tar >/dev/null 2>&1 || die "tar is missing. Install it and run this again."
+  command -v zstd >/dev/null 2>&1 || die "zstd is missing. Install it and run this again."
 }
 
 resolve_version() {
@@ -67,13 +67,13 @@ resolve_version() {
     echo "$v"
     return
   fi
-  log "Resolving latest release..."
+  log "Finding the latest release..."
   local tag
   tag=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
     | grep '"tag_name"' \
     | head -1 \
     | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-  [[ -n "$tag" ]] || die "Could not resolve latest release. Set AGENT_BAR_VERSION."
+  [[ -n "$tag" ]] || die "Could not reach the release list. Set AGENT_BAR_VERSION and run this again."
   echo "${tag#v}"
 }
 
@@ -92,31 +92,32 @@ validate_staged_bundle() {
   local receipt="${stage}/bundle.json"
   local manifest="${stage}/manifest.json"
 
-  [[ -f "$receipt" ]] || die "Staged bundle missing bundle.json receipt"
-  [[ -f "$manifest" ]] || die "Staged bundle missing manifest.json"
-  [[ -f "${stage}/Service.qml" ]] || die "Staged bundle missing Service.qml"
-  [[ -f "${stage}/BarWidget.qml" ]] || die "Staged bundle missing BarWidget.qml"
-  [[ -x "${stage}/bin/agent-bar" ]] || die "Staged helper bin/agent-bar missing or not executable"
+  [[ -f "$receipt" ]] || die "The download is incomplete: bundle.json is missing."
+  [[ -f "$manifest" ]] || die "The download is incomplete: manifest.json is missing."
+  [[ -f "${stage}/Service.qml" ]] || die "The download is incomplete: Service.qml is missing."
+  [[ -f "${stage}/BarWidget.qml" ]] || die "The download is incomplete: BarWidget.qml is missing."
+  [[ -x "${stage}/bin/agent-bar" ]] \
+    || die "The download is incomplete: bin/agent-bar is missing or not executable."
   [[ -x "${stage}/scripts/agent-bar-open-terminal" ]] \
-    || die "Staged terminal helper missing or not executable"
+    || die "The download is incomplete: the terminal helper is missing or not executable."
 
   # Receipt pluginId + version must match expected install target.
   grep -q '"pluginId"[[:space:]]*:[[:space:]]*"'"${PLUGIN_ID}"'"' "$receipt" \
-    || die "bundle.json pluginId is not ${PLUGIN_ID}"
+    || die "This download is for another plugin, not ${PLUGIN_ID}."
   local receipt_version
   receipt_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$receipt" \
     | head -1 \
     | sed 's/.*"\([^"]*\)"$/\1/')
-  [[ -n "$receipt_version" ]] || die "bundle.json missing version"
+  [[ -n "$receipt_version" ]] || die "The download is incomplete: bundle.json has no version."
   [[ "$receipt_version" == "$expected_version" ]] \
-    || die "bundle.json version ${receipt_version} != expected ${expected_version}"
+    || die "The download is version ${receipt_version}, not ${expected_version}."
 
   local man_version
   man_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" \
     | head -1 \
     | sed 's/.*"\([^"]*\)"$/\1/')
   [[ "$man_version" == "$expected_version" ]] \
-    || die "manifest version ${man_version} != expected ${expected_version}"
+    || die "The manifest is version ${man_version}, not ${expected_version}."
 
   # Inventory paths listed in the receipt must exist on disk.
   # bundle.json is not listed in its own files array.
@@ -124,21 +125,21 @@ validate_staged_bundle() {
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
     if [[ ! -e "${stage}/${path}" ]]; then
-      warn "Receipt path missing on disk: ${path}"
+      warn "The download is missing a file it lists: ${path}"
       missing=1
     fi
   done < <(grep -o '"path"[[:space:]]*:[[:space:]]*"[^"]*"' "$receipt" \
     | sed 's/.*"\([^"]*\)"$/\1/')
-  [[ "$missing" -eq 0 ]] || die "Staged inventory does not match bundle.json"
+  [[ "$missing" -eq 0 ]] || die "The download does not match its own receipt."
 
   # Helper version must match receipt (BUNDLE-006).
   local helper_version
   helper_version=$("${stage}/bin/agent-bar" version 2>/dev/null | head -1 | tr -d '[:space:]' || true)
-  [[ -n "$helper_version" ]] || die "Staged helper did not print a version"
+  [[ -n "$helper_version" ]] || die "The helper in this download does not run here."
   [[ "$helper_version" == "$expected_version" ]] \
-    || die "Helper version ${helper_version} != expected ${expected_version}"
+    || die "The helper is version ${helper_version}, not ${expected_version}."
 
-  ok "Staged bundle inventory/receipt validated (${expected_version})"
+  ok "Download verified (${expected_version})"
 }
 
 install_plugin() {
@@ -154,21 +155,21 @@ install_plugin() {
   curl -fL --progress-bar "${base_url}/${asset}" -o "${tmpdir}/${asset}"
   curl -fsSL "${base_url}/${asset}.sha256" -o "${tmpdir}/${asset}.sha256"
 
-  log "Verifying checksum..."
+  log "Verifying the download..."
   (cd "$tmpdir" && sha256sum -c "${asset}.sha256") >&2 \
-    || die "Checksum mismatch — download may be corrupted."
-  ok "Checksum OK"
+    || die "The download is corrupted. Run this again."
+  ok "Checksum matches"
 
-  log "Extracting plugin bundle..."
+  log "Extracting..."
   mkdir -p "${tmpdir}/extract"
   tar --use-compress-program=zstd -xf "${tmpdir}/${asset}" -C "${tmpdir}/extract"
 
   [[ -d "${tmpdir}/extract/${PLUGIN_ID}" ]] \
-    || die "Archive missing top-level ${PLUGIN_ID}/"
+    || die "The archive has no ${PLUGIN_ID} directory."
 
   # Refuse archive paths that escape the extract root (defense in depth).
   if find "${tmpdir}/extract" -name '..' -o -type l | grep -q .; then
-    die "Archive contains links or traversal components"
+    die "The archive contains unsafe paths. Nothing was installed."
   fi
 
   mkdir -p "${PLUGINS_DIR}"
@@ -186,14 +187,14 @@ install_plugin() {
     mv "${PLUGIN_ROOT}" "${bak}"
     if ! mv "${stage}" "${PLUGIN_ROOT}"; then
       mv "${bak}" "${PLUGIN_ROOT}" || true
-      die "Failed to install plugin root"
+      die "Could not write to ${PLUGINS_DIR}."
     fi
     rm -rf "${bak}"
   else
     mv "${stage}" "${PLUGIN_ROOT}"
   fi
 
-  ok "Plugin installed at ${PLUGIN_ROOT}"
+  ok "Installed at ${PLUGIN_ROOT}"
 
   rm -rf "$tmpdir"
   trap - EXIT
@@ -201,40 +202,40 @@ install_plugin() {
 
 activate_plugin() {
   if ! command -v omarchy >/dev/null 2>&1; then
-    warn "omarchy CLI not found. Enable manually: omarchy plugin enable ${PLUGIN_ID}"
+    warn "omarchy was not found. Enable it yourself: omarchy plugin enable ${PLUGIN_ID}"
     return
   fi
 
   if [[ -f "${HOME}/.config/omarchy/shell.json" ]] \
     && grep -q "${PLUGIN_ID}" "${HOME}/.config/omarchy/shell.json" 2>/dev/null; then
-    log "Existing shell entry — running omarchy plugin rescan"
-    omarchy plugin rescan || warn "rescan failed; run: omarchy plugin rescan"
+    log "Already in your shell. Rescanning..."
+    omarchy plugin rescan || warn "Rescan failed. Run it yourself: omarchy plugin rescan"
   else
     local proceed=0
     if [[ "$YES" -eq 1 ]]; then
       proceed=1
     elif [[ -t 0 ]]; then
       echo "" >&2
-      read -r -p "Enable ${PLUGIN_ID} via omarchy plugin enable? [Y/n] " ans
+      read -r -p "Enable ${PLUGIN_ID} now? [Y/n] " ans
       case "${ans:-Y}" in
         [yY]|[yY][eE][sS]|"") proceed=1 ;;
         *) proceed=0 ;;
       esac
     else
-      warn "Non-interactive install. Run: omarchy plugin enable ${PLUGIN_ID}"
+      warn "Nothing to answer here. Run: omarchy plugin enable ${PLUGIN_ID}"
       return
     fi
     if [[ "$proceed" -eq 1 ]]; then
-      log "Running omarchy plugin enable ${PLUGIN_ID}"
+      log "Enabling ${PLUGIN_ID}..."
       omarchy plugin enable "${PLUGIN_ID}" \
-        || warn "enable failed; run: omarchy plugin enable ${PLUGIN_ID}"
+        || warn "Enable failed. Run it yourself: omarchy plugin enable ${PLUGIN_ID}"
     fi
   fi
 }
 
 main() {
   echo "" >&2
-  log "agent-bar plugin installer"
+  log "Agent Bar installer"
   check_platform
   check_deps
 
@@ -245,20 +246,20 @@ main() {
   local existing
   existing=$(existing_version || true)
   if [[ -n "$existing" && "$existing" == "$version" && "$FORCE" -eq 0 ]]; then
-    ok "agent-bar.usage is already at ${version}"
+    ok "Already at ${version}. Use --force to reinstall."
     exit 0
   fi
 
   if [[ -n "$existing" ]]; then
-    log "Updating agent-bar.usage (${existing} -> ${version})..."
+    log "Updating ${existing} to ${version}..."
   else
-    log "Installing agent-bar.usage ${version}..."
+    log "Installing ${version}..."
   fi
 
   install_plugin "$version"
   activate_plugin
-  ok "agent-bar.usage ${version} ready"
-  log "Private helper: ${PLUGIN_ROOT}/bin/agent-bar"
+  ok "Agent Bar ${version} is ready"
+  log "Helper: ${PLUGIN_ROOT}/bin/agent-bar"
   log "No global executable was installed."
 }
 
