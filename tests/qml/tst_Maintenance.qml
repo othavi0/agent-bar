@@ -69,27 +69,49 @@ TestCase {
     compare(purge.purgeSettingsAndBackups, true)
   }
 
+  // The check payloads are the shared fixtures pinned byte-exactly to the
+  // Rust serializer by tests/update_check_parity.rs. Never inline a payload
+  // here: the previous inline documents used a key set the helper never
+  // emitted, and the suite stayed green while the product said
+  // "Update check failed." on every successful check.
+  function checkFixture(name) {
+    return read("tests/fixtures/update-check/" + name)
+  }
+
   function test_update_check_parse_available() {
-    var ui = Core.maintenanceUiIdle("10.0.0")
-    var json = JSON.stringify({
-      updateAvailable: true,
-      currentVersion: "10.0.0",
-      targetVersion: "10.1.0",
-      releaseNotesUrl: "https://example.com/notes"
-    })
-    ui = Core.maintenanceUiFromCheck(ui, json, 0, "10.0.0")
+    var ui = Core.maintenanceUiIdle("10.2.0")
+    ui = Core.maintenanceUiFromCheck(ui, checkFixture("available.json"), 0, "10.2.0")
     compare(ui.phase, "update_available")
-    compare(ui.targetVersion, "10.1.0")
-    compare(ui.releaseNotesUrl, "https://example.com/notes")
-    verify(ui.message.indexOf("10.1.0") >= 0)
+    compare(ui.installedVersion, "10.2.0")
+    compare(ui.targetVersion, "10.3.0")
+    compare(ui.releaseNotesUrl, "https://github.com/othavi0/agent-bar/releases/tag/v10.3.0")
+    verify(ui.message.indexOf("10.3.0") >= 0)
   }
 
   function test_update_check_up_to_date() {
-    var ui = Core.maintenanceUiIdle("10.0.0")
-    ui = Core.maintenanceUiFromCheck(ui, JSON.stringify({ updateAvailable: false, currentVersion: "10.0.0" }), 0, "10.0.0")
+    // A stale target from an earlier check must not survive the new answer.
+    var ui = Core.maintenanceUiIdle("")
+    ui.targetVersion = "10.3.0"
+    ui.releaseNotesUrl = "https://github.com/othavi0/agent-bar/releases/tag/v10.3.0"
+    ui = Core.maintenanceUiFromCheck(ui, checkFixture("up-to-date.json"), 0, "")
     compare(ui.phase, "up_to_date")
-    ui = Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("10.0.0"), "Agent Bar is up to date.\n", 0, "10.0.0")
-    compare(ui.phase, "up_to_date")
+    compare(ui.installedVersion, "10.3.0")
+    compare(ui.targetVersion, "")
+    compare(ui.releaseNotesUrl, "")
+    // latestCompatible is null when no release fits this target/contract;
+    // there is still nothing to offer, so the UI answer is the same.
+    var none = Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("10.3.0"), checkFixture("no-compatible.json"), 0, "10.3.0")
+    compare(none.phase, "up_to_date")
+  }
+
+  // BUNDLE-021: a successful check always writes exactly the JSON document,
+  // so exit 0 with anything else is a failed check, not an implied answer.
+  function test_update_check_rejects_unusable_stdout() {
+    compare(Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("1.0.0"), "", 1, "1.0.0").phase, "error")
+    compare(Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("1.0.0"), "", 0, "1.0.0").phase, "error")
+    compare(Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("1.0.0"), "Agent Bar is up to date.\n", 0, "1.0.0").phase, "error")
+    var wrongSchema = JSON.stringify({ schemaVersion: 2, available: true })
+    compare(Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("1.0.0"), wrongSchema, 0, "1.0.0").phase, "error")
   }
 
   function test_update_confirm_message_names_versions() {
@@ -113,8 +135,10 @@ TestCase {
     verify(src.indexOf("Update check returned an unusable response.") < 0)
     var first = src.indexOf("Update check failed.")
     verify(first >= 0)
-    verify(src.indexOf("Update check failed.", first + 1) > first,
-           "both failure branches must use the one string")
+    // One failure exit, one string: a second occurrence means a second
+    // failure branch grew its own copy.
+    verify(src.indexOf("Update check failed.", first + 1) < 0,
+           "every failure path must share the single string")
   }
 
   function test_uninstall_double_confirm() {

@@ -493,6 +493,12 @@ TestCase {
     // §5: fixed-width numeral measured on "100%", host icon canvas, tint.
     verify(chip.indexOf("TextMetrics") >= 0)
     verify(chip.indexOf('"100%"') >= 0)
+    // §5 amended 2026-08-01 (owner picked it on live mockups): the numeral
+    // hugs the icon — left-aligned inside the still-fixed box. Right-aligned
+    // put the box's slack exactly between icon and number (~2 digits for
+    // "7%"), which read as a broken chip.
+    verify(chip.indexOf("Text.AlignLeft") >= 0)
+    verify(chip.indexOf("Text.AlignRight") < 0)
     verify(chip.indexOf("Style.bar.iconCanvas") >= 0)
     verify(chip.indexOf("MultiEffect") >= 0)
     verify(chip.indexOf("colorization") >= 0)
@@ -546,6 +552,19 @@ TestCase {
       var src = String(xhr.responseText)
       verify(src.indexOf("⌛") < 0, files[i] + " must not use the emoji hourglass")
     }
+  }
+
+  // §5 amended 2026-08-01 (owner picked it on live mockups): chips sit at
+  // spacing.md (6). The old xxl (12) read as scattered once the numeral
+  // moved beside the icon and its box slack joined the inter-chip gap.
+  function test_chip_row_spacing_is_md() {
+    var xhr = new XMLHttpRequest()
+    xhr.open("GET", widgetUrl, false)
+    xhr.send()
+    var src = String(xhr.responseText)
+    verify(src.indexOf("columnSpacing: Style.spacing.md") >= 0)
+    verify(src.indexOf("columnSpacing: Style.spacing.xxl") < 0,
+           "the scattered spacing must not come back")
   }
 
   function test_icon_files_exist_with_approved_names() {

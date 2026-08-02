@@ -61,6 +61,12 @@ closed
 - `SET-020`: Reopening during a save reflects actual busy state.
 - `SET-021`: A successful save adopts only the canonical returned document.
 - `SET-022`: Restore defaults mutates the draft only.
+- `SET-023`: Service startup reads and applies the persisted settings once the
+  helper is proven alive: provider visibility and order, display metric, and
+  refresh interval govern the bar without the Settings popup ever opening. A
+  failed or invalid startup read keeps in-memory defaults, and a load or save
+  completed through the popup is newer than the startup read and wins. The
+  startup read never touches the popup snapshot state above.
 
 ## Cache files
 
