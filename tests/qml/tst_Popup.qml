@@ -308,13 +308,43 @@ TestCase {
     verify(view.indexOf("groups.secondary") < 0)
   }
 
-  // §6/§3.7: the popup shows the countdown only. The absolute-clock humaniser
-  // is deleted with its weekday table and its only Qt.formatDateTime call.
+  // §6/§3.7 amended 2026-08-03 (owner decision on live mockups): the LEAD
+  // window appends the reset's wall-clock time after the countdown, in the
+  // viewer's locale format. The plan-04 deletions stay deleted: no weekday
+  // table, no fixed-format humaniser, compact rows countdown-only.
   function test_absolute_clock_humaniser_is_gone() {
     var core = read("assets/omarchy/CoreView.js")
     verify(core.indexOf("formatResetText") < 0)
     verify(core.indexOf("WEEKDAYS") < 0)
     verify(core.indexOf("Qt.formatDateTime") < 0)
     verify(core.indexOf("function resetCountdownText") >= 0)
+  }
+
+  function test_lead_reset_clock_is_locale_formatted() {
+    var core = read("assets/omarchy/CoreView.js")
+    verify(core.indexOf("function resetClockText(") >= 0)
+    // The format is the caller's locale format, never hardcoded.
+    verify(core.indexOf('"hh:mm"') < 0)
+    verify(core.indexOf('"HH:mm"') < 0)
+    // 24h locale shape and 12h locale shape both come from the same seam.
+    var h24 = Core.resetClockText("2026-08-02T02:00:00Z", "HH:mm")
+    verify(/^\(\d{2}:\d{2}\)$/.test(h24), "got: " + h24)
+    var h12 = Core.resetClockText("2026-08-02T02:00:00Z", "h:mm AP")
+    verify(/^\(\d{1,2}:\d{2} (AM|PM)\)$/.test(h12), "got: " + h12)
+    compare(Core.resetClockText("not-a-date", "HH:mm"), "")
+    compare(Core.resetClockText("2026-08-02T02:00:00Z", ""), "")
+  }
+
+  function test_only_the_lead_window_gets_the_clock() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    // Exactly one binding site — the lead Repeater; compact rows stay bare.
+    var first = view.indexOf("resetClock:")
+    verify(first >= 0, "lead window must bind resetClock")
+    verify(view.indexOf("resetClock:", first + 1) < 0,
+           "compact rows must not gain the clock")
+    verify(view.indexOf("Locale.ShortFormat") >= 0,
+           "the format must come from the viewer's locale")
+    var win = read("assets/omarchy/components/UsageWindow.qml")
+    verify(win.indexOf("property string resetClock") >= 0)
   }
 }

@@ -526,6 +526,21 @@ function resetCountdownText(iso, nowMs) {
   return countdownText(diff)
 }
 
+// §6 amended 2026-08-03 (owner decision on live mockups): the lead window
+// appends the reset's wall-clock time after the countdown — "(13:31)" here,
+// "(1:31 PM)" on an en-US machine. The format string is the caller's locale
+// short-time format, never hardcoded; weekday names stay deleted, so compact
+// rows (days away) remain countdown-only.
+function resetClockText(iso, localeTimeFormat) {
+  var ms = parseIsoMs(iso)
+  if (!isFinite(ms))
+    return ""
+  var fmt = String(localeTimeFormat || "")
+  if (!fmt.length)
+    return ""
+  return "(" + Qt.formatTime(new Date(ms), fmt) + ")"
+}
+
 // The muted lead-in the lead window prints before the countdown:
 // "Session (5h) · resets in 3h 1m" / "Session (5h) · resets now".
 function resetPhrase(countdown) {
