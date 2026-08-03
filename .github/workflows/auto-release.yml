@@ -1,18 +1,40 @@
-name: Release plugin bundle
+name: Auto release
+
+# Every product merge to main cuts an official release, so the Settings
+# update button always has the latest merge to offer. The release is created
+# with its assets in one call — a public release never exists without them
+# (an asset-less claiming release is a command error for every installed
+# update check).
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'scripts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  workflow_dispatch:
 
 permissions:
-  contents: write # gh release upload
+  contents: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      !startsWith(github.event.head_commit.message, 'chore: release')
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Install Rust (gnu host target)
         run: |
@@ -20,14 +42,13 @@ jobs:
           rustup default stable
           rustup target list --installed
 
-      - name: Verify version matches release tag
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - name: Cut release (bump + notes)
+        id: cut
         run: |
-          scripts/check-version "$RELEASE_TAG"
-
-      - name: Build release helper (x86_64-unknown-linux-gnu)
-        run: cargo build --release --target x86_64-unknown-linux-gnu
+          set -euo pipefail
+          scripts/agent-bar-cut-release
+          VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Rust gates
         run: |
@@ -35,16 +56,30 @@ jobs:
           cargo test
           cargo clippy --all-targets -- -D warnings
 
+      - name: Commit and tag the bump
+        env:
+          VERSION: ${{ steps.cut.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock CHANGELOG.md "docs/releases/${VERSION}.md"
+          git commit -m "chore: release ${VERSION}"
+          git tag "v${VERSION}"
+
+      - name: Build release helper (x86_64-unknown-linux-gnu)
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
       - name: Assemble plugin bundle
         run: |
+          set -euo pipefail
           SOURCE_COMMIT="$(git rev-parse HEAD)"
-          # Prefer the target-triple build as the helper.
           mkdir -p target/release
           cp -f target/x86_64-unknown-linux-gnu/release/agent-bar target/release/agent-bar
           cargo run --bin agent-bar-bundle -- \
             assemble output target/release/agent-bar.usage \
             source-commit "$SOURCE_COMMIT"
-          scripts/check-version "v$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')" \
+          scripts/check-version "v${{ steps.cut.outputs.version }}" \
             target/release/agent-bar.usage
 
       - name: Bundle inventory / modes / architecture
@@ -55,66 +90,45 @@ jobs:
           test -f "$ROOT/manifest.json"
           test -x "$ROOT/bin/agent-bar"
           test -x "$ROOT/scripts/agent-bar-open-terminal"
-          # No global executable name at plugin root.
           test ! -e "$ROOT/agent-bar"
-          # Architecture: ELF x86-64
           file "$ROOT/bin/agent-bar" | grep -E 'ELF 64-bit|x86-64|x86_64'
           "$ROOT/bin/agent-bar" version
-          # QML/Quattro gates consume accepted checkpoint evidence on Omarchy hosts;
-          # Ubuntu runners do not provide the Omarchy runtime (see v10 acceptance).
+          # QML/Quattro gates consume accepted checkpoint evidence on Omarchy
+          # hosts; Ubuntu runners do not provide the Omarchy runtime.
 
       - name: Build release artifacts
-        id: pkg
         run: |
           set -euo pipefail
           SOURCE_COMMIT="$(git rev-parse HEAD)"
-          VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+          VERSION="${{ steps.cut.outputs.version }}"
           NOTES="docs/releases/${VERSION}.md"
-          if [ ! -f "$NOTES" ]; then
-            # Prefer authored notes under docs/releases/; otherwise materialize from
-            # the published GitHub release body so the release-builder path is
-            # always satisfiable on tag publish.
-            mkdir -p docs/releases
-            BODY="${{ github.event.release.body }}"
-            if [ -n "$BODY" ]; then
-              printf '%s\n' "$BODY" > "$NOTES"
-            else
-              {
-                echo "# agent-bar ${VERSION}"
-                echo
-                echo "Release ${VERSION} (auto-generated notes; add docs/releases/${VERSION}.md for authored copy)."
-              } > "$NOTES"
-            fi
-            echo "Materialized release notes at $NOTES"
-          fi
+          test -f "$NOTES"
           OUT="target/release-files"
           rm -rf "$OUT"
           mkdir -p "$OUT"
-          # release requires clean worktree; CI checkout is clean after build artifacts
-          # under target/ which git ignores.
           cargo run --bin agent-bar-bundle -- \
             release bundle target/release/agent-bar.usage \
             output "$OUT" \
             source-commit "$SOURCE_COMMIT" \
             release-notes "$NOTES"
-          # Equality: metadata / checksum / archive
           META="$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.metadata.json"
           ARCHIVE="$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst"
           SUM="$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst.sha256"
           test -f "$META" && test -f "$ARCHIVE" && test -f "$SUM" && test -f "$OUT/LICENSE"
-          # Sidecar paths are basename-relative; verify from the output directory.
           (cd "$OUT" && sha256sum -c "$(basename "$SUM")")
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Attach to release (no clobber)
+      - name: Push and publish release with assets
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.cut.outputs.version }}
         run: |
           set -euo pipefail
-          VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+          git push origin HEAD:main "refs/tags/v${VERSION}"
           OUT="target/release-files"
-          gh release upload "v${VERSION}" \
+          gh release create "v${VERSION}" \
             "$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst" \
             "$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst.sha256" \
             "$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.metadata.json" \
-            "$OUT/LICENSE"
+            "$OUT/LICENSE" \
+            --title "Agent Bar ${VERSION}" \
+            --notes-file "docs/releases/${VERSION}.md"
