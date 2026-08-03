@@ -150,8 +150,13 @@ The rest of `UX-011` is untouched and still describes line 1.
 
 `tests/qml/tst_BarWidget.qml`, pure `Core.chipTooltip` — one case per row of the
 copy contract, each passing a fixed `nowMs` and the fixed format `"HH:mm"` so no
-case depends on the wall clock or the machine locale. Existing cases in
-`test_chip_tooltip_humanized` gain real labels and keep their line 1 assertions.
+case depends on the wall clock or the machine locale. Expected clock strings are
+composed through `resetClockText`, never written out: `Qt.formatTime` renders in
+the machine's zone, so a literal `(13:31)` would pass in one timezone only.
+
+`test_chip_tooltip_humanized` is left untouched. Its fixtures carry windows with
+neither label nor `resetsAt`, so under the no-filler rule they stay one line and
+become the regression proving it.
 
 Cases that are not rows of the table:
 
@@ -159,12 +164,25 @@ Cases that are not rows of the table:
 - label containing `\n` → exactly one `\n` in the whole tooltip.
 - unlabelled window with no `resetsAt` → single line, no trailing separator.
 
-Hover freshness — create a `ProviderChip` against the existing `fakeBar` stub
-(it already captures `showTooltip`), simulate hover, and assert the **captured**
-string carries the countdown computed from the current clock. A pushed text
-computed at `tooltipNowMs === 0` yields a countdown of roughly 20 000 days, so
-the assertion distinguishes fresh from stale unambiguously rather than
-restating the binding.
+Hover freshness cannot be tested on the real chip: `ProviderChip` is built on
+`qs.Ui`'s `WidgetButton`, and `qs.*` does not resolve in the Qt 6 test runner —
+which is why `tst_BarWidget.qml` already carries a hand-written
+`ProviderChipHost` stand-in. The assumption splits into two testable halves,
+both required:
+
+1. The **Qt signal order** — the stand-in grows the host's hover shape
+   (`hoverEnabled` MouseArea, `tooltipHovered` from `containsMouse`, `onEntered`
+   pushing by value). Hovering it with `mouseMove` exercises the genuine Qt
+   ordering, since that ordering is Qt behaviour, not Omarchy behaviour. The
+   probe is a reset a decade out: four-digit days when fresh, five when measured
+   from the epoch, so the assertion distinguishes fresh from stale instead of
+   restating the binding.
+2. **That the stand-in still matches the host** — a source guard over
+   `/usr/share/omarchy/shell/Ui/WidgetButton.qml` asserting it still pushes
+   `root.tooltipText` from `onEntered` and still derives `tooltipHovered` from
+   `containsMouse`. Without it the replica would be self-confirming, and an
+   Omarchy upgrade would degrade the tooltip silently. A second guard over
+   `BarWidget.qml` asserts our widget actually uses the pattern.
 
 Checkpoint commands are the ones in `CLAUDE.md`, including the Qt6 binary paths
 for `qmllint` and `qmltestrunner`.
