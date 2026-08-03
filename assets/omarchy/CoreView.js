@@ -245,10 +245,44 @@ function chipDimmed(provider) {
   return state !== "ready"
 }
 
-// UX-011 (amended by this plan): provider, displayed percentage when one
-// exists, and a plain-language qualifier when not ready. The raw enum
-// value never renders (copy design §5.4).
-function chipTooltip(provider, metric) {
+// The chip's own window, humanised for the tooltip's second line: the label,
+// the reset, or both. Empty when the window has neither, because an
+// unlabelled window with no reset has nothing to say and "Window" filler is
+// not an answer — that emptiness is what keeps signed-out, no-CLI, loading
+// and windowless-ready tooltips at exactly one line.
+//
+// plainText strips control characters but spares U+000A by design, so a label
+// carried in provider payload (Codex derives window identity from its own
+// response) could forge an entire tooltip line. The newline collapse below is
+// the only thing preventing that, and tst_BarWidget proves it.
+function chipWindowLine(provider, nowMs, localeTimeFormat) {
+  var w = primaryWindow(provider)
+  if (!w)
+    return ""
+  var parts = []
+  var label = plainText(w.label || w.id || "").replace(/[\r\n]+/g, " ").trim()
+  if (label.length)
+    parts.push(label)
+  var iso = w.resetsAt ? String(w.resetsAt) : ""
+  var countdown = iso.length ? resetCountdownText(iso, nowMs) : ""
+  if (countdown.length) {
+    // resetPhrase already owns the "resets" / "resets in" distinction, and an
+    // elapsed reset takes no clock — the same rule the popup lead follows.
+    var clock = countdown === "now" ? "" : resetClockText(iso, localeTimeFormat)
+    parts.push(clock.length
+        ? resetPhrase(countdown) + " " + countdown + " " + clock
+        : resetPhrase(countdown) + " " + countdown)
+  }
+  return parts.join(" \u00b7 ")
+}
+
+// UX-011 (amended 2026-08-03): line 1 is the provider, the displayed
+// percentage when one exists, and a plain-language qualifier when not ready —
+// the raw enum value never renders (copy design §5.4). Line 2 describes the
+// window that produced the numeral beside it, so the two can never disagree.
+// The host copies this string by value in WidgetButton.onEntered, so nowMs
+// only has to be fresh at the moment of hover; BarWidget owns that.
+function chipTooltip(provider, metric, nowMs, localeTimeFormat) {
   if (!provider)
     return ""
   var name = provider.name ? String(provider.name) : providerDisplayName(provider.id)
@@ -260,7 +294,11 @@ function chipTooltip(provider, metric) {
   var qualifier = stateQualifier(state)
   if (qualifier.length)
     parts.push(qualifier)
-  return parts.join(" \u00b7 ")
+  var head = parts.join(" \u00b7 ")
+  var windowLine = chipWindowLine(provider,
+                                  nowMs === undefined ? Date.now() : nowMs,
+                                  localeTimeFormat)
+  return windowLine.length ? head + "\n" + windowLine : head
 }
 
 // Visual design §5/§10: per-provider optical scale on the shared 16px

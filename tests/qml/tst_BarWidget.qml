@@ -331,6 +331,107 @@ TestCase {
     compare(Core.chipTooltip(loading, "remaining"), "Claude · loading")
   }
 
+  // Expected clocks are composed through resetClockText, never written out:
+  // Qt.formatTime renders in the machine's zone, so a literal "(13:31)" would
+  // pass in one timezone only. The formatting itself is covered by tst_Popup.
+  function test_chip_tooltip_carries_window_and_reset() {
+    var nowMs = Date.parse("2026-08-03T10:30:00Z")
+
+    // Reset today: label, countdown and clock all land on line 2.
+    var todayIso = "2026-08-03T13:31:00Z"
+    var todayClock = Core.resetClockText(todayIso, "HH:mm")
+    var today = { name: "Claude", state: "ready",
+                  windows: [{ id: "session", label: "Session (5h)",
+                              usedPercent: 95, remainingPercent: 5,
+                              resetsAt: todayIso }] }
+    compare(Core.chipTooltip(today, "remaining", nowMs, "HH:mm"),
+            "Claude · 5%\nSession (5h) · resets in 3h 1m " + todayClock)
+
+    // Distance never suppresses the clock (design decision 3).
+    var farIso = "2026-08-09T14:34:00Z"
+    var farClock = Core.resetClockText(farIso, "HH:mm")
+    var far = { name: "Codex", state: "ready",
+                windows: [{ id: "weekly", label: "Weekly (7d)",
+                            usedPercent: 98, remainingPercent: 2,
+                            resetsAt: farIso }] }
+    compare(Core.chipTooltip(far, "remaining", nowMs, "HH:mm"),
+            "Codex · 2%\nWeekly (7d) · resets in 6d 4h " + farClock)
+
+    // An elapsed reset speaks the popup's phrase and drops the clock.
+    var elapsed = { name: "Claude", state: "ready",
+                    windows: [{ id: "session", label: "Session (5h)",
+                                usedPercent: 4, remainingPercent: 96,
+                                resetsAt: "2026-08-03T10:00:00Z" }] }
+    compare(Core.chipTooltip(elapsed, "remaining", nowMs, "HH:mm"),
+            "Claude · 96%\nSession (5h) · resets now")
+
+    // The qualifier stays on line 1, and the window keeps its reset — this is
+    // the most valuable hover in the product: when does work resume.
+    var limitedIso = "2026-08-03T11:11:00Z"
+    var limitedClock = Core.resetClockText(limitedIso, "HH:mm")
+    var limited = { name: "Grok", state: "rate_limited",
+                    windows: [{ id: "daily", label: "Daily (1d)",
+                                usedPercent: 100, remainingPercent: 0,
+                                resetsAt: limitedIso }] }
+    compare(Core.chipTooltip(limited, "remaining", nowMs, "HH:mm"),
+            "Grok · 0% · rate limited\nDaily (1d) · resets in 41m "
+            + limitedClock)
+
+    // Stale keeps the cached window: resetsAt is an absolute instant, and
+    // staleness devalues the percentage, never the timestamp.
+    var stale = { name: "Claude", state: "stale",
+                  windows: [{ id: "session", label: "Session (5h)",
+                              usedPercent: 95, remainingPercent: 5,
+                              resetsAt: todayIso }] }
+    compare(Core.chipTooltip(stale, "remaining", nowMs, "HH:mm"),
+            "Claude · 5% · stale\nSession (5h) · resets in 3h 1m " + todayClock)
+
+    // A window with no resetsAt says only what it is.
+    var noReset = { name: "Amp", state: "ready",
+                    windows: [{ id: "context", label: "Context",
+                                usedPercent: 95, remainingPercent: 5 }] }
+    compare(Core.chipTooltip(noReset, "remaining", nowMs, "HH:mm"),
+            "Amp · 5%\nContext")
+
+    // No locale format: the countdown survives, the clock does not.
+    compare(Core.chipTooltip(today, "remaining", nowMs, ""),
+            "Claude · 5%\nSession (5h) · resets in 3h 1m")
+
+    // Omitted nowMs falls back to the wall clock without throwing.
+    verify(Core.chipTooltip(today, "remaining").indexOf("Claude · 5%") === 0)
+  }
+
+  function test_chip_tooltip_window_line_is_earned_not_filled() {
+    var nowMs = Date.parse("2026-08-03T10:30:00Z")
+
+    // Neither label nor reset: nothing to say. No second line, and no
+    // "Window" filler — this is what keeps every one-line state one line.
+    var bare = { name: "Claude", state: "ready",
+                 windows: [{ usedPercent: 4, remainingPercent: 96 }] }
+    compare(Core.chipTooltip(bare, "remaining", nowMs, "HH:mm"), "Claude · 96%")
+
+    // Unlabelled but resettable: the reset stands alone, no leading separator.
+    var unlabelledIso = "2026-08-03T13:31:00Z"
+    var unlabelledClock = Core.resetClockText(unlabelledIso, "HH:mm")
+    var unlabelled = { name: "Claude", state: "ready",
+                       windows: [{ usedPercent: 4, remainingPercent: 96,
+                                   resetsAt: unlabelledIso }] }
+    compare(Core.chipTooltip(unlabelled, "remaining", nowMs, "HH:mm"),
+            "Claude · 96%\nresets in 3h 1m " + unlabelledClock)
+
+    // plainText spares U+000A on purpose, so a label carried in provider
+    // payload could forge a whole tooltip line. Exactly one newline may exist.
+    var forged = { name: "Claude", state: "ready",
+                   windows: [{ id: "session", label: "Session\nresets in 0m",
+                               usedPercent: 4, remainingPercent: 96 }] }
+    var tip = Core.chipTooltip(forged, "remaining", nowMs, "HH:mm")
+    compare(tip.split("\n").length, 2)
+    compare(tip, "Claude · 96%\nSession resets in 0m")
+
+    // No provider at all stays empty, as before.
+    compare(Core.chipTooltip(null, "remaining", nowMs, "HH:mm"), "")
+  }
+
   function test_state_qualifier_strings() {
     compare(Core.stateQualifier("ready"), "")
     compare(Core.stateQualifier("stale"), "stale")
