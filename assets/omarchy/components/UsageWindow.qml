@@ -15,6 +15,9 @@ Item {
   property real percent: -1
   // Countdown only: the popup shows no absolute clock (§6).
   property string resetCountdown: ""
+  // Lead-only wall-clock suffix, already parenthesised ("(13:31)"); compact
+  // rows leave it empty (§6 amendment 2026-08-03).
+  property string resetClock: ""
   property string resetPhrase: ""
   property string unitText: "left"
   // "critical" | "warning" | "" — computed from usedPercent by CoreView.
@@ -100,7 +103,9 @@ Item {
 
       Text {
         id: leadReset
-        text: root.resetCountdown
+        text: root.resetClock.length > 0
+            ? root.resetCountdown + " " + root.resetClock
+            : root.resetCountdown
         color: root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
@@ -236,7 +241,9 @@ Item {
     else if (root.severity === "warning")
       parts.push("low")
     if (root.resetCountdown.length > 0)
-      parts.push(root.resetPhrase + " " + root.resetCountdown)
+      parts.push(root.resetClock.length > 0
+          ? root.resetPhrase + " " + root.resetCountdown + " " + root.resetClock
+          : root.resetPhrase + " " + root.resetCountdown)
     return parts.join(", ")
   }
   Accessible.role: Accessible.StaticText

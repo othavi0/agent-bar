@@ -164,6 +164,11 @@ Item {
           percent: modelData.percent !== undefined && modelData.percent !== null
               ? Number(modelData.percent) : -1
           resetCountdown: modelData.resetCountdown ? modelData.resetCountdown : ""
+          resetClock: modelData.resetsAt && modelData.resetCountdown
+              && modelData.resetCountdown !== "now"
+              ? Core.resetClockText(String(modelData.resetsAt),
+                                    Qt.locale().timeFormat(Locale.ShortFormat))
+              : ""
           resetPhrase: modelData.resetPhrase ? modelData.resetPhrase : ""
           severity: modelData.severity ? modelData.severity : ""
           unitText: root.unitText

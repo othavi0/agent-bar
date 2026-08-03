@@ -180,7 +180,13 @@ as a named readonly property on `UsageWindow`, and never repeated.
   labels that arrive lowercase from the API, such as Codex's `plus`.
 - **Lead window.** `Style.font.body * 2.5` numeral, unit at
   `Style.font.caption`, a `Style.spacing.md` track, and the reset promoted
-  into the label line: `Session (5h) · resets in 3h 1m`.
+  into the label line: `Session (5h) · resets in 3h 1m (13:31)`. (Amended
+  2026-08-03, owner decision on live mockups: the countdown gains the reset's
+  wall-clock time in the viewer's locale short format — `(13:31)` on a 24h
+  locale, `(1:31 PM)` on en-US — via `CoreView.resetClockText` fed
+  `Qt.locale().timeFormat(Locale.ShortFormat)`. Lead window only; compact
+  rows stay countdown-only because a bare clock names no day, and the plan-04
+  weekday deletion stands. No clock while the countdown reads `now`.)
 - **Other windows.** One compact row each: `label · track · value · time to
   reset`. Reset time uses `CoreView.countdownText` unmodified, so anything
   under 24h reads in hours. The compact column is sized for `23h 1m`.

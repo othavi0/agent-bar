@@ -427,6 +427,10 @@ struct ClaudeLimitRaw {
     kind: Option<String>,
     #[serde(default)]
     utilization: Option<f64>,
+    /// Current limits[] vocabulary (captured 2026-08-01) reports the value
+    /// as `percent`; older payloads used `utilization`. Both are 0..=100.
+    #[serde(default)]
+    percent: Option<f64>,
     #[serde(default)]
     resets_at: Option<String>,
     #[serde(default)]
@@ -505,31 +509,46 @@ pub fn claude_from_usage_json(
             push_window_unique(&mut windows, window);
         }
     }
-    // Dynamic model windows from limits[] or legacy seven_day_* fields.
-    for (idx, limit) in doc.limits.iter().enumerate() {
-        let Some(util) = limit.utilization else {
+    // Dynamic windows from limits[] (or legacy seven_day_* fields below).
+    // Grouped entries (session/weekly_all) mirror the dedicated fields and
+    // dedup against them by id — and become the source if the API retires
+    // the top-level fields, as it already did with seven_day_oauth_apps.
+    let mut scoped_count = 0usize;
+    for limit in doc.limits.iter() {
+        let Some(util) = limit.utilization.or(limit.percent) else {
             continue;
         };
         let kind = limit.kind.as_deref().unwrap_or("");
         if kind == "five_hour" || kind == "seven_day" || kind == "seven_day_oauth_apps" {
-            continue; // handled via dedicated fields when present
+            continue; // legacy vocabulary: dedicated fields own these
         }
-        let model_id = limit
-            .scope
-            .as_ref()
-            .and_then(|s| s.model.as_ref())
-            .and_then(|m| m.id.as_deref().or(m.display_name.as_deref()))
-            .unwrap_or("model");
-        let id = weekly_model_id(model_id, idx);
-        let label = limit
-            .scope
-            .as_ref()
-            .and_then(|s| s.model.as_ref())
-            .and_then(|m| m.display_name.clone())
-            .unwrap_or_else(|| "Model".into());
         let raw = ClaudeWindowRaw {
             utilization: util,
             resets_at: limit.resets_at.clone(),
+        };
+        let (id, label) = match kind {
+            "session" => ("session".to_owned(), LABEL_SESSION.to_owned()),
+            "weekly_all" => ("weekly".to_owned(), LABEL_WEEKLY.to_owned()),
+            _ => {
+                let model_id = limit
+                    .scope
+                    .as_ref()
+                    .and_then(|s| s.model.as_ref())
+                    .and_then(|m| m.id.as_deref().or(m.display_name.as_deref()))
+                    .unwrap_or("model");
+                // Ordinal counts emitted model windows, not the array
+                // position: ids must not shift when the API reorders or
+                // prepends grouped entries.
+                let id = weekly_model_id(model_id, scoped_count);
+                scoped_count += 1;
+                let label = limit
+                    .scope
+                    .as_ref()
+                    .and_then(|s| s.model.as_ref())
+                    .and_then(|m| m.display_name.clone())
+                    .unwrap_or_else(|| "Model".into());
+                (id, label)
+            }
         };
         if let Some(window) = claude_window(&id, &label, &raw) {
             push_window_unique(&mut windows, window);
@@ -948,6 +967,72 @@ mod tests {
                 assert_eq!(opus.len(), 1, "duplicate weekly-model:opus windows");
                 // limits[] (dynamic) wins over the legacy field.
                 assert!((opus[0].used_percent() - 20.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_reads_current_limits_shape_with_fable() {
+        // Captured live 2026-08-01: limits[] entries carry `percent` (not
+        // `utilization`), kinds are session/weekly_all/weekly_scoped, the
+        // scoped entry names the model only via display_name, and
+        // seven_day_oauth_apps is null. The Fable window must come through
+        // and the grouped entries must not duplicate session/weekly.
+        let body = br#"{
+            "five_hour": {"utilization": 10.0, "resets_at": "2026-08-02T02:00:00+00:00"},
+            "seven_day": {"utilization": 12.0, "resets_at": "2026-08-07T12:00:00+00:00"},
+            "seven_day_oauth_apps": null,
+            "seven_day_cowork": null,
+            "limits": [
+                {"kind": "session", "group": "session", "percent": 10,
+                 "resets_at": "2026-08-02T02:00:00+00:00", "scope": null, "is_active": false},
+                {"kind": "weekly_all", "group": "weekly", "percent": 12,
+                 "resets_at": "2026-08-07T12:00:00+00:00", "scope": null, "is_active": true},
+                {"kind": "weekly_scoped", "group": "weekly", "percent": 10,
+                 "resets_at": "2026-08-07T12:00:00+00:00",
+                 "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null},
+                 "is_active": false}
+            ]
+        }"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-08-01 21:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                let ids: Vec<_> = windows.iter().map(|w| w.id().to_owned()).collect();
+                assert_eq!(
+                    ids,
+                    vec!["session", "weekly", "weekly-model:fable"],
+                    "got {ids:?}"
+                );
+                let fable = &windows[2];
+                assert_eq!(fable.label(), "Fable");
+                assert!((fable.used_percent() - 10.0).abs() < 0.01);
+                assert!(fable.resets_at().is_some(), "Fable resets_at was dropped");
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn claude_limits_only_payload_still_yields_windows() {
+        // The API already retired seven_day_oauth_apps once; if the legacy
+        // top-level fields go next, limits[] must be able to carry the
+        // canonical windows alone.
+        let body = br#"{
+            "limits": [
+                {"kind": "session", "percent": 7.0, "resets_at": "2026-08-02T02:00:00+00:00"},
+                {"kind": "weekly_all", "percent": 12.0, "resets_at": "2026-08-07T12:00:00+00:00"}
+            ]
+        }"#;
+        let result =
+            claude_from_usage_json(body, datetime!(2026-08-01 21:00:00 UTC), None, None, true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                let ids: Vec<_> = windows.iter().map(|w| w.id().to_owned()).collect();
+                assert_eq!(ids, vec!["session", "weekly"], "got {ids:?}");
+                assert_eq!(windows[0].label(), LABEL_SESSION);
+                assert!((windows[0].used_percent() - 7.0).abs() < 0.01);
             }
             other => panic!("expected ready, got {other:?}"),
         }

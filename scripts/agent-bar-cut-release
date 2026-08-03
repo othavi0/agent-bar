@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Bump the patch version and materialize release notes for an auto-release.
+# Mutates: Cargo.toml, Cargo.lock, docs/releases/{next}.md, CHANGELOG.md.
+# Git commit/tag/push stay in the workflow, so this stays testable locally.
+# Usage: scripts/agent-bar-cut-release [--dry-run]
+set -euo pipefail
+
+DRY_RUN=0
+if [ "${1:-}" = "--dry-run" ]; then
+  DRY_RUN=1
+elif [ "${1:-}" != "" ]; then
+  echo "usage: $0 [--dry-run]" >&2
+  exit 2
+fi
+
+CUR="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+case "$CUR" in
+  *.*.*) ;;
+  *)
+    echo "unparseable Cargo.toml version: $CUR" >&2
+    exit 1
+    ;;
+esac
+MAJOR="${CUR%%.*}"
+REST="${CUR#*.}"
+MINOR="${REST%%.*}"
+PATCH="${REST#*.}"
+case "$MAJOR$MINOR$PATCH" in
+  *[!0-9]*)
+    echo "non-numeric version component in: $CUR" >&2
+    exit 1
+    ;;
+esac
+NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
+
+RANGE=""
+if git rev-parse -q --verify "refs/tags/v${CUR}" >/dev/null; then
+  RANGE="v${CUR}..HEAD"
+fi
+if [ -n "$RANGE" ]; then
+  SUBJECTS="$(git log --no-merges --pretty='- %s' "$RANGE")"
+else
+  SUBJECTS="$(git log --no-merges --pretty='- %s' -n 20)"
+fi
+if [ -z "$SUBJECTS" ]; then
+  SUBJECTS="- Maintenance release."
+fi
+
+TODAY="$(date -u +%F)"
+NOTES_PATH="docs/releases/${NEXT}.md"
+NOTES="$(printf '# Agent Bar %s\n\nAutomated release cut from main. Changes since %s:\n\n%s\n' \
+  "$NEXT" "$CUR" "$SUBJECTS")"
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "next-version: $NEXT"
+  echo "notes-path: $NOTES_PATH"
+  printf '%s\n' "$NOTES"
+  exit 0
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "worktree not clean; refusing to bump" >&2
+  exit 1
+fi
+if [ -f "$NOTES_PATH" ]; then
+  echo "release notes already exist: $NOTES_PATH" >&2
+  exit 1
+fi
+
+# Bump only the first (package) version line.
+sed -i "0,/^version = \"${CUR}\"/s//version = \"${NEXT}\"/" Cargo.toml
+cargo update --workspace --offline --quiet
+
+printf '%s\n' "$NOTES" > "$NOTES_PATH"
+
+# Prepend the matching CHANGELOG section right after the intro block.
+CHANGELOG_ENTRY="$(printf '## [%s] - %s\n\n### Changed\n\n%s\n' \
+  "$NEXT" "$TODAY" "$SUBJECTS")"
+awk -v entry="$CHANGELOG_ENTRY" '
+  BEGIN { inserted = 0 }
+  /^## / && !inserted { print entry; print ""; inserted = 1 }
+  { print }
+  END { if (!inserted) { print ""; print entry } }
+' CHANGELOG.md > CHANGELOG.md.tmp
+mv CHANGELOG.md.tmp CHANGELOG.md
+
+echo "version: $NEXT"
