@@ -1,6 +1,6 @@
 name: Auto release
 
-# Every product merge to main cuts an official release, so the Settings
+# Every product merge to master cuts an official release, so the Settings
 # update button always has the latest merge to offer. The release is created
 # with its assets in one call — a public release never exists without them
 # (an asset-less claiming release is a command error for every installed
@@ -8,7 +8,7 @@ name: Auto release
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'src/**'
       - 'assets/**'
@@ -123,7 +123,7 @@ jobs:
           VERSION: ${{ steps.cut.outputs.version }}
         run: |
           set -euo pipefail
-          git push origin HEAD:main "refs/tags/v${VERSION}"
+          git push origin HEAD:master "refs/tags/v${VERSION}"
           OUT="target/release-files"
           gh release create "v${VERSION}" \
             "$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst" \
