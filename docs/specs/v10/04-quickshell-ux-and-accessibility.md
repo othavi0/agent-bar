@@ -23,8 +23,8 @@ verified Quattro-native glyphs or explicit English text labels.
   implements the host trigger protocol.
 - `UX-011`: Tooltip copy includes the provider name, the displayed
   percentage when one exists, and a plain-language state qualifier when the
-  provider is not ready. Raw state identifiers never render. Reset detail
-  lives in the popup.
+  provider is not ready. Raw state identifiers never render. Reset detail is
+  limited to the chip's own window; every other window lives in the popup.
 - `UX-012`: Stale and error states use an icon/text cue in addition to color.
 
 ## Popup layout

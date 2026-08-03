@@ -22,6 +22,7 @@ TestCase {
   property string widgetUrl: "file://" + repoRoot + "/assets/omarchy/BarWidget.qml"
   property string chipUrl: "file://" + repoRoot + "/assets/omarchy/components/ProviderChip.qml"
   property string coreViewUrl: "file://" + repoRoot + "/assets/omarchy/CoreView.js"
+  property string widgetButtonUrl: "file:///usr/share/omarchy/shell/Ui/WidgetButton.qml"
 
   // Minimal shell stand-in with Quattro serviceFor API.
   Item {
@@ -331,6 +332,107 @@ TestCase {
     compare(Core.chipTooltip(loading, "remaining"), "Claude · loading")
   }
 
+  // Expected clocks are composed through resetClockText, never written out:
+  // Qt.formatTime renders in the machine's zone, so a literal "(13:31)" would
+  // pass in one timezone only. The formatting itself is covered by tst_Popup.
+  function test_chip_tooltip_carries_window_and_reset() {
+    var nowMs = Date.parse("2026-08-03T10:30:00Z")
+
+    // Reset today: label, countdown and clock all land on line 2.
+    var todayIso = "2026-08-03T13:31:00Z"
+    var todayClock = Core.resetClockText(todayIso, "HH:mm")
+    var today = { name: "Claude", state: "ready",
+                  windows: [{ id: "session", label: "Session (5h)",
+                              usedPercent: 95, remainingPercent: 5,
+                              resetsAt: todayIso }] }
+    compare(Core.chipTooltip(today, "remaining", nowMs, "HH:mm"),
+            "Claude · 5%\nSession (5h) · resets in 3h 1m " + todayClock)
+
+    // Distance never suppresses the clock (design decision 3).
+    var farIso = "2026-08-09T14:34:00Z"
+    var farClock = Core.resetClockText(farIso, "HH:mm")
+    var far = { name: "Codex", state: "ready",
+                windows: [{ id: "weekly", label: "Weekly (7d)",
+                            usedPercent: 98, remainingPercent: 2,
+                            resetsAt: farIso }] }
+    compare(Core.chipTooltip(far, "remaining", nowMs, "HH:mm"),
+            "Codex · 2%\nWeekly (7d) · resets in 6d 4h " + farClock)
+
+    // An elapsed reset speaks the popup's phrase and drops the clock.
+    var elapsed = { name: "Claude", state: "ready",
+                    windows: [{ id: "session", label: "Session (5h)",
+                                usedPercent: 4, remainingPercent: 96,
+                                resetsAt: "2026-08-03T10:00:00Z" }] }
+    compare(Core.chipTooltip(elapsed, "remaining", nowMs, "HH:mm"),
+            "Claude · 96%\nSession (5h) · resets now")
+
+    // The qualifier stays on line 1, and the window keeps its reset — this is
+    // the most valuable hover in the product: when does work resume.
+    var limitedIso = "2026-08-03T11:11:00Z"
+    var limitedClock = Core.resetClockText(limitedIso, "HH:mm")
+    var limited = { name: "Grok", state: "rate_limited",
+                    windows: [{ id: "daily", label: "Daily (1d)",
+                                usedPercent: 100, remainingPercent: 0,
+                                resetsAt: limitedIso }] }
+    compare(Core.chipTooltip(limited, "remaining", nowMs, "HH:mm"),
+            "Grok · 0% · rate limited\nDaily (1d) · resets in 41m "
+            + limitedClock)
+
+    // Stale keeps the cached window: resetsAt is an absolute instant, and
+    // staleness devalues the percentage, never the timestamp.
+    var stale = { name: "Claude", state: "stale",
+                  windows: [{ id: "session", label: "Session (5h)",
+                              usedPercent: 95, remainingPercent: 5,
+                              resetsAt: todayIso }] }
+    compare(Core.chipTooltip(stale, "remaining", nowMs, "HH:mm"),
+            "Claude · 5% · stale\nSession (5h) · resets in 3h 1m " + todayClock)
+
+    // A window with no resetsAt says only what it is.
+    var noReset = { name: "Amp", state: "ready",
+                    windows: [{ id: "context", label: "Context",
+                                usedPercent: 95, remainingPercent: 5 }] }
+    compare(Core.chipTooltip(noReset, "remaining", nowMs, "HH:mm"),
+            "Amp · 5%\nContext")
+
+    // No locale format: the countdown survives, the clock does not.
+    compare(Core.chipTooltip(today, "remaining", nowMs, ""),
+            "Claude · 5%\nSession (5h) · resets in 3h 1m")
+
+    // Omitted nowMs falls back to the wall clock without throwing.
+    verify(Core.chipTooltip(today, "remaining").indexOf("Claude · 5%") === 0)
+  }
+
+  function test_chip_tooltip_window_line_is_earned_not_filled() {
+    var nowMs = Date.parse("2026-08-03T10:30:00Z")
+
+    // Neither label nor reset: nothing to say. No second line, and no
+    // "Window" filler — this is what keeps every one-line state one line.
+    var bare = { name: "Claude", state: "ready",
+                 windows: [{ usedPercent: 4, remainingPercent: 96 }] }
+    compare(Core.chipTooltip(bare, "remaining", nowMs, "HH:mm"), "Claude · 96%")
+
+    // Unlabelled but resettable: the reset stands alone, no leading separator.
+    var unlabelledIso = "2026-08-03T13:31:00Z"
+    var unlabelledClock = Core.resetClockText(unlabelledIso, "HH:mm")
+    var unlabelled = { name: "Claude", state: "ready",
+                       windows: [{ usedPercent: 4, remainingPercent: 96,
+                                   resetsAt: unlabelledIso }] }
+    compare(Core.chipTooltip(unlabelled, "remaining", nowMs, "HH:mm"),
+            "Claude · 96%\nresets in 3h 1m " + unlabelledClock)
+
+    // plainText spares U+000A on purpose, so a label carried in provider
+    // payload could forge a whole tooltip line. Exactly one newline may exist.
+    var forged = { name: "Claude", state: "ready",
+                   windows: [{ id: "session", label: "Session\nresets in 0m",
+                               usedPercent: 4, remainingPercent: 96 }] }
+    var tip = Core.chipTooltip(forged, "remaining", nowMs, "HH:mm")
+    compare(tip.split("\n").length, 2)
+    compare(tip, "Claude · 96%\nSession resets in 0m")
+
+    // No provider at all stays empty, as before.
+    compare(Core.chipTooltip(null, "remaining", nowMs, "HH:mm"), "")
+  }
+
   function test_state_qualifier_strings() {
     compare(Core.stateQualifier("ready"), "")
     compare(Core.stateQualifier("stale"), "stale")
@@ -454,6 +556,64 @@ TestCase {
     chip.triggerPress(Qt.LeftButton)
     compare(seen, Qt.LeftButton)
     chip.destroy()
+  }
+
+  function test_tooltip_snapshot_is_fresh_at_hover() {
+    // A reset a decade out gives a four-digit countdown; measured from the
+    // epoch the same reset gives five digits. That gap is the probe: it
+    // proves the refresh ran before the host copied the string, without
+    // restating the binding back to itself.
+    var provider = { name: "Claude", state: "ready",
+                     windows: [{ id: "session", label: "Session (5h)",
+                                 usedPercent: 4, remainingPercent: 96,
+                                 resetsAt: "2036-01-01T00:00:00Z" }] }
+    // TestCase itself is invisible and 0x0 in qmltestrunner, and an invisible
+    // parent makes every child invisible, which silently swallows hover. The
+    // chip is parented to the visible root item instead.
+    var chip = providerChipComp.createObject(testCase.parent, { bar: fakeBar })
+    verify(chip !== null)
+    verify(chip.visible, "the chip must be visible or hover never fires")
+    chip.tooltipText = Qt.binding(function () {
+      return Core.chipTooltip(provider, "remaining", chip.tooltipNowMs, "HH:mm")
+    })
+
+    chip.tooltipNowMs = 0
+    verify(/\d{5}d/.test(chip.tooltipText),
+           "epoch baseline must be five-digit days, got: " + chip.tooltipText)
+
+    fakeBar.lastTooltip = ""
+    mouseMove(chip, 5, 5)
+    verify(fakeBar.lastTooltip.length > 0, "hover must push a tooltip")
+    verify(!/\d{5}d/.test(fakeBar.lastTooltip),
+           "host read a stale clock: " + fakeBar.lastTooltip)
+    verify(fakeBar.lastTooltip.indexOf("Session (5h) · resets in") >= 0,
+           "got: " + fakeBar.lastTooltip)
+
+    chip.destroy()
+    wait(0)
+  }
+
+  function test_bar_widget_wires_the_tooltip_clock() {
+    var widget = sourceAt(widgetUrl)
+    verify(widget.indexOf("property double tooltipNowMs") >= 0)
+    verify(widget.indexOf("Qt.locale().timeFormat(Locale.ShortFormat)") >= 0,
+           "the clock format is the host locale's, never a literal")
+    verify(widget.indexOf("onTooltipHoveredChanged") >= 0,
+           "nowMs must refresh before the host snapshots the text")
+    verify(widget.indexOf("root.tooltipNowMs = Date.now()") >= 0)
+    verify(widget.indexOf("root.shortTimeFormat") >= 0,
+           "the locale format must reach chipTooltip")
+  }
+
+  function test_host_still_snapshots_the_tooltip_text() {
+    // If an Omarchy upgrade changes either of these, the replica above stops
+    // representing the host and the freshness strategy needs rethinking.
+    var host = sourceAt(widgetButtonUrl)
+    verify(host.length > 0, "host WidgetButton.qml must be readable")
+    verify(host.indexOf("root.bar.showTooltip(root, root.tooltipText)") >= 0,
+           "host still copies the text by value inside onEntered")
+    verify(host.indexOf("mouseArea.containsMouse") >= 0,
+           "tooltipHovered still derives from containsMouse")
   }
 
   function test_source_guard_no_process_timer_shell() {
@@ -610,6 +770,36 @@ TestCase {
     property string stateCue: ""
     property string tooltipText: ""
     property var registeredBar: null
+
+    // Hover shape copied from qs.Ui's WidgetButton: tooltipHovered derives
+    // from containsMouse, and onEntered hands the host a *copy* of the text.
+    // The real ProviderChip cannot be instantiated here (qs.Ui does not
+    // resolve in this runner), so this replica is what exercises the Qt
+    // signal order; test_host_still_snapshots_the_tooltip_text is what keeps
+    // the replica honest against the installed host.
+    width: 40
+    height: 20
+    property double tooltipNowMs: 0
+    readonly property bool tooltipHovered: hoverArea.containsMouse
+
+    onTooltipHoveredChanged: {
+      if (chipRoot.tooltipHovered)
+        chipRoot.tooltipNowMs = Date.now()
+    }
+
+    MouseArea {
+      id: hoverArea
+      anchors.fill: parent
+      hoverEnabled: true
+      onEntered: {
+        if (chipRoot.bar && typeof chipRoot.bar.showTooltip === "function")
+          chipRoot.bar.showTooltip(chipRoot, chipRoot.tooltipText)
+      }
+      onExited: {
+        if (chipRoot.bar && typeof chipRoot.bar.hideTooltip === "function")
+          chipRoot.bar.hideTooltip(chipRoot)
+      }
+    }
 
     signal pressed(int button)
 
