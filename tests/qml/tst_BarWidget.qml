@@ -22,6 +22,7 @@ TestCase {
   property string widgetUrl: "file://" + repoRoot + "/assets/omarchy/BarWidget.qml"
   property string chipUrl: "file://" + repoRoot + "/assets/omarchy/components/ProviderChip.qml"
   property string coreViewUrl: "file://" + repoRoot + "/assets/omarchy/CoreView.js"
+  property string widgetButtonUrl: "file:///usr/share/omarchy/shell/Ui/WidgetButton.qml"
 
   // Minimal shell stand-in with Quattro serviceFor API.
   Item {
@@ -557,6 +558,64 @@ TestCase {
     chip.destroy()
   }
 
+  function test_tooltip_snapshot_is_fresh_at_hover() {
+    // A reset a decade out gives a four-digit countdown; measured from the
+    // epoch the same reset gives five digits. That gap is the probe: it
+    // proves the refresh ran before the host copied the string, without
+    // restating the binding back to itself.
+    var provider = { name: "Claude", state: "ready",
+                     windows: [{ id: "session", label: "Session (5h)",
+                                 usedPercent: 4, remainingPercent: 96,
+                                 resetsAt: "2036-01-01T00:00:00Z" }] }
+    // TestCase itself is invisible and 0x0 in qmltestrunner, and an invisible
+    // parent makes every child invisible, which silently swallows hover. The
+    // chip is parented to the visible root item instead.
+    var chip = providerChipComp.createObject(testCase.parent, { bar: fakeBar })
+    verify(chip !== null)
+    verify(chip.visible, "the chip must be visible or hover never fires")
+    chip.tooltipText = Qt.binding(function () {
+      return Core.chipTooltip(provider, "remaining", chip.tooltipNowMs, "HH:mm")
+    })
+
+    chip.tooltipNowMs = 0
+    verify(/\d{5}d/.test(chip.tooltipText),
+           "epoch baseline must be five-digit days, got: " + chip.tooltipText)
+
+    fakeBar.lastTooltip = ""
+    mouseMove(chip, 5, 5)
+    verify(fakeBar.lastTooltip.length > 0, "hover must push a tooltip")
+    verify(!/\d{5}d/.test(fakeBar.lastTooltip),
+           "host read a stale clock: " + fakeBar.lastTooltip)
+    verify(fakeBar.lastTooltip.indexOf("Session (5h) · resets in") >= 0,
+           "got: " + fakeBar.lastTooltip)
+
+    chip.destroy()
+    wait(0)
+  }
+
+  function test_bar_widget_wires_the_tooltip_clock() {
+    var widget = sourceAt(widgetUrl)
+    verify(widget.indexOf("property double tooltipNowMs") >= 0)
+    verify(widget.indexOf("Qt.locale().timeFormat(Locale.ShortFormat)") >= 0,
+           "the clock format is the host locale's, never a literal")
+    verify(widget.indexOf("onTooltipHoveredChanged") >= 0,
+           "nowMs must refresh before the host snapshots the text")
+    verify(widget.indexOf("root.tooltipNowMs = Date.now()") >= 0)
+    verify(widget.indexOf("root.shortTimeFormat") >= 0,
+           "the locale format must reach chipTooltip")
+  }
+
+  function test_host_still_snapshots_the_tooltip_text() {
+    // If an Omarchy upgrade changes either of these, the replica above stops
+    // representing the host and the freshness strategy needs rethinking.
+    var host = sourceAt(widgetButtonUrl)
+    verify(host.length > 0, "host WidgetButton.qml must be readable")
+    verify(host.indexOf("root.bar.showTooltip(root, root.tooltipText)") >= 0,
+           "host still copies the text by value inside onEntered")
+    verify(host.indexOf("mouseArea.containsMouse") >= 0,
+           "tooltipHovered still derives from containsMouse")
+  }
+
   function test_source_guard_no_process_timer_shell() {
     var files = [widgetUrl, chipUrl]
     for (var i = 0; i < files.length; i++) {
@@ -711,6 +770,36 @@ TestCase {
     property string stateCue: ""
     property string tooltipText: ""
     property var registeredBar: null
+
+    // Hover shape copied from qs.Ui's WidgetButton: tooltipHovered derives
+    // from containsMouse, and onEntered hands the host a *copy* of the text.
+    // The real ProviderChip cannot be instantiated here (qs.Ui does not
+    // resolve in this runner), so this replica is what exercises the Qt
+    // signal order; test_host_still_snapshots_the_tooltip_text is what keeps
+    // the replica honest against the installed host.
+    width: 40
+    height: 20
+    property double tooltipNowMs: 0
+    readonly property bool tooltipHovered: hoverArea.containsMouse
+
+    onTooltipHoveredChanged: {
+      if (chipRoot.tooltipHovered)
+        chipRoot.tooltipNowMs = Date.now()
+    }
+
+    MouseArea {
+      id: hoverArea
+      anchors.fill: parent
+      hoverEnabled: true
+      onEntered: {
+        if (chipRoot.bar && typeof chipRoot.bar.showTooltip === "function")
+          chipRoot.bar.showTooltip(chipRoot, chipRoot.tooltipText)
+      }
+      onExited: {
+        if (chipRoot.bar && typeof chipRoot.bar.hideTooltip === "function")
+          chipRoot.bar.hideTooltip(chipRoot)
+      }
+    }
 
     signal pressed(int button)
 
