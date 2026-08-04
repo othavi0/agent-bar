@@ -7,20 +7,37 @@ documentation.
 
 ## Adapter
 
-Implement:
+Implement the two required methods; `discover` and `login_command` have
+catalog-driven default bodies that none of the four shipped adapters
+override:
 
 ```rust
 pub trait ProviderAdapter: Send + Sync {
     fn descriptor(&self) -> &'static ProviderDescriptor;
-    fn discover(&self, env: &ExecutionEnvironment) -> Discovery;
-    fn login_command(&self, discovery: &Discovery) -> Result<ProcessSpec>;
+
+    // Defaulted: catalog-driven discovery.
+    fn discover(
+        &self,
+        env: &ExecutionEnvironment,
+    ) -> Result<Discovery, CatalogError> { /* default body */ }
+
+    // Defaulted: login argv from the catalog descriptor.
+    fn login_command(
+        &self,
+        discovery: &Discovery,
+    ) -> Result<ProcessSpec, LoginError> { /* default body */ }
+
     fn collect<'a>(
         &'a self,
-        context: &'a CollectionContext,
+        context: &'a CollectionContext<'a>,
         discovery: &'a Discovery,
     ) -> BoxFuture<'a, ProviderResult>;
 }
 ```
+
+(The `/* default body */` comments are intentional documentation elision —
+the real bodies live in `src/providers/adapter.rs` and stay out of the
+doc.)
 
 `CollectionContext` provides narrow process, HTTP, filesystem, clock, and
 redaction capabilities. Do not force HTTP/filesystem/composite providers into a
@@ -57,6 +74,19 @@ collect from existing HTTP credentials or local data without an installed
 interactive login CLI.
 
 CLI discovery verifies executable permission, not only file existence.
+
+Consulting the collection executable is itself optional: Claude and Grok
+collect purely from credential files plus HTTP and never read the
+collection-discovery result; only Amp and Codex resolve the discovered
+executable.
+
+## Process invocation notes
+
+- Amp runs its CLI with `NO_COLOR=1` and `TERM=dumb` forced into the
+  environment to guarantee plain non-interactive output.
+- Codex retries the app-server RPC once manually (short sleep, one re-run)
+  when it times out — independent of, and in addition to, the catalog-level
+  retry policy used for HTTP providers.
 
 ## Normalization
 
