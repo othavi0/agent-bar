@@ -54,6 +54,10 @@ Unknown keys and invalid/duplicate/missing providers are rejected. Reads never
 rewrite. Applies validate before lock and atomic replacement. File mode is
 `0600`.
 
+While maintenance holds the exclusive lock, apply validates first and then
+waits for the lock; the settings file is untouched until the lock is
+granted.
+
 ## Cache
 
 Cache contains normalized status only. It does not contain:
@@ -66,6 +70,9 @@ Cache contains normalized status only. It does not contain:
 
 Corrupt cache is quarantined and rebuilt. Temporary provider failure retains
 last good data as stale.
+
+Per-provider cache TTLs are fixed in the catalog: Claude 300 seconds;
+Codex, Amp, and Grok 90 seconds each.
 
 ## Provider data sources
 
