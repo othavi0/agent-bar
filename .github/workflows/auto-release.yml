@@ -42,6 +42,13 @@ jobs:
           rustup default stable
           rustup target list --installed
 
+      - name: Fetch dependencies
+        # cut-release runs `cargo update --workspace --offline`; a fresh
+        # runner has an empty registry, so offline resolution fails without
+        # this. The test and build steps need these exact crates later in
+        # the same run, so the download is moved earlier, not added.
+        run: cargo fetch
+
       - name: Cut release (bump + notes)
         id: cut
         run: |
