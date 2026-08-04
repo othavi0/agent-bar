@@ -12,9 +12,12 @@ PLUGIN="$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar"
 "$PLUGIN" doctor scan
 ```
 
-Doctor is read-only. It reports bundle/version integrity, settings/cache
-validity, shell entry placement, provider discovery, legacy ownership, and
-incomplete transactions without printing credentials or account identifiers.
+Doctor is read-only. `doctor scan` checks a fixed list of legacy artifact
+paths from previous Agent Bar generations, classifies each through the
+ownership rules, and reports the evidence. It does not check bundle
+integrity, settings or cache validity, shell entry placement, or
+transaction journals, and it never prints credentials or account
+identifiers.
 
 ## One provider is unavailable
 
@@ -41,9 +44,10 @@ substitute percentage.
 
 ## Codex Retry loops with “rate limits not available”
 
-Ensure the Codex CLI is logged in. Agent Bar collects Codex rate limits through
-`codex app-server` JSON-RPC `rateLimits/read`, then newest valid rate-limit
-events under `~/.codex/sessions`. It does not rely on `rate-limits.json` alone.
+Ensure the Codex CLI is logged in. Agent Bar collects Codex rate limits in
+three ordered tiers: `codex app-server` JSON-RPC `rateLimits/read` first,
+then an explicit `~/.codex/rate-limits.json` read when the file exists, and
+finally the newest valid rate-limit events under `~/.codex/sessions`.
 
 ## Grok shows `—` or missing Weekly
 
@@ -78,6 +82,10 @@ placement.
 
 Confirm the settings file is valid and user-owned. Save errors leave the
 previous file intact. Use `RUST_LOG=debug` only with sanitized output.
+
+While a maintenance operation (update or uninstall) holds the exclusive
+maintenance lock, `config apply` fails fast instead of waiting. Retry after
+maintenance completes.
 
 ## Update failed
 
