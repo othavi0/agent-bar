@@ -113,8 +113,10 @@ cross-monitor click forwarding/dismiss overlay; `Service.qml` delegating to
 `CoreService/CoreSettings/CoreMaintenance/CoreView.js`; non-TTY uninstall JSON
 confirmation document (strict parse, no trailing bytes); confirmation required
 for both uninstall forms; per-provider cache TTLs (Claude 300 s, Codex/Amp/
-Grok 90 s); Codex three-tier fallback; `config apply` fail-fast (WouldBlock)
-under an exclusive maintenance lock; Amp invoked with `NO_COLOR=1 TERM=dumb`;
+Grok 90 s); Codex three-tier fallback; `config apply` validating before the
+lock and waiting behind exclusive maintenance (correction 2026-08-04: the
+audit initially misread this as fail-fast — `SettingsStore::apply` uses the
+blocking `lock_shared`); Amp invoked with `NO_COLOR=1 TERM=dumb`;
 Codex manual one-shot retry on app-server timeout; `agent-bar-cut-release
 --dry-run`; auto-release self-skip guard; product path filter; concurrency
 queue; auto-generated notes format (git subjects); the auto-release decision
@@ -205,7 +207,7 @@ docs/
   to match dispatch reality (login passthrough; status 4 vs config 3 for
   settings failures).
 - **docs/guide/runtime.md** — add per-provider cache TTLs and the
-  `config apply` WouldBlock behavior.
+  `config apply` wait-behind-maintenance behavior.
 - **docs/guide/integration.md** — move; refresh references (auto-release
   replaces publish.yml where mentioned).
 - **docs/dev/architecture.md** — add the `Core*.js` module decomposition and

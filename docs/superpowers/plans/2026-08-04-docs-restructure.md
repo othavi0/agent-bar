@@ -466,9 +466,10 @@ Replace with:
 
 ```markdown
 Ensure the Codex CLI is logged in. Agent Bar collects Codex rate limits in
-three ordered tiers: `codex app-server` JSON-RPC `rateLimits/read` first,
-then an explicit `~/.codex/rate-limits.json` read when the file exists, and
-finally the newest valid rate-limit events under `~/.codex/sessions`.
+three ordered tiers: `codex app-server` JSON-RPC `account/rateLimits/read`
+first, then an explicit `~/.codex/rate-limits.json` read when the file
+exists, and finally the newest valid rate-limit events under
+`~/.codex/sessions`.
 ```
 
 - [ ] **Step 3: Extend "Settings do not save" (after line 80)**
@@ -477,8 +478,9 @@ Append to that section:
 
 ```markdown
 While a maintenance operation (update or uninstall) holds the exclusive
-maintenance lock, `config apply` fails fast instead of waiting. Retry after
-maintenance completes.
+maintenance lock, `config apply` waits for the lock after validating; it
+completes once maintenance finishes, and the settings file is untouched
+until then.
 ```
 
 - [ ] **Step 4: Verify green and commit**
@@ -511,8 +513,9 @@ Codex, Amp, and Grok 90 seconds each.
 - [ ] **Step 2: Extend the Settings section (after "File mode is `0600`.")**
 
 ```markdown
-While maintenance holds the exclusive lock, apply fails fast instead of
-queueing; the settings file is untouched.
+While maintenance holds the exclusive lock, apply validates first and then
+waits for the lock; the settings file is untouched until the lock is
+granted.
 ```
 
 - [ ] **Step 3: Verify green and commit**
