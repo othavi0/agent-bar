@@ -1,5 +1,11 @@
 # Handoff: Agent Bar v10 after PR #25 merge
 
+> Historical snapshot (2026-07-27), kept as a delivery record. Later
+> releases (10.1.0–10.3.0) and subsequent master work supersede parts of
+> this document. The `appliedSettings` cold-start residual listed below was
+> fixed on 2026-08-01 (commit f48f233, requirement SET-023); see
+> `CHANGELOG.md` for the current state.
+
 **Date:** 2026-07-27  
 **Audience:** Next implementer / release owner (Grok, Codex, or human)  
 **Merge:** [PR #25](https://github.com/othavi0/agent-bar/pull/25) → `master`  
