@@ -244,17 +244,17 @@ fn cli_writability_message_does_not_claim_a_fix() {
     );
 }
 
-/// `docs/commands.md` documents the same command grammar the CLI's own help
+/// `docs/guide/commands.md` documents the same command grammar the CLI's own help
 /// text implements, and it drifted once: the v11-06 plan's own measurement
 /// found "Status clauses" live in this file after `clause` was renamed to
 /// `argument` in the help text it describes. None of the guards above can
-/// see prose in a Markdown file, so this one reads `docs/commands.md`
+/// see prose in a Markdown file, so this one reads `docs/guide/commands.md`
 /// directly rather than relying on the `src/cli/**` walk to catch prose that
 /// never lives under `src/cli/` in the first place.
 #[test]
 fn docs_commands_do_not_say_clause() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/commands.md");
-    let source = fs::read_to_string(&path).expect("read docs/commands.md");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/guide/commands.md");
+    let source = fs::read_to_string(&path).expect("read docs/guide/commands.md");
     let lowered = source.to_lowercase();
     let violations: Vec<&str> = lowered
         .split(|c: char| !c.is_ascii_alphabetic())
@@ -262,7 +262,7 @@ fn docs_commands_do_not_say_clause() {
         .collect();
     assert!(
         violations.is_empty(),
-        "docs/commands.md still says clause ({} occurrences)",
+        "docs/guide/commands.md still says clause ({} occurrences)",
         violations.len()
     );
 }

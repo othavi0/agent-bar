@@ -102,8 +102,26 @@ Normal users use the Maintenance UI.
 "$PLUGIN" uninstall purge
 ```
 
-Standard uninstall preserves settings and migration backups. Purge requires an
-explicit UI selection or interactive terminal confirmation.
+Both forms require confirmation before any mutation:
+
+- On a TTY, type the exact phrase `uninstall agent-bar` at the prompt.
+- On non-TTY stdin, provide a strict JSON confirmation document:
+
+  ```json
+  {
+    "schemaVersion": 1,
+    "operation": "uninstall",
+    "confirmed": true,
+    "purgeSettingsAndBackups": false
+  }
+  ```
+
+  `purgeSettingsAndBackups` must match the invoked form (`true` only for
+  `uninstall purge`), `confirmed` must be `true`, and trailing bytes after
+  the JSON object are rejected.
+
+Standard uninstall preserves settings and migration backups. Purge
+additionally removes settings and owned backups.
 
 ## Help and version
 
@@ -126,11 +144,15 @@ stderr.
 | Code | Meaning |
 | --- | --- |
 | `0` | Request processed; provider failures may still be typed data |
-| `1` | Delegated login or generic operation failure |
+| `1` | Generic operation failure, including login pre-flight failures |
 | `2` | CLI grammar or unsupported value |
-| `3` | Settings/input validation |
-| `4` | Status/schema/serialization invariant |
+| `3` | Settings/input validation surfaced by `config` commands |
+| `4` | Status/schema/serialization invariant; `status` also exits 4 when settings fail to load |
 | `5` | Plugin integration or transaction failure |
 | `70` | Unexpected internal failure |
+
+`login <provider>` passes the delegated provider CLI's own exit code
+through verbatim when the login command runs and fails; the reserved codes
+above apply to the helper's own failures.
 
 Set `RUST_LOG` for diagnostics. There is no verbose command option.

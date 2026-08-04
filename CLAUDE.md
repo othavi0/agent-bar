@@ -153,7 +153,7 @@ documentation. New files written there are English.
 - `docs/specs/v10/09-implementation-plan.md` — executable plan.
 - `docs/specs/v10/10-grok-execution-runbook.md` — permissions and checkpoints.
 - `README.md` — product overview.
-- `docs/architecture.md` — runtime data flow.
-- `docs/commands.md` — private helper contract.
-- `docs/runtime.md` — paths, settings, cache, and privacy.
-- `docs/new-provider.md` — provider adapter checklist.
+- `docs/dev/architecture.md` — runtime data flow.
+- `docs/guide/commands.md` — private helper contract.
+- `docs/guide/runtime.md` — paths, settings, cache, and privacy.
+- `docs/dev/new-provider.md` — provider adapter checklist.

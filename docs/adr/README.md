@@ -8,6 +8,7 @@ ADRs preserve durable decisions and their historical context.
 | [0002](0002-config-cli-dual-write.md) | Settings CLI with shell interval | Superseded by 0004 |
 | [0003](0003-cli-help-hide-internals.md) | Small help with parseable internals | Superseded by 0004 |
 | [0004](0004-quickshell-only-v10.md) | Quickshell-only v10 plugin | Accepted |
+| [0005](0005-auto-release-on-product-merge.md) | Automatic release on every product merge | Accepted |
 
 Existing ADR bodies remain historical and are not rewritten to resemble the
 current decision.

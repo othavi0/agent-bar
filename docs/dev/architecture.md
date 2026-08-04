@@ -42,14 +42,22 @@ Each `BarWidget.qml` exists per monitor and owns:
 - provider chips;
 - Quattro click-target registration;
 - the monitor-local popup anchor and visible `Popup` / `KeyboardPanel`;
-- optional foreign-monitor dismiss overlay when the popup is owned elsewhere
-  (`dismissPopup()` clears ownership on outside click);
+- optional foreign-monitor overlay when the popup is owned elsewhere: a
+  click on that monitor's own chip strip is forwarded to the chip under the
+  cursor, and any other press dismisses the popup (`dismissPopup()` clears
+  ownership);
 - rendering derived from the shared service.
 
 The consolidated popup uses an icon rail (providers + Settings), a
 content-fit card height, overflow-gated vertical scrolling, one lead
 percentage window, and compact rows with a progress track. Widgets do not own
 polling, provider state, settings persistence, or cache.
+
+`Service.qml` stays declarative by delegating its logic to four JS modules
+loaded beside it: `CoreService.js` (polling, generations, forced-refresh
+coalescing), `CoreSettings.js` (draft and persisted settings flow),
+`CoreMaintenance.js` (update and uninstall flow), and `CoreView.js`
+(chip and popup presentation data, tooltips, severity cues).
 
 ## Rust boundaries
 
@@ -150,4 +158,4 @@ quarantined cache or notification state.
 
 ## Detailed contract
 
-See [specs/v10/02-target-architecture.md](specs/v10/02-target-architecture.md).
+See [specs/v10/02-target-architecture.md](../specs/v10/02-target-architecture.md).

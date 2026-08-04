@@ -78,7 +78,7 @@ CHANGELOG_ENTRY="$(printf '## [%s] - %s\n\n### Changed\n\n%s\n' \
   "$NEXT" "$TODAY" "$SUBJECTS")"
 awk -v entry="$CHANGELOG_ENTRY" '
   BEGIN { inserted = 0 }
-  /^## / && !inserted { print entry; print ""; inserted = 1 }
+  /^## / && !inserted && $0 !~ /^## \[?Unreleased/ { print entry; print ""; inserted = 1 }
   { print }
   END { if (!inserted) { print ""; print entry } }
 ' CHANGELOG.md > CHANGELOG.md.tmp
