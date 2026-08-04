@@ -1,5 +1,7 @@
 # Agent Bar
 
+![Agent Bar on an Omarchy desktop: provider chips in the bar and the consolidated popup](docs/assets/agent-bar-desktop.png)
+
 Agent Bar is an Omarchy Quattro Quickshell plugin that shows normalized
 quota and reset information for Claude, Codex, Amp, and Grok.
 
