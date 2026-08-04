@@ -45,9 +45,10 @@ substitute percentage.
 ## Codex Retry loops with “rate limits not available”
 
 Ensure the Codex CLI is logged in. Agent Bar collects Codex rate limits in
-three ordered tiers: `codex app-server` JSON-RPC `rateLimits/read` first,
-then an explicit `~/.codex/rate-limits.json` read when the file exists, and
-finally the newest valid rate-limit events under `~/.codex/sessions`.
+three ordered tiers: `codex app-server` JSON-RPC `account/rateLimits/read`
+first, then an explicit `~/.codex/rate-limits.json` read when the file
+exists, and finally the newest valid rate-limit events under
+`~/.codex/sessions`.
 
 ## Grok shows `—` or missing Weekly
 
@@ -84,8 +85,9 @@ Confirm the settings file is valid and user-owned. Save errors leave the
 previous file intact. Use `RUST_LOG=debug` only with sanitized output.
 
 While a maintenance operation (update or uninstall) holds the exclusive
-maintenance lock, `config apply` fails fast instead of waiting. Retry after
-maintenance completes.
+maintenance lock, `config apply` waits for the lock after validating; it
+completes once maintenance finishes, and the settings file is untouched
+until then.
 
 ## Update failed
 
