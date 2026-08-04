@@ -22,7 +22,7 @@ mod tests {
     }
 
     /// Release identity: package version, manifest, helper, and archive
-    /// name must all match (BUNDLE-006 / docs/releasing.md).
+    /// name must all match (BUNDLE-006 / docs/dev/releasing.md).
     #[test]
     fn package_version_is_release_identity() {
         assert_eq!(

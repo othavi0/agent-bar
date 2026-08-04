@@ -69,7 +69,7 @@ shellcheck scripts/agent-bar-open-terminal
 
 ## Provider changes
 
-Read [docs/new-provider.md](docs/new-provider.md). Provider-specific behavior
+Read [docs/dev/new-provider.md](docs/dev/new-provider.md). Provider-specific behavior
 stays behind the adapter. QML receives schema-v2 normalized data only.
 
 ## Commits and checkpoints
@@ -91,4 +91,4 @@ Changelog release sections 9.0.0 and older, ADR bodies 0001–0003, and
 
 Implementation may prepare a release candidate and open a ready PR. Merge,
 tag, GitHub Release publication, and distribution require separate explicit
-authorization. See [docs/releasing.md](docs/releasing.md).
+authorization. See [docs/dev/releasing.md](docs/dev/releasing.md).

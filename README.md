@@ -126,10 +126,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and
 ## Documentation
 
 - [Product](PRODUCT.md)
-- [Architecture](docs/architecture.md)
+- [Architecture](docs/dev/architecture.md)
 - [Commands](docs/guide/commands.md)
 - [Runtime](docs/guide/runtime.md)
-- [Omarchy integration](docs/omarchy-shell.md)
+- [Omarchy integration](docs/dev/omarchy-shell.md)
 - [Troubleshooting](docs/guide/troubleshooting.md)
 - [Canonical v10 specification](docs/specs/v10/README.md)
 

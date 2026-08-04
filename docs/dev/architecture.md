@@ -150,4 +150,4 @@ quarantined cache or notification state.
 
 ## Detailed contract
 
-See [specs/v10/02-target-architecture.md](specs/v10/02-target-architecture.md).
+See [specs/v10/02-target-architecture.md](../specs/v10/02-target-architecture.md).
