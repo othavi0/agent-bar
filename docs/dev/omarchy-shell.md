@@ -17,7 +17,7 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
   "schemaVersion": 1,
   "id": "agent-bar.usage",
   "name": "Agent Bar",
-  "version": "10.0.0",
+  "version": "__AGENT_BAR_VERSION__",
   "author": "othavi0",
   "license": "MIT",
   "description": "LLM quota monitor for Claude, Codex, Amp, and Grok.",
@@ -37,6 +37,9 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
   }
 }
 ```
+
+`__AGENT_BAR_VERSION__` is a build-time placeholder substituted with the
+crate version when the bundle is assembled.
 
 Do not add `activation`, `keepLoaded`, or inline Agent Bar settings.
 
@@ -114,8 +117,9 @@ own terminal-emulator fallback list.
 
 ```bash
 omarchy plugin validate /path/to/agent-bar.usage
+# PATH qmllint is a stub; the Qt6 binary path is mandatory
 find /path/to/agent-bar.usage -type f -name '*.qml' -exec \
-  qmllint -I /usr/share/omarchy/shell {} +
+  /usr/lib/qt6/bin/qmllint -I /usr/share/omarchy/shell {} +
 ```
 
 Omarchy validation does not verify the Rust target, executable modes, bundle
