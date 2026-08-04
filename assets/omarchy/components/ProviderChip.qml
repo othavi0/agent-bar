@@ -84,8 +84,6 @@ WidgetButton {
 
     Text {
       visible: !root.vertical
-      width: numeralMetrics.advanceWidth
-      horizontalAlignment: Text.AlignLeft
       text: root.numeralText
       color: root.numeralColor
       font.family: root.fontFamily
@@ -111,15 +109,10 @@ WidgetButton {
     }
   }
 
-  // §5: numeral box is fixed width, measured on "100%" at the body size —
-  // never a hardcoded pixel; the font scales with [font] base-size. The
-  // numeral is left-aligned so it hugs the icon at a constant gap; the
-  // box's slack trails into the inter-chip spacing instead of splitting
-  // icon and number (amended 2026-08-01).
-  TextMetrics {
-    id: numeralMetrics
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.body
-    text: "100%"
-  }
+  // §5: the numeral box is tight — width follows the text (amended
+  // 2026-08-04). The reserved box sized on the widest numeral parked ~2
+  // digits of slack in the inter-chip gap when every numeral was short,
+  // reading as disproportionate spacing with an inflated right edge. Chips
+  // may shift when a value crosses a digit boundary; the state cues (! / ln)
+  // already resized them, so width stability was never absolute.
 }

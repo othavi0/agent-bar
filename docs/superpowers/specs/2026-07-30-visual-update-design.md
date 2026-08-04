@@ -150,19 +150,20 @@ as a named readonly property on `UsageWindow`, and never repeated.
   `CoreView.iconOpticalScale(providerId)`, beside the existing
   `iconFileName`: Claude, Codex and Amp at `1.0`; Grok at `0.875`, because its
   mark is a thin ring that fills its own box edge to edge.
-- Numeral box is fixed width, left-aligned, measured with `TextMetrics` on
-  the string `100%` at `Style.font.body`. Never a hardcoded pixel value: the
-  font scales with `[font] base-size`. (Amended 2026-08-01, owner decision on
-  live mockups: right alignment parked the box's slack between icon and
-  number — ~2 digits of air for `7%` — so the numeral now hugs the icon and
-  the slack trails into the inter-chip gap. The box stays fixed; chip widths
-  still never move.)
+- Numeral box is tight: the `Text` width follows its content, with no
+  reserved box and no `TextMetrics`. (Amended 2026-08-04, owner decision on
+  live mockups, superseding the 2026-08-01 fixed box measured on `100%`:
+  with every numeral short — `0%`, `2%` — the fixed box parked ~2 digits of
+  slack in each inter-chip gap, reading as disproportionate spacing and an
+  inflated right edge on the widget. The accepted cost is that chips shift
+  when a value crosses a digit boundary; the state cues `!`/`ln` already
+  resized chips, so width stability was never absolute.)
 - Gap inside a chip is `Style.spacing.sm` (4). Gap between chips is
   `Style.spacing.md` (6). (Amended 2026-08-01, owner decision on live
   mockups: with the numeral hugging the icon, the old `xxl` (12) plus the
-  numeral box's trailing slack read as scattered chips. The 1.5:1 ratio is
-  acceptable because that slack — up to two digits on short values — still
-  pads the boundary between chips; pairs stay distinct even at `100%`.)
+  numeral box's trailing slack read as scattered chips. With the 2026-08-04
+  tight box these tokens are the exact perceived gaps in every state, and
+  the widget's `Style.space(12)` outer margin splits symmetrically.)
 - State cues carry no leading space; separation is layout spacing. `⌛` is
   replaced by a Nerd Font glyph from the active bar family. The loading cue is
   visually distinct from the `—` no-data glyph.

@@ -650,14 +650,15 @@ TestCase {
     verify(chip.indexOf("wheelMoved") < 0)
     // A11Y-013: no plugin-authored motion (tst_Accessibility also guards).
     verify(chip.indexOf("Behavior") < 0)
-    // §5: fixed-width numeral measured on "100%", host icon canvas, tint.
-    verify(chip.indexOf("TextMetrics") >= 0)
-    verify(chip.indexOf('"100%"') >= 0)
-    // §5 amended 2026-08-01 (owner picked it on live mockups): the numeral
-    // hugs the icon — left-aligned inside the still-fixed box. Right-aligned
-    // put the box's slack exactly between icon and number (~2 digits for
-    // "7%"), which read as a broken chip.
-    verify(chip.indexOf("Text.AlignLeft") >= 0)
+    // §5 amended 2026-08-04 (owner picked it on live mockups): the numeral
+    // box is tight — width follows the text, no reserved "100%" box. The
+    // fixed box parked ~2 digits of slack in the inter-chip gap whenever
+    // every numeral was short, which read as disproportionate spacing and
+    // an inflated right edge. Chips may shift on digit-count changes; the
+    // state cues (! / ln) already moved them, so nothing new is lost.
+    verify(chip.indexOf("TextMetrics") < 0)
+    verify(chip.indexOf('"100%"') < 0)
+    verify(chip.indexOf("advanceWidth") < 0)
     verify(chip.indexOf("Text.AlignRight") < 0)
     verify(chip.indexOf("Style.bar.iconCanvas") >= 0)
     verify(chip.indexOf("MultiEffect") >= 0)
