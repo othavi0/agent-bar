@@ -107,7 +107,7 @@ PLUGIN="$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar"
 "$PLUGIN" doctor scan
 ```
 
-See [docs/commands.md](docs/commands.md) for the recovery contract.
+See [docs/guide/commands.md](docs/guide/commands.md) for the recovery contract.
 
 ## Development
 
@@ -127,10 +127,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and
 
 - [Product](PRODUCT.md)
 - [Architecture](docs/architecture.md)
-- [Commands](docs/commands.md)
-- [Runtime](docs/runtime.md)
+- [Commands](docs/guide/commands.md)
+- [Runtime](docs/guide/runtime.md)
 - [Omarchy integration](docs/omarchy-shell.md)
-- [Troubleshooting](docs/troubleshooting.md)
+- [Troubleshooting](docs/guide/troubleshooting.md)
 - [Canonical v10 specification](docs/specs/v10/README.md)
 
 ## License

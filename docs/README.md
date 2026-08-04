@@ -4,12 +4,12 @@ Active product and engineering documentation for Agent Bar v10.
 
 ## User and operator documentation
 
-- [Commands](commands.md) — private helper diagnostics and recovery grammar.
-- [Runtime](runtime.md) — owned paths, settings, cache, privacy, and state.
+- [Commands](guide/commands.md) — private helper diagnostics and recovery grammar.
+- [Runtime](guide/runtime.md) — owned paths, settings, cache, privacy, and state.
 - [Omarchy integration](omarchy-shell.md) — Quattro plugin contract.
-- [Integration](integration.md) — install, migration, update, uninstall,
+- [Integration](guide/integration.md) — install, migration, update, uninstall,
   ownership, and rollback.
-- [Troubleshooting](troubleshooting.md) — typed provider and plugin failures.
+- [Troubleshooting](guide/troubleshooting.md) — typed provider and plugin failures.
 
 ## Engineering documentation
 
