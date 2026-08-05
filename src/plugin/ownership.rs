@@ -102,32 +102,6 @@ fn mode_of(meta: &fs::Metadata) -> Option<u32> {
     }
 }
 
-/// Capture size/mode/hash without classifying (for plan manifests).
-pub fn capture_evidence(
-    path: &Path,
-    class: OwnershipClass,
-    reason: impl Into<String>,
-) -> OwnershipEvidence {
-    let meta = fs::symlink_metadata(path).ok();
-    let file_type = meta.as_ref().map(file_kind).unwrap_or(FileKind::Other);
-    let size = meta.as_ref().map(|m| m.len());
-    let mode = meta.as_ref().and_then(mode_of);
-    let before_hash = if matches!(file_type, FileKind::File) {
-        hash_path(path).ok()
-    } else {
-        None
-    };
-    OwnershipEvidence {
-        class,
-        path: path.to_path_buf(),
-        reason: reason.into(),
-        before_hash,
-        size,
-        mode,
-        file_type,
-    }
-}
-
 /// Classify one artifact. Filename resemblance alone never yields owned/* (CLEAN-003).
 pub fn classify_artifact(path: &Path, rules: &OwnershipRules) -> OwnershipEvidence {
     let meta = match fs::symlink_metadata(path) {
@@ -384,16 +358,5 @@ mod tests {
             classify_artifact(&path, &OwnershipRules::default()).class,
             OwnershipClass::Unrelated
         );
-    }
-
-    #[test]
-    fn capture_evidence_records_mode_and_hash() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("f");
-        fs::write(&path, b"abc").unwrap();
-        let ev = capture_evidence(&path, OwnershipClass::OwnedCurrent, "test");
-        assert_eq!(ev.before_hash, Some(hash_bytes(b"abc")));
-        assert_eq!(ev.size, Some(3));
-        assert_eq!(ev.file_type, FileKind::File);
     }
 }

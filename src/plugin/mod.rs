@@ -19,10 +19,7 @@ pub use maintenance::{
 };
 pub use omarchy::{CommandOutput, CommandRunner, OmarchyError, ProcessCommandRunner};
 pub use ownership::{
-    capture_evidence, classify_artifact, hash_bytes, hash_path, FileKind, OwnershipClass,
-    OwnershipEvidence, OwnershipRules,
+    classify_artifact, hash_bytes, hash_path, FileKind, OwnershipClass, OwnershipEvidence,
+    OwnershipRules,
 };
-pub use paths::{
-    is_hidden_plugin_sibling, txid_from_bytes, validate_archive_entry_path, validate_txid,
-    PathError, PluginPaths, PLUGIN_ID,
-};
+pub use paths::{txid_from_bytes, validate_archive_entry_path, PathError, PluginPaths, PLUGIN_ID};
