@@ -31,7 +31,7 @@ log = "0.4"
 env_logger = "0.11"
 # async process/HTTP collection runtime
 tokio = { version = "1", features = ["rt", "macros", "time", "process", "io-util", "io-std", "sync"] }
-# Claude HTTP collector and update downloads
+# Claude HTTP collector and update check
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 # HTTP body streaming in providers/http
 futures = "0.3"
@@ -41,14 +41,8 @@ regex = "1"
 semver = "1.0.28"
 # exclusive maintenance gate lock
 fs2 = "0.4.3"
-# filesystem durability helpers
-rustix = { version = "1.1.4", features = ["fs"] }
 # bundle and ownership hashes
 sha2 = "0.11.0"
-# plugin archive extract/pack
-tar = "0.4.46"
-# plugin archive compression
-zstd = "0.13.3"
 
 [dev-dependencies]
 # CLI integration tests

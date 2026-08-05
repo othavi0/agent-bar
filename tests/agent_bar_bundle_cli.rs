@@ -1,4 +1,6 @@
-//! Binary-level grammar checks for `agent-bar-bundle` (Task 17 Step 1).
+//! Binary-level grammar checks for `agent-bar-bundle` (git-plugin-distribution
+//! Task 5). `assemble` is the binary's only verb; the tarball `release`
+//! packaging command was removed with the rest of the tarball machinery.
 
 use std::process::Command;
 
@@ -7,14 +9,14 @@ fn bin() -> &'static str {
 }
 
 #[test]
-fn help_exits_zero_and_prints_grammar() {
+fn help_exits_zero_and_names_only_assemble() {
     let out = Command::new(bin()).arg("help").output().expect("spawn");
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("assemble output"));
-    assert!(stdout.contains("release bundle"));
     assert!(stdout.contains("source-commit"));
-    assert!(stdout.contains("release-notes"));
+    assert!(!stdout.contains("release bundle"));
+    assert!(!stdout.contains("release-notes"));
 }
 
 #[test]
@@ -32,7 +34,7 @@ fn assemble_rejects_missing_keywords() {
 }
 
 #[test]
-fn release_rejects_unknown_keyword() {
+fn release_no_longer_a_known_command() {
     let out = Command::new(bin())
         .args([
             "release",
@@ -44,17 +46,10 @@ fn release_rejects_unknown_keyword() {
             "0123456789abcdef0123456789abcdef01234567",
             "release-notes",
             "/tmp/n",
-            "extra",
-            "nope",
         ])
         .output()
         .expect("spawn");
-    assert!(!out.status.success());
-    let err = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        err.contains("unknown") || err.contains("failed") || err.contains("extra"),
-        "stderr={err}"
-    );
+    assert_eq!(out.status.code(), Some(2));
 }
 
 #[test]

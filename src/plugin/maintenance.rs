@@ -1,10 +1,11 @@
-//! Update check, closed download policy, health polls, and uninstall
-//! confirmation. `update apply` and `uninstall` both delegate their live
-//! mutation to the omarchy CLI (git-plugin-distribution Tasks 2-3) — this
-//! module no longer runs a worker over a copied helper binary.
+//! Update check, uninstall confirmation, and executable-path resolution.
+//! `update apply` and `uninstall` both delegate their live mutation to the
+//! omarchy CLI (git-plugin-distribution Tasks 2-3) — this module no longer
+//! runs a worker over a copied helper binary, stages a tarball, or polls a
+//! rescan for health.
 
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -15,11 +16,10 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::plugin::bundle::{
-    BundleError, BundleValidator, MINIMUM_QUICKSHELL_VERSION, OFFICIAL_TARGET, OMARCHY_CONTRACT,
+    BundleError, MINIMUM_QUICKSHELL_VERSION, OFFICIAL_TARGET, OMARCHY_CONTRACT,
 };
-use crate::plugin::omarchy::{CommandOutput, CommandRunner, OmarchyError};
-use crate::plugin::paths::{validate_txid, PathError, PluginPaths, PLUGIN_ID};
-use crate::plugin::transaction::{copy_dir_all, TransactionError};
+use crate::plugin::omarchy::OmarchyError;
+use crate::plugin::paths::{PathError, PLUGIN_ID};
 use crate::support::Clock;
 
 /// Distribution repo `bundle.json` receipt: the sole `update check` discovery
@@ -34,21 +34,6 @@ pub const RELEASE_USER_AGENT: &str = concat!("agent-bar-update/", env!("CARGO_PK
 /// Literal prefix of the computed `latestCompatible.releaseNotesUrl`.
 pub const RELEASE_NOTES_URL_PREFIX: &str = "https://github.com/othavi0/agent-bar/releases/tag/v";
 
-/// Rescan poll total deadline (BUNDLE-032G).
-pub const RESCAN_POLL_DEADLINE: Duration = Duration::from_secs(15);
-
-/// Environment names forwarded into the transient worker unit.
-pub const WORKER_ENV_ALLOWLIST: &[&str] = &[
-    "HOME",
-    "XDG_CONFIG_HOME",
-    "XDG_CACHE_HOME",
-    "XDG_STATE_HOME",
-    "XDG_RUNTIME_DIR",
-    "DBUS_SESSION_BUS_ADDRESS",
-    "WAYLAND_DISPLAY",
-    "OMARCHY_PATH",
-];
-
 #[derive(Debug, Error)]
 pub enum MaintenanceError {
     #[error("{0}")]
@@ -61,8 +46,6 @@ pub enum MaintenanceError {
     Bundle(#[from] BundleError),
     #[error(transparent)]
     Path(#[from] PathError),
-    #[error(transparent)]
-    Transaction(#[from] TransactionError),
     #[error(transparent)]
     Omarchy(#[from] OmarchyError),
 }
@@ -467,182 +450,8 @@ impl UpdateCheck {
 }
 
 // ---------------------------------------------------------------------------
-// Rescan / health poll
+// Uninstall confirmation
 // ---------------------------------------------------------------------------
-
-/// Poll delays: 100, 200, 400, 500, 500... ms.
-pub fn rescan_poll_delays() -> impl Iterator<Item = Duration> {
-    let mut n = 0u32;
-    std::iter::from_fn(move || {
-        let ms = match n {
-            0 => 100,
-            1 => 200,
-            2 => 400,
-            _ => 500,
-        };
-        n = n.saturating_add(1);
-        Some(Duration::from_millis(ms))
-    })
-}
-
-/// Health IPC argv: `omarchy-shell agent-bar.usage health <expectedVersion>`.
-pub fn health_argv(expected_version: &str) -> Vec<String> {
-    vec![
-        "agent-bar.usage".into(),
-        "health".into(),
-        expected_version.into(),
-    ]
-}
-
-/// True when health stdout is exactly `ok\n` and exit is 0.
-pub fn health_is_ok(out: &CommandOutput) -> bool {
-    out.code == 0 && out.stdout == "ok\n"
-}
-
-/// Parse `listPlugins` JSON and require absence of exact ID `agent-bar.usage`.
-pub fn list_plugins_absent(stdout: &str) -> Result<bool, MaintenanceError> {
-    let value: serde_json::Value = serde_json::from_str(stdout)
-        .map_err(|e| MaintenanceError::msg(format!("malformed listPlugins JSON: {e}")))?;
-    let arr = value
-        .as_array()
-        .ok_or_else(|| MaintenanceError::msg("listPlugins JSON must be an array"))?;
-    for entry in arr {
-        let id = entry
-            .get("id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| MaintenanceError::msg("listPlugins entry missing id"))?;
-        if id == PLUGIN_ID {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
-/// Parse `listPlugins` JSON and require presence of exact enabled entry.
-pub fn list_plugins_has_enabled(stdout: &str) -> Result<bool, MaintenanceError> {
-    let value: serde_json::Value = serde_json::from_str(stdout)
-        .map_err(|e| MaintenanceError::msg(format!("malformed listPlugins JSON: {e}")))?;
-    let arr = value
-        .as_array()
-        .ok_or_else(|| MaintenanceError::msg("listPlugins JSON must be an array"))?;
-    for entry in arr {
-        let id = entry.get("id").and_then(|v| v.as_str());
-        if id == Some(PLUGIN_ID) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-/// Monotonic poll helper with injectable sleeper / clock.
-pub trait Sleeper {
-    fn sleep(&self, d: Duration);
-}
-
-pub struct RealSleeper;
-impl Sleeper for RealSleeper {
-    fn sleep(&self, d: Duration) {
-        std::thread::sleep(d);
-    }
-}
-
-/// Fake clock that advances on demand (tests).
-#[derive(Debug, Default)]
-pub struct FakeMonotonic {
-    pub millis: Mutex<u64>,
-}
-
-impl FakeMonotonic {
-    pub fn new(start_ms: u64) -> Self {
-        Self {
-            millis: Mutex::new(start_ms),
-        }
-    }
-    pub fn now(&self) -> Duration {
-        Duration::from_millis(*self.millis.lock().unwrap_or_else(|e| e.into_inner()))
-    }
-    pub fn advance(&self, d: Duration) {
-        *self.millis.lock().unwrap_or_else(|e| e.into_inner()) += d.as_millis() as u64;
-    }
-}
-
-/// Poll health after asynchronous rescan until success or 15s deadline.
-pub fn poll_update_health<R: CommandRunner, S: Sleeper>(
-    runner: &R,
-    shell_program: &str,
-    expected_version: &str,
-    sleeper: &S,
-    start: Duration,
-    now: &dyn Fn() -> Duration,
-) -> Result<(), MaintenanceError> {
-    let deadline = start + RESCAN_POLL_DEADLINE;
-    let mut delays = rescan_poll_delays();
-    loop {
-        let args = health_argv(expected_version);
-        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let out = runner.run(shell_program, &arg_refs)?;
-        if health_is_ok(&out) {
-            return Ok(());
-        }
-        // Malformed non-ok that is not simply "not ready" still continues until
-        // deadline; final failure reports mismatch.
-        let t = now();
-        if t >= deadline {
-            return Err(MaintenanceError::msg(format!(
-                "health poll timeout: last stdout={:?} code={}",
-                out.stdout, out.code
-            )));
-        }
-        let delay = delays.next().unwrap_or(Duration::from_millis(500));
-        let remaining = deadline.saturating_sub(t);
-        sleeper.sleep(delay.min(remaining));
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Maintenance worker journal payload + handoff
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MaintenanceOp {
-    Update,
-    Uninstall,
-}
-
-/// Durable payload written into the transaction journal for the worker.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MaintenanceJournalPayload {
-    pub txid: String,
-    pub operation: MaintenanceOp,
-    pub expected_version: Option<String>,
-    pub previous_version: Option<String>,
-    pub stage_path: String,
-    pub plugin_root: String,
-    pub quarantine_path: String,
-    pub selected: Option<UpdateCompatible>,
-    /// Absolute paths recorded at preflight for worker-internal tools.
-    pub omarchy_bin: String,
-    pub omarchy_shell_bin: String,
-    pub is_fresh_install: bool,
-    pub is_v9_rollback: bool,
-    /// Uninstall: when true, also quarantine settings and owned backups.
-    #[serde(default)]
-    pub purge_settings_and_backups: bool,
-    /// Absolute path to Omarchy `shell.json` (literal `$HOME/.config/omarchy/...`).
-    #[serde(default)]
-    pub shell_json_path: String,
-    /// Absolute path to product `settings.json` (may be purged).
-    #[serde(default)]
-    pub settings_path: String,
-    /// Absolute `$XDG_CACHE_HOME/agent-bar` cache root (quarantined by both forms).
-    #[serde(default)]
-    pub cache_root: String,
-    /// Absolute migration backups directory (purged only with purge=true).
-    #[serde(default)]
-    pub backups_dir: String,
-}
 
 /// Non-TTY structured uninstall confirmation (CLI-036 / BUNDLE-036).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -734,28 +543,9 @@ pub const UNINSTALL_TTY_PHRASE: &str = "uninstall agent-bar";
 /// TTY prompt text written to stderr (no trailing newline required by contract).
 pub const UNINSTALL_TTY_PROMPT: &str = "Type uninstall agent-bar to continue:";
 
-/// Build the exact transient unit name.
-pub fn maintenance_unit_name(txid: &str) -> Result<String, MaintenanceError> {
-    validate_txid(txid)?;
-    Ok(format!("agent-bar-maintenance-{txid}.service"))
-}
-
-/// Filter process environment down to the allowlist (missing optional omitted).
-pub fn collect_worker_env(
-    env: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
-) -> Vec<(String, String)> {
-    let allow: std::collections::HashSet<&str> = WORKER_ENV_ALLOWLIST.iter().copied().collect();
-    let mut out = Vec::new();
-    for (k, v) in env {
-        let k = k.as_ref();
-        let v = v.as_ref();
-        if allow.contains(k) && !v.is_empty() {
-            out.push((k.to_string(), v.to_string()));
-        }
-    }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
-}
+// ---------------------------------------------------------------------------
+// Executable resolution
+// ---------------------------------------------------------------------------
 
 /// Locate `cmd` on `$PATH` (first regular file hit).
 fn which_in_path(cmd: &str) -> Option<PathBuf> {
@@ -805,165 +595,6 @@ pub fn require_absolute_executable(path: &str) -> Result<(), MaintenanceError> {
     Ok(())
 }
 
-/// Classification of the live plugin root before update (BUNDLE-029 / 032G).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LocalPluginClass {
-    /// No live plugin root — fresh install path.
-    Absent,
-    /// `bundle.json` inventory validates (owned current v10).
-    OwnedCurrent,
-    /// Receipt present but inventory/content diverges from it.
-    Modified,
-    /// Looks like a pre-v10 Agent Bar tree (no receipt).
-    V9Structural,
-    /// Exists but is not a recognizable owned plugin tree.
-    Ambiguous,
-}
-
-/// Classify the live plugin directory without mutating it.
-pub fn classify_local_plugin(plugin_root: &Path) -> LocalPluginClass {
-    if !plugin_root.exists() {
-        return LocalPluginClass::Absent;
-    }
-    if !plugin_root.is_dir() {
-        return LocalPluginClass::Ambiguous;
-    }
-    let has_receipt = plugin_root.join("bundle.json").is_file();
-    let has_manifest = plugin_root.join("manifest.json").is_file();
-    let has_helper =
-        plugin_root.join("bin/agent-bar").is_file() || plugin_root.join("agent-bar").is_file();
-    if has_receipt {
-        match BundleValidator::validate_tree(plugin_root) {
-            Ok(_) => LocalPluginClass::OwnedCurrent,
-            Err(_) => LocalPluginClass::Modified,
-        }
-    } else if has_manifest || has_helper {
-        LocalPluginClass::V9Structural
-    } else {
-        LocalPluginClass::Ambiguous
-    }
-}
-
-/// Result of pre-update local-root preparation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LocalPluginPrep {
-    pub class: LocalPluginClass,
-    pub is_fresh_install: bool,
-    pub is_v9_rollback: bool,
-    /// Durable backup of a modified accepted tree, when created.
-    pub modified_backup: Option<PathBuf>,
-}
-
-/// Gate modified/ambiguous roots (BUNDLE-029). Modified trees are preserved in
-/// durable backup before the caller may replace them; ambiguous roots refuse.
-pub fn prepare_local_plugin_for_update(
-    paths: &PluginPaths,
-    txid: &str,
-) -> Result<LocalPluginPrep, MaintenanceError> {
-    validate_txid(txid)?;
-    let class = classify_local_plugin(&paths.plugin_root);
-    match class {
-        LocalPluginClass::Absent => Ok(LocalPluginPrep {
-            class,
-            is_fresh_install: true,
-            is_v9_rollback: false,
-            modified_backup: None,
-        }),
-        LocalPluginClass::OwnedCurrent => Ok(LocalPluginPrep {
-            class,
-            is_fresh_install: false,
-            is_v9_rollback: false,
-            modified_backup: None,
-        }),
-        LocalPluginClass::V9Structural => Ok(LocalPluginPrep {
-            class,
-            is_fresh_install: false,
-            is_v9_rollback: true,
-            modified_backup: None,
-        }),
-        LocalPluginClass::Modified => {
-            // Preserve modified accepted tree before replacement (BUNDLE-029/032K).
-            fs::create_dir_all(&paths.backups_dir)?;
-            let dest = paths.backup_root(&format!("modified-pre-update-{txid}"));
-            if dest.exists() {
-                fs::remove_dir_all(&dest)?;
-            }
-            copy_dir_all(&paths.plugin_root, &dest).map_err(|e| {
-                MaintenanceError::msg(format!(
-                    "failed to back up modified plugin tree to {}: {e}",
-                    dest.display()
-                ))
-            })?;
-            let report = DurableReport {
-                txid: txid.to_string(),
-                ok: true,
-                rolled_back: false,
-                residual_paths: vec![dest.display().to_string()],
-                message: "modified local bundle preserved in durable backup before update".into(),
-            };
-            write_durable_report(paths, &report)?;
-            Ok(LocalPluginPrep {
-                class,
-                is_fresh_install: false,
-                is_v9_rollback: false,
-                modified_backup: Some(dest),
-            })
-        }
-        LocalPluginClass::Ambiguous => Err(MaintenanceError::msg(
-            "refuse to replace ambiguous plugin directory without ownership proof (BUNDLE-029)",
-        )),
-    }
-}
-
-/// Single-shot preflight health probe for an existing v10 install (before download).
-pub fn preflight_existing_health<R: CommandRunner>(
-    runner: &R,
-    shell_program: &str,
-    expected_version: &str,
-) -> Result<(), MaintenanceError> {
-    require_absolute_executable(shell_program)?;
-    let args = health_argv(expected_version);
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let out = runner.run(shell_program, &arg_refs)?;
-    if health_is_ok(&out) {
-        return Ok(());
-    }
-    Err(MaintenanceError::msg(format!(
-        "existing Agent Bar health endpoint failed before download/swap (stdout={:?} code={})",
-        out.stdout, out.code
-    )))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct DurableReport {
-    pub txid: String,
-    pub ok: bool,
-    pub rolled_back: bool,
-    pub residual_paths: Vec<String>,
-    pub message: String,
-}
-
-fn write_durable_report(
-    paths: &PluginPaths,
-    report: &DurableReport,
-) -> Result<(), MaintenanceError> {
-    fs::create_dir_all(&paths.reports_dir)?;
-    let path = paths.reports_dir.join(format!("{}.json", report.txid));
-    let json = serde_json::to_vec_pretty(report)?;
-    let mut opts = OpenOptions::new();
-    opts.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    let mut f = opts.open(&path)?;
-    f.write_all(&json)?;
-    f.sync_all()?;
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -971,10 +602,7 @@ fn write_durable_report(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin::bundle::BundleBuilder;
-    use crate::plugin::omarchy::RecordingRunner;
-    use crate::plugin::transaction::{TransactionJournal, TxStep};
-    use crate::support::maintenance_gate::MaintenanceGate;
+    use crate::plugin::bundle::{BundleBuilder, BundleValidator};
     use crate::support::Clock;
     use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
@@ -1268,164 +896,11 @@ mod tests {
         assert!(err.to_string().contains("malformed"), "{err}");
     }
 
-    #[test]
-    fn health_ok_and_list_plugins_parsing() {
-        assert!(health_is_ok(&CommandOutput {
-            code: 0,
-            stdout: "ok\n".into(),
-            stderr: String::new(),
-        }));
-        assert!(!health_is_ok(&CommandOutput {
-            code: 0,
-            stdout: "ok".into(),
-            stderr: String::new(),
-        }));
-        assert!(list_plugins_absent(r#"[{"id":"other.plugin"}]"#).unwrap());
-        assert!(!list_plugins_absent(r#"[{"id":"agent-bar.usage"}]"#).unwrap());
-        assert!(list_plugins_has_enabled(r#"[{"id":"agent-bar.usage"}]"#).unwrap());
-        assert!(list_plugins_absent("not-json").is_err());
-    }
-
-    #[test]
-    fn rescan_poll_delay_sequence() {
-        let d: Vec<_> = rescan_poll_delays().take(6).collect();
-        assert_eq!(
-            d,
-            vec![
-                Duration::from_millis(100),
-                Duration::from_millis(200),
-                Duration::from_millis(400),
-                Duration::from_millis(500),
-                Duration::from_millis(500),
-                Duration::from_millis(500),
-            ]
-        );
-    }
-
-    #[test]
-    fn poll_health_succeeds_and_times_out() {
-        let mono = FakeMonotonic::new(0);
-        let runner = RecordingRunner::default();
-        // First call not ready, second ok — but we need custom responses.
-        {
-            let mut q = runner.responses.lock().unwrap();
-            q.push(Ok(CommandOutput {
-                code: 0,
-                stdout: "ok\n".into(),
-                stderr: String::new(),
-            }));
-            q.push(Ok(CommandOutput {
-                code: 1,
-                stdout: "unknown\n".into(),
-                stderr: String::new(),
-            }));
-            // pop removes from front in RecordingRunner? It uses remove(0) — FIFO.
-        }
-        struct AdvancingSleeper<'a>(&'a FakeMonotonic);
-        impl Sleeper for AdvancingSleeper<'_> {
-            fn sleep(&self, d: Duration) {
-                self.0.advance(d);
-            }
-        }
-        let sleeper = AdvancingSleeper(&mono);
-        poll_update_health(
-            &runner,
-            "omarchy-shell",
-            "10.0.0",
-            &sleeper,
-            Duration::ZERO,
-            &|| mono.now(),
-        )
-        .unwrap();
-
-        // Timeout path.
-        let mono2 = FakeMonotonic::new(0);
-        let runner2 = RecordingRunner::default();
-        {
-            // Always unknown; sleeper advances past 15s.
-            // RecordingRunner returns empty-ok when exhausted — push many unknowns.
-            let mut q = runner2.responses.lock().unwrap();
-            for _ in 0..50 {
-                q.push(Ok(CommandOutput {
-                    code: 1,
-                    stdout: "unknown\n".into(),
-                    stderr: String::new(),
-                }));
-            }
-        }
-        let sleeper2 = AdvancingSleeper(&mono2);
-        let err = poll_update_health(
-            &runner2,
-            "omarchy-shell",
-            "10.0.0",
-            &sleeper2,
-            Duration::ZERO,
-            &|| mono2.now(),
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("timeout"));
-    }
-
-    #[test]
-    fn maintenance_unit_name_and_worker_env_contract() {
-        // git-plugin-distribution Task 3 deleted `systemd_run_argv` along
-        // with the worker-copy handoff it built argv for (`update apply` and
-        // `uninstall` each build their own detached-unit argv inline now).
-        // `maintenance_unit_name` and `collect_worker_env` remain generic
-        // helpers so their coverage stays.
-        let txid = "0123456789abcdef0123456789abcdef";
-        assert_eq!(
-            maintenance_unit_name(txid).unwrap(),
-            format!("agent-bar-maintenance-{txid}.service")
-        );
-        assert!(maintenance_unit_name("short").is_err());
-
-        let env = collect_worker_env([
-            ("HOME", "/home/u"),
-            ("SECRET", "nope"),
-            ("WAYLAND_DISPLAY", "wayland-0"),
-            ("EMPTY", ""),
-        ]);
-        assert!(env
-            .iter()
-            .all(|(k, _)| WORKER_ENV_ALLOWLIST.contains(&k.as_str())));
-        assert!(!env.iter().any(|(k, _)| k == "SECRET"));
-        assert!(!env.iter().any(|(k, _)| k == "EMPTY"));
-    }
-
     fn fake_abs_bin(dir: &Path, name: &str) -> String {
         let p = dir.join(name);
         fs::write(&p, b"#!/bin/true\n").unwrap();
         fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
         p.canonicalize().unwrap().display().to_string()
-    }
-
-    fn sample_payload(
-        paths: &PluginPaths,
-        txid: &str,
-        expected: &str,
-        previous: &str,
-        tools: &Path,
-    ) -> MaintenanceJournalPayload {
-        MaintenanceJournalPayload {
-            txid: txid.into(),
-            operation: MaintenanceOp::Update,
-            expected_version: Some(expected.into()),
-            previous_version: Some(previous.into()),
-            stage_path: paths.stage_dir(txid).unwrap().display().to_string(),
-            plugin_root: paths.plugin_root.display().to_string(),
-            quarantine_path: paths.quarantine_dir(txid).unwrap().display().to_string(),
-            selected: None,
-            omarchy_bin: fake_abs_bin(tools, "omarchy"),
-            omarchy_shell_bin: fake_abs_bin(tools, "omarchy-shell"),
-            is_fresh_install: false,
-            is_v9_rollback: false,
-            purge_settings_and_backups: false,
-            shell_json_path: String::new(),
-            settings_path: String::new(),
-            cache_root: String::new(),
-            backups_dir: String::new(),
-        }
     }
 
     fn write_min_plugin(root: &Path, version: &str) {
@@ -1487,67 +962,6 @@ mod tests {
     }
 
     #[test]
-    fn classify_local_plugin_owned_modified_v9_ambiguous() {
-        let dir = tempdir().unwrap();
-        assert_eq!(
-            classify_local_plugin(&dir.path().join("missing")),
-            LocalPluginClass::Absent
-        );
-
-        let owned = dir.path().join("owned");
-        write_min_plugin(&owned, "10.0.0");
-        write_receipt(&owned, "10.0.0");
-        assert_eq!(
-            classify_local_plugin(&owned),
-            LocalPluginClass::OwnedCurrent
-        );
-
-        let modified = dir.path().join("modified");
-        write_min_plugin(&modified, "10.0.0");
-        write_receipt(&modified, "10.0.0");
-        fs::write(modified.join("extra.txt"), b"local edit").unwrap();
-        assert_eq!(classify_local_plugin(&modified), LocalPluginClass::Modified);
-
-        let v9 = dir.path().join("v9");
-        write_min_plugin(&v9, "9.0.0");
-        // no bundle.json → structural v9
-        assert_eq!(classify_local_plugin(&v9), LocalPluginClass::V9Structural);
-
-        let amb = dir.path().join("amb");
-        fs::create_dir_all(&amb).unwrap();
-        fs::write(amb.join("readme.txt"), b"noise").unwrap();
-        assert_eq!(classify_local_plugin(&amb), LocalPluginClass::Ambiguous);
-    }
-
-    #[test]
-    fn prepare_refuses_ambiguous_and_backs_up_modified() {
-        let dir = tempdir().unwrap();
-        let paths = PluginPaths::with_plugins_dir(
-            dir.path(),
-            dir.path().join("plugins"),
-            dir.path().join("state"),
-        );
-        fs::create_dir_all(&paths.plugins_dir).unwrap();
-        fs::create_dir_all(&paths.plugin_root).unwrap();
-        fs::write(paths.plugin_root.join("noise"), b"x").unwrap();
-        let txid = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-        let err = prepare_local_plugin_for_update(&paths, txid).unwrap_err();
-        assert!(err.to_string().contains("ambiguous"));
-
-        // Modified: preserve then allow.
-        fs::remove_dir_all(&paths.plugin_root).unwrap();
-        write_min_plugin(&paths.plugin_root, "10.0.0");
-        write_receipt(&paths.plugin_root, "10.0.0");
-        fs::write(paths.plugin_root.join("local.patch"), b"edit").unwrap();
-        let prep = prepare_local_plugin_for_update(&paths, txid).unwrap();
-        assert_eq!(prep.class, LocalPluginClass::Modified);
-        let backup = prep.modified_backup.expect("backup path");
-        assert!(backup.join("local.patch").is_file());
-        let report = fs::read_to_string(paths.reports_dir.join(format!("{txid}.json"))).unwrap();
-        assert!(report.contains("modified local bundle"));
-    }
-
-    #[test]
     fn require_absolute_and_resolve_executable() {
         let dir = tempdir().unwrap();
         let bin = fake_abs_bin(dir.path(), "tool");
@@ -1558,50 +972,14 @@ mod tests {
         assert_eq!(again, bin);
     }
 
-    #[test]
-    fn worker_holds_exclusive_maintenance_gate() {
-        let dir = tempdir().unwrap();
-        let paths = PluginPaths::with_plugins_dir(
-            dir.path(),
-            dir.path().join("plugins"),
-            dir.path().join("state"),
-        );
-        fs::create_dir_all(&paths.plugins_dir).unwrap();
-        fs::create_dir_all(&paths.transactions_dir).unwrap();
-        let tools = dir.path().join("tools");
-        fs::create_dir_all(&tools).unwrap();
-        let txid = "44444444444444444444444444444444";
-        let stage = paths.stage_dir(txid).unwrap();
-        write_min_plugin(&stage, "10.1.0");
-        write_receipt(&stage, "10.1.0");
-        write_min_plugin(&paths.plugin_root, "10.0.0");
-        write_receipt(&paths.plugin_root, "10.0.0");
-        let payload = sample_payload(&paths, txid, "10.1.0", "10.0.0", &tools);
-        let mut journal = TransactionJournal::new(txid, "update");
-        journal.record(TxStep::Preflight, "ok");
-        journal.record(TxStep::Stage, serde_json::to_string(&payload).unwrap());
-        journal
-            .write_to(&paths.journal_path(txid).unwrap())
-            .unwrap();
-
-        // Hold exclusive first so the worker cannot begin mutation.
-        let gate = MaintenanceGate::open(&paths.maintenance_lock).unwrap();
-        let exclusive = gate.lock_exclusive().unwrap();
-        let worker_gate = MaintenanceGate::open(&paths.maintenance_lock).unwrap();
-        assert!(
-            worker_gate.try_lock_exclusive().unwrap().is_none(),
-            "exclusive maintenance barrier must block concurrent workers"
-        );
-        drop(exclusive);
-        // After release, try_lock succeeds (worker path can acquire).
-        assert!(worker_gate.try_lock_exclusive().unwrap().is_some());
-    }
-
     // -----------------------------------------------------------------------
     // Uninstall confirmation (Task 18 / BUNDLE-036). The quarantine/rollback
     // fault matrix that used to live here tested the worker chain deleted in
     // git-plugin-distribution Task 3 — `uninstall` no longer runs a worker at
-    // all, so there is nothing left to fault-inject.
+    // all, so there is nothing left to fault-inject. `worker_holds_exclusive_
+    // maintenance_gate`, which exercised `MaintenanceGate` through the same
+    // dead journal/payload ceremony, is likewise gone — the primitive's own
+    // exclusive-lock coverage lives in `support::maintenance_gate`'s tests.
     // -----------------------------------------------------------------------
 
     #[test]

@@ -1,9 +1,9 @@
-//! Plugin bundle assembly, receipt (`bundle.json`), validation, and release packaging.
+//! Plugin bundle assembly, receipt (`bundle.json`), and tree validation.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
-use std::path::{Component, Path, PathBuf};
+use std::io::{self, Write};
+use std::path::{Component, Path};
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,6 @@ use thiserror::Error;
 
 use crate::plugin::ownership::hash_bytes;
 use crate::plugin::paths::{validate_archive_entry_path, PLUGIN_ID};
-use crate::plugin::transaction::inspect_tar_zst_entries;
 
 /// Official first-class Rust target for the product bundle.
 pub const OFFICIAL_TARGET: &str = "x86_64-unknown-linux-gnu";
@@ -139,126 +138,6 @@ impl BundleReceipt {
             prev = Some(entry.path.as_str());
             validate_sha256_hex(&entry.sha256)?;
             validate_mode_string(&entry.mode)?;
-        }
-        Ok(())
-    }
-}
-
-/// Archive metadata embedded in the release metadata document.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ReleaseArchiveMeta {
-    pub file_name: String,
-    pub size: u64,
-    pub sha256: String,
-}
-
-/// Closed release metadata JSON (BUNDLE-012B).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ReleaseMetadata {
-    pub schema_version: u32,
-    pub plugin_id: String,
-    pub version: String,
-    pub target: String,
-    pub omarchy_contract: u32,
-    pub minimum_quickshell_version: String,
-    pub source_commit: String,
-    pub archive: ReleaseArchiveMeta,
-    pub release_notes_url: String,
-}
-
-impl ReleaseMetadata {
-    pub fn to_pretty_json(&self) -> Result<String, BundleError> {
-        let mut json = serde_json::to_string_pretty(self)?;
-        json.push('\n');
-        Ok(json)
-    }
-
-    pub fn parse_json(bytes: &[u8]) -> Result<Self, BundleError> {
-        let meta: Self = serde_json::from_slice(bytes)?;
-        meta.validate_shape()?;
-        Ok(meta)
-    }
-
-    pub fn validate_shape(&self) -> Result<(), BundleError> {
-        if self.schema_version != BUNDLE_SCHEMA_VERSION {
-            return Err(BundleError::msg("metadata schemaVersion must be 1"));
-        }
-        if self.plugin_id != PLUGIN_ID {
-            return Err(BundleError::msg(format!(
-                "metadata pluginId must be {PLUGIN_ID}"
-            )));
-        }
-        if self.target != OFFICIAL_TARGET {
-            return Err(BundleError::msg(format!(
-                "metadata target must be {OFFICIAL_TARGET}"
-            )));
-        }
-        if self.omarchy_contract != OMARCHY_CONTRACT {
-            return Err(BundleError::msg("metadata omarchyContract must be 1"));
-        }
-        if self.minimum_quickshell_version != MINIMUM_QUICKSHELL_VERSION {
-            return Err(BundleError::msg(format!(
-                "metadata minimumQuickshellVersion must be {MINIMUM_QUICKSHELL_VERSION}"
-            )));
-        }
-        validate_source_commit(&self.source_commit)?;
-        validate_semver_strict(&self.version)?;
-        validate_sha256_hex(&self.archive.sha256)?;
-        let expected_name = format!("{PLUGIN_ID}-{}-{OFFICIAL_TARGET}.tar.zst", self.version);
-        if self.archive.file_name != expected_name {
-            return Err(BundleError::msg(format!(
-                "archive fileName must be {expected_name}, got {}",
-                self.archive.file_name
-            )));
-        }
-        let expected_notes = format!(
-            "https://github.com/othavi0/agent-bar/releases/tag/v{}",
-            self.version
-        );
-        if self.release_notes_url != expected_notes {
-            return Err(BundleError::msg(format!(
-                "releaseNotesUrl must be {expected_notes}"
-            )));
-        }
-        Ok(())
-    }
-
-    /// Cross-file equality between receipt, archive, checksum, and metadata.
-    pub fn assert_equals_release(
-        &self,
-        receipt: &BundleReceipt,
-        archive_bytes: &[u8],
-        checksum_sidecar: &str,
-    ) -> Result<(), BundleError> {
-        if self.version != receipt.version
-            || self.target != receipt.target
-            || self.source_commit != receipt.source_commit
-            || self.omarchy_contract != receipt.omarchy_contract
-            || self.minimum_quickshell_version != receipt.minimum_quickshell_version
-            || self.plugin_id != receipt.plugin_id
-        {
-            return Err(BundleError::msg(
-                "release metadata does not equal bundle receipt identity fields",
-            ));
-        }
-        let digest = hash_bytes(archive_bytes);
-        if self.archive.sha256 != digest {
-            return Err(BundleError::msg(
-                "release metadata archive sha256 does not match archive bytes",
-            ));
-        }
-        if self.archive.size != archive_bytes.len() as u64 {
-            return Err(BundleError::msg(
-                "release metadata archive size does not match archive bytes",
-            ));
-        }
-        let expected_sidecar = format!("{digest}  {}\n", self.archive.file_name);
-        if checksum_sidecar != expected_sidecar {
-            return Err(BundleError::msg(
-                "checksum sidecar does not match archive digest and file name",
-            ));
         }
         Ok(())
     }
@@ -511,181 +390,6 @@ impl BundleValidator {
 
         Ok(receipt)
     }
-
-    /// Validate a tar.zst archive inventory before extraction (BUNDLE-027).
-    pub fn validate_archive_bytes(bytes: &[u8]) -> Result<Vec<String>, BundleError> {
-        let names = inspect_tar_zst_entries(bytes).map_err(|e| BundleError::msg(e.to_string()))?;
-        if names.is_empty() {
-            return Err(BundleError::msg("archive is empty"));
-        }
-        // Every path must be under agent-bar.usage/
-        let prefix = format!("{PLUGIN_ID}/");
-        for name in &names {
-            if name.as_str() == PLUGIN_ID || name.as_str() == format!("{PLUGIN_ID}/") {
-                continue;
-            }
-            if !name.starts_with(&prefix) {
-                return Err(BundleError::msg(format!(
-                    "archive entry outside plugin root: {name}"
-                )));
-            }
-            let rel = &name[prefix.len()..];
-            if !rel.is_empty() {
-                validate_archive_entry_path(rel).map_err(|e| BundleError::msg(e.to_string()))?;
-            }
-        }
-        Ok(names)
-    }
-}
-
-/// Internal release builder: archive + checksum + metadata + LICENSE.
-#[derive(Debug, Clone)]
-pub struct ReleaseBuilder {
-    pub source_commit: String,
-}
-
-impl ReleaseBuilder {
-    pub fn new(source_commit: impl Into<String>) -> Result<Self, BundleError> {
-        let source_commit = source_commit.into();
-        validate_source_commit(&source_commit)?;
-        Ok(Self { source_commit })
-    }
-
-    /// Require clean worktree whose HEAD equals `source_commit`.
-    pub fn assert_clean_head_equals(&self, repo_root: &Path) -> Result<(), BundleError> {
-        let status = Command::new("git")
-            .args(["status", "--porcelain"])
-            .current_dir(repo_root)
-            .output()
-            .map_err(|e| BundleError::msg(format!("git status failed: {e}")))?;
-        if !status.status.success() {
-            return Err(BundleError::msg("git status returned non-zero"));
-        }
-        if !status.stdout.is_empty() {
-            return Err(BundleError::msg(
-                "release requires a clean worktree (git status --porcelain is non-empty)",
-            ));
-        }
-        let head = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(repo_root)
-            .output()
-            .map_err(|e| BundleError::msg(format!("git rev-parse failed: {e}")))?;
-        if !head.status.success() {
-            return Err(BundleError::msg("git rev-parse HEAD failed"));
-        }
-        let head_s = String::from_utf8_lossy(&head.stdout).trim().to_string();
-        if head_s != self.source_commit {
-            return Err(BundleError::msg(format!(
-                "HEAD {head_s} does not equal source-commit {}",
-                self.source_commit
-            )));
-        }
-        Ok(())
-    }
-
-    /// Package a validated bundle into an empty output directory.
-    /// When `skip_git_gate` is true, skip the clean worktree / HEAD equality
-    /// check (tests only).
-    pub fn release(
-        &self,
-        plugin_dir: &Path,
-        output_dir: &Path,
-        release_notes: &Path,
-        license_src: &Path,
-        skip_git_gate: bool,
-        repo_root: Option<&Path>,
-    ) -> Result<ReleaseMetadata, BundleError> {
-        if !skip_git_gate {
-            let root = repo_root.ok_or_else(|| {
-                BundleError::msg("release requires repo_root for git clean/HEAD gate")
-            })?;
-            self.assert_clean_head_equals(root)?;
-        }
-
-        if output_dir.exists() {
-            let mut entries = fs::read_dir(output_dir)?;
-            if entries.next().is_some() {
-                return Err(BundleError::msg(format!(
-                    "release output directory must be empty: {}",
-                    output_dir.display()
-                )));
-            }
-        } else {
-            fs::create_dir_all(output_dir)?;
-        }
-
-        if !release_notes.is_file() {
-            return Err(BundleError::msg(format!(
-                "release-notes file missing: {}",
-                release_notes.display()
-            )));
-        }
-        if !license_src.is_file() {
-            return Err(BundleError::msg(format!(
-                "LICENSE missing: {}",
-                license_src.display()
-            )));
-        }
-
-        let receipt = BundleValidator::validate_tree(plugin_dir)?;
-        if receipt.source_commit != self.source_commit {
-            return Err(BundleError::msg(
-                "bundle receipt sourceCommit does not equal release source-commit",
-            ));
-        }
-
-        let archive_name = format!("{PLUGIN_ID}-{}-{OFFICIAL_TARGET}.tar.zst", receipt.version);
-        let archive_path = output_dir.join(&archive_name);
-        if archive_path.exists() {
-            return Err(BundleError::msg("refusing to overwrite existing archive"));
-        }
-
-        write_tar_zst(plugin_dir, &archive_path)?;
-        let archive_bytes = fs::read(&archive_path)?;
-        // Safety: re-inspect produced archive.
-        BundleValidator::validate_archive_bytes(&archive_bytes)?;
-
-        let digest = hash_bytes(&archive_bytes);
-        let checksum_name = format!("{archive_name}.sha256");
-        let checksum_path = output_dir.join(&checksum_name);
-        let sidecar = format!("{digest}  {archive_name}\n");
-        write_bytes_atomic(&checksum_path, sidecar.as_bytes(), 0o644)?;
-
-        let meta = ReleaseMetadata {
-            schema_version: BUNDLE_SCHEMA_VERSION,
-            plugin_id: PLUGIN_ID.to_string(),
-            version: receipt.version.clone(),
-            target: receipt.target.clone(),
-            omarchy_contract: receipt.omarchy_contract,
-            minimum_quickshell_version: receipt.minimum_quickshell_version.clone(),
-            source_commit: receipt.source_commit.clone(),
-            archive: ReleaseArchiveMeta {
-                file_name: archive_name,
-                size: archive_bytes.len() as u64,
-                sha256: digest,
-            },
-            release_notes_url: format!(
-                "https://github.com/othavi0/agent-bar/releases/tag/v{}",
-                receipt.version
-            ),
-        };
-        meta.validate_shape()?;
-        meta.assert_equals_release(&receipt, &archive_bytes, &sidecar)?;
-
-        let meta_name = format!(
-            "{PLUGIN_ID}-{}-{OFFICIAL_TARGET}.metadata.json",
-            receipt.version
-        );
-        let meta_path = output_dir.join(meta_name);
-        write_bytes_atomic(&meta_path, meta.to_pretty_json()?.as_bytes(), 0o644)?;
-
-        let license_dest = output_dir.join("LICENSE");
-        fs::copy(license_src, &license_dest)?;
-        set_unix_mode(&license_dest, 0o644)?;
-
-        Ok(meta)
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -730,11 +434,6 @@ pub fn validate_sha256_hex(s: &str) -> Result<(), BundleError> {
         ));
     }
     Ok(())
-}
-
-/// Public alias used by maintenance update-check validation.
-pub fn validate_sha256_hex_pub(s: &str) -> Result<(), BundleError> {
-    validate_sha256_hex(s)
 }
 
 fn validate_mode_string(mode: &str) -> Result<(), BundleError> {
@@ -1023,116 +722,6 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], mode: u32) -> Result<(), Bundle
     Ok(())
 }
 
-/// Create a deterministic tar.zst with top-level `agent-bar.usage/`.
-fn write_tar_zst(plugin_dir: &Path, archive_path: &Path) -> Result<(), BundleError> {
-    let file = File::create(archive_path)?;
-    let encoder = zstd::stream::write::Encoder::new(file, 3)
-        .map_err(|e| BundleError::msg(format!("zstd encoder: {e}")))?;
-    let mut builder = tar::Builder::new(encoder);
-
-    let mut stack = vec![plugin_dir.to_path_buf()];
-    let mut files: Vec<PathBuf> = Vec::new();
-    while let Some(dir) = stack.pop() {
-        let mut entries: Vec<_> = fs::read_dir(&dir)?.collect::<Result<Vec<_>, _>>()?;
-        entries.sort_by_key(|e| e.file_name());
-        for entry in entries {
-            let path = entry.path();
-            let ft = entry.file_type()?;
-            if ft.is_dir() {
-                stack.push(path);
-            } else if ft.is_file() {
-                files.push(path);
-            } else {
-                return Err(BundleError::msg(format!(
-                    "refusing to archive special file {}",
-                    path.display()
-                )));
-            }
-        }
-    }
-    files.sort();
-
-    // Directory entry for the top-level plugin root.
-    {
-        let mut header = tar::Header::new_gnu();
-        header.set_entry_type(tar::EntryType::Directory);
-        header.set_mode(0o755);
-        header.set_size(0);
-        header.set_mtime(0);
-        header.set_uid(0);
-        header.set_gid(0);
-        header.set_cksum();
-        builder
-            .append_data(&mut header, format!("{PLUGIN_ID}/"), io::empty())
-            .map_err(|e| BundleError::msg(e.to_string()))?;
-    }
-
-    for path in files {
-        let rel = path
-            .strip_prefix(plugin_dir)
-            .map_err(|e| BundleError::msg(e.to_string()))?;
-        let rel_s = rel
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("/");
-        let archive_rel = format!("{PLUGIN_ID}/{rel_s}");
-        let mut bytes = Vec::new();
-        File::open(&path)?.read_to_end(&mut bytes)?;
-        let mode = if rel_s == "bin/agent-bar" || rel_s == "scripts/agent-bar-open-terminal" {
-            0o755
-        } else {
-            0o644
-        };
-        let mut header = tar::Header::new_gnu();
-        header.set_entry_type(tar::EntryType::Regular);
-        header.set_mode(mode);
-        header.set_size(bytes.len() as u64);
-        header.set_mtime(0);
-        header.set_uid(0);
-        header.set_gid(0);
-        header.set_cksum();
-        builder
-            .append_data(&mut header, archive_rel, bytes.as_slice())
-            .map_err(|e| BundleError::msg(e.to_string()))?;
-    }
-
-    let encoder = builder
-        .into_inner()
-        .map_err(|e| BundleError::msg(e.to_string()))?;
-    encoder
-        .finish()
-        .map_err(|e| BundleError::msg(format!("zstd finish: {e}")))?;
-    Ok(())
-}
-
-/// Extract a validated archive into `dest_parent`, producing `dest_parent/agent-bar.usage`.
-pub fn extract_bundle_archive(bytes: &[u8], dest_parent: &Path) -> Result<PathBuf, BundleError> {
-    BundleValidator::validate_archive_bytes(bytes)?;
-    fs::create_dir_all(dest_parent)?;
-    let plugin_root = dest_parent.join(PLUGIN_ID);
-    if plugin_root.exists() {
-        return Err(BundleError::msg(format!(
-            "extract destination already exists: {}",
-            plugin_root.display()
-        )));
-    }
-
-    let cursor = io::Cursor::new(bytes);
-    let decoder = zstd::stream::read::Decoder::new(cursor)
-        .map_err(|e| BundleError::msg(format!("zstd decode: {e}")))?;
-    let mut archive = tar::Archive::new(decoder);
-    archive
-        .unpack(dest_parent)
-        .map_err(|e| BundleError::msg(format!("tar unpack: {e}")))?;
-
-    if !plugin_root.is_dir() {
-        return Err(BundleError::msg("archive did not produce plugin root"));
-    }
-    BundleValidator::validate_tree(&plugin_root)?;
-    Ok(plugin_root)
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1141,6 +730,7 @@ pub fn extract_bundle_archive(bytes: &[u8], dest_parent: &Path) -> Result<PathBu
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
     const ZERO_COMMIT: &str = "0000000000000000000000000000000000000000";
@@ -1384,106 +974,6 @@ mod tests {
     }
 
     #[test]
-    fn archive_round_trip_and_traversal_rejection() {
-        let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
-        write_minimal_plugin(&root, "10.0.0");
-        let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
-        let receipt = BundleValidator::build_receipt(&builder, &root).unwrap();
-        fs::write(root.join("bundle.json"), receipt.to_pretty_json().unwrap()).unwrap();
-        BundleValidator::validate_tree(&root).unwrap();
-
-        let out = dir.path().join("out");
-        fs::create_dir_all(&out).unwrap();
-        let notes = dir.path().join("notes.md");
-        fs::write(&notes, b"# 10.0.0\n").unwrap();
-        let license = dir.path().join("LICENSE");
-        fs::write(&license, b"MIT\n").unwrap();
-
-        let rb = ReleaseBuilder::new(ZERO_COMMIT).unwrap();
-        let meta = rb
-            .release(&root, &out, &notes, &license, true, None)
-            .unwrap();
-        assert_eq!(meta.version, "10.0.0");
-        let archive_path = out.join(&meta.archive.file_name);
-        let bytes = fs::read(&archive_path).unwrap();
-        assert_eq!(hash_bytes(&bytes), meta.archive.sha256);
-
-        let extract_parent = dir.path().join("extract");
-        let extracted = extract_bundle_archive(&bytes, &extract_parent).unwrap();
-        let again = BundleValidator::validate_tree(&extracted).unwrap();
-        assert_eq!(again.files.len(), receipt.files.len());
-
-        // Metadata equality with checksum sidecar.
-        let sidecar =
-            fs::read_to_string(out.join(format!("{}.sha256", meta.archive.file_name))).unwrap();
-        meta.assert_equals_release(&receipt, &bytes, &sidecar)
-            .unwrap();
-    }
-
-    #[test]
-    fn release_refuses_nonempty_output_and_missing_notes() {
-        let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
-        write_minimal_plugin(&root, "10.0.0");
-        let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
-        let receipt = BundleValidator::build_receipt(&builder, &root).unwrap();
-        fs::write(root.join("bundle.json"), receipt.to_pretty_json().unwrap()).unwrap();
-
-        let out = dir.path().join("out");
-        fs::create_dir_all(&out).unwrap();
-        fs::write(out.join("stale"), b"x").unwrap();
-        let notes = dir.path().join("notes.md");
-        fs::write(&notes, b"n").unwrap();
-        let license = dir.path().join("LICENSE");
-        fs::write(&license, b"MIT\n").unwrap();
-        let rb = ReleaseBuilder::new(ZERO_COMMIT).unwrap();
-        assert!(rb
-            .release(&root, &out, &notes, &license, true, None)
-            .is_err());
-
-        let out2 = dir.path().join("out2");
-        assert!(rb
-            .release(
-                &root,
-                &out2,
-                &dir.path().join("missing.md"),
-                &license,
-                true,
-                None
-            )
-            .is_err());
-    }
-
-    #[test]
-    fn release_metadata_literal_shape() {
-        let meta = ReleaseMetadata {
-            schema_version: 1,
-            plugin_id: PLUGIN_ID.into(),
-            version: "10.0.0".into(),
-            target: OFFICIAL_TARGET.into(),
-            omarchy_contract: 1,
-            minimum_quickshell_version: MINIMUM_QUICKSHELL_VERSION.into(),
-            source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
-            archive: ReleaseArchiveMeta {
-                file_name: "agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.tar.zst".into(),
-                size: 1234567,
-                sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
-            },
-            release_notes_url: "https://github.com/othavi0/agent-bar/releases/tag/v10.0.0".into(),
-        };
-        meta.validate_shape().unwrap();
-        let json = meta.to_pretty_json().unwrap();
-        assert!(json.contains("\"releaseNotesUrl\""));
-        assert!(json.contains("agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.tar.zst"));
-        let mut v = serde_json::to_value(&meta).unwrap();
-        v.as_object_mut()
-            .unwrap()
-            .insert("extra".into(), serde_json::json!(1));
-        assert!(ReleaseMetadata::parse_json(&serde_json::to_vec(&v).unwrap()).is_err());
-    }
-
-    #[test]
     fn assemble_from_repo_assets() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let dir = tempdir().unwrap();
@@ -1539,87 +1029,6 @@ mod tests {
             err.to_string().contains("helper version"),
             "unexpected error: {err}"
         );
-    }
-
-    #[test]
-    fn release_refuses_dirty_or_wrong_head() {
-        let dir = tempdir().unwrap();
-        let repo = dir.path().join("repo");
-        fs::create_dir_all(&repo).unwrap();
-        // Minimal git repo with a known HEAD and a dirty worktree.
-        let init = Command::new("git")
-            .args(["init"])
-            .current_dir(&repo)
-            .output()
-            .unwrap();
-        assert!(init.status.success(), "git init failed");
-        let _ = Command::new("git")
-            .args(["config", "user.email", "test@example.com"])
-            .current_dir(&repo)
-            .status();
-        let _ = Command::new("git")
-            .args(["config", "user.name", "test"])
-            .current_dir(&repo)
-            .status();
-        fs::write(repo.join("README"), b"x\n").unwrap();
-        assert!(Command::new("git")
-            .args(["add", "README"])
-            .current_dir(&repo)
-            .status()
-            .unwrap()
-            .success());
-        assert!(Command::new("git")
-            .args(["commit", "-m", "init"])
-            .current_dir(&repo)
-            .status()
-            .unwrap()
-            .success());
-        let head = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(&repo)
-            .output()
-            .unwrap();
-        let head_s = String::from_utf8_lossy(&head.stdout).trim().to_string();
-        // Dirty worktree rejects.
-        fs::write(repo.join("dirty"), b"y\n").unwrap();
-        let rb = ReleaseBuilder::new(head_s.clone()).unwrap();
-        assert!(rb.assert_clean_head_equals(&repo).is_err());
-        // Clean but wrong source-commit rejects.
-        fs::remove_file(repo.join("dirty")).unwrap();
-        let wrong = ReleaseBuilder::new("0123456789abcdef0123456789abcdef01234567").unwrap();
-        let err = wrong.assert_clean_head_equals(&repo).unwrap_err();
-        assert!(err.to_string().contains("does not equal source-commit"));
-        // Clean matching HEAD accepts.
-        rb.assert_clean_head_equals(&repo).unwrap();
-    }
-
-    #[test]
-    fn archive_rejects_link_entries() {
-        // Craft a plain tar with a symlink, then zstd it.
-        let dir = tempdir().unwrap();
-        let tar_path = dir.path().join("bad.tar");
-        {
-            let f = File::create(&tar_path).unwrap();
-            let mut builder = tar::Builder::new(f);
-            let mut header = tar::Header::new_gnu();
-            header.set_entry_type(tar::EntryType::Symlink);
-            header.set_size(0);
-            header.set_mode(0o777);
-            header.set_mtime(0);
-            header.set_cksum();
-            builder
-                .append_link(&mut header, "agent-bar.usage/evil", "/etc/passwd")
-                .unwrap();
-            builder.finish().unwrap();
-        }
-        let tar_bytes = fs::read(&tar_path).unwrap();
-        let mut zstd_bytes = Vec::new();
-        {
-            let mut enc = zstd::stream::write::Encoder::new(&mut zstd_bytes, 1).unwrap();
-            enc.write_all(&tar_bytes).unwrap();
-            enc.finish().unwrap();
-        }
-        assert!(BundleValidator::validate_archive_bytes(&zstd_bytes).is_err());
     }
 
     #[test]

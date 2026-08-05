@@ -47,15 +47,6 @@ impl PluginPaths {
         Self::from_parts(home, plugins_dir, state)
     }
 
-    /// Test / `setup plugins-dir` layout with an injected plugins parent.
-    pub fn with_plugins_dir(
-        home: impl Into<PathBuf>,
-        plugins_dir: impl Into<PathBuf>,
-        xdg_state: impl Into<PathBuf>,
-    ) -> Self {
-        Self::from_parts(home.into(), plugins_dir.into(), xdg_state.into())
-    }
-
     fn from_parts(home: PathBuf, plugins_dir: PathBuf, xdg_state: PathBuf) -> Self {
         let agent_state = xdg_state.join("agent-bar");
         Self {
@@ -264,16 +255,6 @@ mod tests {
     }
 
     #[test]
-    fn injected_plugins_dir_for_tests() {
-        let p = PluginPaths::with_plugins_dir("/tmp/home", "/tmp/plugins", "/tmp/state");
-        assert_eq!(p.plugin_root, PathBuf::from("/tmp/plugins/agent-bar.usage"));
-        assert_eq!(
-            p.transactions_dir,
-            PathBuf::from("/tmp/state/agent-bar/transactions")
-        );
-    }
-
-    #[test]
     fn txid_must_be_32_lowercase_hex() {
         assert!(validate_txid("0123456789abcdef0123456789abcdef").is_ok());
         assert!(validate_txid("0123456789ABCDEF0123456789abcdef").is_err());
@@ -283,7 +264,7 @@ mod tests {
 
     #[test]
     fn stage_and_quarantine_are_hidden_siblings() {
-        let p = PluginPaths::with_plugins_dir("/h", "/plugins", "/state");
+        let p = PluginPaths::production("/h", None);
         let tx = "0123456789abcdef0123456789abcdef";
         let stage = p.stage_dir(tx).unwrap();
         let q = p.quarantine_dir(tx).unwrap();
