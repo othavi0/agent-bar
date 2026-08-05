@@ -60,11 +60,8 @@ function updateCheckArgv(helperPath) {
   return [String(helperPath), "update", "check"]
 }
 
-function updateApplyArgv(helperPath, version) {
-  var v = String(version || "")
-  if (!v.length)
-    return null
-  return [String(helperPath), "update", "apply", v]
+function updateApplyArgv(helperPath) {
+  return [String(helperPath), "update", "apply"]
 }
 
 function uninstallArgv(helperPath, purge) {
@@ -136,6 +133,14 @@ function maintenanceUiFromCheck(ui, stdout, exitCode, fallbackVersion) {
         next.installedVersion = current.length
             ? current
             : String(next.installedVersion || fallbackVersion || "")
+        if (doc.reinstallRequired === true) {
+          next.phase = "reinstall_required"
+          next.targetVersion = ""
+          next.releaseNotesUrl = ""
+          next.message = "Installed without git. Run: omarchy plugin remove agent-bar.usage, "
+              + "then omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git"
+          return next
+        }
         var latest = doc.latestCompatible
         if (doc.available === true && latest && latest.version) {
           next.phase = "update_available"
@@ -182,7 +187,7 @@ function updateConfirmMessage(ui) {
   var current = ui && ui.installedVersion ? String(ui.installedVersion) : "current"
   var target = ui && ui.targetVersion ? String(ui.targetVersion) : "new"
   return "Updates " + current + " \u2192 " + target
-      + ". Settings stay. Rolls back if it fails."
+      + ". Settings stay. Fast-forwards to the latest release; a failed validation rolls back."
 }
 
 function maintenanceUiOpenUninstallConfirm(ui) {

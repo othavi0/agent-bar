@@ -14,8 +14,9 @@
 //! BUNDLE-021 v-next (git-plugin-distribution Task 1): the document now
 //! carries `reinstallRequired` and no archive/checksum/source-commit fields
 //! at all — discovery reads the dist repo's `bundle.json` receipt instead of
-//! GitHub Releases. QML's `reinstallRequired` handling is a later task; this
-//! file only pins the Rust-side shape and fixture contents for now.
+//! GitHub Releases. QML reads `reinstallRequired` too (Task 7): this file
+//! pins the Rust-side shape and fixture contents, and asserts the key name
+//! survives into the QML parser.
 
 use agent_bar::plugin::maintenance::UpdateCheckDocument;
 
@@ -125,6 +126,10 @@ fn qml_parser_reads_the_real_keys() {
     assert!(
         js.contains("latestCompatible"),
         "the parser must read the BUNDLE-021 document"
+    );
+    assert!(
+        js.contains("reinstallRequired"),
+        "the parser must read the git-less reinstall sentinel"
     );
     assert!(
         !js.contains("updateAvailable"),
