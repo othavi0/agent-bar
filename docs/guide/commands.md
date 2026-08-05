@@ -165,7 +165,7 @@ stderr.
 | `2` | CLI grammar or unsupported value |
 | `3` | Settings/input validation surfaced by `config` commands |
 | `4` | Status/schema/serialization invariant; `status` also exits 4 when settings fail to load |
-| `5` | Plugin integration or transaction failure |
+| `5` | Plugin integration or delegation failure |
 | `70` | Unexpected internal failure |
 
 `login <provider>` passes the delegated provider CLI's own exit code

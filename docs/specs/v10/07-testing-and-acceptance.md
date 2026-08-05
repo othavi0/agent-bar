@@ -163,15 +163,18 @@ direct Cargo dependency to lack a v10 owner. Active documentation may contain
 these tokens only inside explicit negative-removal/history-policy statements;
 production Rust/QML/workflows/scripts may not.
 
-Scope-specific assertions reject the four installer strings above from
-`install.sh`. Final `Cargo.toml` must contain exactly
+Since git-plugin-distribution (2026-08-05), `install.sh` is a locked
+deletion path: the gate requires it absent rather than scanning its
+content, and the four installer strings above are enforced only as
+ordinary forbidden tokens across the active surface. Final `Cargo.toml`
+must contain exactly
 `description = "LLM quota monitor for Claude, Codex, Amp, and Grok."`, contain
 no `package.metadata.binstall`, and declare no standalone/AUR metadata. These
 checks avoid a useless global rejection of the word `Waybar` while closing
 positive production surfaces.
 
 Exact raw-input allowlists are `amp usage`, Codex `session_log`, normalized
-window ID `session`, plugin-scoped `install.sh`,
+window ID `session`,
 `tests/fixtures/amp/usage-legacy-dollars.txt`,
 `tests/fixtures/amp/usage-free-pct.txt`,
 `tests/fixtures/status-v2/money-field.json`, and

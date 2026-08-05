@@ -343,16 +343,16 @@ Cache:
   $XDG_CACHE_HOME/agent-bar/status.lock
   $XDG_CACHE_HOME/agent-bar/notification-state-v1.json
 
-Backups and transaction journals:
+Backups:
   $XDG_STATE_HOME/agent-bar/backups/
-  $XDG_STATE_HOME/agent-bar/transactions/
-  $XDG_STATE_HOME/agent-bar/reports/
 ```
 
 Agent Bar settings/cache/state follow XDG defaults when the corresponding
 variable is unset. The installed Quattro plugin root and `shell.json` use
 literal `$HOME/.config/omarchy`; production must not redirect them through XDG.
-Tests use `setup plugins-dir <path>`, a fake HOME, and isolated XDG roots.
+Tests use an injected `HOME` (and `XDG_STATE_HOME`) and isolated XDG roots;
+since git-plugin-distribution (2026-08-05), there is no `setup plugins-dir
+<path>` argument to inject one instead.
 
 ## Data flow
 
