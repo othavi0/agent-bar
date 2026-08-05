@@ -245,17 +245,17 @@ pub enum ConfigInput {
     Json(String),
 }
 
-pub enum SetupOptions {
-    Production,
-    PluginsDir(PathBuf),
-}
-
-pub struct ReleaseVersion(semver::Version);
-
+// Amended 2026-08-05 (git-plugin-distribution): `setup` and `update apply`
+// dropped their payloads. `setup` always targets the literal production
+// plugins directory, so `SetupOptions` and its `Production`/`PluginsDir`
+// variants were removed in favor of a unit `Command::Setup`. `update apply`
+// delegates version resolution to `omarchy plugin update`, so `ReleaseVersion`
+// and `UpdateCommand::Apply(ReleaseVersion)` were removed in favor of a unit
+// `UpdateCommand::Apply`.
 pub enum UpdateCommand {
     Interactive,
     Check,
-    Apply(ReleaseVersion),
+    Apply,
 }
 
 pub enum DoctorCommand {
@@ -267,7 +267,7 @@ pub enum Command {
     Status(StatusOptions),
     Login(ProviderId),
     Config(ConfigCommand),
-    Setup(SetupOptions),
+    Setup,
     Update(UpdateCommand),
     Uninstall { purge: bool },
     Doctor(DoctorCommand),

@@ -2,31 +2,33 @@
 
 ## Transaction model
 
-Every mutating operation follows:
+Since git-plugin-distribution (2026-08-05), plugin-directory mutation (fresh
+install, update, and uninstall) is delegated to the Omarchy plugin manager,
+which owns its own git-based fetch, fast-forward, validation, and rollback;
+see "Update and uninstall transactions" below. The discipline described here
+now covers only the two remaining in-process writers that still touch files
+directly: v9-to-v10 settings migration and `doctor clean`'s legacy-artifact
+removal. Both follow:
 
 ```text
 preflight
-  -> ownership scan
-  -> exact plan
-  -> backup and manifest
-  -> stage
-  -> validate staged result
-  -> atomic replacement
-  -> Omarchy rescan
-  -> health check
-  -> commit journal or rollback
+  -> plan (ownership scan for doctor clean)
+  -> backup
+  -> write (atomic replacement for settings; backup-then-remove for doctor
+     clean artifacts)
+  -> manifest
 ```
 
 - `MIG-001`: No affected path changes before preflight and backup succeed.
-- `MIG-002`: Staging occurs on the same filesystem as each replacement.
-- `MIG-002A`: Journals, verified worker copies, reports, and durable backups
-  live under XDG state. Exchange candidates and quarantine never do: each is a
-  hidden sibling of the path it will replace or remove.
-- `MIG-003`: The transaction journal records every completed step.
-- `MIG-004`: Any failed validation or health check restores all affected
-  components, not only the last file.
-- `MIG-005`: Rollback is verified and included in the operation report.
+- `MIG-002A`: Durable backups live under XDG state, one directory per
+  operation timestamp.
 - `MIG-006`: Backups never live inside a directory being replaced.
+
+`MIG-002` (same-filesystem staging), `MIG-003` (transaction journal),
+`MIG-004` (staged-validation rollback), and `MIG-005` (verified rollback
+report) described a stage, exchange, and journal pipeline that no live
+command path ever used; that dead machinery was removed 2026-08-05 along
+with the code that implemented it.
 
 ## Backup layout
 

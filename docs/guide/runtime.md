@@ -98,6 +98,6 @@ strings are sanitized English plain text.
 
 ## Permissions
 
-Settings, cache, journals, backups, and transient worker copies are restricted
-to the user. Bundle executable files are `0755`; nonexecutables use
-deterministic nonexecutable modes. Bundles contain no symlinks.
+Settings, cache, and backups are restricted to the user. Bundle executable
+files are `0755`; nonexecutables use deterministic nonexecutable modes.
+Bundles contain no symlinks.
