@@ -99,8 +99,9 @@ design doc that now govern the amended behavior. See
 
 | Requirements | Tasks | Primary evidence |
 | --- | --- | --- |
-| `MIG-001`–`MIG-006` | 15 | transaction fault injection and rollback hashes |
-| `MIG-002A` | 15, 17–18 | destination-local stage/quarantine path tests |
+| `MIG-001`, `MIG-006` | 15 | `tests/cli.rs::binary_setup_migrates_v9_settings_to_strict_v10` (setup migration backup) and `src/plugin/doctor.rs::clean_removes_only_owned_legacy_and_backups` (doctor clean backup) |
+| `MIG-002`, `MIG-003`, `MIG-004`, `MIG-005` | 15 | **amended 2026-08-05**: the stage/exchange/journal pipeline they described was never used by any live command path; the machinery that implemented it (`PluginPaths::stage_dir`/`quarantine_dir`/`journal_path`/`settings_quarantine`/`cache_quarantine`/`backups_quarantine`, `validate_txid`, `ensure_not_symlink`, `same_filesystem`) was removed, no replacement test surface exists |
+| `MIG-002A` | 15, 17–18 | **amended 2026-08-05**: `tests/cli.rs::binary_setup_migrates_v9_settings_to_strict_v10` and `src/plugin/doctor.rs::clean_removes_only_owned_legacy_and_backups` (destination-local stage/quarantine path tests retired with the machinery above) |
 | `MIG-007`–`MIG-019` | 16 | complete v9 fixture matrix and idempotency |
 | `MIG-019A`–`MIG-019C` | 16 | byte-preservation tests; **MIG-019A amended 2026-08-05**: `omarchy plugin add` is the install now, no exact-argv test needed |
 | `MIG-020`–`MIG-026` | 17–18 | **amended 2026-08-05**: superseded by the delegation model; evidence is `tests/cli.rs` delegation-argv/purge-ordering tests and `tests/dist_tree_validate.rs`, not the retired stage/exchange fault matrix |
