@@ -62,7 +62,7 @@ Check:
 
 ```bash
 omarchy plugin validate "$HOME/.config/omarchy/plugins/agent-bar.usage"
-omarchy plugin rescan
+omarchy-shell shell rescanPlugins
 ```
 
 Then inspect:
@@ -91,14 +91,37 @@ until then.
 
 ## Update failed
 
+`update apply` only hands off to `omarchy plugin update agent-bar.usage
+--yes`; that command owns the actual result. Its failure modes:
+
+- **Non-fast-forward**: `omarchy plugin update` refuses to update a plugin
+  directory with local modifications or diverged history. It never force-
+  pushes or overwrites; resolve or discard the local change in the plugin
+  directory, then retry.
+- **Validation failure after fetch**: the update fetches, fast-forwards, and
+  re-validates with `omarchy-plugin-validate`. A failing validation runs
+  `git reset --hard ORIG_HEAD` automatically, restoring the previous
+  version; nothing is left half-installed.
+- **Not a git checkout**: a plugin directory installed before the git-based
+  distribution has no `.git`. `omarchy plugin update` silently skips it in
+  a bulk run and refuses it outright when targeted by ID. `update check`
+  detects this and reports `reinstallRequired: true`; the Settings UI shows
+  the one-time migration instruction:
+
+  ```bash
+  omarchy plugin remove agent-bar.usage
+  omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
+  ```
+
+  Settings, cache, and backups live outside the plugin directory and
+  survive the reinstall.
+
+Confirm the outcome with:
+
 ```bash
 "$PLUGIN" doctor scan
+"$PLUGIN" version
 ```
-
-Inspect the latest transaction journal under
-`$XDG_STATE_HOME/agent-bar/transactions`. A failed update must restore the
-previous complete bundle. Do not delete staging/quarantine manually before
-doctor identifies it.
 
 ## Modified or ambiguous legacy files
 

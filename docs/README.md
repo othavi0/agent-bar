@@ -4,8 +4,8 @@ Active product and engineering documentation for Agent Bar.
 
 ## User and operator guide
 
-- [Integration](guide/integration.md) — install, migration, update,
-  uninstall, ownership, and rollback.
+- [Integration](guide/integration.md): install, migration, update,
+  uninstall, and ownership through the native Omarchy plugin flow.
 - [Runtime](guide/runtime.md) — owned paths, settings, cache, privacy, and
   state.
 - [Troubleshooting](guide/troubleshooting.md) — typed provider and plugin

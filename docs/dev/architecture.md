@@ -123,25 +123,37 @@ payload. Generation IDs prevent stale callbacks.
 
 ## Plugin maintenance
 
-Bundle mutations use:
+`update apply` and `uninstall` delegate their live mutation to the Omarchy
+CLI rather than staging, exchanging, or rolling back the plugin directory
+themselves:
 
-1. preflight and ownership scan;
-2. exact backup and journal;
-3. same-filesystem staging;
-4. archive/inventory/version validation;
-5. `renameat2(RENAME_EXCHANGE)`;
-6. Quattro rescan;
-7. health IPC;
-8. commit or complete rollback.
+1. resolve `omarchy` and `systemd-run` to absolute executable paths
+   (fails closed before anything destructive if either is missing);
+2. `uninstall purge` removes Agent Bar's own XDG state here, before the
+   handoff;
+3. run `omarchy plugin update agent-bar.usage --yes` or
+   `omarchy plugin remove agent-bar.usage --yes` as a detached transient
+   `systemd-run --user` unit;
+4. return once systemd has accepted and started the unit.
 
-Update/uninstall use a verified helper copy in a transient user systemd unit so
-the operation survives destruction of the initiating QML service. There is no
-permanent daemon.
+`omarchy plugin update` owns the git fetch, fast-forward, re-validation, and
+`git reset --hard ORIG_HEAD` rollback on a failed validation. `omarchy
+plugin remove` owns disabling the bar entry, deleting (or, for a non-git
+directory, backing up) the plugin directory, and rescanning. Detaching the
+unit lets the operation survive destruction of the initiating QML service
+during rescan; there is no permanent daemon and no verified worker copy of
+the helper.
 
-All status/config mutations hold the shared stable maintenance gate under XDG
-state. Maintenance holds it exclusively from final plan recheck through commit
-or verified rollback, preventing an external helper from recreating
-quarantined cache or notification state.
+`update check` fetches the distribution repository's `bundle.json` receipt
+over HTTPS and reports `reinstallRequired: true` when the live plugin root
+has no `.git` directory, so the UI can offer the one-time
+remove-then-add migration instead of a false "up to date".
+
+All status/config mutations, plus the purge/preflight/handoff step above,
+hold the shared stable maintenance gate under XDG state. Maintenance holds
+it exclusively while its own local work runs, preventing an external helper
+from recreating cache or notification state mid-operation; it does not hold
+the lock across the detached unit's own execution.
 
 ## Security boundaries
 

@@ -1,13 +1,25 @@
 # Plugin Bundle and Release
 
+Amended by git-plugin-distribution (2026-08-05):
+`docs/superpowers/specs/2026-08-05-git-plugin-distribution-design.md`. The
+manifest and receipt shapes below carry forward; the release-files,
+update-transaction, and uninstall-transaction sections are replaced by the
+distribution-repository model.
+
 ## Product artifact
 
-v10 builds one architecture-specific Omarchy plugin bundle:
+v10 builds one architecture-specific Omarchy plugin bundle. Since
+git-plugin-distribution, the same assembled tree is also the exact
+distribution-repository commit that `omarchy plugin add` clones, so it
+carries its own `README.md`, `LICENSE`, and marketplace `preview.png`:
 
 ```text
 agent-bar.usage/
 ├── manifest.json
 ├── bundle.json
+├── README.md
+├── LICENSE
+├── preview.png
 ├── Service.qml
 ├── BarWidget.qml
 ├── Popup.qml
@@ -22,6 +34,13 @@ agent-bar.usage/
 └── bin/
     └── agent-bar
 ```
+
+An installed plugin directory additionally contains a `.git/` at its root:
+it is a git checkout of the distribution repository. Bundle tree validation
+(`BundleValidator::validate_tree`, `doctor`) tolerates a real `.git`
+directory sitting directly at the tree root and does not walk it; a `.git`
+anywhere deeper, or one that is itself a symlink, is not special-cased and
+still fails validation through the ordinary symlink/extra-file checks.
 
 - `BUNDLE-001`: The product is the `agent-bar.usage` plugin directory.
 - `BUNDLE-002`: `bin/agent-bar` is private and invoked by resolved absolute
@@ -59,6 +78,7 @@ The final Quattro-validated manifest is:
     "displayName": "Agent Bar",
     "description": "Shows normalized provider quota and reset information.",
     "category": "AI",
+    "defaultSection": "right",
     "aliases": ["agent-bar"],
     "allowMultiple": false,
     "defaults": {},
@@ -76,14 +96,21 @@ It must:
 - map the bar widget to `BarWidget.qml`;
 - set `allowMultiple` to exactly `false`; Quattro replicates the single widget
   definition per monitor through its normal host mechanism;
+- set `barWidget.defaultSection` to `right`, so `omarchy plugin add`'s
+  interactive placement prompt (and its `--enable` flag) defaults there;
 - contain no ignored v9 activation key;
 - contain only supported schema keys;
 - expose no inline Agent Bar settings schema.
 
-`bundle.json` is the Agent Bar ownership and integrity receipt. It records
-bundle schema, plugin ID, version, Rust target, source commit, and the SHA-256,
-size, and mode of every other bundle file. The release archive checksum covers
-`bundle.json`; the receipt does not attempt a recursive self-digest.
+`bundle.json` is the Agent Bar ownership and integrity receipt, and, since
+git-plugin-distribution, the sole document `update check` reads to
+discover the latest release. It records bundle schema, plugin ID, version,
+Rust target, source commit, and the SHA-256, size, and mode of every other
+bundle file, including `README.md`, `LICENSE`, and `preview.png`. Every
+release embeds a freshly computed `sourceCommit`, so the distribution
+repository never receives an empty commit. There is no separate archive or
+checksum sidecar to cover `bundle.json` itself; the receipt does not attempt
+a recursive self-digest.
 
 The exact receipt shape is:
 
@@ -120,50 +147,42 @@ contract. Rust/JSON contract tests run in CI; `omarchy plugin validate`,
 Quickshell imports, and QML behavior run in the isolated Quattro acceptance
 environment because generic GitHub-hosted runners do not provide that runtime.
 
-## Release files
+## Distribution repository
 
-```text
-agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.tar.zst
-agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.tar.zst.sha256
-agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.metadata.json
-LICENSE
-```
+Replaces the archive-based "Release files" model. There is no `.tar.zst`
+archive, checksum sidecar, or release-metadata JSON; the distribution
+artifact is a plain git tree.
 
-- `BUNDLE-008`: The archive contains one top-level `agent-bar.usage` directory.
-- `BUNDLE-009`: It contains no Rust source, tests, target directory, Git
-  metadata, credentials, local config, or development fixtures.
+`othavi0/omarchy-agent-bar` holds exactly one root layout: the assembled
+tree above (`manifest.json`, `bundle.json`, QML/icons/scripts/`bin/`,
+`README.md`, `LICENSE`, `preview.png`) plus its own `.git/`. CI
+(`.github/workflows/auto-release.yml`) is the sole writer: it clones the
+repository, replaces every tracked path except `.git`, commits
+`release: vX.Y.Z (agent-bar@<source-commit>)`, and pushes to `master` with a
+dedicated SSH deploy key scoped to that repository only. The repository's
+`master` branch is append-only: the workflow never force-pushes, and branch
+protection denies it independently, because `omarchy plugin update` is a
+fast-forward-only pull for every existing install. A rewritten history
+breaks the update check for all of them with no remote-side recovery.
+
+- `BUNDLE-008`: The pushed tree contains exactly one `agent-bar.usage`
+  worth of content at the distribution repository root (plus that
+  repository's own `.git/`).
+- `BUNDLE-009`: It contains no Rust source, tests, target directory,
+  credentials, local config, or development fixtures from the product
+  repository.
 - `BUNDLE-010`: File modes are deterministic; the Rust and terminal helpers
-  are executable and other files are not.
-- `BUNDLE-011`: Archive paths are relative, normalized, and free of symlinks,
-  devices, and traversal.
+  are executable and other files are not. Git preserves the executable bit
+  across the clone/fast-forward.
+- `BUNDLE-011`: Tree paths are relative, normalized, and free of symlinks,
+  devices, and traversal, both at assemble time and as pushed.
 - `BUNDLE-012`: Reproducible assembly produces the same inventory and content
   hashes from the same source commit.
 - `BUNDLE-012A`: Icons retain their approved source formats:
   `claude.png`, `codex.png`, `amp.svg`, and `grok.svg`.
-- `BUNDLE-012B`: Release metadata is a closed schema-v1 document containing
-  plugin ID, version, target, Omarchy contract, minimum Quickshell version,
-  source commit, archive filename/size/SHA-256, and release-notes URL. Values
-  equal the receipt, archive, checksum sidecar, and GitHub release tag.
-
-Exact metadata shape:
-
-```json
-{
-  "schemaVersion": 1,
-  "pluginId": "agent-bar.usage",
-  "version": "10.0.0",
-  "target": "x86_64-unknown-linux-gnu",
-  "omarchyContract": 1,
-  "minimumQuickshellVersion": "0.3.0",
-  "sourceCommit": "0123456789abcdef0123456789abcdef01234567",
-  "archive": {
-    "fileName": "agent-bar.usage-10.0.0-x86_64-unknown-linux-gnu.tar.zst",
-    "size": 1234567,
-    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  },
-  "releaseNotesUrl": "https://github.com/othavi0/agent-bar/releases/tag/v10.0.0"
-}
-```
+- `BUNDLE-012B`: **Retired.** There is no separate release-metadata document;
+  `bundle.json` (above) is the only discovery document, fetched directly
+  from the distribution repository over HTTPS.
 
 The tracked English release-notes source is
 `docs/releases/10.0.0.md`. The internal builder command is exactly:
@@ -171,39 +190,44 @@ The tracked English release-notes source is
 ```text
 agent-bar-bundle assemble output <plugin-dir>
   source-commit <40-lowercase-hex>
-
-agent-bar-bundle release bundle <plugin-dir> output <output-dir>
-  source-commit <40-lowercase-hex> release-notes <path>
 ```
 
-`assemble` creates and validates a bundle using the explicit source commit; it
-does not claim the worktree matches that value. `release` requires a clean
-worktree whose `HEAD` equals `source-commit`, validates the complete staged
-bundle/receipt and release-notes file, and writes archive, checksum, closed
-metadata JSON, and `LICENSE` to an initially empty output directory. It refuses
-overwrite, missing notes, version/target/receipt mismatch, or a later source
-change. The builder is an internal development binary, not installed in the
-plugin.
+`assemble` creates and validates a bundle using the explicit source commit;
+it does not claim the worktree matches that value. It requires
+`assets/dist/README.md`, the repository-root `LICENSE`, and
+`docs/media/demo.png` to exist, and copies them into the tree as
+`README.md`, `LICENSE`, and `preview.png`. The `agent-bar-bundle release
+bundle` subcommand (archive/checksum/metadata builder) is removed; the
+builder is an internal development binary, not installed in the plugin.
 
 ## Installation
 
-- `BUNDLE-013`: The existing `install.sh` is rewritten as a minimal
-  plugin-scoped bootstrap. It downloads or accepts the exact
-  release bundle, verifies SHA-256, stages, validates, and atomically installs
-  it in the resolved Omarchy user plugin directory.
-- `BUNDLE-014`: Installation records source release, source commit, target,
-  checksum, plugin ID, and version in transaction state.
-- `BUNDLE-015`: Existing v9 state follows the migration transaction before
-  replacement.
-- `BUNDLE-016`: Existing bar placement is preserved.
-- `BUNDLE-017`: Fresh installation creates one entry through the supported
-  Quattro path.
-- `BUNDLE-018`: Rescan is always performed after a successful swap.
-- `BUNDLE-019`: A failed install restores the previous complete plugin and
-  shell entry.
-- `BUNDLE-019A`: Fresh installation uses
-  `omarchy plugin enable agent-bar.usage` once. Existing installation uses
-  rescan only. Neither path runs `omarchy bar plugin add`.
+Replaces the `install.sh` bootstrap model entirely. Agent Bar ships no
+installer; installation is the native Omarchy plugin flow end to end.
+
+- `BUNDLE-013`: **Retired.** `install.sh` is deleted. Installation is
+  `omarchy plugin add <dist-repo-url>`: it clones the URL, validates the
+  clone with `omarchy-plugin-validate`, and moves it to
+  `$HOME/.config/omarchy/plugins/agent-bar.usage`. No Agent Bar-authored
+  bootstrap, checksum verification, or staging step runs.
+- `BUNDLE-014`: **Retired.** `omarchy plugin add` owns its own install
+  bookkeeping; Agent Bar's transaction state records nothing about
+  installation.
+- `BUNDLE-015`: A pre-conversion (non-git) install is migrated by removing
+  and re-adding rather than an in-place transaction; see `MIG-026`.
+- `BUNDLE-016`: `omarchy plugin add`'s interactive placement prompt, or its
+  `--enable` flag, places the bar widget; `manifest.json`'s
+  `barWidget.defaultSection: "right"` (above) is the default when the
+  prompt is skipped.
+- `BUNDLE-017`: **Retired**, folded into `BUNDLE-016`: placement is entirely
+  the Omarchy CLI's enable flow.
+- `BUNDLE-018`: **Retired.** `omarchy plugin add` performs its own
+  validate/move/rescan; Agent Bar issues no separate rescan call for
+  install.
+- `BUNDLE-019`: **Retired.** A failed `omarchy plugin add` leaves no partial
+  Agent Bar install to restore; failure is the Omarchy CLI's own, entirely
+  before any move into the plugins directory.
+- `BUNDLE-019A`: **Retired**, superseded by `MIG-019A`.
 
 ## Update check
 
@@ -212,20 +236,27 @@ The private command surface includes:
 ```text
 agent-bar update
 agent-bar update check
-agent-bar update apply <version>
+agent-bar update apply
 ```
 
-- `BUNDLE-020`: Bare `update` is an interactive recovery flow: check, display
-  target, confirm, apply.
-- `BUNDLE-021`: `update check` returns a machine-readable document containing
-  current version, latest compatible version, availability, release URL,
-  release-notes URL, target, and checksum metadata.
-- `BUNDLE-022`: `update apply <version>` accepts only the exact compatible
-  version selected from a fresh official check.
-- `BUNDLE-023`: The Settings UI performs check, confirmation, and apply as
-  separate states.
-- `BUNDLE-024`: Version checks use only the official Agent Bar release source.
-- `BUNDLE-025`: No update downloads or executes a remote install script.
+- `BUNDLE-020`: **Retired.** Bare `update` has no interactive flow: since
+  `update apply` applies unconditionally (below), there is no specific
+  fetched version left for a TTY prompt to confirm. Bare `update` prints
+  usage pointing at `update check`/`update apply` and exits `3`.
+- `BUNDLE-021`: `update check` returns a machine-readable document
+  containing current version, latest compatible version, availability,
+  release-notes URL, target, and `reinstallRequired`. It carries no
+  archive/checksum/source-commit fields.
+- `BUNDLE-022`: `update apply` takes no version argument; it delegates
+  unconditionally to `omarchy plugin update agent-bar.usage --yes`.
+- `BUNDLE-023`: The Settings UI performs check and confirmation as separate
+  states before triggering apply.
+- `BUNDLE-024`: `update check` reads only the distribution repository's own
+  `bundle.json`, fetched directly from
+  `https://raw.githubusercontent.com/othavi0/omarchy-agent-bar/master/bundle.json`.
+- `BUNDLE-025`: `update apply` never downloads, extracts, or executes
+  anything itself; the git fast-forward and validation are entirely the
+  Omarchy CLI's.
 
 The exact successful `update check` response is:
 
@@ -240,47 +271,36 @@ The exact successful `update check` response is:
     "quickshellVersion": "0.3.0"
   },
   "available": true,
+  "reinstallRequired": false,
   "latestCompatible": {
     "version": "10.1.0",
     "omarchyContract": 1,
     "minimumQuickshellVersion": "0.3.0",
-    "archiveUrl": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst",
-    "checksumUrl": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256",
-    "archiveSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    "releaseNotesUrl": "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0",
-    "sourceCommit": "0123456789abcdef0123456789abcdef01234567"
+    "releaseNotesUrl": "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0"
   }
 }
 ```
 
-`latestCompatible` is `null` when no well-formed non-draft, non-prerelease
-release satisfies the current target, supported Omarchy contract, and
-installed Quickshell minimum. Well-formed but locally incompatible releases
-are skipped. Malformed metadata or incomplete assets for a release that claims
-the current target/contract are command errors, not silently skipped.
-Otherwise `latestCompatible` describes the newest compatible release,
-including the current version when no newer version exists. `available` is
-true exactly when that version is strictly newer than `current.version`.
-Unknown fields, redirects
-outside the download policy below, non-HTTPS URLs, malformed hashes, target
-mismatches, unsupported contract, insufficient Quickshell, and incomplete
-release assets are contract failures. `update check` writes only this JSON
-document plus newline to stdout; diagnostics go to stderr.
+`latestCompatible` is `null` when the receipt's target/contract are
+incompatible with the local install, or when `reinstallRequired` is `true`.
+Otherwise it describes the receipt's version, including the current version
+when no newer version exists. `available` is true exactly when that version
+is strictly newer than `current.version`, and is always `false` when
+`reinstallRequired` is `true`. A `reinstallRequired` document must have
+`available: false` and `latestCompatible: null`; it may never also claim an
+offer. `update check` writes only this JSON document plus newline to
+stdout; diagnostics go to stderr.
 
-Release discovery begins only at
-`https://api.github.com/repos/othavi0/agent-bar/releases`. Metadata URLs and
-every initial release-asset request must remain under the exact
-`https://github.com/othavi0/agent-bar/releases/` path. An asset download may
-follow at most five HTTPS redirects to `github.com` or a hostname whose suffix
-is `.githubusercontent.com`; userinfo, IP-literal hosts, non-default ports,
-scheme downgrade, and every other host are rejected. No provider credential,
-cookie, or authorization header is attached to release download redirects.
+`reinstallRequired` is `true` whenever the live plugin root has no `.git`
+directory: `omarchy plugin update` can only fast-forward a git-managed
+install, so a pre-conversion (tarball-installed) tree must be reinstalled
+through `omarchy plugin add` instead of updated in place. The receipt is
+still fetched and validated for its own sake in that case, so a malformed
+or unreachable distribution repository is still a command error.
 
-`update apply <version>` performs its own fresh check, writes the exact selected
-object to the transaction journal, and proceeds only when `<version>` equals
-`latestCompatible.version` and `available` is true. All downloaded bytes are
-verified against `archiveSha256`; the checksum sidecar is corroborating release
-evidence, not a substitute for the pinned journal hash.
+`update apply` performs no version check of its own. The omarchy CLI it
+delegates to always fast-forwards to whatever the distribution repository's
+`master` currently is.
 
 Omarchy contract `1` means all of these are required:
 
@@ -289,119 +309,69 @@ Omarchy contract `1` means all of these are required:
 - `bar.shell.serviceFor(moduleName)`;
 - `KeyboardPanel`, `PanelKeyCatcher`, and `BarWidget`;
 - `IpcHandler` reached through `omarchy-shell`;
-- `omarchy plugin validate`, `plugin enable`, and asynchronous `plugin rescan`;
+- `omarchy plugin add`, `plugin update`, `plugin remove`, and
+  `plugin validate`;
 - `shell ping` and structured `shell listPlugins`.
 
-Setup/update preflight requires regular readable Quattro QML components,
-executable Omarchy commands, `quickshell --version >= 0.3.0`, successful shell
-ping, valid `listPlugins` JSON, and validation of the staged bundle. Existing
-update additionally requires the old Agent Bar health endpoint before any
-download/swap. A release is `latestCompatible` only when its target and
-contract metadata pass these probes; package version alone is insufficient.
+Setup preflight (for the settings-migration path only) requires regular
+readable Quattro QML components and executable Omarchy commands.
+`update apply` and `uninstall` preflight requires resolvable absolute paths
+for `omarchy` and `systemd-run` before consuming any confirmation or
+purging any state.
 
 ## Update transaction
 
-- `BUNDLE-026`: Download the complete target bundle to an isolated temporary
-  path.
-- `BUNDLE-027`: Verify checksum, architecture, archive inventory, manifest ID,
-  schema, manifest version, and helper version before extraction can affect the
-  live plugin.
-- `BUNDLE-028`: Refuse downgrade unless a separately approved recovery path is
-  used.
-- `BUNDLE-029`: Refuse to replace a modified/ambiguous plugin directory without
-  preserving and reporting it.
-- `BUNDLE-030`: Back up, swap, rescan, and health-check as one transaction.
-- `BUNDLE-031`: Restore the previous complete bundle on failure.
-- `BUNDLE-032`: Directory replacement uses Linux
-  `renameat2(RENAME_EXCHANGE)`. If the filesystem cannot provide exchange
-  semantics, update fails before replacement instead of exposing a missing or
-  half-installed plugin directory.
-- `BUNDLE-032A`: Before self-update or uninstall, the helper copies and verifies
-  itself inside the transaction directory under the executable name
-  `agent-bar-maintenance-worker`.
-- `BUNDLE-032B`: The helper launches that copy in a transient user systemd unit
-  using argv. There is no permanent daemon.
-- `BUNDLE-032C`: Worker mode is selected by the copied executable filename and
-  a validated transaction journal, not by a public hidden flag or shell string.
-- `BUNDLE-032D`: The worker performs exchange/removal, rescan, health IPC,
-  rollback, final journal state, and desktop notification after the initiating
-  QML object can be destroyed.
-- `BUNDLE-032E`: `Service.qml` exposes one plugin-scoped health IPC endpoint
-  with the contract in `02-target-architecture.md`. The maintenance worker
-  requires `omarchy-shell agent-bar.usage health <expectedVersion>` to return
-  `ok` after update.
-- `BUNDLE-032F`: After uninstall rescan, the worker calls
-  `omarchy-shell shell listPlugins`, parses the returned JSON, and requires that
-  no entry has exact ID `agent-bar.usage`. Quiet/best-effort IPC is forbidden
-  for maintenance health gates.
-- `BUNDLE-032G`: Rescan is asynchronous. After the rescan command returns, the
-  worker polls a monotonic 15-second deadline with delays
-  `100, 200, 400, 500, 500...` milliseconds. Update requires health stdout
-  exactly `ok\n` and exit `0`. Uninstall requires parsed `listPlugins` absence
-  and failure/absence of the old service health endpoint. Timeout, malformed
-  output, or mismatch triggers rollback. A restored v10 bundle must pass the
-  same health poll for its previous version. A restored v9 bundle has no health
-  IPC: rollback instead verifies every restored file against the pre-transaction
-  backup manifest, restores exact `shell.json` bytes, rescans, and requires
-  parsed `listPlugins` to contain the exact enabled `agent-bar.usage` entry.
-  Fresh-install rollback verifies exact shell bytes and exact plugin absence.
-- `BUNDLE-032H`: Maintenance preflight requires a reachable user systemd
-  manager, shell ping, executable absolute command paths, a synced journal,
-  and a verified worker copy. It starts unique unit
-  `agent-bar-maintenance-<32-lowercase-hex-txid>.service` using
-  `systemd-run --user --collect`, `Type=exec`, `UMask=0077`, and
-  `TimeoutStartSec=120` and `RuntimeMaxSec=600`. The worker uses injected
-  monotonic deadlines: preflight/download/stage must finish by 420 seconds,
-  live mutation by 510, and rollback by 570, leaving 30 seconds for durable
-  failure reporting before systemd's hard bound. It does not begin live
-  mutation without the reserved rollback window. The only forwarded
-  environment names are `HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`,
-  `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`,
-  `WAYLAND_DISPLAY`, and `OMARCHY_PATH`. Missing optional values are omitted.
-  Worker-internal executables use absolute paths recorded during preflight.
-- `BUNDLE-032I`: The caller reports successful handoff only after systemd has
-  accepted and executed the worker. Failure to satisfy preflight or start the
-  unit occurs before live mutation.
-- `BUNDLE-032J`: Bundle stage/quarantine and purge quarantine use the
-  destination-local sibling locations defined by `MIG-002A`. XDG state stores
-  journal/worker/report/backups but is never assumed to share a filesystem
-  with the plugin or settings.
-- `BUNDLE-032K`: After a successful update health check and fsynced commit, the
-  old bundle left in the exchange sibling is post-commit garbage collection.
-  Cleanup failure records its exact residual path in the durable report and
-  never claims rollback. A locally modified bundle accepted through an
-  approved recovery path is copied to durable backup before this cleanup.
+Retired as a block. `BUNDLE-026`–`BUNDLE-032K` described the staged-download
+worker chain: temporary-path download, archive/checksum/inventory
+validation, `renameat2(RENAME_EXCHANGE)` swap, a self-copied
+`agent-bar-maintenance-worker` running in a transient systemd unit, health
+IPC polling, and post-commit garbage collection. None of that exists after
+git-plugin-distribution: there is no archive to download or verify, no
+directory exchange, and no copied worker binary.
+
+What replaces it:
+
+- `BUNDLE-026`: `update apply` builds no download/stage plan; the git fetch
+  and fast-forward are entirely `omarchy plugin update`'s.
+- `BUNDLE-027`: Validation (manifest ID, schema, entry points, no symlinks,
+  `barWidget.defaultSection`) runs as `omarchy-plugin-validate` inside
+  `omarchy plugin update`, after the fast-forward and before it is kept.
+- `BUNDLE-028`–`BUNDLE-029`: **Retired.** There is no separate
+  downgrade/modified-directory policy in Agent Bar: `omarchy plugin update`
+  always fast-forwards to the distribution repository's current `master`,
+  and refuses a plugin directory with local modifications outright (a
+  non-fast-forward `git merge`) rather than negotiating around them.
+- `BUNDLE-030`: `omarchy plugin update` performs fetch, fast-forward,
+  re-validate, and (only on a failed validation) rollback as one operation
+  from the caller's perspective; Agent Bar's own part is limited to holding
+  the maintenance lock across the handoff and reporting it.
+- `BUNDLE-031`: A failed validation restores the previous complete bundle
+  via `git reset --hard ORIG_HEAD`, run by `omarchy plugin update` itself.
+- `BUNDLE-032`: **Retired.** There is no directory exchange; the update is a
+  git working-tree fast-forward in place.
+- `BUNDLE-032A`–`BUNDLE-032K`: **Retired.** The copied-worker, transient-unit
+  argv0 dispatch, health-IPC polling, `listPlugins` absence verification,
+  monotonic deadline budget, and post-commit garbage collection they
+  described are gone with the worker chain. What survives of the
+  "detached transient unit" idea is simpler: `update apply` and `uninstall`
+  each start one `systemd-run --user --collect
+  --unit=agent-bar-<update|remove>-<32-lowercase-hex-txid>.service -- <omarchy>
+  plugin <update|remove> agent-bar.usage --yes` and return once systemd has
+  accepted it, so the operation survives the initiating QML service being
+  torn down by the rescan it triggers. `MIG-020`–`MIG-026` are the current
+  contract.
 
 ## UI uninstall
 
-- `BUNDLE-033`: Standard uninstall quarantines then removes the shell entry,
-  bundle, cache, notification state, transaction runtime, and confirmed owned
-  legacy files.
-- `BUNDLE-034`: Standard uninstall preserves settings and migration backups.
-- `BUNDLE-035`: Purge requires the explicit UI selection or an interactive
-  terminal confirmation.
-- `BUNDLE-036`: Purge confirmation from QML is a structured stdin document,
-  not a shell token, using the exact schema in
-  `03-cli-and-json-contract.md`.
-- `BUNDLE-037`: The reversible phase backs up exact shell bytes; moves bundle,
-  cache, confirmed legacy, and selected purge paths to destination-local
-  quarantine; removes exact shell entries; rescans; and verifies absence. Only
-  then does the worker fsync a commit record and sanitized report under
-  `$XDG_STATE_HOME/agent-bar/reports/<txid>.json`.
-- `BUNDLE-038`: A desktop notification reports successful uninstall because
-  the plugin UI no longer exists.
-- `BUNDLE-038A`: Uninstall first quarantines the bundle by same-filesystem
-  rename. It deletes quarantine only after shell absence is verified; rollback
-  restores the bundle and exact previous `shell.json` bytes.
-- `BUNDLE-038B`: The fsynced commit record is the irreversible boundary.
-  Failures before it roll back every quarantine and verify the restored
-  service. After it, quarantine deletion and transaction-runtime removal are
-  garbage collection: failure records exact residual paths in the durable
-  report and notification and never claims rollback.
-- `BUNDLE-038C`: Successful cleanup removes the worker copy and transaction
-  journal as its last filesystem action. Failed or incomplete rollback keeps
-  the journal and worker evidence for `doctor`; the durable report is never
-  stored inside a path standard uninstall deletes.
+Retired as a block. `BUNDLE-033`–`BUNDLE-038C` described uninstall's own
+quarantine/rescan/health/garbage-collection transaction, matching the
+update worker chain above. `MIG-020`–`MIG-026` are the current contract:
+`uninstall` purges only Agent Bar's own XDG state (with `purge`), then
+delegates unconditionally to `omarchy plugin remove agent-bar.usage --yes`,
+which owns disabling the bar entry, deleting (or, for a non-git directory,
+backing up) the plugin directory, and rescanning. The structured stdin
+confirmation document (`BUNDLE-036`'s schema) is unchanged and lives in
+`03-cli-and-json-contract.md`.
 
 ## Release boundary
 

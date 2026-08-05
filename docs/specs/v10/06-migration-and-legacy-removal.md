@@ -68,9 +68,12 @@ The manifest records:
   absent.
 - `MIG-018`: Rescan reloads staged QML without altering placement.
 - `MIG-019`: Shell restart is a last resort after a valid rescan fails.
-- `MIG-019A`: Fresh setup uses `omarchy plugin enable agent-bar.usage`, which
-  rescans and adds a missing bar entry. It never follows with
-  `omarchy bar plugin add`.
+- `MIG-019A`: Since git-plugin-distribution (2026-08-05), fresh installation
+  is `omarchy plugin add <dist-repo-url>`, which clones, validates, moves
+  the tree, and, after a separate confirmation or `--enable`, enables it
+  and adds a missing bar entry. An already-installed but disabled plugin may
+  still be enabled directly with `omarchy plugin enable agent-bar.usage`.
+  Neither path ever follows with `omarchy bar plugin add`.
 - `MIG-019B`: Update does not edit `shell.json`.
 - `MIG-019C`: Rollback restores the exact previous `shell.json` bytes.
 
@@ -192,33 +195,48 @@ The Bash helper is retained only for interactive provider login and rewritten:
 
 ## Update and uninstall transactions
 
-- `MIG-020`: Update backs up and replaces the complete plugin directory.
-- `MIG-021`: Update validates plugin ID, manifest schema, target architecture,
-  version equality, archive inventory, checksum, and safe paths before swap.
-- `MIG-022`: Uninstall removes the shell entry before final plugin removal but
-  the initiating UI is expected to unload. The detached worker continues
-  rescan, absence verification, commit/rollback, report, and notification.
-- `MIG-023`: Standard uninstall preserves settings and backups.
-- `MIG-024`: Purge deletes settings and owned backups only after explicit
-  confirmation.
-- `MIG-025`: Cache and notification runtime state are removed by both forms.
-- `MIG-026`: Ambiguous legacy files remain after uninstall and appear in the
-  completion report.
+Replaced by git-plugin-distribution (2026-08-05):
+`docs/superpowers/specs/2026-08-05-git-plugin-distribution-design.md`.
+Update and uninstall no longer stage, exchange, or roll back the plugin
+directory themselves; each hands its live mutation to the Omarchy CLI as a
+detached transient `systemd-run --user` unit, so the helper process can
+return as soon as the handoff is accepted without depending on the QML
+service it may be running under.
 
-Exact same-filesystem locations use a validated 32-lowercase-hex transaction
-ID:
+- `MIG-020`: `update apply` takes no version argument and detaches
+  unconditionally to `omarchy plugin update agent-bar.usage --yes`, which
+  owns the git fetch, fast-forward, re-validation, and
+  `git reset --hard ORIG_HEAD` rollback on a failed validation.
+- `MIG-021`: `update check` reads the distribution repository's
+  `bundle.json` receipt over HTTPS and reports `reinstallRequired: true`,
+  forcing `available`/`latestCompatible` null, whenever the live plugin root
+  has no `.git` directory, since a pre-conversion tree cannot be
+  fast-forwarded and must be reinstalled through `omarchy plugin add`.
+- `MIG-022`: `uninstall` purges only Agent Bar's own XDG state (with
+  `purge`) under the exclusive maintenance lock, then detaches
+  unconditionally to `omarchy plugin remove agent-bar.usage --yes`, which
+  owns disabling the bar entry, deleting the plugin directory, and
+  rescanning.
+- `MIG-023`: Standard uninstall preserves settings, cache configuration, and
+  migration backups; only the purge form removes them, and only before the
+  detached handoff.
+- `MIG-024`: Purge and the detached remove are ordered and disjoint: purge
+  never touches the plugin directory, and `omarchy plugin remove` never
+  touches `$XDG_CONFIG_HOME/agent-bar`, `$XDG_CACHE_HOME/agent-bar`, or
+  `$XDG_STATE_HOME/agent-bar`.
+- `MIG-025`: Both `update apply` and `uninstall` resolve `omarchy` and
+  `systemd-run` to absolute executable paths before consuming the
+  confirmation or purging any state, so a missing tool fails closed before
+  anything destructive happens.
+- `MIG-026`: A non-git plugin root removed by `omarchy plugin remove` is
+  backed up by Omarchy to a timestamped sibling rather than deleted
+  (verified Omarchy behavior), so the one-time migration path is safe.
+  Agent Bar settings live outside the plugin directory and always survive
+  it.
 
-```text
-$HOME/.config/omarchy/plugins/.agent-bar.usage.stage-<txid>/
-$HOME/.config/omarchy/plugins/.agent-bar.usage.quarantine-<txid>/
-<settings-parent>/.settings.json.agent-bar-quarantine-<txid>
-<cache-parent>/.agent-bar-cache-quarantine-<txid>/
-<backup-parent>/.agent-bar-backups-quarantine-<txid>/
-```
-
-Hidden plugin siblings must not match a valid plugin ID. They intentionally
-retain the complete candidate/quarantined bundle, including its root manifest,
-so staged validation and rollback are possible; Quattro's registry must ignore
-their dot-prefixed directory names. Cross-filesystem rename is never used.
-Restoration from a durable backup first copies into a verified destination
-sibling and then performs the destination-local atomic operation.
+The pre-conversion stage/quarantine sibling and cross-filesystem-safe
+quarantine paths (`PluginPaths::stage_dir`, `quarantine_dir`,
+`settings_quarantine`, `cache_quarantine`, `backups_quarantine`) are no
+longer produced by any live command path. Only `PluginPaths::backup_root`
+survives, used by `setup`'s v9-to-v10 settings migration and `doctor
+clean`, each under `$XDG_STATE_HOME/agent-bar/backups/<stamp>/`.

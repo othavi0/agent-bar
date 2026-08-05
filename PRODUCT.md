@@ -15,14 +15,16 @@ reliable glanceable answer to:
 Agent Bar is a Quickshell plugin, not a general terminal application. The bar
 provides the glanceable state. The consolidated popup provides quota details,
 provider actions, Settings, update, and uninstall without requiring the user to
-learn a CLI.
+learn a CLI: the update and uninstall buttons delegate to the Omarchy plugin
+manager (`omarchy plugin update|remove`), which owns the actual mutation.
 
 Success means:
 
 - every visible value comes from normalized provider data;
 - all monitors share one state and polling source;
 - stale and partial failures remain understandable;
-- Settings and maintenance are recoverable and transactional;
+- Settings changes are recoverable; update and uninstall are explicit,
+  confirmed actions delegated to the Omarchy plugin manager;
 - pointer, keyboard, focus, scrolling, themes, and absence of Agent
   Bar-authored motion work as native Quattro behavior;
 - the plugin never leaks credentials or raw provider output.
@@ -54,7 +56,8 @@ Included:
 - Typed missing/auth/network/rate/provider states.
 - Provider login delegation through the official CLI.
 - Provider enablement/order, used/remaining, interval, and notifications.
-- Plugin update, uninstall, migration, backup, and rollback.
+- Plugin update and uninstall delegated to the Omarchy plugin manager;
+  settings migration with backup.
 
 Removed:
 

@@ -10,9 +10,7 @@
 | `$XDG_CACHE_HOME/agent-bar/status.lock` | Cross-process collection lock |
 | `$XDG_CACHE_HOME/agent-bar/notification-state-v1.json` | Alert deduplication |
 | `$XDG_CACHE_HOME/agent-bar/notification.lock` | Alert evaluation/dispatch lock |
-| `$XDG_STATE_HOME/agent-bar/backups/` | Exact migration/maintenance backups |
-| `$XDG_STATE_HOME/agent-bar/transactions/` | Journals and transient workers |
-| `$XDG_STATE_HOME/agent-bar/reports/` | Durable sanitized maintenance reports |
+| `$XDG_STATE_HOME/agent-bar/backups/` | Exact settings-migration and `doctor clean` backups |
 | `$XDG_STATE_HOME/agent-bar/maintenance.lock` | Stable shared/exclusive mutation gate |
 
 Default XDG paths are `~/.config`, `~/.cache`, and `~/.local/state`.
@@ -23,11 +21,20 @@ production.
 ## Bundle
 
 The plugin bundle contains manifest, `bundle.json`, QML, approved icons, the
-terminal helper, and private Rust helper. `bundle.json` records ID, version,
-target, Omarchy contract, minimum Quickshell version, source commit, and
-hash/size/mode for every other file.
+terminal helper, private Rust helper, `README.md`, `LICENSE`, and
+`preview.png`. `bundle.json` records ID, version, target, Omarchy contract,
+minimum Quickshell version, source commit, and hash/size/mode for every
+other file.
 
-No global `agent-bar`, application entry, package, or managed checkout exists.
+The installed plugin directory is a git checkout of the distribution
+repository (`othavi0/omarchy-agent-bar`): `omarchy plugin add` clones it,
+and `omarchy plugin update` fast-forwards it in place. `bundle.json` is also
+the sole discovery document `update check` reads, fetched over HTTPS
+directly from the distribution repository's `master` branch rather than
+from the local checkout, so a check works even before the first update.
+
+No global `agent-bar`, application entry, package, or standalone binary
+exists.
 
 ## Settings
 

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Distribution is entirely git-native: install with `omarchy plugin add
+  https://github.com/othavi0/omarchy-agent-bar.git`, update with
+  `omarchy plugin update agent-bar.usage`, and remove with
+  `omarchy plugin remove agent-bar.usage`. The Settings update and uninstall
+  buttons delegate to those same commands as a detached transient systemd
+  unit instead of staging and swapping the plugin directory themselves.
+- `update apply` no longer takes a version argument; it fast-forwards
+  unconditionally to whatever the distribution repository currently
+  publishes. `update check` reads that repository's `bundle.json` directly
+  and reports `reinstallRequired` for a pre-conversion (non-git) install
+  instead of a false "up to date".
+- If you installed Agent Bar before this release, the update button shows a
+  one-time migration notice. Run `omarchy plugin remove agent-bar.usage`
+  then `omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git`.
+  Settings, cache, and backups live outside the plugin directory and survive
+  the swap.
+
+### Removed
+
+- `install.sh` and the tarball/GitHub-Releases-asset bootstrap. Releases no
+  longer attach any archive; the release tag and notes are published
+  alongside a plain commit pushed to the distribution repository.
+- The staged plugin-directory transaction machinery (worker copy, journal,
+  `renameat2` exchange/quarantine, health-IPC polling) that used to back
+  in-app update and uninstall. The Omarchy CLI now owns that mutation.
+
 ## [10.3.0] - 2026-08-01
 
 The visual and copy pass over the whole product: severity you can see, one

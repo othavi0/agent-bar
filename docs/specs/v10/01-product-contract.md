@@ -17,13 +17,20 @@ connection actions, update, and uninstall.
 - `PROD-006`: Remove TUI, Waybar, history, local cost, BRL conversion, and
   chart complexity rather than hiding them.
 - `PROD-007`: Give normal users complete configuration, update, and uninstall
-  flows in the plugin UI.
+  flows in the plugin UI. Update and uninstall remain UI journeys; since
+  git-plugin-distribution (2026-08-05) they delegate their live mutation to
+  the Omarchy CLI (`omarchy plugin update|remove agent-bar.usage`) instead of
+  performing it in-process.
 - `PROD-008`: Expose typed, safe, partial provider failures without parsing
   human error strings in QML.
 - `PROD-009`: Treat keyboard navigation, scrolling, focus, themes, and absence
   of Agent Bar-authored motion as release gates.
 - `PROD-010`: Ship the QML, icons, scripts, and matching Rust helper as one
-  versioned plugin bundle.
+  versioned plugin bundle. Since git-plugin-distribution (2026-08-05), "the
+  bundle" is the distribution repository tree
+  (`othavi0/omarchy-agent-bar`, one append-only commit per release): the same
+  assembled tree is what CI pushes, what `omarchy plugin add` clones, and
+  what an installed plugin directory is a git checkout of.
 
 ## Non-goals
 
@@ -102,11 +109,17 @@ Notifications: enabled
 ### Maintain
 
 1. Settings shows installed plugin version and `Check for updates`.
-2. An available release requires explicit confirmation before download.
-3. Update validates and atomically replaces one complete plugin bundle.
-4. `Uninstall Agent Bar` requires confirmation.
+2. An available release requires explicit confirmation before applying it.
+3. Confirming update delegates to `omarchy plugin update agent-bar.usage
+   --yes`, which fetches, fast-forwards, re-validates, and rolls back
+   automatically on a failed validation. A plugin directory without `.git`
+   (a pre-conversion install) cannot be fast-forwarded; the check reports
+   `reinstallRequired` and Settings shows the remove-then-add migration
+   instruction instead of an update offer.
+4. `Uninstall Agent Bar` requires confirmation, then delegates to
+   `omarchy plugin remove agent-bar.usage --yes`.
 5. Settings are preserved by default; deleting settings requires an additional
-   explicit selection.
+   explicit purge selection, applied before the delegated remove.
 
 ## Public state principles
 

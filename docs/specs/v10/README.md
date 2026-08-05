@@ -1,6 +1,7 @@
 # Agent Bar v10 Specification
 
-Status: **implemented, published as `v10.0.0`, and live-accepted (2026-07-27)**
+Status: **implemented, published as `v10.0.0`, live-accepted (2026-07-27),
+and amended by the git-native plugin distribution conversion (2026-08-05)**
 
 Approved on: 2026-07-26 · Merged: [PR #25](https://github.com/othavi0/agent-bar/pull/25) ·
 Release: [v10.0.0](https://github.com/othavi0/agent-bar/releases/tag/v10.0.0) ·
@@ -9,6 +10,18 @@ Live QA: [docs/history/qa/v10.0.0-live-qa-2026-07-27.md](../../history/qa/v10.0.
 This directory is the canonical product and engineering contract for Agent Bar
 v10. Post-merge notes and residuals:
 [docs/history/handoff-v10-post-merge.md](../../history/handoff-v10-post-merge.md).
+
+The plugin update/uninstall, distribution, and installation model is
+superseded by the git-native plugin distribution design, approved
+2026-08-05:
+[docs/superpowers/specs/2026-08-05-git-plugin-distribution-design.md](../../superpowers/specs/2026-08-05-git-plugin-distribution-design.md).
+That design is this specification's change-control record for
+`01-product-contract.md` (PROD-007, PROD-010, the Maintain journey),
+`03-cli-and-json-contract.md` (the maintenance grammar and CLI-024..031),
+`06-migration-and-legacy-removal.md` (MIG-019A, MIG-020..026), and
+`08-plugin-bundle-and-release.md` (the distribution-repository model). Every
+other file in this directory, and every other requirement, still describes
+the current, unamended contract.
 
 ## Product statement
 

@@ -109,6 +109,9 @@ jobs:
           VERSION: ${{ steps.cut.outputs.version }}
         run: |
           set -euo pipefail
+          # bundle.json always embeds a freshly computed source_commit (this
+          # run's HEAD), so this commit is never empty even when the
+          # assembled tree is otherwise byte-identical to the last release.
           mkdir -p ~/.ssh
           printf '%s\n' "$DIST_DEPLOY_KEY" > ~/.ssh/dist_key
           chmod 600 ~/.ssh/dist_key

@@ -92,7 +92,8 @@ confirmed owned legacy artifacts.
 - `update apply` takes no argument. It delegates unconditionally to
   `omarchy plugin update agent-bar.usage --yes` as a detached transient unit
   and returns as soon as the handoff is accepted; that command owns the
-  fast-forward, health check, and rollback.
+  fast-forward, re-validation, and automatic rollback on a failed
+  validation.
 
 Normal users use the Maintenance UI.
 

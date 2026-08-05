@@ -19,8 +19,7 @@ Deno, or JavaScript build tooling.
 Do not install a work-in-progress build into the live desktop. Use:
 
 - isolated Git worktrees;
-- temporary plugin roots;
-- `setup plugins-dir <path>`;
+- temporary plugin roots reached through an isolated `HOME`;
 - isolated `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_STATE_HOME`;
 - fake provider executables and fixture data;
 - offscreen QML tests.
@@ -92,6 +91,11 @@ Changelog release sections 9.0.0 and older, ADR bodies 0001–0003, and
 
 ## Release
 
-Implementation may prepare a release candidate and open a ready PR. Merge,
-tag, GitHub Release publication, and distribution require separate explicit
-authorization. See [docs/dev/releasing.md](docs/dev/releasing.md).
+Merging to `master` triggers an automatic patch release: version bump, Rust
+gates, a tagged bump commit, and a push of the assembled plugin tree to the
+distribution repository (`othavi0/omarchy-agent-bar`), followed by the
+tagged GitHub Release on this repository. There are no release assets to
+attach; the distribution repository's tree is the release. Implementation
+may prepare a release candidate and open a ready PR, but merge itself is
+the release decision and requires separate explicit authorization. See
+[docs/dev/releasing.md](docs/dev/releasing.md).

@@ -363,7 +363,7 @@ fn required_dependency_owners() -> BTreeMap<&'static str, &'static str> {
         ("log", "stderr diagnostics for cache/notifications"),
         ("env_logger", "helper binary stderr logger init"),
         ("tokio", "async process/HTTP collection runtime"),
-        ("reqwest", "Claude HTTP collector and update downloads"),
+        ("reqwest", "Claude HTTP collector and update check"),
         ("futures", "HTTP body streaming in providers/http"),
         ("regex", "provider stdout/session parsers"),
         ("semver", "update version comparison"),

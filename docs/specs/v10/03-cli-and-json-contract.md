@@ -22,10 +22,9 @@ agent-bar config apply file <path>
 agent-bar config apply json <value>
 
 agent-bar setup
-agent-bar setup plugins-dir <path>
 agent-bar update
 agent-bar update check
-agent-bar update apply <version>
+agent-bar update apply
 agent-bar uninstall
 agent-bar uninstall purge
 
@@ -48,10 +47,12 @@ agent-bar version
 - `CLI-006`: `--help` and `--version` are the only accepted double-dash aliases.
 - `CLI-007`: Every other legacy command, alias, and flag is rejected.
 - `CLI-008`: `RUST_LOG` controls diagnostics; there is no verbose argument.
-- `CLI-009`: `setup plugins-dir <path>` exists for isolated testing and manual
-  recovery. `<path>` is an existing writable absolute parent directory that
-  contains or receives the `agent-bar.usage` child; relative paths and a direct
-  plugin-root path are rejected. Production uses the literal Quattro parent.
+- `CLI-009`: Since git-plugin-distribution (2026-08-05), `setup` takes no
+  arguments. It migrates settings to the current schema only; it does not
+  create, enable, or move any plugin tree, since `omarchy plugin add` is
+  the install now. Isolated testing and manual recovery use an injected
+  `HOME` (and `XDG_STATE_HOME`), not a command argument. Production uses
+  the literal Quattro plugin root under the real `HOME`.
 - `CLI-010`: Public help describes the plugin-first product and labels the
   helper CLI as diagnostics/recovery.
 
@@ -289,15 +290,27 @@ view_installation
 
 ## Maintenance command contract
 
+Amended by git-plugin-distribution (2026-08-05):
+`docs/superpowers/specs/2026-08-05-git-plugin-distribution-design.md`.
+`update apply` and `uninstall` no longer stage, exchange, or roll back the
+plugin directory in-process; each resolves `omarchy` and `systemd-run` to
+absolute paths, then detaches unconditionally to the Omarchy CLI as a
+transient `systemd-run --user` unit and returns once the handoff is
+accepted.
+
 - `CLI-024`: `doctor scan` is read-only.
 - `CLI-025`: `doctor clean` removes only confirmed owned legacy artifacts after
   creating a backup.
 - `CLI-026`: `uninstall` preserves settings and migration backups.
 - `CLI-027`: `uninstall purge` additionally deletes settings and owned backups
-  only after an explicit UI or interactive confirmation.
+  only after an explicit UI or interactive confirmation, and only before the
+  detached `omarchy plugin remove` handoff.
 - `CLI-028`: QML passes structured intentions; it never concatenates command
   strings.
-- `CLI-029`: `update` replaces one complete version-matched plugin bundle.
+- `CLI-029`: `update apply` takes no version argument. It delegates
+  unconditionally to `omarchy plugin update agent-bar.usage --yes`, which
+  owns the git fetch, fast-forward, re-validation, and automatic
+  `git reset --hard ORIG_HEAD` rollback on a failed validation.
 - `CLI-030`: Setup, update, doctor, and uninstall never touch unrelated Omarchy
   plugins or layout entries.
 - `CLI-031`: Notification dispatch failure is reported on stderr, does not
@@ -342,10 +355,9 @@ before mutation. `uninstall` requires `false`; `uninstall purge` requires
 `true`. QML always uses the structured non-TTY document. Standard uninstall
 does not consume stdin until after its complete preflight has succeeded.
 
-Bare interactive `update` requires TTY stdin before network access. If no
-compatible newer release exists it prints `Agent Bar is up to date.` plus
-newline and exits `0`. When an update exists it prints the current/target
-versions, then `Type update agent-bar to continue:` to stderr and accepts only
-the exact line `update agent-bar`. EOF or any other line exits `3` without
-mutation. Non-TTY use exits `3` with guidance to use `update check` and
-`update apply <version>`; the typed UI never invokes bare `update`.
+Since git-plugin-distribution (2026-08-05), bare `update` has no interactive
+flow: `update apply` now applies unconditionally, so there is no longer a
+specific fetched version for a TTY prompt to confirm. Bare `update` prints
+usage to stderr pointing at `update check` and `update apply`, and exits `3`
+without touching the network or the filesystem, on both TTY and non-TTY
+stdin. The typed UI never invokes bare `update`.
