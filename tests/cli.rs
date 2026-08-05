@@ -981,6 +981,10 @@ fn uninstall_without_purge_preserves_xdg_state_and_delegates_remove() {
         fx.cache_dir.join("status-v2.json").is_file(),
         "without purge, cache must survive"
     );
+    assert!(
+        fx.state_dir.join("agent-bar").exists(),
+        "without purge, state dir must survive"
+    );
 
     let shell_after = std::fs::read(&fx.shell_path).unwrap();
     assert_eq!(
@@ -997,5 +1001,72 @@ fn uninstall_without_purge_preserves_xdg_state_and_delegates_remove() {
             "--yes".to_string(),
         ]),
         "argv={argv:?}"
+    );
+}
+
+#[test]
+fn uninstall_purge_fails_closed_without_touching_state_when_omarchy_missing() {
+    // Review round 1, finding 1: tool resolution must happen before any
+    // destructive purge, so a missing `omarchy` fails the whole command
+    // before the settings/cache/state XDG roots are touched — not after
+    // they are already gone with the plugin never actually removed. PATH is
+    // isolated to just `path_dir` (no real system PATH fallback) so a real
+    // `omarchy` binary elsewhere on this machine cannot mask the failure.
+    let dir = tempdir().unwrap();
+    let fx = seed_uninstall_fixture(dir.path());
+    std::fs::remove_file(fx.path_dir.join("omarchy")).unwrap();
+
+    let bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let mut child = StdCommand::new(&bin)
+        .args(["uninstall", "purge"])
+        .env("HOME", &fx.home)
+        .env("XDG_STATE_HOME", &fx.state_dir)
+        .env("XDG_CACHE_HOME", fx.cache_dir.parent().unwrap())
+        .env("XDG_CONFIG_HOME", fx.settings_dir.parent().unwrap())
+        .env("PATH", &fx.path_dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        use std::io::Write as _;
+        let mut stdin = child.stdin.take().unwrap();
+        stdin
+            .write_all(
+                br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":true}"#,
+            )
+            .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+
+    assert!(
+        !output.status.success(),
+        "must fail closed when omarchy cannot be resolved: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "no delegation document on preflight failure"
+    );
+
+    assert!(
+        fx.settings_dir.join("settings.json").is_file(),
+        "settings must survive a failed tool resolution"
+    );
+    assert!(
+        fx.cache_dir.join("status-v2.json").is_file(),
+        "cache must survive a failed tool resolution"
+    );
+    assert!(
+        fx.state_dir.join("agent-bar").exists(),
+        "state dir must survive a failed tool resolution"
+    );
+
+    let shell_after = std::fs::read(&fx.shell_path).unwrap();
+    assert_eq!(
+        shell_after, fx.shell_before,
+        "uninstall must never touch shell.json — omarchy owns it now"
     );
 }

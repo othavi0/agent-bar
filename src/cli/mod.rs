@@ -494,6 +494,16 @@ fn dispatch_uninstall(purge: bool) -> Result<(), CliFailure> {
         .lock_exclusive()
         .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
 
+    // Resolve the delegation tools before consuming the confirmation or
+    // touching any state: a missing `omarchy`/`systemd-run` must fail closed
+    // before anything destructive happens, not after the purge already ran
+    // and the plugin was never actually removed (mirrors the pre-Task-3
+    // preflight-before-confirmation ordering).
+    let omarchy_bin =
+        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let systemd_run = resolve_absolute_executable("systemd-run")
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+
     let is_tty = io::stdin().is_terminal();
     let stdin = io::stdin();
     let mut locked_in = stdin.lock();
@@ -528,11 +538,6 @@ fn dispatch_uninstall(purge: bool) -> Result<(), CliFailure> {
     if purge {
         remove_dir_all_idempotent(&paths.xdg_state)?;
     }
-
-    let omarchy_bin =
-        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let systemd_run = resolve_absolute_executable("systemd-run")
-        .map_err(|e| CliFailure::plugin(e.to_string()))?;
 
     let clock = SystemClock;
     let txid = txid_from_bytes(format!("uninstall:{}", Clock::now_utc(&clock)).as_bytes());
