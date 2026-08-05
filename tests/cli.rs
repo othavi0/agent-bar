@@ -1,6 +1,6 @@
 //! Exhaustive v10 word-based CLI grammar and binary contract tests.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 
 use agent_bar::cli::{
@@ -188,11 +188,10 @@ fn login_config_setup_update_uninstall_doctor_forms() {
         parse(words(&["update", "check"])).unwrap(),
         Command::Update(UpdateCommand::Check)
     );
-    let apply = parse(words(&["update", "apply", "10.0.0"])).unwrap();
-    match apply {
-        Command::Update(UpdateCommand::Apply(v)) => assert_eq!(v.as_str(), "10.0.0"),
-        other => panic!("expected apply, got {other:?}"),
-    }
+    assert_eq!(
+        parse(words(&["update", "apply"])).unwrap(),
+        Command::Update(UpdateCommand::Apply)
+    );
     assert_eq!(
         parse(words(&["uninstall"])).unwrap(),
         Command::Uninstall { purge: false }
@@ -225,15 +224,15 @@ fn setup_plugins_dir_rejects_relative_and_plugin_root_path() {
 }
 
 #[test]
-fn update_apply_rejects_non_strict_semver() {
-    for version in ["10", "10.0", "v10.0.0", "latest", ""] {
-        let args = if version.is_empty() {
-            words(&["update", "apply"])
-        } else {
-            words(&["update", "apply", version])
-        };
-        let err = parse(args).unwrap_err();
-        assert_eq!(err.exit_code, GRAMMAR, "{version}");
+fn update_apply_rejects_trailing_arguments() {
+    // `update apply` takes no argument (git-plugin-distribution Task 2): it
+    // delegates unconditionally instead of applying a specific version.
+    for extra in [
+        words(&["update", "apply", "10.0.0"]),
+        words(&["update", "apply", "extra", "words"]),
+    ] {
+        let err = parse(extra.clone()).unwrap_err();
+        assert_eq!(err.exit_code, GRAMMAR, "{extra:?}");
     }
 }
 
@@ -654,7 +653,10 @@ fn binary_doctor_clean_backs_up_and_removes_owned_legacy() {
 
 #[test]
 fn binary_interactive_update_rejects_non_tty() {
-    // Pipe stdin so the process is non-TTY.
+    // Bare `update` has no interactive flow left (git-plugin-distribution
+    // Task 2 removed the TTY confirm-then-apply dance): it always points at
+    // the two real subcommands, TTY or not. Pipe stdin so the process is
+    // non-TTY, matching the historical name of this test.
     let dir = tempdir().unwrap();
     let home = dir.path();
     let bin = assert_cmd::cargo::cargo_bin("agent-bar");
@@ -679,4 +681,116 @@ fn binary_interactive_update_rejects_non_tty() {
         stderr.contains("update check") && stderr.contains("update apply"),
         "stderr={stderr}"
     );
+}
+
+/// Write an executable shell script (mirrors `tests/terminal_helper.rs`'s
+/// fake-PATH-tool pattern for `xdg-terminal-exec`).
+fn write_executable(path: &Path, body: &str) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(path, body).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(path, perms).unwrap();
+    }
+}
+
+/// Recording shim: records its NUL-separated argv to `out` then exits 0.
+fn recording_shim_body(out: &Path) -> String {
+    format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+: > "{out}"
+for a in "$@"; do
+  printf '%s\0' "$a" >> "{out}"
+done
+exit 0
+"#,
+        out = out.display()
+    )
+}
+
+fn read_nul_argv(path: &Path) -> Vec<String> {
+    let bytes = std::fs::read(path).unwrap_or_default();
+    bytes
+        .split(|b| *b == 0)
+        .filter(|s| !s.is_empty())
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect()
+}
+
+#[test]
+fn update_apply_emits_delegation_document() {
+    // omarchy and systemd-run resolved via fake PATH shims in a tempdir that
+    // record argv (git-plugin-distribution Task 2): `update apply` never
+    // downloads/stages/exchanges anymore, it hands off to
+    // `systemd-run --user --collect --unit=... -- <omarchy> plugin update
+    // agent-bar.usage --yes` and prints the delegation document.
+    let dir = tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+
+    let path_dir = dir.path().join("pathbin");
+    write_executable(&path_dir.join("omarchy"), "#!/usr/bin/env bash\nexit 0\n");
+
+    let systemd_run_argv = dir.path().join("systemd-run-argv.bin");
+    write_executable(
+        &path_dir.join("systemd-run"),
+        &recording_shim_body(&systemd_run_argv),
+    );
+
+    let path = format!(
+        "{}:{}",
+        path_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    let bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let output = StdCommand::new(&bin)
+        .args(["update", "apply"])
+        .env("HOME", &home)
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("PATH", &path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr={} stdout={}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.trim_end_matches('\n').lines().collect();
+    assert_eq!(lines.len(), 1, "stdout must be exactly one line: {stdout}");
+    let doc: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(doc["schemaVersion"], 1);
+    assert_eq!(doc["operation"], "updateApply");
+    assert_eq!(doc["delegated"], true);
+    let unit = doc["unit"].as_str().expect("unit is a string");
+    assert!(
+        unit.starts_with("agent-bar-update-") && unit.ends_with(".service"),
+        "unit={unit}"
+    );
+
+    let argv = read_nul_argv(&systemd_run_argv);
+    assert!(
+        argv.ends_with(&[
+            "plugin".to_string(),
+            "update".to_string(),
+            "agent-bar.usage".to_string(),
+            "--yes".to_string(),
+        ]),
+        "argv={argv:?}"
+    );
+    assert_eq!(argv.first().map(String::as_str), Some("--user"));
+    assert!(argv.contains(&"--collect".to_string()));
+    assert!(argv.iter().any(|a| a == &format!("--unit={unit}")));
+    assert!(argv.contains(&"--".to_string()));
 }

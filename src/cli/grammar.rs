@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use super::command::{
     CacheMode, Command, ConfigCommand, ConfigInput, DoctorCommand, HelpTopic, NotificationMode,
-    ProviderId, ReleaseVersion, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
+    ProviderId, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
 };
 use super::exit::CliFailure;
 
@@ -261,15 +261,10 @@ fn parse_update(tokens: &[String]) -> Result<Command, CliFailure> {
     match tokens {
         [] => Ok(Command::Update(UpdateCommand::Interactive)),
         [word] if word == "check" => Ok(Command::Update(UpdateCommand::Check)),
-        [word] if word == "apply" => Err(CliFailure::grammar("update apply requires a version")),
-        [word, version] if word == "apply" => {
-            let release = ReleaseVersion::parse(version).map_err(|_| {
-                CliFailure::grammar(format!(
-                    "update apply requires a strict semantic version; got '{version}'"
-                ))
-            })?;
-            Ok(Command::Update(UpdateCommand::Apply(release)))
-        }
+        [word] if word == "apply" => Ok(Command::Update(UpdateCommand::Apply)),
+        [word, ..] if word == "apply" => Err(CliFailure::grammar(
+            "unexpected argument after update apply",
+        )),
         [other, ..] => Err(CliFailure::grammar(format!(
             "unknown argument '{other}' for update"
         ))),

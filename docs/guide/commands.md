@@ -82,16 +82,17 @@ contains or receives the `agent-bar.usage` child. `doctor scan` never writes.
 ```bash
 "$PLUGIN" update
 "$PLUGIN" update check
-"$PLUGIN" update apply 10.1.0
+"$PLUGIN" update apply
 ```
 
-- `update` is the interactive recovery flow.
-- `update check` returns machine-readable compatibility metadata.
-- `update apply <version>` accepts only the exact version selected by a fresh
-  official check.
-
-Bare `update` requires TTY stdin and the exact confirmation line
-`update agent-bar`; non-TTY automation uses `update check`/`update apply`.
+- Bare `update` has no interactive flow; it prints usage pointing at `update
+  check` and `update apply`.
+- `update check` returns machine-readable compatibility metadata read from the
+  dist repo's git receipt.
+- `update apply` takes no argument. It delegates unconditionally to
+  `omarchy plugin update agent-bar.usage --yes` as a detached transient unit
+  and returns as soon as the handoff is accepted; that command owns the
+  fast-forward, health check, and rollback.
 
 Normal users use the Maintenance UI.
 

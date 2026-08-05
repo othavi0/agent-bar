@@ -6,7 +6,7 @@ mod grammar;
 
 pub use command::{
     CacheMode, Command, ConfigCommand, ConfigInput, DoctorCommand, HelpTopic, NotificationMode,
-    ProviderId, ReleaseVersion, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
+    ProviderId, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
 };
 pub use exit::{
     CliFailure, GENERIC_FAILURE, GRAMMAR, INTERNAL, PLUGIN, SERIALIZATION, SUCCESS, VALIDATION,
@@ -15,6 +15,8 @@ pub use grammar::parse;
 
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
+
+use serde::Serialize;
 
 /// Package version line for `version` / `--version` (exact semver + newline).
 pub fn version_stdout() -> String {
@@ -39,7 +41,7 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
             out.push_str("  agent-bar config show\n");
             out.push_str("  agent-bar config apply stdin|file <path>|json <value>\n");
             out.push_str("  agent-bar setup [plugins-dir <absolute-parent>]\n");
-            out.push_str("  agent-bar update [check|apply <version>]\n");
+            out.push_str("  agent-bar update [check|apply]\n");
             out.push_str("  agent-bar uninstall [purge]\n");
             out.push_str("  agent-bar doctor scan|clean\n");
             out.push_str("  agent-bar help [<command>]\n");
@@ -72,10 +74,9 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
              <path> must not be the plugin root itself (…/agent-bar.usage).\n"
                 .to_owned()
         }
-        Some(HelpTopic::Update) => "update — interactive update (TTY only)\n\
+        Some(HelpTopic::Update) => "update — print usage; no interactive flow\n\
              update check — report whether a newer release exists\n\
-             update apply <version> — apply a strict semantic version\n\
-             Non-TTY callers must use check/apply.\n"
+             update apply — delegate to 'omarchy plugin update agent-bar.usage'\n"
             .to_owned(),
         Some(HelpTopic::Uninstall) => {
             "uninstall — remove the plugin (keeps settings and backups)\n\
@@ -143,77 +144,11 @@ pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
     Ok(path.to_path_buf())
 }
 
-/// Result of an update availability check for interactive confirmation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InteractiveUpdateOffer {
-    UpToDate,
-    Available { current: String, target: String },
-}
-
-/// Shared non-TTY rejection message for interactive `update` (CLI contract).
-const INTERACTIVE_UPDATE_REQUIRES_TTY: &str =
-    "interactive update requires a TTY; use 'update check' and 'update apply <version>'";
-
 /// Three call sites reach this condition — a missing plugin root, a missing
 /// helper, and a non-executable helper — and all three want the same sentence.
 const SETUP_REQUIRES_PLUGIN_TREE: &str =
     "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; \
      use install.sh for first bootstrap from a release archive";
-
-/// Pure interactive `update` confirmation gate (CLI contract).
-///
-/// Non-TTY exits with validation code 3 and guidance. TTY with no update
-/// prints the up-to-date line. TTY with an update requires the exact phrase
-/// `update agent-bar` on stdin.
-pub fn confirm_interactive_update<R, W, E>(
-    is_tty: bool,
-    offer: InteractiveUpdateOffer,
-    stdin: &mut R,
-    stdout: &mut W,
-    stderr: &mut E,
-) -> Result<(), CliFailure>
-where
-    R: BufRead,
-    W: Write,
-    E: Write,
-{
-    if !is_tty {
-        // Message is printed once by the binary dispatcher on CliFailure.
-        let _ = stderr;
-        return Err(CliFailure::validation(INTERACTIVE_UPDATE_REQUIRES_TTY));
-    }
-
-    match offer {
-        InteractiveUpdateOffer::UpToDate => {
-            writeln!(stdout, "Agent Bar is up to date.")
-                .map_err(|err| CliFailure::internal(err.to_string()))?;
-            Ok(())
-        }
-        InteractiveUpdateOffer::Available { current, target } => {
-            writeln!(
-                stdout,
-                "Updates {current} to {target}. Settings stay. Rolls back if it fails."
-            )
-            .map_err(|err| CliFailure::internal(err.to_string()))?;
-            write!(stderr, "Type update agent-bar to continue: ")
-                .map_err(|err| CliFailure::internal(err.to_string()))?;
-            let _ = stderr.flush();
-            let mut line = String::new();
-            match stdin.read_line(&mut line) {
-                Ok(0) => Err(CliFailure::validation("update confirmation aborted")),
-                Ok(_) => {
-                    let trimmed = line.trim_end_matches(['\r', '\n']);
-                    if trimmed == "update agent-bar" {
-                        Ok(())
-                    } else {
-                        Err(CliFailure::validation("update confirmation rejected"))
-                    }
-                }
-                Err(err) => Err(CliFailure::internal(err.to_string())),
-            }
-        }
-    }
-}
 
 /// Dispatch a fully parsed command for the private helper binary.
 ///
@@ -231,7 +166,7 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
         Command::Setup(options) => dispatch_setup(options),
         Command::Update(UpdateCommand::Interactive) => dispatch_update_interactive(),
         Command::Update(UpdateCommand::Check) => dispatch_update_check(),
-        Command::Update(UpdateCommand::Apply(version)) => dispatch_update_apply(&version.as_str()),
+        Command::Update(UpdateCommand::Apply) => dispatch_update_apply(),
         Command::Config(config) => dispatch_config(config),
         Command::Login(provider) => dispatch_login(provider),
         Command::Status(opts) => dispatch_status(opts),
@@ -665,70 +600,103 @@ fn dispatch_update_check() -> Result<(), CliFailure> {
     Ok(())
 }
 
-/// Archive-based apply cannot work with the git-native `update check`
-/// document: BUNDLE-021 v-next carries no archive/checksum/source-commit
-/// fields (see `docs/superpowers/plans/2026-08-05-git-plugin-distribution.md`
-/// Task 1). git-plugin-distribution Task 2 replaces this whole function with
-/// a `systemd-run` delegation to `omarchy plugin update agent-bar.usage
-/// --yes`; until then it fails closed instead of compiling against removed
-/// `UpdateCompatible` fields or silently doing nothing.
-fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
-    Err(CliFailure::plugin(format!(
-        "update apply {version}: archive-based apply is retired under git-native \
-distribution; delegation to the omarchy CLI is pending"
-    )))
+/// Exact successful `update apply` stdout document (git-plugin-distribution
+/// Task 2). `update apply` no longer downloads, stages, or swaps the plugin
+/// tree itself — it hands the whole fast-forward to
+/// `omarchy plugin update agent-bar.usage --yes`, running as a detached
+/// transient unit so this process can return as soon as the handoff is
+/// accepted.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateApplyDelegation<'a> {
+    schema_version: u32,
+    operation: &'static str,
+    delegated: bool,
+    unit: &'a str,
 }
 
-fn dispatch_update_interactive() -> Result<(), CliFailure> {
-    use crate::plugin::{ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe};
-    use crate::support::SystemClock;
+/// `update apply`: unconditional detached delegation to the omarchy CLI.
+///
+/// BUNDLE-021 v-next carries no archive/checksum/source-commit fields (Task
+/// 1), so the old download/stage/exchange/health worker chain cannot run
+/// anymore — `omarchy plugin update` owns the git fast-forward instead.
+fn dispatch_update_apply() -> Result<(), CliFailure> {
+    use crate::plugin::{
+        resolve_absolute_executable, txid_from_bytes, CommandRunner, PluginPaths,
+        ProcessCommandRunner,
+    };
+    use crate::support::maintenance_gate::MaintenanceGate;
+    use crate::support::{Clock, SystemClock};
 
-    let is_tty = io::stdin().is_terminal();
-    if !is_tty {
-        // Reject before any network I/O: a non-interactive caller must use
-        // 'update check' / 'update apply' regardless of update availability
-        // or reachability of the releases API.
-        return Err(CliFailure::validation(INTERACTIVE_UPDATE_REQUIRES_TTY));
-    }
-    let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let clock = SystemClock;
-    let probe = UpdateCheckProbe::default();
-    let doc = UpdateCheck::run(&http, &clock, &probe, reinstall_required()?)
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| CliFailure::plugin("HOME is required for update apply".to_string()))?;
+    let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let paths = PluginPaths::production(PathBuf::from(home), xdg_state);
+
+    // Exclusive barrier (ARCH-026): block shared status/settings and any other
+    // maintenance operation while the handoff is issued.
+    let gate = MaintenanceGate::open(&paths.maintenance_lock)
+        .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
+    let _exclusive = gate
+        .lock_exclusive()
+        .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
+
+    let omarchy_bin =
+        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let systemd_run = resolve_absolute_executable("systemd-run")
         .map_err(|e| CliFailure::plugin(e.to_string()))?;
 
-    let offer = if doc.available {
-        let latest = doc
-            .latest_compatible
-            .as_ref()
-            .ok_or_else(|| CliFailure::plugin("available without latestCompatible"))?;
-        InteractiveUpdateOffer::Available {
-            current: doc.current.version.clone(),
-            target: latest.version.clone(),
-        }
-    } else {
-        InteractiveUpdateOffer::UpToDate
-    };
+    let clock = SystemClock;
+    let txid = txid_from_bytes(format!("update-apply:{}", Clock::now_utc(&clock)).as_bytes());
+    let unit = format!("agent-bar-update-{txid}.service");
+    let unit_flag = format!("--unit={unit}");
 
-    let stdin = io::stdin();
-    let mut locked_in = stdin.lock();
-    let stdout = io::stdout();
-    let mut locked_out = stdout.lock();
-    let stderr = io::stderr();
-    let mut locked_err = stderr.lock();
-    confirm_interactive_update(
-        is_tty,
-        offer,
-        &mut locked_in,
-        &mut locked_out,
-        &mut locked_err,
-    )?;
+    let argv: [&str; 9] = [
+        "--user",
+        "--collect",
+        unit_flag.as_str(),
+        "--",
+        omarchy_bin.as_str(),
+        "plugin",
+        "update",
+        "agent-bar.usage",
+        "--yes",
+    ];
 
-    if let Some(latest) = doc.latest_compatible {
-        if doc.available {
-            return dispatch_update_apply(&latest.version);
-        }
+    let runner = ProcessCommandRunner;
+    let out = runner
+        .run(&systemd_run, &argv)
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    if out.code != 0 {
+        return Err(CliFailure::plugin(format!(
+            "failed to start update unit: {}",
+            out.stderr.trim()
+        )));
     }
+
+    let doc = UpdateApplyDelegation {
+        schema_version: 1,
+        operation: "updateApply",
+        delegated: true,
+        unit: &unit,
+    };
+    let json = serde_json::to_string(&doc).map_err(|e| CliFailure::plugin(e.to_string()))?;
+    println!("{json}");
     Ok(())
+}
+
+/// `update` (no subcommand): the old TTY confirmation flow required a
+/// version-gated apply to offer, which git-native delegation no longer has —
+/// `update apply` now applies unconditionally. Bare `update` just points
+/// callers at the two real subcommands instead of pretending to be
+/// interactive.
+fn dispatch_update_interactive() -> Result<(), CliFailure> {
+    eprintln!("agent-bar update has no interactive flow.");
+    eprintln!("Use 'agent-bar update check' or 'agent-bar update apply'.");
+    Err(CliFailure {
+        message: String::new(),
+        exit_code: VALIDATION,
+    })
 }
 
 fn dispatch_status(opts: StatusOptions) -> Result<(), CliFailure> {
@@ -867,132 +835,6 @@ mod tests {
         let out = version_stdout();
         assert_eq!(out, format!("{}\n", env!("CARGO_PKG_VERSION")));
         assert!(!out.contains('\0'));
-    }
-
-    #[test]
-    fn interactive_update_rejects_non_tty() {
-        let mut stdin = Cursor::new(Vec::new());
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        let err = confirm_interactive_update(
-            false,
-            InteractiveUpdateOffer::Available {
-                current: "10.0.0".into(),
-                target: "10.0.1".into(),
-            },
-            &mut stdin,
-            &mut stdout,
-            &mut stderr,
-        )
-        .unwrap_err();
-        assert_eq!(err.exit_code, VALIDATION);
-        assert!(stdout.is_empty());
-        assert!(stderr.is_empty());
-        assert!(err.message.contains("update check"));
-        assert!(err.message.contains("update apply"));
-    }
-
-    #[test]
-    fn interactive_update_up_to_date_on_tty() {
-        let mut stdin = Cursor::new(Vec::new());
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        confirm_interactive_update(
-            true,
-            InteractiveUpdateOffer::UpToDate,
-            &mut stdin,
-            &mut stdout,
-            &mut stderr,
-        )
-        .unwrap();
-        assert_eq!(
-            String::from_utf8_lossy(&stdout),
-            "Agent Bar is up to date.\n"
-        );
-        assert!(stderr.is_empty());
-    }
-
-    #[test]
-    fn interactive_update_accepts_exact_phrase() {
-        let mut stdin = Cursor::new(b"update agent-bar\n".as_slice());
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        confirm_interactive_update(
-            true,
-            InteractiveUpdateOffer::Available {
-                current: "10.0.0".into(),
-                target: "10.1.0".into(),
-            },
-            &mut stdin,
-            &mut stdout,
-            &mut stderr,
-        )
-        .unwrap();
-        let out = String::from_utf8_lossy(&stdout);
-        assert!(out.contains("10.0.0"));
-        assert!(out.contains("10.1.0"));
-        assert!(String::from_utf8_lossy(&stderr).contains("Type update agent-bar to continue:"));
-    }
-
-    #[test]
-    fn interactive_update_rejects_wrong_phrase_and_eof() {
-        let mut stdin = Cursor::new(b"nope\n".as_slice());
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        let err = confirm_interactive_update(
-            true,
-            InteractiveUpdateOffer::Available {
-                current: "10.0.0".into(),
-                target: "10.1.0".into(),
-            },
-            &mut stdin,
-            &mut stdout,
-            &mut stderr,
-        )
-        .unwrap_err();
-        assert_eq!(err.exit_code, VALIDATION);
-
-        let mut stdin = Cursor::new(Vec::new());
-        let err = confirm_interactive_update(
-            true,
-            InteractiveUpdateOffer::Available {
-                current: "10.0.0".into(),
-                target: "10.1.0".into(),
-            },
-            &mut stdin,
-            &mut stdout,
-            &mut stderr,
-        )
-        .unwrap_err();
-        assert_eq!(err.exit_code, VALIDATION);
-    }
-
-    #[test]
-    fn interactive_update_prompt_speaks_plainly() {
-        let mut stdin = std::io::Cursor::new(b"update agent-bar\n".to_vec());
-        let mut stdout: Vec<u8> = Vec::new();
-        let mut stderr: Vec<u8> = Vec::new();
-        confirm_interactive_update(
-            true,
-            InteractiveUpdateOffer::Available {
-                current: "10.0.0".into(),
-                target: "10.2.0".into(),
-            },
-            &mut stdin,
-            &mut stdout,
-            &mut stderr,
-        )
-        .expect("confirmed");
-        let out = String::from_utf8(stdout).expect("utf8");
-        let err = String::from_utf8(stderr).expect("utf8");
-        assert_eq!(
-            out,
-            "Updates 10.0.0 to 10.2.0. Settings stay. Rolls back if it fails.\n"
-        );
-        // The typed phrase is a safety mechanism, not copy: it must survive
-        // every rewording of the sentence around it.
-        assert!(err.contains("update agent-bar"));
-        assert_eq!(err, "Type update agent-bar to continue: ");
     }
 
     #[test]
