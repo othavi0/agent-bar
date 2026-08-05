@@ -162,18 +162,14 @@ fn cli_messages_do_not_say_clause() {
 
 /// A message that exists twice drifts: one copy gets fixed, the other does
 /// not, and the user sees two wordings for one condition depending on which
-/// code path noticed. These four were duplicated across the parse and
-/// validate paths before this guard existed.
+/// code path noticed. This one was duplicated across the parse and validate
+/// paths before this guard existed. Its former `setup plugins-dir` siblings
+/// were deleted whole with the feature (git-plugin-distribution Task 4:
+/// install is `omarchy plugin add` now) rather than left here unreachable.
 #[test]
 fn cli_messages_are_defined_once() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let watched = [
-        "setup plugins-dir path must be absolute",
-        "setup plugins-dir path must be the parent directory, not the plugin root",
-        "config apply requires stdin, file <path>, or json <value>",
-        "setup plugins-dir requires a path",
-        "setup requires a complete plugin tree",
-    ];
+    let watched = ["config apply requires stdin, file <path>, or json <value>"];
     let mut violations = Vec::new();
     let files = cli_files(&root);
     let mut totals = vec![0usize; watched.len()];
@@ -201,46 +197,22 @@ fn cli_messages_are_defined_once() {
 }
 
 /// §7.3: a message names the fix only where the fix is short and certain.
-/// These three are the whole set of messages that name a remedy — every
+/// This is the whole remaining set of messages that name a remedy — every
 /// other CLI error either states a grammar mistake the user can see from
 /// their own command line, or a condition whose remedy depends on facts the
-/// helper does not have.
-///
-/// The writability probe is that last case: `create_new(true)` fails both on
-/// a real permission problem and on a stale `.agent-bar-write-probe` left by
-/// an earlier run (its own cleanup swallows failure), so a directory the
-/// user fully owns can still report this error. There is no short, certain
-/// fix to name, so [`cli_writability_message_does_not_claim_a_fix`] pins
-/// that message bare.
+/// helper does not have. The `setup plugins-dir` writability/existence
+/// messages this guard used to also check were deleted whole with the
+/// feature (git-plugin-distribution Task 4: install is `omarchy plugin add`
+/// now), including the writability probe that could not tell a permission
+/// problem from a stale probe file and so deliberately named no fix.
 #[test]
 fn cli_messages_that_can_name_a_fix_do() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let source = all_cli_source(&root);
-    for needle in [
-        "setup plugins-dir path cannot be read: {}; create it, or check the permissions on its parents",
-        "setup plugins-dir path is not a directory: {}; pass the parent directory",
-        "{} login executable was not found; install the provider CLI first",
-    ] {
-        assert!(
-            source.contains(needle),
-            "missing fix-naming message: {needle}"
-        );
-    }
-}
-
-/// Companion to [`cli_messages_that_can_name_a_fix_do`]: the writability
-/// probe cannot tell a permission problem from a stale probe file, so its
-/// message must not claim a fix. Checks for the literal closing quote and
-/// trailing comma right after `{}` so a future well-meaning edit cannot
-/// quietly bolt a remedy back onto this message.
-#[test]
-fn cli_writability_message_does_not_claim_a_fix() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let source = all_cli_source(&root);
+    let needle = "{} login executable was not found; install the provider CLI first";
     assert!(
-        source.contains("\"setup plugins-dir path is not writable: {}\","),
-        "the writability probe cannot tell a permission problem from a stale probe file, \
-         so its message must not claim a fix"
+        source.contains(needle),
+        "missing fix-naming message: {needle}"
     );
 }
 

@@ -8,15 +8,7 @@ use super::command::{
 };
 use super::exit::CliFailure;
 
-/// Shared with `super::validate_plugins_dir`, which re-checks the same two
-/// conditions after the filesystem is consulted. One definition means the
-/// parse path and the validate path can never disagree about the wording.
-pub(crate) const SETUP_PLUGINS_DIR_ABSOLUTE: &str = "setup plugins-dir path must be absolute";
-pub(crate) const SETUP_PLUGINS_DIR_NOT_PLUGIN_ROOT: &str =
-    "setup plugins-dir path must be the parent directory, not the plugin root";
-
 const CONFIG_APPLY_USAGE: &str = "config apply requires stdin, file <path>, or json <value>";
-const SETUP_PLUGINS_DIR_REQUIRES_PATH: &str = "setup plugins-dir requires a path";
 
 /// Parse argv words after the program name into a closed [`Command`].
 ///
@@ -223,38 +215,16 @@ fn parse_config(tokens: &[String]) -> Result<Command, CliFailure> {
     }
 }
 
+/// `setup` takes no arguments (git-plugin-distribution Task 4): install is
+/// `omarchy plugin add`/git clone now, so the former `plugins-dir <path>`
+/// injected-install-target form is an ordinary unknown argument.
 fn parse_setup(tokens: &[String]) -> Result<Command, CliFailure> {
     match tokens {
         [] => Ok(Command::Setup(SetupOptions::Production)),
-        [word, path] if word == "plugins-dir" => {
-            if path.is_empty() {
-                return Err(CliFailure::grammar(SETUP_PLUGINS_DIR_REQUIRES_PATH));
-            }
-            // Path shape checks that need no filesystem: relative and direct
-            // plugin-root forms are rejected here; existence/writability are
-            // validated after parse.
-            let pb = PathBuf::from(path);
-            if !pb.is_absolute() {
-                return Err(CliFailure::grammar(SETUP_PLUGINS_DIR_ABSOLUTE));
-            }
-            if path_ends_with_plugin_id(&pb) {
-                return Err(CliFailure::grammar(SETUP_PLUGINS_DIR_NOT_PLUGIN_ROOT));
-            }
-            Ok(Command::Setup(SetupOptions::PluginsDir(pb)))
-        }
-        [word] if word == "plugins-dir" => {
-            Err(CliFailure::grammar(SETUP_PLUGINS_DIR_REQUIRES_PATH))
-        }
         [other, ..] => Err(CliFailure::grammar(format!(
             "unknown argument '{other}' for setup"
         ))),
     }
-}
-
-fn path_ends_with_plugin_id(path: &std::path::Path) -> bool {
-    path.file_name()
-        .and_then(|s| s.to_str())
-        .is_some_and(|name| name == "agent-bar.usage")
 }
 
 fn parse_update(tokens: &[String]) -> Result<Command, CliFailure> {

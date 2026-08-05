@@ -68,14 +68,14 @@ returns the canonical stored document.
 
 ```bash
 "$PLUGIN" setup
-"$PLUGIN" setup plugins-dir /temporary/plugins
 "$PLUGIN" doctor scan
 "$PLUGIN" doctor clean
 ```
 
-The `plugins-dir` argument is an existing writable absolute parent that
-contains or receives the `agent-bar.usage` child. `doctor scan` never writes.
-`doctor clean` backs up and removes only confirmed owned legacy artifacts.
+`setup` takes no arguments; it migrates settings to the current schema.
+Install and update go through `omarchy plugin add|update agent-bar.usage`.
+`doctor scan` never writes. `doctor clean` backs up and removes only
+confirmed owned legacy artifacts.
 
 ## Update
 

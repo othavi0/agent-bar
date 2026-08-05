@@ -40,7 +40,7 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
             out.push_str("  agent-bar login <provider>\n");
             out.push_str("  agent-bar config show\n");
             out.push_str("  agent-bar config apply stdin|file <path>|json <value>\n");
-            out.push_str("  agent-bar setup [plugins-dir <absolute-parent>]\n");
+            out.push_str("  agent-bar setup\n");
             out.push_str("  agent-bar update [check|apply]\n");
             out.push_str("  agent-bar uninstall [purge]\n");
             out.push_str("  agent-bar doctor scan|clean\n");
@@ -69,9 +69,8 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
              config apply stdin|file <path>|json <value> — replace settings\n"
             .to_owned(),
         Some(HelpTopic::Setup) => {
-            "setup — install the agent-bar.usage plugin into the production Quattro parent\n\
-             setup plugins-dir <path> — install under an existing writable absolute parent\n\
-             <path> must not be the plugin root itself (…/agent-bar.usage).\n"
+            "setup — migrate settings to the current schema; takes no arguments\n\
+             Install and update are 'omarchy plugin add|update agent-bar.usage'.\n"
                 .to_owned()
         }
         Some(HelpTopic::Update) => "update — print usage; no interactive flow\n\
@@ -93,62 +92,6 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
         }
     }
 }
-
-/// Filesystem validation for `setup plugins-dir` (CLI-009).
-///
-/// `<path>` must be an existing writable absolute parent that contains or can
-/// receive the `agent-bar.usage` child. Relative paths and a direct plugin-root
-/// path are rejected by the grammar before this runs.
-pub fn validate_plugins_dir(path: &Path) -> Result<PathBuf, CliFailure> {
-    if !path.is_absolute() {
-        return Err(CliFailure::grammar(grammar::SETUP_PLUGINS_DIR_ABSOLUTE));
-    }
-    if path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .is_some_and(|n| n == "agent-bar.usage")
-    {
-        return Err(CliFailure::grammar(
-            grammar::SETUP_PLUGINS_DIR_NOT_PLUGIN_ROOT,
-        ));
-    }
-    let meta = std::fs::metadata(path).map_err(|_| {
-        CliFailure::validation(format!(
-            "setup plugins-dir path cannot be read: {}; create it, or check the permissions on its parents",
-            path.display()
-        ))
-    })?;
-    if !meta.is_dir() {
-        return Err(CliFailure::validation(format!(
-            "setup plugins-dir path is not a directory: {}; pass the parent directory",
-            path.display()
-        )));
-    }
-    // Probe writability with a same-directory temporary file.
-    let probe = path.join(".agent-bar-write-probe");
-    match std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&probe)
-    {
-        Ok(_) => {
-            let _ = std::fs::remove_file(&probe);
-        }
-        Err(_) => {
-            return Err(CliFailure::validation(format!(
-                "setup plugins-dir path is not writable: {}",
-                path.display()
-            )));
-        }
-    }
-    Ok(path.to_path_buf())
-}
-
-/// Three call sites reach this condition — a missing plugin root, a missing
-/// helper, and a non-executable helper — and all three want the same sentence.
-const SETUP_REQUIRES_PLUGIN_TREE: &str =
-    "setup requires a complete plugin tree at <plugin-root>/bin/agent-bar; \
-     use install.sh for first bootstrap from a release archive";
 
 /// Dispatch a fully parsed command for the private helper binary.
 ///
@@ -175,53 +118,17 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
     }
 }
 
-/// Resolve the complete plugin tree that contains this helper binary.
+/// `setup`: settings migration only (git-plugin-distribution Task 4).
 ///
-/// Expects the installed layout `<plugin-root>/bin/agent-bar`. First bootstrap
-/// from a release archive remains `install.sh` when no local tree exists.
-fn resolve_plugin_source_root() -> Result<PathBuf, CliFailure> {
-    use crate::plugin::BundleValidator;
-
-    let exe =
-        std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
-    let exe = fs_canonicalize(&exe);
-    let Some(bin_dir) = exe.parent() else {
-        return Err(CliFailure::plugin(SETUP_REQUIRES_PLUGIN_TREE));
-    };
-    if bin_dir
-        .file_name()
-        .and_then(|s| s.to_str())
-        .is_none_or(|n| n != "bin")
-    {
-        return Err(CliFailure::plugin(SETUP_REQUIRES_PLUGIN_TREE));
-    }
-    let Some(root) = bin_dir.parent() else {
-        return Err(CliFailure::plugin(SETUP_REQUIRES_PLUGIN_TREE));
-    };
-    if !root.join("manifest.json").is_file() {
-        return Err(CliFailure::plugin(
-            "setup source tree is missing manifest.json",
-        ));
-    }
-    if root.join("bundle.json").is_file() {
-        BundleValidator::validate_tree(root).map_err(|e| CliFailure::plugin(e.to_string()))?;
-    }
-    Ok(root.to_path_buf())
-}
-
-fn fs_canonicalize(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn paths_equal(a: &Path, b: &Path) -> bool {
-    fs_canonicalize(a) == fs_canonicalize(b)
-}
-
-fn dispatch_setup(options: SetupOptions) -> Result<(), CliFailure> {
-    use crate::plugin::{
-        resolve_absolute_executable, shell_has_plugin_entry, txid_from_bytes, OmarchyClient,
-        PluginPaths, ProcessCommandRunner, Transaction,
-    };
+/// The plugin tree install/activate that used to live here is gone —
+/// `omarchy plugin add agent-bar.usage` is the install now, and `update`
+/// (Task 2) / `uninstall` (Task 3) already delegate their tree mutations to
+/// the omarchy CLI the same way. `setup` keeps the one piece of state only
+/// this helper owns: MIG-007..016 explicit settings/shell v9-to-v10
+/// migration, run once under the exclusive maintenance gate. Reads never
+/// write; setup is the authorized apply path.
+fn dispatch_setup(_options: SetupOptions) -> Result<(), CliFailure> {
+    use crate::plugin::PluginPaths;
     use crate::settings::{default_settings_path, migrate_live_paths};
     use crate::support::maintenance_gate::MaintenanceGate;
     use crate::support::{Clock, SystemClock};
@@ -230,92 +137,37 @@ fn dispatch_setup(options: SetupOptions) -> Result<(), CliFailure> {
         .ok_or_else(|| CliFailure::plugin("HOME is required for setup".to_string()))?;
     let home = PathBuf::from(home);
     let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-
-    let (paths, is_production) = match options {
-        SetupOptions::Production => (PluginPaths::production(home.clone(), xdg_state), true),
-        SetupOptions::PluginsDir(path) => {
-            let parent = validate_plugins_dir(&path)?;
-            let state = std::env::var_os("XDG_STATE_HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home.join(".local/state"));
-            (
-                PluginPaths::with_plugins_dir(home.clone(), parent, state),
-                false,
-            )
-        }
-    };
+    let paths = PluginPaths::production(home.clone(), xdg_state);
 
     let clock = SystemClock;
     let stamp = format!("{}", Clock::now_utc(&clock));
     let backup_stamp = stamp.replace(':', "-");
 
-    // MIG-007..016: explicit settings/shell migration under exclusive gate before
-    // plugin swap. Reads never write; setup is the authorized apply path.
-    {
-        let gate = MaintenanceGate::open(&paths.maintenance_lock)
-            .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
-        let _exclusive = gate
-            .lock_exclusive()
-            .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
-        let settings_path = default_settings_path();
-        let shell_path = home.join(".config/omarchy/shell.json");
-        let migrate_backup = paths.backup_root(&format!("setup-migrate-{backup_stamp}"));
-        let report = migrate_live_paths(&settings_path, &shell_path, &migrate_backup)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        if report.already_migrated {
-            eprintln!("settings already at v10; migration skipped");
-        } else if report.settings_written {
+    let gate = MaintenanceGate::open(&paths.maintenance_lock)
+        .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
+    let _exclusive = gate
+        .lock_exclusive()
+        .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
+    let settings_path = default_settings_path();
+    let shell_path = home.join(".config/omarchy/shell.json");
+    let migrate_backup = paths.backup_root(&format!("setup-migrate-{backup_stamp}"));
+    let report = migrate_live_paths(&settings_path, &shell_path, &migrate_backup)
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    if report.already_migrated {
+        eprintln!("settings already at v10; migration skipped");
+    } else if report.settings_written {
+        eprintln!(
+            "migrated settings to v10 (shell_written={})",
+            report.shell_written
+        );
+        if !report.unknown_keys.is_empty() {
             eprintln!(
-                "migrated settings to v10 (shell_written={})",
-                report.shell_written
+                "legacy keys retained in backup only: {}",
+                report.unknown_keys.join(", ")
             );
-            if !report.unknown_keys.is_empty() {
-                eprintln!(
-                    "legacy keys retained in backup only: {}",
-                    report.unknown_keys.join(", ")
-                );
-            }
-            if let Some(root) = report.backup_root {
-                eprintln!("migration backup: {}", root.display());
-            }
         }
-    }
-
-    let source = resolve_plugin_source_root()?;
-    if !paths_equal(&source, &paths.plugin_root) {
-        std::fs::create_dir_all(&paths.plugins_dir)
-            .map_err(|e| CliFailure::plugin(format!("create plugins dir: {e}")))?;
-        let gate = MaintenanceGate::open(&paths.maintenance_lock)
-            .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
-        let txid = txid_from_bytes(format!("setup:{stamp}").as_bytes());
-        let mut tx = Transaction::begin(&paths, &gate, &txid, "setup", &backup_stamp)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        let report = tx
-            .replace_plugin_dir(&source)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        if !report.ok {
-            return Err(CliFailure::plugin(report.message));
-        }
-        eprintln!("plugin installed at {}", paths.plugin_root.display());
-    } else {
-        eprintln!("plugin already present at {}", paths.plugin_root.display());
-    }
-
-    // Production setup activates Quattro placement. Injected plugins-dir is
-    // tree-only (CLI-009 isolated testing) and never runs omarchy.
-    if is_production {
-        let omarchy_bin = resolve_absolute_executable("omarchy")
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        let client = OmarchyClient::new(ProcessCommandRunner).with_program(omarchy_bin);
-        let shell_json = home.join(".config/omarchy/shell.json");
-        let has_entry = shell_has_plugin_entry(&shell_json);
-        client
-            .activate(has_entry)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        if has_entry {
-            eprintln!("omarchy plugin rescan completed");
-        } else {
-            eprintln!("omarchy plugin enable agent-bar.usage completed");
+        if let Some(root) = report.backup_root {
+            eprintln!("migration backup: {}", root.display());
         }
     }
     Ok(())
@@ -846,14 +698,6 @@ mod tests {
     }
 
     #[test]
-    fn validate_plugins_dir_accepts_writable_parent() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().canonicalize().unwrap();
-        let got = validate_plugins_dir(&path).unwrap();
-        assert_eq!(got, path);
-    }
-
-    #[test]
     fn uninstall_tty_accepts_exact_phrase() {
         let mut stdin = Cursor::new(b"uninstall agent-bar\n".as_slice());
         let mut stderr = Vec::new();
@@ -903,18 +747,5 @@ mod tests {
         );
         let err = confirm_uninstall(false, false, &mut stdin, &mut stderr).unwrap_err();
         assert_eq!(err.exit_code, VALIDATION);
-    }
-
-    #[test]
-    fn validate_plugins_dir_rejects_missing_and_plugin_root_name() {
-        let missing = PathBuf::from("/tmp/agent-bar-missing-plugins-dir-xyz");
-        let err = validate_plugins_dir(&missing).unwrap_err();
-        assert_eq!(err.exit_code, VALIDATION);
-
-        let dir = tempfile::tempdir().unwrap();
-        let plugin_root = dir.path().join("agent-bar.usage");
-        std::fs::create_dir_all(&plugin_root).unwrap();
-        let err = validate_plugins_dir(&plugin_root).unwrap_err();
-        assert_eq!(err.exit_code, GRAMMAR);
     }
 }
