@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use super::command::{
     CacheMode, Command, ConfigCommand, ConfigInput, DoctorCommand, HelpTopic, NotificationMode,
-    ProviderId, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
+    ProviderId, StatusFormat, StatusOptions, UpdateCommand,
 };
 use super::exit::CliFailure;
 
@@ -220,7 +220,7 @@ fn parse_config(tokens: &[String]) -> Result<Command, CliFailure> {
 /// injected-install-target form is an ordinary unknown argument.
 fn parse_setup(tokens: &[String]) -> Result<Command, CliFailure> {
     match tokens {
-        [] => Ok(Command::Setup(SetupOptions::Production)),
+        [] => Ok(Command::Setup),
         [other, ..] => Err(CliFailure::grammar(format!(
             "unknown argument '{other}' for setup"
         ))),

@@ -104,14 +104,6 @@ pub enum ConfigInput {
     Json(String),
 }
 
-/// Setup modes. `setup` is settings-migration only (git-plugin-distribution
-/// Task 4): `omarchy plugin add`/`update`/`remove` own the plugin tree now,
-/// so there is no injected-install-target variant to carry.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SetupOptions {
-    Production,
-}
-
 /// Update subcommands. `Apply` takes no argument: `update apply` is an
 /// unconditional detached delegation to `omarchy plugin update
 /// agent-bar.usage --yes` (git-plugin-distribution Task 2), not a
@@ -187,13 +179,16 @@ impl HelpTopic {
     }
 }
 
-/// Top-level parsed command.
+/// Top-level parsed command. `Setup` is settings-migration only
+/// (git-plugin-distribution Task 4): `omarchy plugin add`/`update`/`remove`
+/// own the plugin tree now, so there is no injected-install-target variant
+/// to carry — it takes no payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Status(StatusOptions),
     Login(ProviderId),
     Config(ConfigCommand),
-    Setup(SetupOptions),
+    Setup,
     Update(UpdateCommand),
     Uninstall { purge: bool },
     Doctor(DoctorCommand),

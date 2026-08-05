@@ -6,7 +6,7 @@ mod grammar;
 
 pub use command::{
     CacheMode, Command, ConfigCommand, ConfigInput, DoctorCommand, HelpTopic, NotificationMode,
-    ProviderId, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
+    ProviderId, StatusFormat, StatusOptions, UpdateCommand,
 };
 pub use exit::{
     CliFailure, GENERIC_FAILURE, GRAMMAR, INTERNAL, PLUGIN, SERIALIZATION, SUCCESS, VALIDATION,
@@ -106,7 +106,7 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
             print!("{}", help_text(topic));
             Ok(())
         }
-        Command::Setup(options) => dispatch_setup(options),
+        Command::Setup => dispatch_setup(),
         Command::Update(UpdateCommand::Interactive) => dispatch_update_interactive(),
         Command::Update(UpdateCommand::Check) => dispatch_update_check(),
         Command::Update(UpdateCommand::Apply) => dispatch_update_apply(),
@@ -127,7 +127,7 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
 /// this helper owns: MIG-007..016 explicit settings/shell v9-to-v10
 /// migration, run once under the exclusive maintenance gate. Reads never
 /// write; setup is the authorized apply path.
-fn dispatch_setup(_options: SetupOptions) -> Result<(), CliFailure> {
+fn dispatch_setup() -> Result<(), CliFailure> {
     use crate::plugin::PluginPaths;
     use crate::settings::{default_settings_path, migrate_live_paths};
     use crate::support::maintenance_gate::MaintenanceGate;

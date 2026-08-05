@@ -5,8 +5,8 @@ use std::process::Command as StdCommand;
 
 use agent_bar::cli::{
     parse, CacheMode, Command, ConfigCommand, ConfigInput, DoctorCommand, HelpTopic,
-    NotificationMode, ProviderId, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
-    GRAMMAR, SUCCESS, VALIDATION,
+    NotificationMode, ProviderId, StatusFormat, StatusOptions, UpdateCommand, GRAMMAR, SUCCESS,
+    VALIDATION,
 };
 use assert_cmd::Command as CargoBin;
 use tempfile::tempdir;
@@ -172,10 +172,7 @@ fn login_config_setup_update_uninstall_doctor_forms() {
             r#"{"schemaVersion":1}"#.into()
         )))
     );
-    assert_eq!(
-        parse(words(&["setup"])).unwrap(),
-        Command::Setup(SetupOptions::Production)
-    );
+    assert_eq!(parse(words(&["setup"])).unwrap(), Command::Setup);
     assert_eq!(
         parse(words(&["update"])).unwrap(),
         Command::Update(UpdateCommand::Interactive)
