@@ -123,11 +123,15 @@ fn is_historical_cut(rel: &str) -> bool {
     if rel.starts_with("docs/superpowers/") {
         return true;
     }
-    // Dated, frozen release-note and QA snapshots describe what a past,
+    // Dated, frozen release-note snapshots describe what a past,
     // already-published version actually shipped (e.g. `docs/releases/10.0.0.md`
     // naming that release's real `.tar.zst` asset). Same rationale as the
     // ADR/CHANGELOG historical-slice exclusions below: never rewritten.
-    if rel.starts_with("docs/releases/") || rel.starts_with("docs/history/") {
+    // `docs/releases/README.md` is the live index for the current pipeline
+    // (Task 8), not a dated cut, so it is deliberately NOT covered here.
+    if (rel.starts_with("docs/releases/") && rel != "docs/releases/README.md")
+        || rel.starts_with("docs/history/")
+    {
         return true;
     }
     if rel == "docs/adr/0001-omarchy-right-click-settings.md"
@@ -142,15 +146,6 @@ fn is_historical_cut(rel: &str) -> bool {
 /// Fixture / contract paths allowed to mention otherwise-forbidden tokens.
 fn is_allowlisted_path(rel: &str) -> bool {
     if rel.starts_with("tests/fixtures/migration/") {
-        return true;
-    }
-    // git-plugin-distribution Task 5 (this gate's new `tar.zst` /
-    // `releases/download/` tokens) intentionally lands before Task 8, which
-    // converts the CI pipeline to push the assembled tree straight to the
-    // distribution repo instead of building a release archive. Until Task 8
-    // lands, these two files still accurately describe the live pipeline —
-    // remove this allowance as part of that task, not before.
-    if rel == ".github/workflows/auto-release.yml" || rel == "docs/dev/releasing.md" {
         return true;
     }
     matches!(
