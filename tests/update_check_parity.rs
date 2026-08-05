@@ -10,6 +10,12 @@
 //! never emitted (`updateAvailable`, `currentVersion`, `targetVersion`,
 //! `releaseNotesUrl` at top level) and its tests fed that invented format
 //! back to it — green tests, broken product.
+//!
+//! BUNDLE-021 v-next (git-plugin-distribution Task 1): the document now
+//! carries `reinstallRequired` and no archive/checksum/source-commit fields
+//! at all — discovery reads the dist repo's `bundle.json` receipt instead of
+//! GitHub Releases. QML's `reinstallRequired` handling is a later task; this
+//! file only pins the Rust-side shape and fixture contents for now.
 
 use agent_bar::plugin::maintenance::UpdateCheckDocument;
 
@@ -45,7 +51,12 @@ fn fixtures_are_exact_update_check_stdout() {
         );
         names.push(name);
     }
-    for required in ["available.json", "no-compatible.json", "up-to-date.json"] {
+    for required in [
+        "available.json",
+        "no-compatible.json",
+        "up-to-date.json",
+        "reinstall-required.json",
+    ] {
         assert!(
             names.iter().any(|n| n == required),
             "missing required fixture {required}"
@@ -53,11 +64,12 @@ fn fixtures_are_exact_update_check_stdout() {
     }
 }
 
-/// The three fixtures cover every answer the document can give the UI.
+/// The four fixtures cover every answer the document can give the UI.
 #[test]
 fn fixture_semantics_cover_every_answer() {
     let available = fixture("available.json");
     assert!(available.available);
+    assert!(!available.reinstall_required);
     let latest = available
         .latest_compatible
         .expect("available fixture names a target");
@@ -66,6 +78,7 @@ fn fixture_semantics_cover_every_answer() {
 
     let up_to_date = fixture("up-to-date.json");
     assert!(!up_to_date.available);
+    assert!(!up_to_date.reinstall_required);
     let same = up_to_date
         .latest_compatible
         .expect("up-to-date still describes the newest compatible release");
@@ -73,7 +86,31 @@ fn fixture_semantics_cover_every_answer() {
 
     let none = fixture("no-compatible.json");
     assert!(!none.available);
+    assert!(!none.reinstall_required);
     assert!(none.latest_compatible.is_none());
+
+    let reinstall = fixture("reinstall-required.json");
+    assert!(reinstall.reinstall_required);
+    assert!(!reinstall.available);
+    assert!(reinstall.latest_compatible.is_none());
+}
+
+/// The rewritten document (BUNDLE-021 v-next) carries no archive-download
+/// fields anywhere: discovery is a dist repo receipt, not a GitHub release
+/// asset list, and `update apply` no longer downloads/verifies an archive.
+#[test]
+fn fixtures_carry_no_archive_fields() {
+    for entry in std::fs::read_dir(fixture_dir()).expect("read fixture dir") {
+        let path = entry.expect("dir entry").path();
+        let raw = std::fs::read_to_string(&path).expect("read fixture");
+        for forbidden in ["archiveUrl", "checksumUrl", "archiveSha256", "sourceCommit"] {
+            assert!(
+                !raw.contains(forbidden),
+                "{} must not contain {forbidden}",
+                path.display()
+            );
+        }
+    }
 }
 
 /// The seam is only real while the QML side parses the real key set.

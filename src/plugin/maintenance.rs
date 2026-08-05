@@ -12,7 +12,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::plugin::bundle::{
-    extract_bundle_archive, BundleError, BundleReceipt, BundleValidator, ReleaseMetadata,
+    extract_bundle_archive, BundleError, BundleReceipt, BundleValidator,
     MINIMUM_QUICKSHELL_VERSION, OFFICIAL_TARGET, OMARCHY_CONTRACT,
 };
 use crate::plugin::omarchy::{CommandOutput, CommandRunner, OmarchyError};
@@ -28,17 +28,17 @@ use crate::support::Clock;
 /// Executable basename that selects maintenance-worker mode before CLI parsing.
 pub const MAINTENANCE_WORKER_NAME: &str = "agent-bar-maintenance-worker";
 
-/// Official GitHub releases listing (discovery only).
-pub const RELEASES_API_URL: &str = "https://api.github.com/repos/othavi0/agent-bar/releases";
-
-/// Every initial metadata/asset URL must stay under this path prefix.
-pub const RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/othavi0/agent-bar/releases/";
+/// Distribution repo `bundle.json` receipt: the sole `update check` discovery
+/// source under git-native distribution. Served directly by
+/// raw.githubusercontent.com — no redirect-following is needed.
+pub const DIST_RECEIPT_URL: &str =
+    "https://raw.githubusercontent.com/othavi0/omarchy-agent-bar/master/bundle.json";
 
 /// User-Agent for release discovery/download (no provider credentials).
 pub const RELEASE_USER_AGENT: &str = concat!("agent-bar-update/", env!("CARGO_PKG_VERSION"));
 
-/// Max HTTPS redirects for an asset download.
-pub const MAX_DOWNLOAD_REDIRECTS: u32 = 5;
+/// Literal prefix of the computed `latestCompatible.releaseNotesUrl`.
+pub const RELEASE_NOTES_URL_PREFIX: &str = "https://github.com/othavi0/agent-bar/releases/tag/v";
 
 /// Rescan poll total deadline (BUNDLE-032G).
 pub const RESCAN_POLL_DEADLINE: Duration = Duration::from_secs(15);
@@ -107,14 +107,10 @@ pub struct UpdateCompatible {
     pub version: String,
     pub omarchy_contract: u32,
     pub minimum_quickshell_version: String,
-    pub archive_url: String,
-    pub checksum_url: String,
-    pub archive_sha256: String,
     pub release_notes_url: String,
-    pub source_commit: String,
 }
 
-/// Exact successful `update check` stdout document (BUNDLE-021).
+/// Exact successful `update check` stdout document (BUNDLE-021 v-next).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateCheckDocument {
@@ -122,6 +118,7 @@ pub struct UpdateCheckDocument {
     pub checked_at: String,
     pub current: UpdateCurrent,
     pub available: bool,
+    pub reinstall_required: bool,
     pub latest_compatible: Option<UpdateCompatible>,
 }
 
@@ -155,6 +152,13 @@ impl UpdateCheckDocument {
         if self.current.omarchy_contract != OMARCHY_CONTRACT {
             return Err(MaintenanceError::msg("current.omarchyContract must be 1"));
         }
+        // A reinstall-required document cannot also offer an update: the QML
+        // side (later task) shows only the reinstall message in that phase.
+        if self.reinstall_required && (self.available || self.latest_compatible.is_some()) {
+            return Err(MaintenanceError::msg(
+                "reinstallRequired documents must have available:false and latestCompatible:null",
+            ));
+        }
         if let Some(ref latest) = self.latest_compatible {
             if latest.omarchy_contract != OMARCHY_CONTRACT {
                 return Err(MaintenanceError::msg(
@@ -166,12 +170,14 @@ impl UpdateCheckDocument {
                     "latestCompatible.minimumQuickshellVersion must be {MINIMUM_QUICKSHELL_VERSION}"
                 )));
             }
-            validate_release_asset_url(&latest.archive_url)?;
-            validate_release_asset_url(&latest.checksum_url)?;
-            crate::plugin::bundle::validate_sha256_hex_pub(&latest.archive_sha256)
-                .map_err(|e| MaintenanceError::msg(e.to_string()))?;
-            crate::plugin::bundle::validate_source_commit(&latest.source_commit)
-                .map_err(|e| MaintenanceError::msg(e.to_string()))?;
+            if !latest
+                .release_notes_url
+                .starts_with(RELEASE_NOTES_URL_PREFIX)
+            {
+                return Err(MaintenanceError::msg(format!(
+                    "latestCompatible.releaseNotesUrl must start with {RELEASE_NOTES_URL_PREFIX}"
+                )));
+            }
             let current = semver::Version::parse(&self.current.version)
                 .map_err(|e| MaintenanceError::msg(e.to_string()))?;
             let latest_v = semver::Version::parse(&latest.version)
@@ -189,95 +195,6 @@ impl UpdateCheckDocument {
         }
         Ok(())
     }
-}
-
-// ---------------------------------------------------------------------------
-// Download URL policy
-// ---------------------------------------------------------------------------
-
-/// Validate an initial release asset / metadata URL (no redirect yet).
-pub fn validate_release_asset_url(url: &str) -> Result<(), MaintenanceError> {
-    if !url.starts_with(RELEASE_DOWNLOAD_PREFIX) {
-        return Err(MaintenanceError::msg(format!(
-            "release URL must start with {RELEASE_DOWNLOAD_PREFIX}"
-        )));
-    }
-    validate_redirect_target(url, true)
-}
-
-/// Validate a redirect target under the closed download policy.
-///
-/// Rules (BUNDLE-025 / download policy):
-/// - HTTPS only (no scheme downgrade)
-/// - host is `github.com` or ends with `.githubusercontent.com`
-/// - no userinfo
-/// - no IP-literal hosts
-/// - no non-default ports
-pub fn validate_redirect_target(url: &str, initial: bool) -> Result<(), MaintenanceError> {
-    // Lightweight parser (no extra crate): scheme://[userinfo@]host[:port]/path
-    let rest = url
-        .strip_prefix("https://")
-        .ok_or_else(|| MaintenanceError::msg("download URL must use https"))?;
-    if rest.contains('@') {
-        return Err(MaintenanceError::msg(
-            "download URL must not contain userinfo",
-        ));
-    }
-    let authority = rest.split('/').next().unwrap_or("");
-    if authority.is_empty() {
-        return Err(MaintenanceError::msg("download URL missing host"));
-    }
-    // Port detection: host:port (IPv6 literals rejected via '[').
-    if authority.starts_with('[') {
-        return Err(MaintenanceError::msg(
-            "download URL must not use an IP-literal host",
-        ));
-    }
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) if p.chars().all(|c| c.is_ascii_digit()) => (h, Some(p)),
-        _ => (authority, None),
-    };
-    if port.is_some() {
-        return Err(MaintenanceError::msg(
-            "download URL must not specify a non-default port",
-        ));
-    }
-    if host.parse::<std::net::Ipv4Addr>().is_ok() {
-        return Err(MaintenanceError::msg(
-            "download URL must not use an IP-literal host",
-        ));
-    }
-    let host_ok = host == "github.com" || host.ends_with(".githubusercontent.com");
-    if !host_ok {
-        return Err(MaintenanceError::msg(format!(
-            "download host not allowed: {host}"
-        )));
-    }
-    if initial && !url.starts_with(RELEASE_DOWNLOAD_PREFIX) {
-        return Err(MaintenanceError::msg(
-            "initial asset URL must remain under github.com/othavi0/agent-bar/releases/",
-        ));
-    }
-    let _ = initial;
-    Ok(())
-}
-
-/// Pure redirect chain validator (no network). Depth must be ≤ 5.
-pub fn validate_redirect_chain(urls: &[&str]) -> Result<(), MaintenanceError> {
-    if urls.is_empty() {
-        return Err(MaintenanceError::msg("empty redirect chain"));
-    }
-    if urls.len() as u32 > MAX_DOWNLOAD_REDIRECTS + 1 {
-        return Err(MaintenanceError::msg(format!(
-            "redirect depth exceeds {MAX_DOWNLOAD_REDIRECTS}"
-        )));
-    }
-    validate_release_asset_url(urls[0])?;
-    for (i, u) in urls.iter().enumerate().skip(1) {
-        validate_redirect_target(u, false)
-            .map_err(|e| MaintenanceError::msg(format!("redirect[{i}] rejected: {e}")))?;
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -446,137 +363,99 @@ impl Default for UpdateCheckProbe {
     }
 }
 
+/// Distribution repo `bundle.json` receipt shape (BUNDLE-012 producer, this
+/// task's consumer). Unknown fields (`sourceCommit`, `files`, ...) are
+/// intentionally tolerated — `update check` only needs discovery fields.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DistReceipt {
+    schema_version: u32,
+    plugin_id: String,
+    version: String,
+    target: String,
+    omarchy_contract: u32,
+    minimum_quickshell_version: String,
+}
+
 pub struct UpdateCheck;
 
 impl UpdateCheck {
-    /// Discover the latest compatible release and return the machine document.
+    /// Fetch the dist repo receipt and return the machine `update check` document.
+    ///
+    /// `reinstall_required` is computed by the caller (BUNDLE-021 v-next: a
+    /// non-git plugin root cannot be fast-forwarded by `omarchy plugin
+    /// update`) so unit tests can script both states without touching the
+    /// filesystem. When true, the receipt is still fetched and validated for
+    /// its own sake, but `available`/`latestCompatible` are forced to their
+    /// null state to satisfy `UpdateCheckDocument::validate`.
     pub fn run<H: ReleaseHttp, C: Clock>(
         http: &H,
         clock: &C,
         probe: &UpdateCheckProbe,
+        reinstall_required: bool,
     ) -> Result<UpdateCheckDocument, MaintenanceError> {
-        let list = http.get(
-            RELEASES_API_URL,
+        let resp = http.get(
+            DIST_RECEIPT_URL,
             &[
-                ("Accept", "application/vnd.github+json"),
+                ("Accept", "application/json"),
                 ("User-Agent", RELEASE_USER_AGENT),
             ],
         )?;
-        if list.status != 200 {
+        if resp.status != 200 {
             return Err(MaintenanceError::msg(format!(
-                "releases API returned HTTP {}",
-                list.status
+                "dist receipt fetch returned HTTP {}",
+                resp.status
             )));
         }
-        let releases: Vec<GitHubRelease> = serde_json::from_slice(&list.body)
-            .map_err(|e| MaintenanceError::msg(format!("malformed releases list: {e}")))?;
+        let receipt: DistReceipt = serde_json::from_slice(&resp.body)
+            .map_err(|e| MaintenanceError::msg(format!("malformed dist receipt: {e}")))?;
+
+        if receipt.schema_version != 1 {
+            return Err(MaintenanceError::msg(
+                "dist receipt schemaVersion must be 1",
+            ));
+        }
+        if receipt.plugin_id != PLUGIN_ID {
+            return Err(MaintenanceError::msg(format!(
+                "dist receipt pluginId must be {PLUGIN_ID}"
+            )));
+        }
+        if receipt.target != OFFICIAL_TARGET {
+            return Err(MaintenanceError::msg(format!(
+                "dist receipt target must be {OFFICIAL_TARGET}"
+            )));
+        }
+        if receipt.omarchy_contract != OMARCHY_CONTRACT {
+            return Err(MaintenanceError::msg(format!(
+                "dist receipt omarchyContract must be {OMARCHY_CONTRACT}"
+            )));
+        }
 
         let current = semver::Version::parse(&probe.current_version)
             .map_err(|e| MaintenanceError::msg(format!("current version: {e}")))?;
+        let receipt_version = semver::Version::parse(&receipt.version)
+            .map_err(|e| MaintenanceError::msg(format!("dist receipt version: {e}")))?;
         let qs = semver::Version::parse(&probe.quickshell_version)
             .map_err(|e| MaintenanceError::msg(format!("quickshell version: {e}")))?;
-        let min_qs = semver::Version::parse(MINIMUM_QUICKSHELL_VERSION)
+        let receipt_min_qs = semver::Version::parse(&receipt.minimum_quickshell_version)
             .map_err(|e| MaintenanceError::msg(e.to_string()))?;
 
-        let mut best: Option<(semver::Version, UpdateCompatible)> = None;
-
-        for rel in &releases {
-            if rel.draft || rel.prerelease {
-                continue;
-            }
-            let tag = rel.tag_name.trim_start_matches('v');
-            let ver = match semver::Version::parse(tag) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            // Locate metadata asset for this target.
-            let meta_name = format!("{PLUGIN_ID}-{tag}-{OFFICIAL_TARGET}.metadata.json");
-            let archive_name = format!("{PLUGIN_ID}-{tag}-{OFFICIAL_TARGET}.tar.zst");
-            let checksum_name = format!("{archive_name}.sha256");
-
-            let meta_asset = rel.assets.iter().find(|a| a.name == meta_name);
-            let archive_asset = rel.assets.iter().find(|a| a.name == archive_name);
-            let checksum_asset = rel.assets.iter().find(|a| a.name == checksum_name);
-
-            // Incomplete assets for a release that claims the target → error
-            // only when any of the three names is present without the others,
-            // or metadata exists but is malformed. Fully absent → skip.
-            let any = meta_asset.is_some() || archive_asset.is_some() || checksum_asset.is_some();
-            if !any {
-                continue;
-            }
-            let (meta_asset, archive_asset, checksum_asset) =
-                match (meta_asset, archive_asset, checksum_asset) {
-                    (Some(m), Some(a), Some(c)) => (m, a, c),
-                    _ => {
-                        return Err(MaintenanceError::msg(format!(
-                            "incomplete release assets for {tag}"
-                        )));
-                    }
-                };
-
-            validate_release_asset_url(&meta_asset.browser_download_url)?;
-            validate_release_asset_url(&archive_asset.browser_download_url)?;
-            validate_release_asset_url(&checksum_asset.browser_download_url)?;
-
-            // GitHub asset URLs always 302 to the CDN (issue #31); follow the
-            // redirect under the closed host policy like archive/checksum do.
-            let meta_body = download_with_policy(http, &meta_asset.browser_download_url)
-                .map_err(|e| MaintenanceError::msg(format!("metadata download for {tag}: {e}")))?;
-            let meta = ReleaseMetadata::parse_json(&meta_body)
-                .map_err(|e| MaintenanceError::msg(format!("malformed metadata for {tag}: {e}")))?;
-
-            if meta.target != probe.target {
-                continue;
-            }
-            if meta.omarchy_contract != probe.omarchy_contract {
-                continue;
-            }
-            let meta_min_qs = semver::Version::parse(&meta.minimum_quickshell_version)
-                .map_err(|e| MaintenanceError::msg(e.to_string()))?;
-            if qs < meta_min_qs || qs < min_qs {
-                // Locally incompatible — skip (not an error).
-                continue;
-            }
-            if meta.version != tag && meta.version != ver.to_string() {
-                return Err(MaintenanceError::msg(format!(
-                    "metadata version {} does not equal tag {tag}",
-                    meta.version
-                )));
-            }
-            if meta.archive.file_name != archive_name {
-                return Err(MaintenanceError::msg(format!(
-                    "metadata archive fileName mismatch for {tag}"
-                )));
-            }
-
-            let compatible = UpdateCompatible {
-                version: meta.version.clone(),
-                omarchy_contract: meta.omarchy_contract,
-                minimum_quickshell_version: meta.minimum_quickshell_version.clone(),
-                archive_url: archive_asset.browser_download_url.clone(),
-                checksum_url: checksum_asset.browser_download_url.clone(),
-                archive_sha256: meta.archive.sha256.clone(),
-                release_notes_url: meta.release_notes_url.clone(),
-                source_commit: meta.source_commit.clone(),
-            };
-
-            match &best {
-                None => best = Some((ver, compatible)),
-                Some((best_v, _)) if ver > *best_v => best = Some((ver, compatible)),
-                _ => {}
-            }
-        }
-
-        let latest_compatible = best.map(|(_, c)| c);
-        let available = match &latest_compatible {
-            Some(c) => {
-                let lv = semver::Version::parse(&c.version)
-                    .map_err(|e| MaintenanceError::msg(e.to_string()))?;
-                lv > current
-            }
-            None => false,
+        let compatible = qs >= receipt_min_qs;
+        let (available, latest_compatible) = if reinstall_required {
+            (false, None)
+        } else if compatible {
+            (
+                receipt_version > current,
+                Some(UpdateCompatible {
+                    version: receipt.version.clone(),
+                    omarchy_contract: receipt.omarchy_contract,
+                    minimum_quickshell_version: receipt.minimum_quickshell_version.clone(),
+                    release_notes_url: format!("{RELEASE_NOTES_URL_PREFIX}{}", receipt.version),
+                }),
+            )
+        } else {
+            // Locally incompatible — not an error, just nothing to offer.
+            (false, None)
         };
 
         let checked_at = clock
@@ -594,84 +473,12 @@ impl UpdateCheck {
                 quickshell_version: probe.quickshell_version.clone(),
             },
             available,
+            reinstall_required,
             latest_compatible,
         };
         doc.validate()?;
         Ok(doc)
     }
-
-    /// Download archive bytes following the closed redirect policy; verify sha256.
-    pub fn download_archive<H: ReleaseHttp>(
-        http: &H,
-        archive_url: &str,
-        expected_sha256: &str,
-    ) -> Result<Vec<u8>, MaintenanceError> {
-        let body = download_with_policy(http, archive_url)?;
-        let digest = hash_bytes(&body);
-        if digest != expected_sha256 {
-            return Err(MaintenanceError::msg(
-                "archive sha256 does not match pinned journal hash",
-            ));
-        }
-        Ok(body)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubRelease {
-    tag_name: String,
-    draft: bool,
-    prerelease: bool,
-    assets: Vec<GitHubAsset>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubAsset {
-    name: String,
-    browser_download_url: String,
-}
-
-/// Follow ≤5 HTTPS redirects under the closed host policy. No credentials.
-pub fn download_with_policy<H: ReleaseHttp>(
-    http: &H,
-    initial_url: &str,
-) -> Result<Vec<u8>, MaintenanceError> {
-    validate_release_asset_url(initial_url)?;
-    let mut url = initial_url.to_string();
-    for hop in 0..=MAX_DOWNLOAD_REDIRECTS {
-        let resp = http.get(&url, &[("User-Agent", RELEASE_USER_AGENT)])?;
-        if (300..400).contains(&resp.status) {
-            if hop == MAX_DOWNLOAD_REDIRECTS {
-                return Err(MaintenanceError::msg(format!(
-                    "redirect depth exceeds {MAX_DOWNLOAD_REDIRECTS}"
-                )));
-            }
-            let loc = resp
-                .headers
-                .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("location"))
-                .map(|(_, v)| v.clone())
-                .ok_or_else(|| MaintenanceError::msg("redirect without Location"))?;
-            // Absolute HTTPS only — relative redirects are rejected (closed policy).
-            if !loc.starts_with("https://") {
-                return Err(MaintenanceError::msg(
-                    "redirect Location must be an absolute https URL",
-                ));
-            }
-            let next = loc;
-            validate_redirect_target(&next, false)?;
-            url = next;
-            continue;
-        }
-        if resp.status != 200 {
-            return Err(MaintenanceError::msg(format!(
-                "download HTTP {} for {url}",
-                resp.status
-            )));
-        }
-        return Ok(resp.body);
-    }
-    Err(MaintenanceError::msg("redirect loop"))
 }
 
 // ---------------------------------------------------------------------------
@@ -2293,7 +2100,7 @@ pub fn apply_version_allowed(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin::bundle::{BundleBuilder, ReleaseArchiveMeta};
+    use crate::plugin::bundle::BundleBuilder;
     use crate::plugin::omarchy::RecordingRunner;
     use crate::support::Clock;
     use std::os::unix::fs::PermissionsExt;
@@ -2314,12 +2121,25 @@ mod tests {
             version: "10.1.0".into(),
             omarchy_contract: 1,
             minimum_quickshell_version: MINIMUM_QUICKSHELL_VERSION.into(),
-            archive_url: "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst".into(),
-            checksum_url: "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256".into(),
-            archive_sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
             release_notes_url: "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0".into(),
-            source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
         }
+    }
+
+    /// A `bundle.json`-shaped dist receipt (BUNDLE-012 producer shape,
+    /// including fields `update check` does not read) so parsing coverage
+    /// matches what `BundleBuilder` actually emits.
+    fn receipt_json(version: &str, minimum_quickshell_version: &str) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 1,
+            "pluginId": PLUGIN_ID,
+            "version": version,
+            "target": OFFICIAL_TARGET,
+            "omarchyContract": OMARCHY_CONTRACT,
+            "minimumQuickshellVersion": minimum_quickshell_version,
+            "sourceCommit": ZERO_COMMIT,
+            "files": [],
+        }))
+        .unwrap()
     }
 
     #[test]
@@ -2334,12 +2154,14 @@ mod tests {
                 quickshell_version: "0.3.0".into(),
             },
             available: true,
+            reinstall_required: false,
             latest_compatible: Some(sample_compatible()),
         };
         doc.validate().unwrap();
         let json = doc.to_stdout_json().unwrap();
         assert!(json.ends_with('\n'));
         assert!(json.contains("\"schemaVersion\":1") || json.contains("\"schemaVersion\": 1"));
+        assert!(json.contains("\"reinstallRequired\":false"));
         let parsed = UpdateCheckDocument::parse_json(json.trim_end().as_bytes()).unwrap();
         assert!(parsed.available);
         // Unknown fields rejected.
@@ -2364,6 +2186,7 @@ mod tests {
                 quickshell_version: "0.3.0".into(),
             },
             available: false,
+            reinstall_required: false,
             latest_compatible: Some(c),
         };
         doc.validate().unwrap();
@@ -2373,310 +2196,203 @@ mod tests {
     }
 
     #[test]
-    fn redirect_policy_matrix() {
-        validate_release_asset_url(
-            "https://github.com/othavi0/agent-bar/releases/download/v10.0.0/x.tar.zst",
-        )
-        .unwrap();
-        assert!(
-            validate_release_asset_url("http://github.com/othavi0/agent-bar/releases/x").is_err()
-        );
-        assert!(
-            validate_release_asset_url("https://evil.com/othavi0/agent-bar/releases/x").is_err()
-        );
-        assert!(validate_redirect_target("https://user:pass@github.com/foo", false).is_err());
-        assert!(validate_redirect_target("https://github.com:8443/foo", false).is_err());
-        assert!(validate_redirect_target("https://127.0.0.1/foo", false).is_err());
-        assert!(
-            validate_redirect_target("https://objects.githubusercontent.com/foo", false).is_ok()
-        );
-        assert!(validate_redirect_target("https://evilusercontent.com/x", false).is_err());
+    fn reinstall_required_document_forbids_an_offer() {
+        let mut doc = UpdateCheckDocument {
+            schema_version: 1,
+            checked_at: "2026-07-26T18:42:00Z".into(),
+            current: UpdateCurrent {
+                version: "10.0.0".into(),
+                target: OFFICIAL_TARGET.into(),
+                omarchy_contract: 1,
+                quickshell_version: "0.3.0".into(),
+            },
+            available: false,
+            reinstall_required: true,
+            latest_compatible: None,
+        };
+        doc.validate().unwrap();
 
-        validate_redirect_chain(&[
-            "https://github.com/othavi0/agent-bar/releases/download/v1/a",
-            "https://objects.githubusercontent.com/a",
-        ])
-        .unwrap();
+        let mut with_latest = doc.clone();
+        with_latest.latest_compatible = Some(sample_compatible());
+        assert!(with_latest.validate().is_err());
 
-        let mut deep: Vec<String> =
-            vec!["https://github.com/othavi0/agent-bar/releases/download/v1/a".into()];
-        for i in 0..6 {
-            deep.push(format!("https://objects.githubusercontent.com/h{i}"));
-        }
-        let refs: Vec<&str> = deep.iter().map(String::as_str).collect();
-        assert!(validate_redirect_chain(&refs).is_err());
+        doc.available = true;
+        assert!(doc.validate().is_err());
     }
 
     #[test]
     fn credentials_rejected_on_download() {
         let http = ScriptedReleaseHttp::with_responses(vec![]);
         let err = http
-            .get(
-                "https://github.com/othavi0/agent-bar/releases/download/v1/a",
-                &[("Authorization", "Bearer secret")],
-            )
+            .get(DIST_RECEIPT_URL, &[("Authorization", "Bearer secret")])
             .unwrap_err();
         assert!(err.to_string().contains("credentials"));
     }
 
     #[test]
-    fn download_with_policy_follows_and_caps_redirects() {
-        let url0 = "https://github.com/othavi0/agent-bar/releases/download/v1/a";
-        let url1 = "https://objects.githubusercontent.com/a";
-        // Scripted client pops from the end — push in reverse call order.
-        let http = ScriptedReleaseHttp::with_responses(vec![
-            Ok(ReleaseHttpResponse {
-                status: 200,
-                headers: vec![],
-                body: b"archive-bytes".to_vec(),
-            }),
-            Ok(ReleaseHttpResponse {
-                status: 302,
-                headers: vec![("Location".into(), url1.into())],
-                body: vec![],
-            }),
-        ]);
-        let body = download_with_policy(&http, url0).unwrap();
-        assert_eq!(body, b"archive-bytes");
-
-        // Too many redirects.
-        let mut seq: Vec<Result<ReleaseHttpResponse, MaintenanceError>> = Vec::new();
-        for i in 0..7 {
-            seq.push(Ok(ReleaseHttpResponse {
-                status: 302,
-                headers: vec![(
-                    "Location".into(),
-                    format!("https://objects.githubusercontent.com/r{i}"),
-                )],
-                body: vec![],
-            }));
-        }
-        seq.reverse();
-        let http = ScriptedReleaseHttp::with_responses(seq);
-        assert!(download_with_policy(&http, url0).is_err());
-    }
-
-    #[test]
-    fn update_check_selects_newest_compatible_skips_draft() {
-        let meta_10_1 = ReleaseMetadata {
-            schema_version: 1,
-            plugin_id: PLUGIN_ID.into(),
-            version: "10.1.0".into(),
-            target: OFFICIAL_TARGET.into(),
-            omarchy_contract: 1,
-            minimum_quickshell_version: MINIMUM_QUICKSHELL_VERSION.into(),
-            source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
-            archive: ReleaseArchiveMeta {
-                file_name: "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst".into(),
-                size: 10,
-                sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
-            },
-            release_notes_url: "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0".into(),
-        };
-        let meta_json = meta_10_1.to_pretty_json().unwrap();
-
-        let releases = serde_json::json!([
-            {
-                "tag_name": "v10.2.0-rc1",
-                "draft": false,
-                "prerelease": true,
-                "assets": []
-            },
-            {
-                "tag_name": "v10.1.0",
-                "draft": false,
-                "prerelease": false,
-                "assets": [
-                    {
-                        "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json",
-                        "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json"
-                    },
-                    {
-                        "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst",
-                        "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst"
-                    },
-                    {
-                        "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256",
-                        "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256"
-                    }
-                ]
-            },
-            {
-                "tag_name": "v9.0.0",
-                "draft": true,
-                "prerelease": false,
-                "assets": []
-            }
-        ]);
-
-        // Calls: list, then metadata for 10.1.0. Pop order = reverse push.
-        let http = ScriptedReleaseHttp::with_responses(vec![
-            Ok(ReleaseHttpResponse {
-                status: 200,
-                headers: vec![],
-                body: meta_json.into_bytes(),
-            }),
-            Ok(ReleaseHttpResponse {
-                status: 200,
-                headers: vec![],
-                body: serde_json::to_vec(&releases).unwrap(),
-            }),
-        ]);
-
-        let clock = FixedClock(OffsetDateTime::parse("2026-07-26T18:42:00Z", &Rfc3339).unwrap());
-        let probe = UpdateCheckProbe {
-            current_version: "10.0.0".into(),
-            quickshell_version: "0.3.0".into(),
-            target: OFFICIAL_TARGET.into(),
-            omarchy_contract: 1,
-        };
-        let doc = UpdateCheck::run(&http, &clock, &probe).unwrap();
-        assert!(doc.available);
-        assert_eq!(doc.latest_compatible.as_ref().unwrap().version, "10.1.0");
-    }
-
-    // Issue #31: GitHub release assets always answer 302 to the CDN, so the
-    // metadata fetch must follow redirects under the closed policy like the
-    // archive/checksum downloads already do.
-    #[test]
-    fn update_check_follows_metadata_redirect() {
-        let meta_10_1 = ReleaseMetadata {
-            schema_version: 1,
-            plugin_id: PLUGIN_ID.into(),
-            version: "10.1.0".into(),
-            target: OFFICIAL_TARGET.into(),
-            omarchy_contract: 1,
-            minimum_quickshell_version: MINIMUM_QUICKSHELL_VERSION.into(),
-            source_commit: "0123456789abcdef0123456789abcdef01234567".into(),
-            archive: ReleaseArchiveMeta {
-                file_name: "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst".into(),
-                size: 10,
-                sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
-            },
-            release_notes_url: "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0".into(),
-        };
-        let meta_json = meta_10_1.to_pretty_json().unwrap();
-
-        let releases = serde_json::json!([{
-            "tag_name": "v10.1.0",
-            "draft": false,
-            "prerelease": false,
-            "assets": [
-                {
-                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json",
-                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json"
-                },
-                {
-                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst",
-                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst"
-                },
-                {
-                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256",
-                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256"
-                }
-            ]
-        }]);
-
-        // Calls: list (200), metadata (302 → CDN), metadata (200). Pop order
-        // = reverse push.
-        let http = ScriptedReleaseHttp::with_responses(vec![
-            Ok(ReleaseHttpResponse {
-                status: 200,
-                headers: vec![],
-                body: meta_json.into_bytes(),
-            }),
-            Ok(ReleaseHttpResponse {
-                status: 302,
-                headers: vec![(
-                    "Location".into(),
-                    "https://objects.githubusercontent.com/meta".into(),
-                )],
-                body: vec![],
-            }),
-            Ok(ReleaseHttpResponse {
-                status: 200,
-                headers: vec![],
-                body: serde_json::to_vec(&releases).unwrap(),
-            }),
-        ]);
-
-        let clock = FixedClock(OffsetDateTime::parse("2026-07-26T18:42:00Z", &Rfc3339).unwrap());
-        let probe = UpdateCheckProbe {
-            current_version: "10.0.0".into(),
-            quickshell_version: "0.3.0".into(),
-            target: OFFICIAL_TARGET.into(),
-            omarchy_contract: 1,
-        };
-        let doc = UpdateCheck::run(&http, &clock, &probe).unwrap();
-        assert!(doc.available);
-        assert_eq!(doc.latest_compatible.as_ref().unwrap().version, "10.1.0");
-    }
-
-    #[test]
-    fn update_check_rejects_metadata_redirect_outside_allowlist() {
-        let releases = serde_json::json!([{
-            "tag_name": "v10.1.0",
-            "draft": false,
-            "prerelease": false,
-            "assets": [
-                {
-                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json",
-                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.metadata.json"
-                },
-                {
-                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst",
-                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst"
-                },
-                {
-                    "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256",
-                    "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst.sha256"
-                }
-            ]
-        }]);
-        let http = ScriptedReleaseHttp::with_responses(vec![
-            Ok(ReleaseHttpResponse {
-                status: 302,
-                headers: vec![("Location".into(), "https://evil.example.com/meta".into())],
-                body: vec![],
-            }),
-            Ok(ReleaseHttpResponse {
-                status: 200,
-                headers: vec![],
-                body: serde_json::to_vec(&releases).unwrap(),
-            }),
-        ]);
-        let clock = FixedClock(OffsetDateTime::now_utc());
-        let probe = UpdateCheckProbe {
-            current_version: "10.0.0".into(),
-            ..UpdateCheckProbe::default()
-        };
-        let err = UpdateCheck::run(&http, &clock, &probe).unwrap_err();
-        assert!(err.to_string().contains("not allowed"), "{err}");
-    }
-
-    #[test]
-    fn update_check_errors_on_incomplete_assets() {
-        let releases = serde_json::json!([{
-            "tag_name": "v10.1.0",
-            "draft": false,
-            "prerelease": false,
-            "assets": [{
-                "name": "agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst",
-                "browser_download_url": "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/agent-bar.usage-10.1.0-x86_64-unknown-linux-gnu.tar.zst"
-            }]
-        }]);
+    fn update_check_available_when_receipt_newer() {
         let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
             status: 200,
             headers: vec![],
-            body: serde_json::to_vec(&releases).unwrap(),
+            body: receipt_json("10.1.0", MINIMUM_QUICKSHELL_VERSION),
+        })]);
+        let clock = FixedClock(OffsetDateTime::parse("2026-07-26T18:42:00Z", &Rfc3339).unwrap());
+        let probe = UpdateCheckProbe {
+            current_version: "10.0.0".into(),
+            quickshell_version: "0.3.0".into(),
+            target: OFFICIAL_TARGET.into(),
+            omarchy_contract: OMARCHY_CONTRACT,
+        };
+        let doc = UpdateCheck::run(&http, &clock, &probe, false).unwrap();
+        assert!(doc.available);
+        assert!(!doc.reinstall_required);
+        let latest = doc.latest_compatible.expect("newer receipt names a target");
+        assert_eq!(latest.version, "10.1.0");
+        assert_eq!(
+            latest.release_notes_url,
+            "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0"
+        );
+
+        // Exactly one GET, to the dist receipt URL with the expected headers.
+        let calls = http.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, DIST_RECEIPT_URL);
+        assert!(calls[0]
+            .1
+            .iter()
+            .any(|(k, v)| k == "Accept" && v == "application/json"));
+    }
+
+    #[test]
+    fn update_check_up_to_date_when_receipt_equal() {
+        let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
+            status: 200,
+            headers: vec![],
+            body: receipt_json("10.0.0", MINIMUM_QUICKSHELL_VERSION),
         })]);
         let clock = FixedClock(OffsetDateTime::now_utc());
         let probe = UpdateCheckProbe {
             current_version: "10.0.0".into(),
             ..UpdateCheckProbe::default()
         };
-        let err = UpdateCheck::run(&http, &clock, &probe).unwrap_err();
-        assert!(err.to_string().contains("incomplete"));
+        let doc = UpdateCheck::run(&http, &clock, &probe, false).unwrap();
+        assert!(!doc.available);
+        let latest = doc
+            .latest_compatible
+            .expect("still names the newest compatible receipt");
+        assert_eq!(latest.version, "10.0.0");
+    }
+
+    #[test]
+    fn update_check_incompatible_quickshell_yields_no_offer() {
+        let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
+            status: 200,
+            headers: vec![],
+            body: receipt_json("10.1.0", "99.0.0"),
+        })]);
+        let clock = FixedClock(OffsetDateTime::now_utc());
+        let probe = UpdateCheckProbe {
+            current_version: "10.0.0".into(),
+            quickshell_version: "0.3.0".into(),
+            ..UpdateCheckProbe::default()
+        };
+        // Locally incompatible is not an error — just nothing to offer.
+        let doc = UpdateCheck::run(&http, &clock, &probe, false).unwrap();
+        assert!(!doc.available);
+        assert!(doc.latest_compatible.is_none());
+    }
+
+    #[test]
+    fn update_check_reinstall_required_forces_null_offer() {
+        // Even a genuinely newer, compatible receipt must not surface as an
+        // offer when the live plugin root is not a git checkout.
+        let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
+            status: 200,
+            headers: vec![],
+            body: receipt_json("10.1.0", MINIMUM_QUICKSHELL_VERSION),
+        })]);
+        let clock = FixedClock(OffsetDateTime::now_utc());
+        let probe = UpdateCheckProbe {
+            current_version: "10.0.0".into(),
+            quickshell_version: "0.3.0".into(),
+            ..UpdateCheckProbe::default()
+        };
+        let doc = UpdateCheck::run(&http, &clock, &probe, true).unwrap();
+        assert!(doc.reinstall_required);
+        assert!(!doc.available);
+        assert!(doc.latest_compatible.is_none());
+        doc.validate().unwrap();
+    }
+
+    #[test]
+    fn update_check_rejects_receipt_identity_mismatches() {
+        let clock = FixedClock(OffsetDateTime::now_utc());
+        let probe = UpdateCheckProbe::default();
+        let cases: [(&str, serde_json::Value); 4] = [
+            (
+                "schemaVersion",
+                serde_json::json!({
+                    "schemaVersion": 2, "pluginId": PLUGIN_ID, "version": "10.1.0",
+                    "target": OFFICIAL_TARGET, "omarchyContract": OMARCHY_CONTRACT,
+                    "minimumQuickshellVersion": MINIMUM_QUICKSHELL_VERSION,
+                }),
+            ),
+            (
+                "pluginId",
+                serde_json::json!({
+                    "schemaVersion": 1, "pluginId": "some.other.plugin", "version": "10.1.0",
+                    "target": OFFICIAL_TARGET, "omarchyContract": OMARCHY_CONTRACT,
+                    "minimumQuickshellVersion": MINIMUM_QUICKSHELL_VERSION,
+                }),
+            ),
+            (
+                "target",
+                serde_json::json!({
+                    "schemaVersion": 1, "pluginId": PLUGIN_ID, "version": "10.1.0",
+                    "target": "aarch64-unknown-linux-gnu", "omarchyContract": OMARCHY_CONTRACT,
+                    "minimumQuickshellVersion": MINIMUM_QUICKSHELL_VERSION,
+                }),
+            ),
+            (
+                "omarchyContract",
+                serde_json::json!({
+                    "schemaVersion": 1, "pluginId": PLUGIN_ID, "version": "10.1.0",
+                    "target": OFFICIAL_TARGET, "omarchyContract": 2,
+                    "minimumQuickshellVersion": MINIMUM_QUICKSHELL_VERSION,
+                }),
+            ),
+        ];
+        for (needle, body) in cases {
+            let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
+                status: 200,
+                headers: vec![],
+                body: serde_json::to_vec(&body).unwrap(),
+            })]);
+            let err = UpdateCheck::run(&http, &clock, &probe, false).unwrap_err();
+            assert!(err.to_string().contains(needle), "{needle}: {err}");
+        }
+    }
+
+    #[test]
+    fn update_check_rejects_non_200_and_malformed_body() {
+        let clock = FixedClock(OffsetDateTime::now_utc());
+        let probe = UpdateCheckProbe::default();
+
+        let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
+            status: 404,
+            headers: vec![],
+            body: vec![],
+        })]);
+        let err = UpdateCheck::run(&http, &clock, &probe, false).unwrap_err();
+        assert!(err.to_string().contains("404"), "{err}");
+
+        let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
+            status: 200,
+            headers: vec![],
+            body: b"not json".to_vec(),
+        })]);
+        let err = UpdateCheck::run(&http, &clock, &probe, false).unwrap_err();
+        assert!(err.to_string().contains("malformed"), "{err}");
     }
 
     #[test]
@@ -3197,6 +2913,7 @@ mod tests {
                 quickshell_version: "0.3.0".into(),
             },
             available: false,
+            reinstall_required: false,
             latest_compatible: Some(UpdateCompatible {
                 version: "10.1.0".into(),
                 ..sample_compatible()
@@ -3280,22 +2997,6 @@ mod tests {
         assert!(backup.join("local.patch").is_file());
         let report = fs::read_to_string(paths.reports_dir.join(format!("{txid}.json"))).unwrap();
         assert!(report.contains("modified local bundle"));
-    }
-
-    #[test]
-    fn interrupted_download_rejects_sha_mismatch() {
-        let http = ScriptedReleaseHttp::with_responses(vec![Ok(ReleaseHttpResponse {
-            status: 200,
-            headers: vec![],
-            body: b"truncated-archive".to_vec(),
-        })]);
-        let err = UpdateCheck::download_archive(
-            &http,
-            "https://github.com/othavi0/agent-bar/releases/download/v10.1.0/a.tar.zst",
-            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("sha256"));
     }
 
     #[test]

@@ -636,6 +636,19 @@ fn read_plugin_version(plugin_root: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+/// True when the live plugin root is not a git checkout (BUNDLE-021 v-next):
+/// `omarchy plugin update` can only fast-forward a git-managed install, so a
+/// tarball-installed tree must be reinstalled via `omarchy plugin add`.
+fn reinstall_required() -> Result<bool, CliFailure> {
+    use crate::plugin::PluginPaths;
+
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| CliFailure::plugin("HOME is required for update check".to_string()))?;
+    let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let paths = PluginPaths::production(PathBuf::from(home), xdg_state);
+    Ok(!paths.plugin_root.join(".git").is_dir())
+}
+
 fn dispatch_update_check() -> Result<(), CliFailure> {
     use crate::plugin::{ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe};
     use crate::support::SystemClock;
@@ -643,8 +656,8 @@ fn dispatch_update_check() -> Result<(), CliFailure> {
     let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
     let clock = SystemClock;
     let probe = UpdateCheckProbe::default();
-    let doc =
-        UpdateCheck::run(&http, &clock, &probe).map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let doc = UpdateCheck::run(&http, &clock, &probe, reinstall_required()?)
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
     let json = doc
         .to_stdout_json()
         .map_err(|e| CliFailure::plugin(e.to_string()))?;
@@ -652,148 +665,18 @@ fn dispatch_update_check() -> Result<(), CliFailure> {
     Ok(())
 }
 
+/// Archive-based apply cannot work with the git-native `update check`
+/// document: BUNDLE-021 v-next carries no archive/checksum/source-commit
+/// fields (see `docs/superpowers/plans/2026-08-05-git-plugin-distribution.md`
+/// Task 1). git-plugin-distribution Task 2 replaces this whole function with
+/// a `systemd-run` delegation to `omarchy plugin update agent-bar.usage
+/// --yes`; until then it fails closed instead of compiling against removed
+/// `UpdateCompatible` fields or silently doing nothing.
 fn dispatch_update_apply(version: &str) -> Result<(), CliFailure> {
-    use crate::plugin::maintenance::{
-        preflight_existing_health, prepare_local_plugin_for_update, resolve_absolute_executable,
-        LocalPluginPrep,
-    };
-    use crate::plugin::{
-        apply_version_allowed, collect_worker_env, download_with_policy, stage_update_bundle,
-        txid_from_bytes, MaintenanceJournalPayload, MaintenanceOp, MaintenanceWorker, PluginPaths,
-        ProcessCommandRunner, ReqwestReleaseHttp, UpdateCheck, UpdateCheckProbe,
-        WORKER_ENV_ALLOWLIST,
-    };
-    use crate::support::maintenance_gate::MaintenanceGate;
-    use crate::support::{Clock, SystemClock};
-
-    let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let clock = SystemClock;
-    let probe = UpdateCheckProbe::default();
-    // Fresh check required before apply (BUNDLE-022).
-    let doc =
-        UpdateCheck::run(&http, &clock, &probe).map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let selected =
-        apply_version_allowed(&doc, version).map_err(|e| CliFailure::validation(e.to_string()))?;
-
-    let home = std::env::var_os("HOME")
-        .ok_or_else(|| CliFailure::plugin("HOME is required for update apply".to_string()))?;
-    let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-    let paths = PluginPaths::production(PathBuf::from(home), xdg_state);
-
-    let txid = txid_from_bytes(
-        format!(
-            "update:{}:{}:{}",
-            version,
-            selected.source_commit,
-            Clock::now_utc(&clock)
-        )
-        .as_bytes(),
-    );
-
-    // Preflight absolute tool paths (BUNDLE-032H).
-    let omarchy_bin =
-        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let omarchy_shell_bin = resolve_absolute_executable("omarchy-shell")
-        .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let systemd_run = resolve_absolute_executable("systemd-run")
-        .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let systemctl =
-        resolve_absolute_executable("systemctl").map_err(|e| CliFailure::plugin(e.to_string()))?;
-
-    let runner = ProcessCommandRunner;
-
-    // Exclusive barrier for classify + existing health + download + stage.
-    // Released before handoff so the worker unit can take its own exclusive lock.
-    let (local_prep, stage): (LocalPluginPrep, PathBuf) = {
-        let gate = MaintenanceGate::open(&paths.maintenance_lock)
-            .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
-        let _exclusive = gate
-            .lock_exclusive()
-            .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
-
-        let prep = prepare_local_plugin_for_update(&paths, &txid)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-
-        // Existing v10 update requires old Agent Bar health before any download/swap.
-        if !prep.is_fresh_install && !prep.is_v9_rollback {
-            preflight_existing_health(&runner, &omarchy_shell_bin, &probe.current_version)
-                .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        }
-
-        let archive =
-            UpdateCheck::download_archive(&http, &selected.archive_url, &selected.archive_sha256)
-                .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        // Corroborating checksum sidecar (not a substitute for the pinned hash).
-        if let Ok(side) = download_with_policy(&http, &selected.checksum_url) {
-            let text = String::from_utf8_lossy(&side);
-            if !text.contains(&selected.archive_sha256) {
-                return Err(CliFailure::plugin(
-                    "checksum sidecar does not corroborate pinned archive hash",
-                ));
-            }
-        }
-
-        let (stage, receipt) = stage_update_bundle(&paths, &txid, &archive)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?;
-        if receipt.version != version {
-            return Err(CliFailure::plugin(format!(
-                "staged version {} does not equal requested {version}",
-                receipt.version
-            )));
-        }
-        (prep, stage)
-    };
-
-    let current_exe =
-        std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
-    let previous = probe.current_version.clone();
-
-    let payload = MaintenanceJournalPayload {
-        txid: txid.clone(),
-        operation: MaintenanceOp::Update,
-        expected_version: Some(version.to_string()),
-        previous_version: Some(previous),
-        stage_path: stage.display().to_string(),
-        plugin_root: paths.plugin_root.display().to_string(),
-        quarantine_path: paths
-            .quarantine_dir(&txid)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?
-            .display()
-            .to_string(),
-        selected: Some(selected),
-        omarchy_bin,
-        omarchy_shell_bin,
-        is_fresh_install: local_prep.is_fresh_install,
-        is_v9_rollback: local_prep.is_v9_rollback,
-        purge_settings_and_backups: false,
-        shell_json_path: String::new(),
-        settings_path: String::new(),
-        cache_root: String::new(),
-        backups_dir: String::new(),
-    };
-
-    let env_pairs = collect_worker_env(
-        std::env::vars().filter(|(k, _)| WORKER_ENV_ALLOWLIST.contains(&k.as_str())),
-    );
-    let unit = MaintenanceWorker::handoff_update(
-        &paths,
-        &runner,
-        &current_exe,
-        &txid,
-        &payload,
-        &env_pairs,
-        &systemd_run,
-        &systemctl,
-    )
-    .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    if let Some(backup) = local_prep.modified_backup {
-        eprintln!(
-            "modified local bundle preserved at {} before update",
-            backup.display()
-        );
-    }
-    eprintln!("maintenance handoff accepted: {unit}");
-    Ok(())
+    Err(CliFailure::plugin(format!(
+        "update apply {version}: archive-based apply is retired under git-native \
+distribution; delegation to the omarchy CLI is pending"
+    )))
 }
 
 fn dispatch_update_interactive() -> Result<(), CliFailure> {
@@ -810,8 +693,8 @@ fn dispatch_update_interactive() -> Result<(), CliFailure> {
     let http = ReqwestReleaseHttp::new().map_err(|e| CliFailure::plugin(e.to_string()))?;
     let clock = SystemClock;
     let probe = UpdateCheckProbe::default();
-    let doc =
-        UpdateCheck::run(&http, &clock, &probe).map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let doc = UpdateCheck::run(&http, &clock, &probe, reinstall_required()?)
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
 
     let offer = if doc.available {
         let latest = doc
