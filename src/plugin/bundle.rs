@@ -1,6 +1,7 @@
 //! Plugin bundle assembly, receipt (`bundle.json`), and tree validation.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Component, Path};
@@ -207,6 +208,27 @@ impl BundleBuilder {
                 terminal.display()
             )));
         }
+        let readme_src = repo_root.join("assets/dist/README.md");
+        if !readme_src.is_file() {
+            return Err(BundleError::msg(format!(
+                "dist README not found: {}",
+                readme_src.display()
+            )));
+        }
+        let license_src = repo_root.join("LICENSE");
+        if !license_src.is_file() {
+            return Err(BundleError::msg(format!(
+                "LICENSE not found: {}",
+                license_src.display()
+            )));
+        }
+        let preview_src = repo_root.join("docs/media/demo.png");
+        if !preview_src.is_file() {
+            return Err(BundleError::msg(format!(
+                "preview image not found: {}",
+                preview_src.display()
+            )));
+        }
 
         fs::create_dir_all(output)?;
         // Top-level QML / JS / manifest (version substituted).
@@ -225,6 +247,16 @@ impl BundleBuilder {
         let dest_term = scripts.join("agent-bar-open-terminal");
         fs::copy(&terminal, &dest_term)?;
         set_unix_mode(&dest_term, 0o755)?;
+
+        // Distribution repo metadata: the assembled tree is the complete
+        // repo state pushed to the git plugin distribution repo, so it
+        // carries its own README, LICENSE, and marketplace preview image.
+        fs::copy(&readme_src, output.join("README.md"))?;
+        set_unix_mode(&output.join("README.md"), 0o644)?;
+        fs::copy(&license_src, output.join("LICENSE"))?;
+        set_unix_mode(&output.join("LICENSE"), 0o644)?;
+        fs::copy(&preview_src, output.join("preview.png"))?;
+        set_unix_mode(&output.join("preview.png"), 0o644)?;
 
         // Deterministic non-exec modes for ordinary files.
         normalize_bundle_modes(output)?;
@@ -380,6 +412,9 @@ impl BundleValidator {
             "BarWidget.qml",
             "bin/agent-bar",
             "scripts/agent-bar-open-terminal",
+            "README.md",
+            "LICENSE",
+            "preview.png",
         ] {
             if !plugin_root.join(required).is_file() {
                 return Err(BundleError::msg(format!(
@@ -595,6 +630,16 @@ fn normalize_bundle_modes(root: &Path) -> Result<(), BundleError> {
     Ok(())
 }
 
+/// True for a real directory named `.git` sitting directly under `root`.
+///
+/// Mirrors omarchy-plugin-validate's `find "$PLUGIN_DIR" -name .git -prune`:
+/// installed plugins are git checkouts, and git's own bookkeeping directory
+/// at the tree root is never part of the plugin contract. A `.git` deeper in
+/// the tree, or one that is itself a symlink, gets no such pass.
+fn is_root_git_dir(root: &Path, dir: &Path, name: &OsStr, is_dir: bool) -> bool {
+    is_dir && dir == root && name == OsStr::new(".git")
+}
+
 /// Collect (relative path with `/`, sha256, size, mode) for every regular file.
 fn collect_inventory(root: &Path) -> Result<Vec<(String, String, u64, String)>, BundleError> {
     let mut out = Vec::new();
@@ -610,6 +655,9 @@ fn collect_inventory(root: &Path) -> Result<Vec<(String, String, u64, String)>, 
                     "symlink rejected in bundle: {}",
                     path.display()
                 )));
+            }
+            if is_root_git_dir(root, &dir, &entry.file_name(), ft.is_dir()) {
+                continue;
             }
             if ft.is_dir() {
                 stack.push(path);
@@ -652,6 +700,9 @@ fn reject_special_files(root: &Path) -> Result<(), BundleError> {
                     "symlink rejected: {}",
                     path.display()
                 )));
+            }
+            if is_root_git_dir(root, &dir, &entry.file_name(), ft.is_dir()) {
+                continue;
             }
             if ft.is_dir() {
                 stack.push(path);
@@ -889,11 +940,17 @@ mod tests {
         )
         .unwrap();
         fs::write(root.join("icons/claude.png"), b"png").unwrap();
+        fs::write(root.join("README.md"), b"# Agent Bar\n").unwrap();
+        fs::write(root.join("LICENSE"), b"MIT\n").unwrap();
+        fs::write(root.join("preview.png"), b"png").unwrap();
         for p in [
             "Service.qml",
             "BarWidget.qml",
             "manifest.json",
             "icons/claude.png",
+            "README.md",
+            "LICENSE",
+            "preview.png",
         ] {
             fs::set_permissions(root.join(p), fs::Permissions::from_mode(0o644)).unwrap();
         }
