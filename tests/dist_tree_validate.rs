@@ -87,19 +87,39 @@ fn fake_helper(path: &Path, version: &str) {
     }
 }
 
-/// The plugin id grammar `omarchy-plugin-validate` enforces:
-/// `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
+/// The plugin id grammar `omarchy-plugin-validate` enforces: the character
+/// class `^[A-Za-z0-9][A-Za-z0-9._-]*$`, plus its separate `[[ $ID !=
+/// *".."* ]]` substring ban. The two are independent checks in the real
+/// script -- `.` is a legal character in the class, so `a..b` passes the
+/// regex and still needs the substring check to fail it.
 fn matches_omarchy_id_grammar(id: &str) -> bool {
     let mut chars = id.chars();
     match chars.next() {
         Some(c) if c.is_ascii_alphanumeric() => {}
         _ => return false,
     }
-    chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
+        return false;
+    }
+    !id.contains("..")
 }
 
-/// `find`-equivalent walk: every symlink under `root`, pruning a `.git`
-/// directory exactly like `find $DIR -name .git -prune -o -type l -print`.
+/// Kind -> required `entryPoints` key, mirroring omarchy-plugin-validate's
+/// own table. A kind not listed here is left alone, same as the real script.
+const KIND_ENTRY_POINTS: &[(&str, &str)] = &[
+    ("bar", "bar"),
+    ("bar-widget", "barWidget"),
+    ("menu", "menu"),
+    ("overlay", "overlay"),
+    ("panel", "panel"),
+    ("service", "service"),
+];
+
+/// `find`-equivalent walk: every symlink under `root`. Unlike the shell
+/// tool's `find $DIR -name .git -prune -o -type l -print`, which prunes any
+/// `.git` directory in the tree, this walk only skips a `.git` at the root,
+/// matching `BundleValidator`'s deliberately narrower tolerance (see
+/// `is_root_git_dir` in `src/plugin/bundle.rs`).
 fn find_symlinks(root: &Path) -> Vec<PathBuf> {
     let mut hits = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -180,6 +200,21 @@ fn assembled_tree_mirrors_omarchy_plugin_validate() {
             "entry point may not contain '..': {rel}"
         );
         assert!(out.join(rel).is_file(), "entry point file not found: {rel}");
+    }
+
+    // A kind is a promise to supply something to load: for every kind the
+    // real script's table maps to an entry point key, that key must be
+    // present. Claiming a kind without its entry point installs and enables
+    // fine, then does nothing -- exactly the "mirror passes, real tool
+    // fails" gap this test exists to close.
+    for kind in kinds {
+        let kind_str = kind.as_str().expect("kind must be a string");
+        if let Some((_, ep_key)) = KIND_ENTRY_POINTS.iter().find(|(k, _)| *k == kind_str) {
+            assert!(
+                entry_points.contains_key(*ep_key),
+                "kind '{kind_str}' requires entryPoints.{ep_key}"
+            );
+        }
     }
 
     // barWidget.defaultSection, when present, is one of the enum values the

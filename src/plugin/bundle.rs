@@ -632,10 +632,13 @@ fn normalize_bundle_modes(root: &Path) -> Result<(), BundleError> {
 
 /// True for a real directory named `.git` sitting directly under `root`.
 ///
-/// Mirrors omarchy-plugin-validate's `find "$PLUGIN_DIR" -name .git -prune`:
-/// installed plugins are git checkouts, and git's own bookkeeping directory
-/// at the tree root is never part of the plugin contract. A `.git` deeper in
-/// the tree, or one that is itself a symlink, gets no such pass.
+/// Unlike omarchy-plugin-validate's `find "$PLUGIN_DIR" -name .git -prune`,
+/// which skips a `.git` directory anywhere in the tree, this tolerance is
+/// deliberately root-only: installed plugins are git checkouts, so a `.git`
+/// at the tree root is expected and never part of the plugin contract, but a
+/// `.git` nested deeper is unexpected and still trips the ordinary
+/// extra-file-not-in-receipt check below. A `.git` that is itself a symlink
+/// at the root gets no pass either -- the symlink check always runs first.
 fn is_root_git_dir(root: &Path, dir: &Path, name: &OsStr, is_dir: bool) -> bool {
     is_dir && dir == root && name == OsStr::new(".git")
 }
