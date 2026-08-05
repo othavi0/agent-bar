@@ -1,6 +1,5 @@
 //! Plugin path layout and path-safety helpers (MIG-002A, BUNDLE-007A).
 
-use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
@@ -113,50 +112,9 @@ pub fn validate_archive_entry_path(rel: &str) -> Result<(), PathError> {
     Ok(())
 }
 
-/// Fail when `path` exists and is a symlink (canonical install roots must be real dirs).
-pub fn ensure_not_symlink(path: &Path) -> Result<(), PathError> {
-    match fs::symlink_metadata(path) {
-        Ok(meta) if meta.file_type().is_symlink() => Err(PathError::msg(format!(
-            "symlink rejected at {}",
-            path.display()
-        ))),
-        Ok(_) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err.into()),
-    }
-}
-
-/// Compare device IDs so stage/exchange stay same-filesystem (MIG-002).
-pub fn same_filesystem(a: &Path, b: &Path) -> Result<bool, PathError> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let ma = fs::metadata(a).or_else(|_| {
-            a.parent()
-                .map(fs::metadata)
-                .transpose()?
-                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no parent"))
-        })?;
-        let mb = fs::metadata(b).or_else(|_| {
-            b.parent()
-                .map(fs::metadata)
-                .transpose()?
-                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no parent"))
-        })?;
-        Ok(ma.dev() == mb.dev())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (a, b);
-        Ok(true)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::symlink;
-    use tempfile::tempdir;
 
     #[test]
     fn production_uses_literal_omarchy_plugins() {
@@ -184,28 +142,6 @@ mod tests {
         assert!(validate_archive_entry_path("foo/../../bar").is_err());
         assert!(validate_archive_entry_path("").is_err());
         assert!(validate_archive_entry_path("C:\\windows").is_err());
-    }
-
-    #[test]
-    fn symlink_plugin_root_rejected() {
-        let dir = tempdir().unwrap();
-        let real = dir.path().join("real");
-        fs::create_dir_all(&real).unwrap();
-        let link = dir.path().join("link");
-        symlink(&real, &link).unwrap();
-        assert!(ensure_not_symlink(&link).is_err());
-        assert!(ensure_not_symlink(&real).is_ok());
-        assert!(ensure_not_symlink(&dir.path().join("missing")).is_ok());
-    }
-
-    #[test]
-    fn same_filesystem_true_for_siblings() {
-        let dir = tempdir().unwrap();
-        let a = dir.path().join("a");
-        let b = dir.path().join("b");
-        fs::write(&a, b"1").unwrap();
-        fs::write(&b, b"2").unwrap();
-        assert!(same_filesystem(&a, &b).unwrap());
     }
 
     #[test]
