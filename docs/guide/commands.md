@@ -121,8 +121,23 @@ Both forms require confirmation before any mutation:
   `uninstall purge`), `confirmed` must be `true`, and trailing bytes after
   the JSON object are rejected.
 
-Standard uninstall preserves settings and migration backups. Purge
-additionally removes settings and owned backups.
+After confirmation, `uninstall` purges only Agent Bar's own XDG state, then
+delegates unconditionally to `omarchy plugin remove agent-bar.usage --yes`
+as a detached transient unit — that command owns the plugin tree and the
+`shell.json` entry now. Standard uninstall preserves settings, cache, and
+migration backups. Purge additionally removes `$XDG_CONFIG_HOME/agent-bar`,
+`$XDG_CACHE_HOME/agent-bar`, and `$XDG_STATE_HOME/agent-bar` before the
+handoff. Both forms print one stdout JSON line once the handoff is accepted:
+
+```json
+{
+  "schemaVersion": 1,
+  "operation": "uninstall",
+  "purged": false,
+  "delegated": true,
+  "unit": "agent-bar-remove-<txid>.service"
+}
+```
 
 ## Help and version
 

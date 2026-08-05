@@ -794,3 +794,208 @@ fn update_apply_emits_delegation_document() {
     assert!(argv.iter().any(|a| a == &format!("--unit={unit}")));
     assert!(argv.contains(&"--".to_string()));
 }
+
+/// Fixture for the two `uninstall` delegation tests: isolated XDG roots with
+/// owned content, plus a fake `$HOME/.config/omarchy/shell.json` the helper
+/// must never touch (git-plugin-distribution Task 3: shell.json is
+/// omarchy's now).
+struct UninstallFixture {
+    home: PathBuf,
+    settings_dir: PathBuf,
+    cache_dir: PathBuf,
+    state_dir: PathBuf,
+    shell_path: PathBuf,
+    shell_before: &'static [u8],
+    path_dir: PathBuf,
+    systemd_run_argv: PathBuf,
+}
+
+fn seed_uninstall_fixture(root: &Path) -> UninstallFixture {
+    let home = root.join("home");
+    let config = home.join("config");
+    let cache = home.join("cache");
+    let state = home.join("state");
+    std::fs::create_dir_all(&home).unwrap();
+
+    let settings_dir = config.join("agent-bar");
+    std::fs::create_dir_all(&settings_dir).unwrap();
+    std::fs::write(
+        settings_dir.join("settings.json"),
+        br#"{"schemaVersion":1}"#,
+    )
+    .unwrap();
+
+    let cache_dir = cache.join("agent-bar");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    std::fs::write(cache_dir.join("status-v2.json"), b"{}").unwrap();
+    std::fs::write(cache_dir.join("notification-state-v1.json"), b"{}").unwrap();
+
+    let shell_path = home.join(".config/omarchy/shell.json");
+    std::fs::create_dir_all(shell_path.parent().unwrap()).unwrap();
+    let shell_before: &'static [u8] = br#"{"bar":{"left":[{"id":"agent-bar.usage"}]}}"#;
+    std::fs::write(&shell_path, shell_before).unwrap();
+
+    let path_dir = root.join("pathbin");
+    write_executable(&path_dir.join("omarchy"), "#!/usr/bin/env bash\nexit 0\n");
+    let systemd_run_argv = root.join("systemd-run-argv.bin");
+    write_executable(
+        &path_dir.join("systemd-run"),
+        &recording_shim_body(&systemd_run_argv),
+    );
+
+    UninstallFixture {
+        home,
+        settings_dir,
+        cache_dir,
+        state_dir: state,
+        shell_path,
+        shell_before,
+        path_dir,
+        systemd_run_argv,
+    }
+}
+
+fn run_uninstall(
+    fx: &UninstallFixture,
+    args: &[&str],
+    confirmation: &[u8],
+) -> std::process::Output {
+    let path = format!(
+        "{}:{}",
+        fx.path_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let mut child = StdCommand::new(&bin)
+        .arg("uninstall")
+        .args(args)
+        .env("HOME", &fx.home)
+        .env("XDG_STATE_HOME", &fx.state_dir)
+        .env("XDG_CACHE_HOME", fx.cache_dir.parent().unwrap())
+        .env("XDG_CONFIG_HOME", fx.settings_dir.parent().unwrap())
+        .env("PATH", &path)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        use std::io::Write as _;
+        let mut stdin = child.stdin.take().unwrap();
+        stdin.write_all(confirmation).unwrap();
+    }
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn uninstall_purge_removes_xdg_state_and_delegates_remove() {
+    // git-plugin-distribution Task 3: `uninstall purge` no longer runs a
+    // quarantine/rollback worker chain over a copied worker binary — it
+    // purges Agent Bar's own XDG state directly under the maintenance gate,
+    // then hands the plugin tree + shell.json removal to `omarchy plugin
+    // remove` via the same detached-unit shape Task 2 used for `update
+    // apply`.
+    let dir = tempdir().unwrap();
+    let fx = seed_uninstall_fixture(dir.path());
+
+    let confirmation = br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":true}"#;
+    let output = run_uninstall(&fx, &["purge"], confirmation);
+    assert!(
+        output.status.success(),
+        "stderr={} stdout={}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.trim_end_matches('\n').lines().collect();
+    assert_eq!(lines.len(), 1, "stdout must be exactly one line: {stdout}");
+    let doc: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(doc["schemaVersion"], 1);
+    assert_eq!(doc["operation"], "uninstall");
+    assert_eq!(doc["purged"], true);
+    assert_eq!(doc["delegated"], true);
+    let unit = doc["unit"].as_str().expect("unit is a string");
+    assert!(
+        unit.starts_with("agent-bar-remove-") && unit.ends_with(".service"),
+        "unit={unit}"
+    );
+
+    assert!(!fx.settings_dir.exists(), "purge must remove settings dir");
+    assert!(!fx.cache_dir.exists(), "purge must remove cache dir");
+    assert!(
+        !fx.state_dir.join("agent-bar").exists(),
+        "purge must remove state dir"
+    );
+
+    let shell_after = std::fs::read(&fx.shell_path).unwrap();
+    assert_eq!(
+        shell_after, fx.shell_before,
+        "uninstall must never touch shell.json — omarchy owns it now"
+    );
+
+    let argv = read_nul_argv(&fx.systemd_run_argv);
+    assert!(
+        argv.ends_with(&[
+            "plugin".to_string(),
+            "remove".to_string(),
+            "agent-bar.usage".to_string(),
+            "--yes".to_string(),
+        ]),
+        "argv={argv:?}"
+    );
+    assert_eq!(argv.first().map(String::as_str), Some("--user"));
+    assert!(argv.contains(&"--collect".to_string()));
+    assert!(argv.iter().any(|a| a == &format!("--unit={unit}")));
+    assert!(argv.contains(&"--".to_string()));
+}
+
+#[test]
+fn uninstall_without_purge_preserves_xdg_state_and_delegates_remove() {
+    let dir = tempdir().unwrap();
+    let fx = seed_uninstall_fixture(dir.path());
+
+    let confirmation = br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":false}"#;
+    let output = run_uninstall(&fx, &[], confirmation);
+    assert!(
+        output.status.success(),
+        "stderr={} stdout={}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let doc: serde_json::Value = serde_json::from_str(stdout.trim_end()).unwrap();
+    assert_eq!(doc["schemaVersion"], 1);
+    assert_eq!(doc["operation"], "uninstall");
+    assert_eq!(doc["purged"], false);
+    assert_eq!(doc["delegated"], true);
+    let unit = doc["unit"].as_str().expect("unit is a string");
+    assert!(unit.starts_with("agent-bar-remove-") && unit.ends_with(".service"));
+
+    assert!(
+        fx.settings_dir.join("settings.json").is_file(),
+        "without purge, settings must survive"
+    );
+    assert!(
+        fx.cache_dir.join("status-v2.json").is_file(),
+        "without purge, cache must survive"
+    );
+
+    let shell_after = std::fs::read(&fx.shell_path).unwrap();
+    assert_eq!(
+        shell_after, fx.shell_before,
+        "uninstall must never touch shell.json — omarchy owns it now"
+    );
+
+    let argv = read_nul_argv(&fx.systemd_run_argv);
+    assert!(
+        argv.ends_with(&[
+            "plugin".to_string(),
+            "remove".to_string(),
+            "agent-bar.usage".to_string(),
+            "--yes".to_string(),
+        ]),
+        "argv={argv:?}"
+    );
+}

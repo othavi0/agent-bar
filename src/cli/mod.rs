@@ -433,17 +433,51 @@ where
     }
 }
 
+/// Exact successful `uninstall` stdout document (git-plugin-distribution
+/// Task 3). Own-state purge only — the plugin tree, shell.json entry, and
+/// cache/backups GC that the old worker chain owned all belong to
+/// `omarchy plugin remove` now.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UninstallDelegation<'a> {
+    schema_version: u32,
+    operation: &'static str,
+    purged: bool,
+    delegated: bool,
+    unit: &'a str,
+}
+
+/// Remove `path` and everything under it; a missing path is success
+/// (idempotent purge), any other I/O error propagates.
+fn remove_dir_all_idempotent(path: &Path) -> Result<(), CliFailure> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(CliFailure::plugin(format!(
+            "remove {}: {err}",
+            path.display()
+        ))),
+    }
+}
+
+/// `uninstall [purge]`: own-XDG-state purge under the maintenance gate, then
+/// unconditional detached delegation to the omarchy CLI (git-plugin-
+/// distribution Task 3).
+///
+/// The old worker chain quarantined the plugin tree, stripped the exact
+/// shell.json entry, and polled for absence itself over a copied worker
+/// binary — none of that survives git-native distribution: `omarchy plugin
+/// remove` owns the plugin tree and shell.json now, and this helper only
+/// purges the state it exclusively owns (settings, cache, XDG state)
+/// before handing off, mirroring `update apply`'s Task 2 delegation shape.
 fn dispatch_uninstall(purge: bool) -> Result<(), CliFailure> {
-    use crate::plugin::maintenance::{
-        resolve_absolute_executable, MaintenanceJournalPayload, MaintenanceOp, MaintenanceWorker,
-    };
     use crate::plugin::{
-        collect_worker_env, txid_from_bytes, PluginPaths, ProcessCommandRunner,
-        WORKER_ENV_ALLOWLIST,
+        resolve_absolute_executable, txid_from_bytes, CommandRunner, PluginPaths,
+        ProcessCommandRunner,
     };
     use crate::settings::default_settings_path;
-    use crate::support::Clock;
-    use crate::support::SystemClock;
+    use crate::support::maintenance_gate::MaintenanceGate;
+    use crate::support::{Clock, SystemClock};
 
     let home = std::env::var_os("HOME")
         .ok_or_else(|| CliFailure::plugin("HOME is required for uninstall".to_string()))?;
@@ -451,41 +485,14 @@ fn dispatch_uninstall(purge: bool) -> Result<(), CliFailure> {
     let xdg_state = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     let paths = PluginPaths::production(home.clone(), xdg_state);
 
-    let omarchy_bin =
-        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let omarchy_shell_bin = resolve_absolute_executable("omarchy-shell")
-        .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let systemd_run = resolve_absolute_executable("systemd-run")
-        .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let systemctl =
-        resolve_absolute_executable("systemctl").map_err(|e| CliFailure::plugin(e.to_string()))?;
-
-    let runner = ProcessCommandRunner;
-    let clock = SystemClock;
-    let txid = txid_from_bytes(
-        format!(
-            "uninstall:{}:{}",
-            if purge { "purge" } else { "standard" },
-            Clock::now_utc(&clock)
-        )
-        .as_bytes(),
-    );
-
-    // Preflight absolute tools + shell ping + user manager before confirmation
-    // (CLI: standard uninstall does not consume stdin until preflight succeeds).
-    require_tools_reachable(&runner, &omarchy_shell_bin, &systemctl)?;
-
-    let shell_json = home.join(".config/omarchy/shell.json");
-    let settings_path = default_settings_path();
-    let cache_root = {
-        let base = std::env::var_os("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".cache"));
-        base.join("agent-bar")
-    };
-
-    // Read previous version from live manifest when present (rollback health).
-    let previous_version = read_plugin_version(&paths.plugin_root);
+    // Exclusive barrier (ARCH-026), mirroring dispatch_update_apply (Task 2):
+    // block shared status/settings and any other maintenance operation while
+    // the purge and handoff run.
+    let gate = MaintenanceGate::open(&paths.maintenance_lock)
+        .map_err(|e| CliFailure::plugin(format!("open maintenance lock: {e}")))?;
+    let exclusive = gate
+        .lock_exclusive()
+        .map_err(|e| CliFailure::plugin(format!("exclusive maintenance lock: {e}")))?;
 
     let is_tty = io::stdin().is_terminal();
     let stdin = io::stdin();
@@ -494,81 +501,77 @@ fn dispatch_uninstall(purge: bool) -> Result<(), CliFailure> {
     let mut locked_err = stderr.lock();
     confirm_uninstall(is_tty, purge, &mut locked_in, &mut locked_err)?;
 
-    let payload = MaintenanceJournalPayload {
-        txid: txid.clone(),
-        operation: MaintenanceOp::Uninstall,
-        expected_version: None,
-        previous_version,
-        stage_path: String::new(),
-        plugin_root: paths.plugin_root.display().to_string(),
-        quarantine_path: paths
-            .quarantine_dir(&txid)
-            .map_err(|e| CliFailure::plugin(e.to_string()))?
-            .display()
-            .to_string(),
-        selected: None,
-        omarchy_bin,
-        omarchy_shell_bin,
-        is_fresh_install: false,
-        is_v9_rollback: false,
-        purge_settings_and_backups: purge,
-        shell_json_path: shell_json.display().to_string(),
-        settings_path: settings_path.display().to_string(),
-        cache_root: cache_root.display().to_string(),
-        backups_dir: paths.backups_dir.display().to_string(),
+    if purge {
+        let settings_dir = default_settings_path()
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| {
+                CliFailure::plugin("settings path has no parent directory".to_string())
+            })?;
+        let cache_dir = {
+            let base = std::env::var_os("XDG_CACHE_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".cache"));
+            base.join("agent-bar")
+        };
+        remove_dir_all_idempotent(&settings_dir)?;
+        remove_dir_all_idempotent(&cache_dir)?;
+    }
+
+    // `paths.xdg_state` ($XDG_STATE_HOME/agent-bar) holds `maintenance.lock`
+    // itself. Drop the exclusive guard before removing that directory:
+    // unlinking a file while its flock is still held is safe on Linux, but
+    // the drop-then-remove order is kept explicit — and covered by the
+    // `uninstall_purge_removes_xdg_state_and_delegates_remove` test — rather
+    // than relying on that platform detail.
+    drop(exclusive);
+    if purge {
+        remove_dir_all_idempotent(&paths.xdg_state)?;
+    }
+
+    let omarchy_bin =
+        resolve_absolute_executable("omarchy").map_err(|e| CliFailure::plugin(e.to_string()))?;
+    let systemd_run = resolve_absolute_executable("systemd-run")
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+
+    let clock = SystemClock;
+    let txid = txid_from_bytes(format!("uninstall:{}", Clock::now_utc(&clock)).as_bytes());
+    let unit = format!("agent-bar-remove-{txid}.service");
+    let unit_flag = format!("--unit={unit}");
+
+    let argv: [&str; 9] = [
+        "--user",
+        "--collect",
+        unit_flag.as_str(),
+        "--",
+        omarchy_bin.as_str(),
+        "plugin",
+        "remove",
+        "agent-bar.usage",
+        "--yes",
+    ];
+
+    let runner = ProcessCommandRunner;
+    let out = runner
+        .run(&systemd_run, &argv)
+        .map_err(|e| CliFailure::plugin(e.to_string()))?;
+    if out.code != 0 {
+        return Err(CliFailure::plugin(format!(
+            "failed to start remove unit: {}",
+            out.stderr.trim()
+        )));
+    }
+
+    let doc = UninstallDelegation {
+        schema_version: 1,
+        operation: "uninstall",
+        purged: purge,
+        delegated: true,
+        unit: &unit,
     };
-
-    let current_exe =
-        std::env::current_exe().map_err(|e| CliFailure::plugin(format!("current_exe: {e}")))?;
-    let env_pairs = collect_worker_env(
-        std::env::vars().filter(|(k, _)| WORKER_ENV_ALLOWLIST.contains(&k.as_str())),
-    );
-    let unit = MaintenanceWorker::handoff_uninstall(
-        &paths,
-        &runner,
-        &current_exe,
-        &txid,
-        &payload,
-        &env_pairs,
-        &systemd_run,
-        &systemctl,
-    )
-    .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    eprintln!("maintenance handoff accepted: {unit}");
+    let json = serde_json::to_string(&doc).map_err(|e| CliFailure::plugin(e.to_string()))?;
+    println!("{json}");
     Ok(())
-}
-
-fn require_tools_reachable(
-    runner: &crate::plugin::ProcessCommandRunner,
-    omarchy_shell_bin: &str,
-    systemctl: &str,
-) -> Result<(), CliFailure> {
-    use crate::plugin::CommandRunner;
-    let ping = runner
-        .run(omarchy_shell_bin, &["shell", "ping"])
-        .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    if ping.code != 0 {
-        return Err(CliFailure::plugin(
-            "shell ping failed during uninstall preflight",
-        ));
-    }
-    let user = runner
-        .run(systemctl, &["--user", "is-system-running"])
-        .map_err(|e| CliFailure::plugin(e.to_string()))?;
-    let state = user.stdout.trim();
-    if user.code != 0 && state != "running" && state != "degraded" && state != "starting" {
-        return Err(CliFailure::plugin("user systemd manager is not reachable"));
-    }
-    Ok(())
-}
-
-fn read_plugin_version(plugin_root: &Path) -> Option<String> {
-    let path = plugin_root.join("manifest.json");
-    let bytes = std::fs::read(path).ok()?;
-    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    v.get("version")
-        .and_then(|x| x.as_str())
-        .map(str::to_string)
 }
 
 /// True when the live plugin root is not a git checkout (BUNDLE-021 v-next):
