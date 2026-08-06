@@ -35,7 +35,7 @@
 - Consumes: `chipPercentText(provider, metric)`, `stateQualifier(state)`, `providerDisplayName(id)` — already in `CoreView.js`, unchanged.
 - Produces: `Core.chipAccessibleLabel(provider, metric) -> string` (single line, `"<name> · <pct> · <qualifier>"`, empty for null provider) and `ProviderChip.accessibleLabel: string`. Task 2 has no code dependency on these.
 
-- [ ] **Step 1: Rewrite the tooltip tests as accessible-label tests**
+- [x] **Step 1: Rewrite the tooltip tests as accessible-label tests**
 
 In `tests/qml/tst_BarWidget.qml`:
 
@@ -107,7 +107,7 @@ In `tests/qml/tst_BarWidget.qml`:
 `createObject` property `tooltipText: "Claude · 90% · ready"` to
 `accessibleLabel: "Claude · 90% · ready"`.
 
-- [ ] **Step 2: Run the suite to verify the intended failures**
+- [x] **Step 2: Run the suite to verify the intended failures**
 
 Run:
 ```bash
@@ -120,7 +120,7 @@ QT_QPA_PLATFORM=offscreen QML_XHR_ALLOW_FILE_READ=1 QT_LOGGING_TO_CONSOLE=1 \
 ```
 Expected: FAIL — `test_chip_accessible_label_humanized` (chipAccessibleLabel is not a function) and `test_bar_widget_renders_no_tooltip` (BarWidget still contains `tooltipText`/`tooltipNowMs`).
 
-- [ ] **Step 3: Replace `chipTooltip`/`chipWindowLine` in CoreView.js**
+- [x] **Step 3: Replace `chipTooltip`/`chipWindowLine` in CoreView.js**
 
 In `assets/omarchy/CoreView.js`, delete lines 248-302 — the `chipWindowLine`
 comment block and function, and the `chipTooltip` comment block and function —
@@ -144,14 +144,14 @@ function chipAccessibleLabel(provider, metric) {
   var qualifier = stateQualifier(state)
   if (qualifier.length)
     parts.push(qualifier)
-  return parts.join(" \u00b7 ")
+  return parts.join(" · ")
 }
 ```
 
 (The head-building logic is copied verbatim from the old `chipTooltip`; only
 the window line and its `nowMs`/`localeTimeFormat` parameters are gone.)
 
-- [ ] **Step 4: Give ProviderChip an accessibleLabel and stop reading tooltipText**
+- [x] **Step 4: Give ProviderChip an accessibleLabel and stop reading tooltipText**
 
 In `assets/omarchy/components/ProviderChip.qml`:
 
@@ -171,7 +171,7 @@ In `assets/omarchy/components/ProviderChip.qml`:
       Accessible.name: root.accessibleLabel
 ```
 
-- [ ] **Step 5: Strip the tooltip machinery from BarWidget.qml**
+- [x] **Step 5: Strip the tooltip machinery from BarWidget.qml**
 
 In `assets/omarchy/BarWidget.qml`:
 
@@ -196,12 +196,12 @@ In `assets/omarchy/BarWidget.qml`:
         accessibleLabel: Core.chipAccessibleLabel(modelData, root.displayMetric)
 ```
 
-- [ ] **Step 6: Run the BarWidget suite to verify it passes**
+- [x] **Step 6: Run the BarWidget suite to verify it passes**
 
 Run the same qmltestrunner command as Step 2.
 Expected: PASS, zero failures.
 
-- [ ] **Step 7: Run the full checkpoint**
+- [x] **Step 7: Run the full checkpoint**
 
 ```bash
 cargo fmt --check
@@ -222,7 +222,7 @@ Expected: everything green. Read qmllint output only for warnings this change
 introduced (the `qs.*` unresolved-import noise is pre-existing); its exit code
 is not a verdict.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add assets/omarchy/CoreView.js assets/omarchy/BarWidget.qml \
@@ -242,7 +242,7 @@ git commit -m "feat: remove bar chip hover tooltip"
 - Consumes: nothing from Task 1 (prose only).
 - Produces: nothing consumed by code.
 
-- [ ] **Step 1: Remove hover copy from README.md**
+- [x] **Step 1: Remove hover copy from README.md**
 
 Replace lines 11-15:
 
@@ -267,7 +267,7 @@ usage track.
 Then delete the table row `| Hover a chip | Active window and its reset |`
 (line 30), leaving the Left/Middle/Right click rows.
 
-- [ ] **Step 2: Amend UX-011 in the v10 spec**
+- [x] **Step 2: Amend UX-011 in the v10 spec**
 
 In `docs/specs/v10/04-quickshell-ux-and-accessibility.md`, replace the
 `UX-011` bullet (lines 24-27):
@@ -290,7 +290,7 @@ with:
   `docs/superpowers/specs/2026-08-06-remove-chip-tooltip-design.md`.
 ```
 
-- [ ] **Step 3: Verify the language gate and diff hygiene**
+- [x] **Step 3: Verify the language gate and diff hygiene**
 
 ```bash
 cargo test --test active_language
@@ -298,7 +298,7 @@ git diff --check
 ```
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md docs/specs/v10/04-quickshell-ux-and-accessibility.md

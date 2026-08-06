@@ -21,10 +21,12 @@ verified Quattro-native glyphs or explicit English text labels.
 - `UX-009`: Mouse wheel over a bar chip has no effect.
 - `UX-010`: Each chip registers and unregisters a Quattro bar click target and
   implements the host trigger protocol.
-- `UX-011`: Tooltip copy includes the provider name, the displayed
-  percentage when one exists, and a plain-language state qualifier when the
-  provider is not ready. Raw state identifiers never render. Reset detail is
-  limited to the chip's own window; every other window lives in the popup.
+- `UX-011` (superseded 2026-08-06): The chip renders no hover tooltip. Its
+  former first line — the provider name, the displayed percentage when one
+  exists, and a plain-language state qualifier when the provider is not
+  ready — survives as the chip's accessible name. Raw state identifiers
+  never render. Reset detail lives only in the popup. See
+  `docs/superpowers/specs/2026-08-06-remove-chip-tooltip-design.md`.
 - `UX-012`: Stale and error states use an icon/text cue in addition to color.
 
 ## Popup layout

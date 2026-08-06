@@ -9,10 +9,10 @@ know when a limit clears. It covers Claude, Codex, Amp, and Grok.
 ## What you see
 
 Each enabled provider gets a compact chip with its icon and percentage,
-shown as used or remaining, your pick. Hover a chip for the active
-window and its reset time. Click it and the popup opens: plan tag (like
-`MAX 20X`), a lead window with both the countdown and the wall-clock
-reset, and every other window as a row with its own usage track.
+shown as used or remaining, your pick. Click it and the popup opens:
+plan tag (like `MAX 20X`), a lead window with both the countdown and
+the wall-clock reset, and every other window as a row with its own
+usage track.
 
 Windows are normalized across providers, so Claude's `Session (5h)`,
 `Weekly (7d)`, and per-model windows render the same way Codex's do.
@@ -27,7 +27,6 @@ keyboard-navigable.
 
 | Action | Result |
 | --- | --- |
-| Hover a chip | Active window and its reset |
 | Left click | Open the popup; click again to close |
 | Middle click | Force a refresh of all providers |
 | Right click | Open Settings |
