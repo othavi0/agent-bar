@@ -35,6 +35,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.1] - 2026-08-06
+
+### Changed
+
+- fix: unpin release identity test
+- docs: repoint MIG matrix evidence after removal
+- refactor: drop unused symlink/fs path helpers
+- docs: fix drift after transaction removal
+- refactor: remove dormant transaction paths
+- docs: fix drift in v10 arch/testing specs
+- docs: describe git-native distribution
+- feat: publish releases to dist repo
+- feat: maintenance ui delegates via omarchy cli
+- fix: close kind/id/.git mirror gaps in dist test
+- feat: assemble full dist tree with metadata
+- refactor: drop single-variant SetupOptions
+- feat: remove tarball distribution machinery
+- feat: reduce setup to settings migration
+- fix: resolve uninstall tools before purge
+- feat: narrow uninstall to purge plus delegation
+- feat: delegate update apply to omarchy cli
+- feat: update check reads dist repo receipt
+- docs: add git distribution spec and plan
+- docs: rewrite README with screenshot demo
+- fix: fetch deps before offline release cut
+- docs: rewrite README user-first
+- docs: require qt6 qml verification commands
+- docs: fix manifest example and qt6 qmllint
+- docs: document service module decomposition
+- docs: match new-provider guide to real adapter
+- fix: insert release entry below unreleased
+- docs: rewrite releasing for auto-release
+- docs: add ADR 0005 auto-release decision
+- docs: document cache TTLs and apply lock
+- docs: fix lock wait and codex rpc method name
+- docs: correct lock semantics in spec and plan
+- docs: fix doctor scope and codex fallback tiers
+- docs: correct uninstall and exit code contract
+- docs: rebuild documentation index by audience
+- docs: archive v10 handoff and QA snapshots
+- docs: move engineering docs to docs/dev
+- docs: move operator docs to docs/guide
+- docs: plan documentation restructure
+- docs: spec documentation audit and restructure
+- feat: tighten chip numeral to text width
+- feat: refresh tooltip clock at hover time
+- feat: chip tooltip names window and reset
+- docs: plan chip tooltip window and reset
+- docs: spec chip tooltip window and reset
+- fix: point auto release at master
+- feat: cut a release on every product merge
+- feat: lead reset shows locale wall-clock time
+- fix: read current claude limits vocabulary
+- fix: tighten gap between provider chips
+- fix: left-align chip numeral beside icon
+- fix: apply persisted settings at service start
+- fix: parse real update check document in QML
+
 ## [10.3.0] - 2026-08-01
 
 The visual and copy pass over the whole product: severity you can see, one
