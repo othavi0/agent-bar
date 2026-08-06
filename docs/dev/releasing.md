@@ -53,6 +53,60 @@ of the bundled terminal helper) do not run on the Ubuntu release runner,
 which has no Omarchy runtime. They run at the pre-merge checkpoints on
 Omarchy hosts; the release consumes that accepted evidence.
 
+## Update-path verification
+
+Every release must end with proof that installed plugins can actually
+receive it. A green merge is not that proof: the auto-release run has
+failed silently in the past (three consecutive releases before the fix in
+PR #50), and a red run means the Settings update button simply never sees
+the new version. Run this checklist after every product merge.
+
+Before merging, the standing gates already cover the update contract:
+`cargo test --test dist_tree_validate` mirrors `omarchy-plugin-validate`
+against the assembled tree, and the append-only rule keeps the dist
+repository fast-forwardable. Nothing extra is manual at that stage.
+
+After merging:
+
+1. **Watch the `Auto release` run to completion.** The release exists only
+   when the run is green:
+
+   ```bash
+   gh run list --workflow "Auto release" --limit 1
+   ```
+
+   The run takes a few minutes after the merge. Checking an install before
+   it finishes reports "up to date" — that is timing, not a defect.
+
+2. **Confirm the distribution repository advanced by one fast-forward
+   commit** (one `release: v{version}` commit on top of the previous
+   history, never a rewrite).
+
+3. **On an Omarchy host with the plugin installed, exercise the consumer
+   paths in order:**
+
+   ```bash
+   # The Settings button's first stage: must report the new version.
+   ~/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar update check
+
+   # The apply path (the Settings button delegates to this same command).
+   omarchy plugin update agent-bar.usage
+
+   # Must now report available: false with current == the new version.
+   ~/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar update check
+   ```
+
+   Then glance at the bar: chips must render with live data after the
+   automatic shell rescan.
+
+`omarchy update` (the system-wide update) does not update plugins by
+design; installs that want it hook `omarchy-plugin-update --yes` into
+`~/.config/omarchy/hooks/post-update.d/`. That path is the same
+`omarchy plugin update` exercised above, so it needs no separate check.
+When a user reports an update error, read `/tmp/omarchy-update.log`
+first — the failure is frequently an unrelated package in the same
+system update.
+
 ## Distribution repository deploy key
 
 The dist push authenticates over SSH with a dedicated deploy key scoped to

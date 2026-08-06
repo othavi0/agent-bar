@@ -127,6 +127,12 @@ for the amended contract.
 Tests use fake providers, fake clock/process/HTTP/filesystem seams, temporary
 plugin roots, and isolated XDG directories. No live network or credentials.
 
+A release is not done when the merge is green: after every product merge,
+run the update-path verification in
+[docs/dev/releasing.md](docs/dev/releasing.md) (watch the `Auto release`
+run, confirm the dist repo fast-forwarded, prove `update check` and
+`omarchy plugin update` deliver the new version on a live install).
+
 ## Workflow
 
 1. Check `git status`.
