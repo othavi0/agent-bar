@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "agent-bar.usage",
+  "name": "Agent Bar",
+  "version": "10.3.1",
+  "author": "othavi0",
+  "license": "MIT",
+  "description": "LLM quota monitor for Claude, Codex, Amp, and Grok.",
+  "kinds": ["service", "bar-widget"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Bar",
+    "description": "Shows normalized provider quota and reset information.",
+    "category": "AI",
+    "defaultSection": "right",
+    "aliases": ["agent-bar"],
+    "allowMultiple": false,
+    "defaults": {},
+    "schema": []
+  }
+}

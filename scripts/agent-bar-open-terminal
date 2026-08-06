@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Interactive provider login launcher for the agent-bar.usage plugin bundle.
+# Exact contract: login <provider> → xdg-terminal-exec → private bin/agent-bar.
+set -euo pipefail
+
+usage() {
+  echo "Usage: agent-bar-open-terminal login <provider>" >&2
+  echo "Providers: claude, codex, amp, grok" >&2
+}
+
+if [[ "$#" -ne 2 ]]; then
+  usage
+  exit 2
+fi
+
+if [[ "$1" != "login" ]]; then
+  usage
+  exit 2
+fi
+
+provider="$2"
+case "$provider" in
+  claude | codex | amp | grok) ;;
+  *)
+    echo "invalid provider: ${provider}" >&2
+    exit 2
+    ;;
+esac
+
+# Physical absolute plugin root from this script's directory (…/scripts → …/).
+source_path="${BASH_SOURCE[0]}"
+if [[ -L "$source_path" ]]; then
+  # Resolve one level of symlink when present; fall back to readlink -f when available.
+  if resolved="$(readlink -f "$source_path" 2>/dev/null)"; then
+    source_path="$resolved"
+  fi
+fi
+scripts_dir="$(cd -- "$(dirname -- "$source_path")" && pwd -P)"
+plugin_root="$(cd -- "${scripts_dir}/.." && pwd -P)"
+helper="${plugin_root}/bin/agent-bar"
+
+if [[ ! -f "$helper" || ! -x "$helper" ]]; then
+  echo "private helper missing or not executable: ${helper}" >&2
+  exit 1
+fi
+
+# Omarchy owns terminal preference via xdg-terminal-exec. No emulator table,
+# no shell-string construction, no global agent-bar lookup.
+exec xdg-terminal-exec \
+  --app-id=org.omarchy.terminal \
+  --title="Agent Bar Login" \
+  -- \
+  "$helper" \
+  login \
+  "$provider"
