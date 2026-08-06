@@ -33,17 +33,6 @@ BarWidget {
   readonly property color chipForeground: bar ? bar.foreground : Color.foreground
   readonly property string chipFontFamily: bar ? bar.fontFamily : "monospace"
 
-  // The host copies tooltipText by value inside WidgetButton.onEntered and
-  // renders that copy 400ms later, so there is no live countdown to keep
-  // ticking — the string only has to be right at the instant of hover.
-  // MouseArea emits containsMouseChanged (which drives tooltipHovered) before
-  // it emits entered(), so refreshing from the chip's handler lands before
-  // the host reads the property. tst_BarWidget proves that order rather than
-  // trusting it. The initial value is the wall clock so a chip that is
-  // somehow read before any hover still shows a sane countdown.
-  property double tooltipNowMs: Date.now()
-  readonly property string shortTimeFormat: Qt.locale().timeFormat(Locale.ShortFormat)
-
   // Popup is open on another monitor → this instance hosts dismiss-only overlay.
   readonly property bool foreignDismissActive: Service.foreignPopupOpen(
     agentService ? agentService.popupOwner : null,
@@ -106,13 +95,7 @@ BarWidget {
         stateCue: Core.chipStateCue(modelData)
         cueLabel: Core.chipCueLabel(modelData)
         severityUrgent: Core.chipSeverityUrgent(modelData)
-        tooltipText: Core.chipTooltip(modelData, root.displayMetric,
-                                      root.tooltipNowMs, root.shortTimeFormat)
-
-        onTooltipHoveredChanged: {
-          if (chip.tooltipHovered)
-            root.tooltipNowMs = Date.now()
-        }
+        accessibleLabel: Core.chipAccessibleLabel(modelData, root.displayMetric)
         iconSource: root.iconUrl(providerId)
         tinted: Core.iconTinted(providerId)
         iconScale: Core.iconOpticalScale(providerId)

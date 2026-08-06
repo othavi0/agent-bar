@@ -5,9 +5,9 @@ import qs.Ui
 
 // Bar chip on Quattro's WidgetButton (UX-001..012; visual design §5).
 // WidgetButton owns the click-target registration and triggerPress
-// protocol (UX-010), tooltip delivery, pointer cursor, dimmed/concealed
-// semantics, and the host-owned opacity motion (A11Y-013). Wheel events
-// die unconnected inside the host component (UX-009).
+// protocol (UX-010), pointer cursor, dimmed/concealed semantics, and the
+// host-owned opacity motion (A11Y-013). Wheel events die unconnected
+// inside the host component (UX-009).
 WidgetButton {
   id: root
 
@@ -20,6 +20,10 @@ WidgetButton {
   property real iconScale: 1.0
   property bool severityUrgent: false
   property string cueLabel: ""
+
+  // The host tooltip is intentionally never set; this label exists for
+  // assistive tech only and must stay single-line.
+  property string accessibleLabel: ""
 
   // §7: Color.urgent is the single severity colour; no new colour exists.
   readonly property color numeralColor: root.severityUrgent ? Color.urgent : root.foreground
@@ -91,7 +95,7 @@ WidgetButton {
       anchors.verticalCenter: parent.verticalCenter
       renderType: Text.NativeRendering
       textFormat: Text.PlainText
-      Accessible.name: root.tooltipText
+      Accessible.name: root.accessibleLabel
       Accessible.role: Accessible.StaticText
     }
 
