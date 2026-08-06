@@ -35,6 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.2] - 2026-08-06
+
+### Changed
+
+- docs: record chip tooltip removal
+- feat: remove bar chip hover tooltip
+- docs: add chip tooltip removal plan
+- docs: add chip tooltip removal design spec
+
 ## [10.3.1] - 2026-08-06
 
 ### Changed
