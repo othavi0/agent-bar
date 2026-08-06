@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "pluginId": "agent-bar.usage",
-  "version": "10.3.1",
+  "version": "10.3.2",
   "target": "x86_64-unknown-linux-gnu",
   "omarchyContract": 1,
   "minimumQuickshellVersion": "0.3.0",
-  "sourceCommit": "b9a234505e2788d1a137efd374b35a33dc8f34c8",
+  "sourceCommit": "7f5a60b266b8971ec0d4f86663e9fe3383e70988",
   "files": [
     {
       "path": "BarWidget.qml",
-      "sha256": "0b7107732e4add8e16592c95ee9d6ade559140dd0ff6d75859549f44698add3b",
-      "size": 8810,
+      "sha256": "6f1d90cd2593ffd61526adaa7e1ffe07476eb5e9181da23a4b16b13eebe368f4",
+      "size": 7894,
       "mode": "0644"
     },
     {
@@ -39,8 +39,8 @@
     },
     {
       "path": "CoreView.js",
-      "sha256": "5251b426bba90709675e4cef4e7c1e70b08da7d9758e131e26498e0584facc7a",
-      "size": 23418,
+      "sha256": "02fdb6566bab5b4010c5b73f23d7ec266a206bebbc57b8be5bd3f4e15cf9b878",
+      "size": 21607,
       "mode": "0644"
     },
     {
@@ -93,7 +93,7 @@
     },
     {
       "path": "bin/agent-bar",
-      "sha256": "e5ac2e1ec5e773245b2b8560caa0662a4f7d70b3de48504ab800ef2b6ee0709e",
+      "sha256": "74b160116e86d476cb2ccddb2f558644a8c06234fe52f59fd5de97e8c43a30b7",
       "size": 4037680,
       "mode": "0755"
     },
@@ -117,8 +117,8 @@
     },
     {
       "path": "components/ProviderChip.qml",
-      "sha256": "c4043817972aea3342cb9b164c521c97ce20c9add0998cf73c204d7c1e3fe46d",
-      "size": 4037,
+      "sha256": "d9bfa6e4ba78ad3fe2477ce8ae8c117eeb4141612204af57fa40874e768f9e74",
+      "size": 4186,
       "mode": "0644"
     },
     {
@@ -171,7 +171,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "798ff9a4641cca4c09b43072cd2336fd488f9dfedb81915e50408c2f8ec09a28",
+      "sha256": "b6d6a38135bb51a92d508979c9995aad5f501f3dc5db7c41fc3fb4eefdad66ed",
       "size": 617,
       "mode": "0644"
     },
