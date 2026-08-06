@@ -1,10 +1,10 @@
 name: Auto release
 
 # Every product merge to master cuts an official release, so the Settings
-# update button always has the latest merge to offer. The release is created
-# with its assets in one call — a public release never exists without them
-# (an asset-less claiming release is a command error for every installed
-# update check).
+# update button always has the latest merge to offer. The assembled plugin
+# tree is pushed to the distribution repo before the product tag and GitHub
+# release are published, so a failed dist push aborts the release instead of
+# leaving a tag that installs can see but not update to.
 
 on:
   push:
@@ -103,39 +103,36 @@ jobs:
           # QML/Quattro gates consume accepted checkpoint evidence on Omarchy
           # hosts; Ubuntu runners do not provide the Omarchy runtime.
 
-      - name: Build release artifacts
+      - name: Push plugin tree to distribution repo
+        env:
+          DIST_DEPLOY_KEY: ${{ secrets.OMARCHY_AGENT_BAR_DEPLOY_KEY }}
+          VERSION: ${{ steps.cut.outputs.version }}
         run: |
           set -euo pipefail
+          # bundle.json always embeds a freshly computed source_commit (this
+          # run's HEAD), so this commit is never empty even when the
+          # assembled tree is otherwise byte-identical to the last release.
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DIST_DEPLOY_KEY" > ~/.ssh/dist_key
+          chmod 600 ~/.ssh/dist_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/dist_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
           SOURCE_COMMIT="$(git rev-parse HEAD)"
-          VERSION="${{ steps.cut.outputs.version }}"
-          NOTES="docs/releases/${VERSION}.md"
-          test -f "$NOTES"
-          OUT="target/release-files"
-          rm -rf "$OUT"
-          mkdir -p "$OUT"
-          cargo run --bin agent-bar-bundle -- \
-            release bundle target/release/agent-bar.usage \
-            output "$OUT" \
-            source-commit "$SOURCE_COMMIT" \
-            release-notes "$NOTES"
-          META="$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.metadata.json"
-          ARCHIVE="$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst"
-          SUM="$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst.sha256"
-          test -f "$META" && test -f "$ARCHIVE" && test -f "$SUM" && test -f "$OUT/LICENSE"
-          (cd "$OUT" && sha256sum -c "$(basename "$SUM")")
+          git clone --depth 1 git@github.com:othavi0/omarchy-agent-bar.git dist
+          find dist -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
+          cp -a target/release/agent-bar.usage/. dist/
+          git -C dist config user.name "github-actions[bot]"
+          git -C dist config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C dist add -A
+          git -C dist commit -m "release: v${VERSION} (agent-bar@${SOURCE_COMMIT})"
+          git -C dist push origin HEAD:master
 
-      - name: Push and publish release with assets
+      - name: Push and publish release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.cut.outputs.version }}
         run: |
           set -euo pipefail
           git push origin HEAD:master "refs/tags/v${VERSION}"
-          OUT="target/release-files"
           gh release create "v${VERSION}" \
-            "$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst" \
-            "$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.tar.zst.sha256" \
-            "$OUT/agent-bar.usage-${VERSION}-x86_64-unknown-linux-gnu.metadata.json" \
-            "$OUT/LICENSE" \
             --title "Agent Bar ${VERSION}" \
             --notes-file "docs/releases/${VERSION}.md"

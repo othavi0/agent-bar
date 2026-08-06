@@ -2,8 +2,6 @@
 
 use std::path::PathBuf;
 
-use semver::Version;
-
 /// Supported provider identifiers (closed catalog).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProviderId {
@@ -106,33 +104,15 @@ pub enum ConfigInput {
     Json(String),
 }
 
-/// Setup modes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SetupOptions {
-    Production,
-    PluginsDir(PathBuf),
-}
-
-/// Strict semantic version for `update apply`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReleaseVersion(pub Version);
-
-impl ReleaseVersion {
-    pub fn parse(raw: &str) -> Result<Self, semver::Error> {
-        Version::parse(raw).map(Self)
-    }
-
-    pub fn as_str(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-/// Update subcommands.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Update subcommands. `Apply` takes no argument: `update apply` is an
+/// unconditional detached delegation to `omarchy plugin update
+/// agent-bar.usage --yes` (git-plugin-distribution Task 2), not a
+/// version-gated apply of a specific release.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateCommand {
     Interactive,
     Check,
-    Apply(ReleaseVersion),
+    Apply,
 }
 
 /// Doctor subcommands.
@@ -199,13 +179,16 @@ impl HelpTopic {
     }
 }
 
-/// Top-level parsed command.
+/// Top-level parsed command. `Setup` is settings-migration only
+/// (git-plugin-distribution Task 4): `omarchy plugin add`/`update`/`remove`
+/// own the plugin tree now, so there is no injected-install-target variant
+/// to carry — it takes no payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Status(StatusOptions),
     Login(ProviderId),
     Config(ConfigCommand),
-    Setup(SetupOptions),
+    Setup,
     Update(UpdateCommand),
     Uninstall { purge: bool },
     Doctor(DoctorCommand),

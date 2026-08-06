@@ -2,7 +2,15 @@
 
 This matrix maps every requirement family to implementation-plan tasks and
 mandatory evidence. An inclusive range covers each ID inside the range;
-letter-suffixed IDs are listed separately.
+letter-suffixed IDs are listed separately. `Tasks` always names the
+`09-implementation-plan.md` task(s) that originally delivered a
+requirement; it is not renumbered for later amendments.
+
+Rows marked **amended 2026-08-05** were superseded by the git-native plugin
+distribution conversion; their original task numbers stay as the historical
+record of first delivery, and their evidence column points at the tests and
+design doc that now govern the amended behavior. See
+[docs/superpowers/specs/2026-08-05-git-plugin-distribution-design.md](../../superpowers/specs/2026-08-05-git-plugin-distribution-design.md).
 
 ## Product and architecture
 
@@ -10,10 +18,10 @@ letter-suffixed IDs are listed separately.
 | --- | --- | --- |
 | `PROD-001`–`PROD-005` | 8–10, 15–17 | manifest, singleton QML tests, migration placement tests, bundle inventory |
 | `PROD-006` | 19 | active legacy scan and deleted-file inventory |
-| `PROD-007` | 12–13, 17–18 | Settings/Maintenance QML tests and transaction tests |
+| `PROD-007` | 12–13, 17–18 | Settings/Maintenance QML tests; **amended 2026-08-05**: delegation argv tests in `tests/cli.rs` and `tests/qml/tst_Maintenance.qml` |
 | `PROD-008` | 3, 6, 11 | schema fixtures, provider fixtures, provider-state QML tests |
 | `PROD-009` | 14, 21–22 | keyboard/scroll/a11y tests and real screenshots |
-| `PROD-010` | 17 | bundle receipt, archive inventory, version-match tests |
+| `PROD-010` | 17 | bundle receipt and version-match tests; **amended 2026-08-05**: distribution-tree mirror in `tests/dist_tree_validate.rs` (archive inventory retired, no archive) |
 | `PROD-011`–`PROD-019` | 19–20 | source/dependency/doc legacy gates |
 | `PROD-019A` | 3, 6, 10–11, 19 | rejected money fixture, provider/QML tests, legacy scan |
 | `PROD-020`–`PROD-024` | 4, 6, 10, 12, 16 | settings order, discovery, chip, Settings, migration tests |
@@ -39,14 +47,14 @@ letter-suffixed IDs are listed separately.
 | --- | --- | --- |
 | `CLI-001`–`CLI-005` | 2 | exhaustive grammar table |
 | `CLI-005A` | 2, 7, 9 | default-skip and service-evaluate tests |
-| `CLI-006`–`CLI-010` | 2, 20 | alias/rejection/help tests and active command docs |
+| `CLI-006`–`CLI-010` | 2, 20 | alias/rejection/help tests and active command docs; **CLI-009 amended 2026-08-05**: `setup` takes no arguments, covered by `tests/cli.rs` |
 | `CLI-011`–`CLI-016` | 2–3 | stdout/stderr, exit, serializer-failure tests |
 | `CLI-017` | 5–6, 13 | fake login process and terminal-helper status tests |
 | `CLI-017A` | 2, 8–9, 17 | exact fast version output and cold-start health tests |
 | `CLI-018`–`CLI-023` | 4 | settings purity/validation/atomicity tests |
 | `CLI-023A` | 2, 4 | exact settings stdout/newline/stderr tests |
 | `CLI-024`–`CLI-025` | 15–16 | doctor read-only/clean ownership tests |
-| `CLI-026`–`CLI-030` | 16–18 | setup/update/uninstall fault matrix |
+| `CLI-026`–`CLI-030` | 16–18 | **CLI-027, CLI-029 amended 2026-08-05**: superseded by delegation-argv/purge-ordering tests in `tests/cli.rs`, not the retired setup/update/uninstall fault matrix |
 | `CLI-031` | 7 | notification dispatch-failure test |
 | `JSON-001`–`JSON-008` | 3, 6–7 | provider-state and stale fixtures |
 | `JSON-009`–`JSON-015` | 1, 3 | structural schema, semantic validator, invalid fixtures |
@@ -91,28 +99,29 @@ letter-suffixed IDs are listed separately.
 
 | Requirements | Tasks | Primary evidence |
 | --- | --- | --- |
-| `MIG-001`–`MIG-006` | 15 | transaction fault injection and rollback hashes |
-| `MIG-002A` | 15, 17–18 | destination-local stage/quarantine path tests |
+| `MIG-001`, `MIG-006` | 15 | `tests/cli.rs::binary_setup_migrates_v9_settings_to_strict_v10` (setup migration backup) and `src/plugin/doctor.rs::clean_removes_only_owned_legacy_and_backups` (doctor clean backup) |
+| `MIG-002`, `MIG-003`, `MIG-004`, `MIG-005` | 15 | **amended 2026-08-05**: the stage/exchange/journal pipeline they described was never used by any live command path; the machinery that implemented it (`PluginPaths::stage_dir`/`quarantine_dir`/`journal_path`/`settings_quarantine`/`cache_quarantine`/`backups_quarantine`, `validate_txid`, `ensure_not_symlink`, `same_filesystem`) was removed, no replacement test surface exists |
+| `MIG-002A` | 15, 17–18 | **amended 2026-08-05**: `tests/cli.rs::binary_setup_migrates_v9_settings_to_strict_v10` and `src/plugin/doctor.rs::clean_removes_only_owned_legacy_and_backups` (destination-local stage/quarantine path tests retired with the machinery above) |
 | `MIG-007`–`MIG-019` | 16 | complete v9 fixture matrix and idempotency |
-| `MIG-019A`–`MIG-019C` | 16 | exact Omarchy argv and byte-preservation tests |
-| `MIG-020`–`MIG-026` | 17–18 | bundle update/uninstall/purge fault matrix |
+| `MIG-019A`–`MIG-019C` | 16 | byte-preservation tests; **MIG-019A amended 2026-08-05**: `omarchy plugin add` is the install now, no exact-argv test needed |
+| `MIG-020`–`MIG-026` | 17–18 | **amended 2026-08-05**: superseded by the delegation model; evidence is `tests/cli.rs` delegation-argv/purge-ordering tests and `tests/dist_tree_validate.rs`, not the retired stage/exchange fault matrix |
 | `CLEAN-001`–`CLEAN-007` | 15–16, 19 | ownership fixtures, doctor tests, active legacy scan |
 | `BUNDLE-001`–`BUNDLE-007` | 8, 17 | exact bundle tree, private-helper, version tests |
 | `BUNDLE-007A` | 15–17 | literal Quattro path and injected-test-root tests |
-| `BUNDLE-008`–`BUNDLE-012` | 17, 21 | archive inventory, mode, traversal, reproducibility |
+| `BUNDLE-008`–`BUNDLE-012` | 17, 21 | mode, traversal, reproducibility; **amended 2026-08-05**: `tests/dist_tree_validate.rs` (tree, not archive, inventory) |
 | `BUNDLE-012A` | 10, 17 | asset inventory and rendered-icon screenshots |
-| `BUNDLE-012B` | 17, 21 | release-metadata equality and compatibility tests |
-| `BUNDLE-013`–`BUNDLE-019` | 16–17 | plugin bootstrap, migration, install rollback tests |
-| `BUNDLE-019A` | 16–17 | enable-only/rescan-only argv tests |
-| `BUNDLE-020`–`BUNDLE-025` | 13, 17 | update check/apply and official-source tests |
-| `BUNDLE-026`–`BUNDLE-032` | 15, 17 | archive validation, exchange, health, rollback tests |
-| `BUNDLE-032A`–`BUNDLE-032E` | 17 | copied-worker, transient-unit, argv0, IPC tests |
-| `BUNDLE-032F` | 17–18 | exact-ID absence through parsed `listPlugins` JSON |
-| `BUNDLE-032G`–`BUNDLE-032J` | 15, 17–18 | async poll, systemd handoff, environment, same-filesystem tests |
-| `BUNDLE-032K` | 17 | post-commit old-bundle cleanup and residual-report tests |
-| `BUNDLE-033`–`BUNDLE-038` | 13, 18 | standard/purge confirmation and transaction tests |
-| `BUNDLE-038A` | 18 | quarantine and exact-shell rollback tests |
-| `BUNDLE-038B`–`BUNDLE-038C` | 18 | commit-point, residual cleanup, durable-report tests |
+| `BUNDLE-012B` | 17, 21 | **retired 2026-08-05**: no release-metadata document; `update check` reads `bundle.json` directly, covered by `src/plugin/maintenance.rs` update-check tests |
+| `BUNDLE-013`–`BUNDLE-019` | 16–17 | **amended 2026-08-05**: install.sh/bootstrap retired; superseded by native `omarchy plugin add`, no Agent Bar-side test surface remains |
+| `BUNDLE-019A` | 16–17 | **retired 2026-08-05**, superseded by `MIG-019A` |
+| `BUNDLE-020`–`BUNDLE-025` | 13, 17 | **amended 2026-08-05**: `tests/cli.rs` update-apply/check delegation tests and `src/plugin/maintenance.rs` `reinstallRequired` tests, not the official-release-source tests they replace |
+| `BUNDLE-026`–`BUNDLE-032` | 15, 17 | **amended 2026-08-05**: superseded by delegation; `omarchy plugin update`'s own fetch/fast-forward/validate/rollback is out of Agent Bar's test surface, covered here only by `tests/cli.rs` handoff-argv tests |
+| `BUNDLE-032A`–`BUNDLE-032E` | 17 | **retired 2026-08-05**: copied-worker/transient-unit/argv0/health-IPC subsystem deleted whole |
+| `BUNDLE-032F` | 17–18 | **retired 2026-08-05**: no `listPlugins` absence polling; `omarchy plugin remove` owns removal verification |
+| `BUNDLE-032G`–`BUNDLE-032J` | 15, 17–18 | **retired 2026-08-05**: async health poll and worker environment forwarding deleted whole |
+| `BUNDLE-032K` | 17 | **retired 2026-08-05**: no post-commit exchange-sibling cleanup; there is no exchange sibling |
+| `BUNDLE-033`–`BUNDLE-038` | 13, 18 | standard/purge confirmation tests; **amended 2026-08-05**: `tests/cli.rs` purge-then-delegate tests, transaction machinery retired |
+| `BUNDLE-038A` | 18 | **retired 2026-08-05**: no quarantine; `omarchy plugin remove` deletes or, for a non-git tree, backs up |
+| `BUNDLE-038B`–`BUNDLE-038C` | 18 | **retired 2026-08-05**: no commit-point/residual-report machinery; `omarchy plugin remove`'s own outcome is the result |
 | `BUNDLE-039`–`BUNDLE-042` | 20–22 | version/release docs, checkpoint and remote audit |
 
 ## Verification

@@ -58,6 +58,7 @@ const LOCKED_DELETION_PATHS: &[&str] = &[
     "packaging/aur/PKGBUILD",
     "packaging/aur/agent-bar-bin.install",
     "build.rs",
+    "install.sh",
 ];
 
 /// Forbidden tokens from the closed behavioral set (exact substring match).
@@ -111,11 +112,26 @@ const FORBIDDEN_TOKENS: &[&str] = &[
     "tachyonfx",
     "redb",
     "postcard",
+    "tar.zst",
+    "releases/download/",
+    "agent-bar-maintenance-worker",
+    "RELEASES_API_URL",
 ];
 
 /// Relative prefixes excluded from content scans (TEST-031 historical cuts).
 fn is_historical_cut(rel: &str) -> bool {
     if rel.starts_with("docs/superpowers/") {
+        return true;
+    }
+    // Dated, frozen release-note snapshots describe what a past,
+    // already-published version actually shipped (e.g. `docs/releases/10.0.0.md`
+    // naming that release's real `.tar.zst` asset). Same rationale as the
+    // ADR/CHANGELOG historical-slice exclusions below: never rewritten.
+    // `docs/releases/README.md` is the live index for the current pipeline
+    // (Task 8), not a dated cut, so it is deliberately NOT covered here.
+    if (rel.starts_with("docs/releases/") && rel != "docs/releases/README.md")
+        || rel.starts_with("docs/history/")
+    {
         return true;
     }
     if rel == "docs/adr/0001-omarchy-right-click-settings.md"
@@ -347,15 +363,12 @@ fn required_dependency_owners() -> BTreeMap<&'static str, &'static str> {
         ("log", "stderr diagnostics for cache/notifications"),
         ("env_logger", "helper binary stderr logger init"),
         ("tokio", "async process/HTTP collection runtime"),
-        ("reqwest", "Claude HTTP collector and update downloads"),
+        ("reqwest", "Claude HTTP collector and update check"),
         ("futures", "HTTP body streaming in providers/http"),
         ("regex", "provider stdout/session parsers"),
         ("semver", "update version comparison"),
         ("fs2", "exclusive maintenance gate lock"),
-        ("rustix", "filesystem durability helpers"),
         ("sha2", "bundle and ownership hashes"),
-        ("tar", "plugin archive extract/pack"),
-        ("zstd", "plugin archive compression"),
         ("assert_cmd", "CLI integration tests"),
         ("predicates", "CLI integration tests"),
         ("tokio", "test-util runtime in tests"),
@@ -514,28 +527,6 @@ fn active_legacy_scan_cargo_and_install_contract() {
         missing_owner.is_empty(),
         "direct Cargo deps without documented v10 owner: {missing_owner:?}"
     );
-
-    let install = fs::read_to_string(root.join("install.sh")).expect("install.sh");
-    for token in [
-        "InstallKind::System",
-        "InstallKind::DevGit",
-        "InstallKind::ManagedGit",
-        "InstallKind::Standalone",
-        "/usr/bin/agent-bar",
-        ".local/bin/agent-bar",
-        "agent-bar-bin",
-        "package.metadata.binstall",
-        "cargo binstall",
-        "ManagedGit",
-        "AGENT_BAR_DATA",
-        "AGENT_BAR_ASSET_DIR",
-        "AGENT_BAR_FORCE_COMPILED",
-    ] {
-        assert!(
-            !install.contains(token),
-            "install.sh must not contain installer legacy token `{token}`"
-        );
-    }
 }
 
 /// TEST-034 hardening: a documented owner is not proof of real use — every

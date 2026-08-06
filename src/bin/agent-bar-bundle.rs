@@ -1,9 +1,10 @@
-//! Internal release/assemble builder (not installed in the plugin bundle).
+//! Internal assemble builder (not installed in the plugin bundle).
 //!
 //! Grammar (exact):
 //!   agent-bar-bundle assemble output <plugin-dir> source-commit <40-hex>
-//!   agent-bar-bundle release bundle <plugin-dir> output <output-dir>
-//!     source-commit <40-hex> release-notes <path>
+//!
+//! CI pushes the assembled tree straight to the distribution repo
+//! (git-plugin-distribution Task 8) — there is no local release/archive verb.
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
@@ -11,7 +12,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use agent_bar::plugin::bundle::{BundleBuilder, ReleaseBuilder};
+use agent_bar::plugin::bundle::BundleBuilder;
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
@@ -30,19 +31,6 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
-        "release" => match run_release(&mut args[1..]) {
-            Ok(meta) => {
-                eprintln!(
-                    "release ready: {} ({})",
-                    meta.archive.file_name, meta.archive.sha256
-                );
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("release failed: {e}");
-                ExitCode::from(1)
-            }
-        },
         "--help" | "help" => {
             print!("{}", usage());
             ExitCode::SUCCESS
@@ -55,9 +43,7 @@ fn main() -> ExitCode {
 }
 
 fn usage() -> String {
-    "agent-bar-bundle assemble output <plugin-dir> source-commit <40-lowercase-hex>\n\
-     agent-bar-bundle release bundle <plugin-dir> output <output-dir> source-commit <40-lowercase-hex> release-notes <path>\n"
-        .to_string()
+    "agent-bar-bundle assemble output <plugin-dir> source-commit <40-lowercase-hex>\n".to_string()
 }
 
 fn run_assemble(args: &mut [String]) -> Result<PathBuf, String> {
@@ -76,33 +62,6 @@ fn run_assemble(args: &mut [String]) -> Result<PathBuf, String> {
         .assemble(&output, &repo_root, &helper)
         .map_err(|e| e.to_string())?;
     Ok(output)
-}
-
-fn run_release(args: &mut [String]) -> Result<agent_bar::plugin::bundle::ReleaseMetadata, String> {
-    let map = parse_kv(
-        args,
-        &["bundle", "output", "source-commit", "release-notes"],
-    )?;
-    let plugin_dir = PathBuf::from(map.get("bundle").ok_or("missing bundle")?);
-    let output_dir = PathBuf::from(map.get("output").ok_or("missing output")?);
-    let source_commit = map
-        .get("source-commit")
-        .ok_or("missing source-commit")?
-        .clone();
-    let notes = PathBuf::from(map.get("release-notes").ok_or("missing release-notes")?);
-    let repo_root = repo_root()?;
-    let license = repo_root.join("LICENSE");
-    let builder = ReleaseBuilder::new(source_commit).map_err(|e| e.to_string())?;
-    builder
-        .release(
-            &plugin_dir,
-            &output_dir,
-            &notes,
-            &license,
-            false,
-            Some(&repo_root),
-        )
-        .map_err(|e| e.to_string())
 }
 
 /// Parse alternating keyword value pairs. Keywords must match exactly once.

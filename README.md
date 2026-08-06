@@ -38,23 +38,35 @@ token costs, spend, or session history; percentages and resets only.
 
 ## Install
 
-You need Omarchy with Quickshell (Quattro), Linux x86_64, and the
-provider CLIs or local provider data you want to monitor. The
-bootstrap uses `curl`, `tar`, `zstd`, and `sha256sum`.
+You need Omarchy with Quickshell (Quattro), Linux x86_64, `git`, and the
+provider CLIs or local provider data you want to monitor. `git` is already
+an Omarchy base tool, so there is nothing extra to install.
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/othavi0/agent-bar/master/install.sh
-less install.sh
-bash install.sh
+omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
 ```
 
-That installs one verified directory and nothing else:
+Omarchy asks where to place the bar widget when you enable it. If you skip
+that choice, the widget defaults to the right section of the bar. This
+clones one verified directory and nothing else:
 
 ```text
 ~/.config/omarchy/plugins/agent-bar.usage/
 ```
 
-Pin a version with `AGENT_BAR_VERSION=10.3.0 bash install.sh`.
+Update and remove with `omarchy plugin update agent-bar.usage` and
+`omarchy plugin remove agent-bar.usage`, or use the buttons in Settings.
+
+If you installed Agent Bar before this release (a plain directory, not a
+git checkout), the update button shows a one-time migration notice. Run:
+
+```bash
+omarchy plugin remove agent-bar.usage
+omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
+```
+
+Your settings, cache, and backups live outside the plugin directory and
+survive the swap.
 
 ## Settings
 

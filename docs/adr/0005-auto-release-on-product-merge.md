@@ -32,3 +32,17 @@ remain human-driven.
 - QML/Quattro gates do not run on the Ubuntu release runner; the release
   consumes checkpoint evidence accepted on Omarchy hosts before merge.
 - Docs-only merges cut nothing.
+
+## 2026-08-05 amendment
+
+The git-native plugin distribution conversion
+(`docs/superpowers/specs/2026-08-05-git-plugin-distribution-design.md`)
+replaced the "GitHub release with all assets in one call" step. The
+workflow now pushes the assembled plugin tree as one commit to the
+distribution repository (`othavi0/omarchy-agent-bar`) before publishing the
+product tag and GitHub Release, and the release carries no attached
+archive. A failed distribution push aborts the run before the tag or
+release exists, so a public release still never exists without its
+distributable tree. The decision and consequences above describe the
+original asset-attached model and are left as recorded; see
+[docs/dev/releasing.md](../dev/releasing.md) for the current pipeline.

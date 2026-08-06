@@ -1,12 +1,12 @@
 //! Exhaustive v10 word-based CLI grammar and binary contract tests.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 
 use agent_bar::cli::{
     parse, CacheMode, Command, ConfigCommand, ConfigInput, DoctorCommand, HelpTopic,
-    NotificationMode, ProviderId, SetupOptions, StatusFormat, StatusOptions, UpdateCommand,
-    GRAMMAR, PLUGIN, SUCCESS, VALIDATION,
+    NotificationMode, ProviderId, StatusFormat, StatusOptions, UpdateCommand, GRAMMAR, SUCCESS,
+    VALIDATION,
 };
 use assert_cmd::Command as CargoBin;
 use tempfile::tempdir;
@@ -172,14 +172,7 @@ fn login_config_setup_update_uninstall_doctor_forms() {
             r#"{"schemaVersion":1}"#.into()
         )))
     );
-    assert_eq!(
-        parse(words(&["setup"])).unwrap(),
-        Command::Setup(SetupOptions::Production)
-    );
-    assert_eq!(
-        parse(words(&["setup", "plugins-dir", "/tmp/plugins"])).unwrap(),
-        Command::Setup(SetupOptions::PluginsDir(PathBuf::from("/tmp/plugins")))
-    );
+    assert_eq!(parse(words(&["setup"])).unwrap(), Command::Setup);
     assert_eq!(
         parse(words(&["update"])).unwrap(),
         Command::Update(UpdateCommand::Interactive)
@@ -188,11 +181,10 @@ fn login_config_setup_update_uninstall_doctor_forms() {
         parse(words(&["update", "check"])).unwrap(),
         Command::Update(UpdateCommand::Check)
     );
-    let apply = parse(words(&["update", "apply", "10.0.0"])).unwrap();
-    match apply {
-        Command::Update(UpdateCommand::Apply(v)) => assert_eq!(v.as_str(), "10.0.0"),
-        other => panic!("expected apply, got {other:?}"),
-    }
+    assert_eq!(
+        parse(words(&["update", "apply"])).unwrap(),
+        Command::Update(UpdateCommand::Apply)
+    );
     assert_eq!(
         parse(words(&["uninstall"])).unwrap(),
         Command::Uninstall { purge: false }
@@ -212,28 +204,26 @@ fn login_config_setup_update_uninstall_doctor_forms() {
 }
 
 #[test]
-fn setup_plugins_dir_rejects_relative_and_plugin_root_path() {
-    let rel = parse(words(&["setup", "plugins-dir", "relative/plugins"])).unwrap_err();
-    assert_eq!(rel.exit_code, GRAMMAR);
-    let root = parse(words(&[
-        "setup",
-        "plugins-dir",
-        "/tmp/omarchy/plugins/agent-bar.usage",
-    ]))
-    .unwrap_err();
-    assert_eq!(root.exit_code, GRAMMAR);
+fn setup_rejects_any_argument() {
+    // `setup` takes no arguments now that install is git-clone-based
+    // (git-plugin-distribution Task 4): `plugins-dir` and any other word
+    // after `setup` is an ordinary unknown-argument grammar error.
+    let plugins_dir = parse(words(&["setup", "plugins-dir", "/tmp/plugins"])).unwrap_err();
+    assert_eq!(plugins_dir.exit_code, GRAMMAR);
+    let other = parse(words(&["setup", "extra"])).unwrap_err();
+    assert_eq!(other.exit_code, GRAMMAR);
 }
 
 #[test]
-fn update_apply_rejects_non_strict_semver() {
-    for version in ["10", "10.0", "v10.0.0", "latest", ""] {
-        let args = if version.is_empty() {
-            words(&["update", "apply"])
-        } else {
-            words(&["update", "apply", version])
-        };
-        let err = parse(args).unwrap_err();
-        assert_eq!(err.exit_code, GRAMMAR, "{version}");
+fn update_apply_rejects_trailing_arguments() {
+    // `update apply` takes no argument (git-plugin-distribution Task 2): it
+    // delegates unconditionally instead of applying a specific version.
+    for extra in [
+        words(&["update", "apply", "10.0.0"]),
+        words(&["update", "apply", "extra", "words"]),
+    ] {
+        let err = parse(extra.clone()).unwrap_err();
+        assert_eq!(err.exit_code, GRAMMAR, "{extra:?}");
     }
 }
 
@@ -347,6 +337,14 @@ fn binary_grammar_errors_exit_2() {
         .assert()
         .code(GRAMMAR)
         .stdout("");
+    // setup no longer accepts plugins-dir (git-plugin-distribution Task 4):
+    // git clone is the install now, so this is an ordinary unknown argument.
+    CargoBin::cargo_bin("agent-bar")
+        .unwrap()
+        .args(["setup", "plugins-dir", "/tmp/x"])
+        .assert()
+        .code(GRAMMAR)
+        .stdout("");
 }
 
 #[test]
@@ -361,114 +359,13 @@ fn binary_help_mentions_plugin_first_product() {
         .stderr("");
 }
 
-#[test]
-fn binary_setup_plugins_dir_validates_parent_versus_plugin_root() {
-    let dir = tempdir().unwrap();
-    let parent = dir.path().canonicalize().unwrap();
-    let plugin_root = parent.join("agent-bar.usage");
-    std::fs::create_dir_all(&plugin_root).unwrap();
-
-    // Grammar rejects direct plugin root (exit 2).
-    CargoBin::cargo_bin("agent-bar")
-        .unwrap()
-        .args(["setup", "plugins-dir", plugin_root.to_str().unwrap()])
-        .assert()
-        .code(GRAMMAR)
-        .stdout("");
-
-    // Relative path rejected by grammar.
-    CargoBin::cargo_bin("agent-bar")
-        .unwrap()
-        .args(["setup", "plugins-dir", "relative/plugins"])
-        .assert()
-        .code(GRAMMAR)
-        .stdout("");
-
-    // Missing absolute parent is validation (exit 3).
-    let missing = parent.join("does-not-exist");
-    CargoBin::cargo_bin("agent-bar")
-        .unwrap()
-        .args(["setup", "plugins-dir", missing.to_str().unwrap()])
-        .assert()
-        .code(VALIDATION)
-        .stdout("");
-
-    // Existing writable parent validates, then requires a complete plugin source tree
-    // (cargo-built helper is not under <plugin-root>/bin/).
-    CargoBin::cargo_bin("agent-bar")
-        .unwrap()
-        .args(["setup", "plugins-dir", parent.to_str().unwrap()])
-        .assert()
-        .code(PLUGIN)
-        .stdout("")
-        .stderr(predicates::str::contains("complete plugin tree"));
-}
-
-#[test]
-fn binary_setup_plugins_dir_installs_from_local_plugin_tree() {
-    let dir = tempdir().unwrap();
-    let home = dir.path().join("home");
-    std::fs::create_dir_all(&home).unwrap();
-
-    // Source plugin tree containing a copy of the helper under bin/.
-    let source_plugins = dir.path().join("source-plugins");
-    let source_root = source_plugins.join("agent-bar.usage");
-    let source_bin = source_root.join("bin");
-    std::fs::create_dir_all(&source_bin).unwrap();
-    std::fs::write(
-        source_root.join("manifest.json"),
-        r#"{"id":"agent-bar.usage","version":"10.0.0"}"#,
-    )
-    .unwrap();
-    let cargo_bin = assert_cmd::cargo::cargo_bin("agent-bar");
-    let helper = source_bin.join("agent-bar");
-    std::fs::copy(&cargo_bin, &helper).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&helper).unwrap().permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&helper, perms).unwrap();
-    }
-
-    let target_plugins = dir.path().join("target-plugins");
-    std::fs::create_dir_all(&target_plugins).unwrap();
-
-    let out = StdCommand::new(&helper)
-        .args(["setup", "plugins-dir", target_plugins.to_str().unwrap()])
-        .env("HOME", &home)
-        .env("XDG_STATE_HOME", home.join("state"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "setup failed: status={:?} stderr={}",
-        out.status.code(),
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    assert!(
-        target_plugins
-            .join("agent-bar.usage")
-            .join("manifest.json")
-            .is_file(),
-        "setup must install plugin tree under plugins-dir"
-    );
-    assert!(
-        target_plugins
-            .join("agent-bar.usage")
-            .join("bin")
-            .join("agent-bar")
-            .is_file(),
-        "setup must install helper binary"
-    );
-}
-
 /// Live QA regression (Task 22): setup must apply v9→v10 settings migration so
 /// `config show` / status can read the strict document. Reproduction of the
 /// failure where leftover v9 `settings.json` caused `unknown settings key`.
+///
+/// Retargeted at plain `setup` (git-plugin-distribution Task 4): setup no
+/// longer installs a plugin tree, so there is no source tree to stage — the
+/// binary under test is the real cargo-built helper, invoked directly.
 #[test]
 fn binary_setup_migrates_v9_settings_to_strict_v10() {
     let dir = tempdir().unwrap();
@@ -503,32 +400,10 @@ fn binary_setup_migrates_v9_settings_to_strict_v10() {
     .unwrap();
     let shell_before = std::fs::read(&shell_path).unwrap();
 
-    // Source plugin tree with helper under bin/.
-    let source_plugins = dir.path().join("source-plugins");
-    let source_root = source_plugins.join("agent-bar.usage");
-    let source_bin = source_root.join("bin");
-    std::fs::create_dir_all(&source_bin).unwrap();
-    std::fs::write(
-        source_root.join("manifest.json"),
-        r#"{"id":"agent-bar.usage","version":"10.0.0"}"#,
-    )
-    .unwrap();
-    let cargo_bin = assert_cmd::cargo::cargo_bin("agent-bar");
-    let helper = source_bin.join("agent-bar");
-    std::fs::copy(&cargo_bin, &helper).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&helper).unwrap().permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&helper, perms).unwrap();
-    }
-
-    let target_plugins = dir.path().join("target-plugins");
-    std::fs::create_dir_all(&target_plugins).unwrap();
+    let helper = assert_cmd::cargo::cargo_bin("agent-bar");
 
     let out = StdCommand::new(&helper)
-        .args(["setup", "plugins-dir", target_plugins.to_str().unwrap()])
+        .args(["setup"])
         .env("HOME", &home)
         .env("XDG_STATE_HOME", &state)
         .env("XDG_CACHE_HOME", &cache)
@@ -654,7 +529,10 @@ fn binary_doctor_clean_backs_up_and_removes_owned_legacy() {
 
 #[test]
 fn binary_interactive_update_rejects_non_tty() {
-    // Pipe stdin so the process is non-TTY.
+    // Bare `update` has no interactive flow left (git-plugin-distribution
+    // Task 2 removed the TTY confirm-then-apply dance): it always points at
+    // the two real subcommands, TTY or not. Pipe stdin so the process is
+    // non-TTY, matching the historical name of this test.
     let dir = tempdir().unwrap();
     let home = dir.path();
     let bin = assert_cmd::cargo::cargo_bin("agent-bar");
@@ -678,5 +556,393 @@ fn binary_interactive_update_rejects_non_tty() {
     assert!(
         stderr.contains("update check") && stderr.contains("update apply"),
         "stderr={stderr}"
+    );
+}
+
+/// Write an executable shell script (mirrors `tests/terminal_helper.rs`'s
+/// fake-PATH-tool pattern for `xdg-terminal-exec`).
+fn write_executable(path: &Path, body: &str) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(path, body).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(path, perms).unwrap();
+    }
+}
+
+/// Recording shim: records its NUL-separated argv to `out` then exits 0.
+fn recording_shim_body(out: &Path) -> String {
+    format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+: > "{out}"
+for a in "$@"; do
+  printf '%s\0' "$a" >> "{out}"
+done
+exit 0
+"#,
+        out = out.display()
+    )
+}
+
+fn read_nul_argv(path: &Path) -> Vec<String> {
+    let bytes = std::fs::read(path).unwrap_or_default();
+    bytes
+        .split(|b| *b == 0)
+        .filter(|s| !s.is_empty())
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect()
+}
+
+#[test]
+fn update_apply_emits_delegation_document() {
+    // omarchy and systemd-run resolved via fake PATH shims in a tempdir that
+    // record argv (git-plugin-distribution Task 2): `update apply` never
+    // downloads/stages/exchanges anymore, it hands off to
+    // `systemd-run --user --collect --unit=... -- <omarchy> plugin update
+    // agent-bar.usage --yes` and prints the delegation document.
+    let dir = tempdir().unwrap();
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+
+    let path_dir = dir.path().join("pathbin");
+    write_executable(&path_dir.join("omarchy"), "#!/usr/bin/env bash\nexit 0\n");
+
+    let systemd_run_argv = dir.path().join("systemd-run-argv.bin");
+    write_executable(
+        &path_dir.join("systemd-run"),
+        &recording_shim_body(&systemd_run_argv),
+    );
+
+    let path = format!(
+        "{}:{}",
+        path_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    let bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let output = StdCommand::new(&bin)
+        .args(["update", "apply"])
+        .env("HOME", &home)
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("PATH", &path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr={} stdout={}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.trim_end_matches('\n').lines().collect();
+    assert_eq!(lines.len(), 1, "stdout must be exactly one line: {stdout}");
+    let doc: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(doc["schemaVersion"], 1);
+    assert_eq!(doc["operation"], "updateApply");
+    assert_eq!(doc["delegated"], true);
+    let unit = doc["unit"].as_str().expect("unit is a string");
+    assert!(
+        unit.starts_with("agent-bar-update-") && unit.ends_with(".service"),
+        "unit={unit}"
+    );
+
+    let argv = read_nul_argv(&systemd_run_argv);
+    assert!(
+        argv.ends_with(&[
+            "plugin".to_string(),
+            "update".to_string(),
+            "agent-bar.usage".to_string(),
+            "--yes".to_string(),
+        ]),
+        "argv={argv:?}"
+    );
+    assert_eq!(argv.first().map(String::as_str), Some("--user"));
+    assert!(argv.contains(&"--collect".to_string()));
+    assert!(argv.iter().any(|a| a == &format!("--unit={unit}")));
+    assert!(argv.contains(&"--".to_string()));
+}
+
+/// Fixture for the two `uninstall` delegation tests: isolated XDG roots with
+/// owned content, plus a fake `$HOME/.config/omarchy/shell.json` the helper
+/// must never touch (git-plugin-distribution Task 3: shell.json is
+/// omarchy's now).
+struct UninstallFixture {
+    home: PathBuf,
+    settings_dir: PathBuf,
+    cache_dir: PathBuf,
+    state_dir: PathBuf,
+    shell_path: PathBuf,
+    shell_before: &'static [u8],
+    path_dir: PathBuf,
+    systemd_run_argv: PathBuf,
+}
+
+fn seed_uninstall_fixture(root: &Path) -> UninstallFixture {
+    let home = root.join("home");
+    let config = home.join("config");
+    let cache = home.join("cache");
+    let state = home.join("state");
+    std::fs::create_dir_all(&home).unwrap();
+
+    let settings_dir = config.join("agent-bar");
+    std::fs::create_dir_all(&settings_dir).unwrap();
+    std::fs::write(
+        settings_dir.join("settings.json"),
+        br#"{"schemaVersion":1}"#,
+    )
+    .unwrap();
+
+    let cache_dir = cache.join("agent-bar");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    std::fs::write(cache_dir.join("status-v2.json"), b"{}").unwrap();
+    std::fs::write(cache_dir.join("notification-state-v1.json"), b"{}").unwrap();
+
+    let shell_path = home.join(".config/omarchy/shell.json");
+    std::fs::create_dir_all(shell_path.parent().unwrap()).unwrap();
+    let shell_before: &'static [u8] = br#"{"bar":{"left":[{"id":"agent-bar.usage"}]}}"#;
+    std::fs::write(&shell_path, shell_before).unwrap();
+
+    let path_dir = root.join("pathbin");
+    write_executable(&path_dir.join("omarchy"), "#!/usr/bin/env bash\nexit 0\n");
+    let systemd_run_argv = root.join("systemd-run-argv.bin");
+    write_executable(
+        &path_dir.join("systemd-run"),
+        &recording_shim_body(&systemd_run_argv),
+    );
+
+    UninstallFixture {
+        home,
+        settings_dir,
+        cache_dir,
+        state_dir: state,
+        shell_path,
+        shell_before,
+        path_dir,
+        systemd_run_argv,
+    }
+}
+
+fn run_uninstall(
+    fx: &UninstallFixture,
+    args: &[&str],
+    confirmation: &[u8],
+) -> std::process::Output {
+    let path = format!(
+        "{}:{}",
+        fx.path_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let mut child = StdCommand::new(&bin)
+        .arg("uninstall")
+        .args(args)
+        .env("HOME", &fx.home)
+        .env("XDG_STATE_HOME", &fx.state_dir)
+        .env("XDG_CACHE_HOME", fx.cache_dir.parent().unwrap())
+        .env("XDG_CONFIG_HOME", fx.settings_dir.parent().unwrap())
+        .env("PATH", &path)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        use std::io::Write as _;
+        let mut stdin = child.stdin.take().unwrap();
+        stdin.write_all(confirmation).unwrap();
+    }
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn uninstall_purge_removes_xdg_state_and_delegates_remove() {
+    // git-plugin-distribution Task 3: `uninstall purge` no longer runs a
+    // quarantine/rollback worker chain over a copied worker binary — it
+    // purges Agent Bar's own XDG state directly under the maintenance gate,
+    // then hands the plugin tree + shell.json removal to `omarchy plugin
+    // remove` via the same detached-unit shape Task 2 used for `update
+    // apply`.
+    let dir = tempdir().unwrap();
+    let fx = seed_uninstall_fixture(dir.path());
+
+    let confirmation = br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":true}"#;
+    let output = run_uninstall(&fx, &["purge"], confirmation);
+    assert!(
+        output.status.success(),
+        "stderr={} stdout={}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.trim_end_matches('\n').lines().collect();
+    assert_eq!(lines.len(), 1, "stdout must be exactly one line: {stdout}");
+    let doc: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(doc["schemaVersion"], 1);
+    assert_eq!(doc["operation"], "uninstall");
+    assert_eq!(doc["purged"], true);
+    assert_eq!(doc["delegated"], true);
+    let unit = doc["unit"].as_str().expect("unit is a string");
+    assert!(
+        unit.starts_with("agent-bar-remove-") && unit.ends_with(".service"),
+        "unit={unit}"
+    );
+
+    assert!(!fx.settings_dir.exists(), "purge must remove settings dir");
+    assert!(!fx.cache_dir.exists(), "purge must remove cache dir");
+    assert!(
+        !fx.state_dir.join("agent-bar").exists(),
+        "purge must remove state dir"
+    );
+
+    let shell_after = std::fs::read(&fx.shell_path).unwrap();
+    assert_eq!(
+        shell_after, fx.shell_before,
+        "uninstall must never touch shell.json — omarchy owns it now"
+    );
+
+    let argv = read_nul_argv(&fx.systemd_run_argv);
+    assert!(
+        argv.ends_with(&[
+            "plugin".to_string(),
+            "remove".to_string(),
+            "agent-bar.usage".to_string(),
+            "--yes".to_string(),
+        ]),
+        "argv={argv:?}"
+    );
+    assert_eq!(argv.first().map(String::as_str), Some("--user"));
+    assert!(argv.contains(&"--collect".to_string()));
+    assert!(argv.iter().any(|a| a == &format!("--unit={unit}")));
+    assert!(argv.contains(&"--".to_string()));
+}
+
+#[test]
+fn uninstall_without_purge_preserves_xdg_state_and_delegates_remove() {
+    let dir = tempdir().unwrap();
+    let fx = seed_uninstall_fixture(dir.path());
+
+    let confirmation = br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":false}"#;
+    let output = run_uninstall(&fx, &[], confirmation);
+    assert!(
+        output.status.success(),
+        "stderr={} stdout={}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let doc: serde_json::Value = serde_json::from_str(stdout.trim_end()).unwrap();
+    assert_eq!(doc["schemaVersion"], 1);
+    assert_eq!(doc["operation"], "uninstall");
+    assert_eq!(doc["purged"], false);
+    assert_eq!(doc["delegated"], true);
+    let unit = doc["unit"].as_str().expect("unit is a string");
+    assert!(unit.starts_with("agent-bar-remove-") && unit.ends_with(".service"));
+
+    assert!(
+        fx.settings_dir.join("settings.json").is_file(),
+        "without purge, settings must survive"
+    );
+    assert!(
+        fx.cache_dir.join("status-v2.json").is_file(),
+        "without purge, cache must survive"
+    );
+    assert!(
+        fx.state_dir.join("agent-bar").exists(),
+        "without purge, state dir must survive"
+    );
+
+    let shell_after = std::fs::read(&fx.shell_path).unwrap();
+    assert_eq!(
+        shell_after, fx.shell_before,
+        "uninstall must never touch shell.json — omarchy owns it now"
+    );
+
+    let argv = read_nul_argv(&fx.systemd_run_argv);
+    assert!(
+        argv.ends_with(&[
+            "plugin".to_string(),
+            "remove".to_string(),
+            "agent-bar.usage".to_string(),
+            "--yes".to_string(),
+        ]),
+        "argv={argv:?}"
+    );
+}
+
+#[test]
+fn uninstall_purge_fails_closed_without_touching_state_when_omarchy_missing() {
+    // Review round 1, finding 1: tool resolution must happen before any
+    // destructive purge, so a missing `omarchy` fails the whole command
+    // before the settings/cache/state XDG roots are touched — not after
+    // they are already gone with the plugin never actually removed. PATH is
+    // isolated to just `path_dir` (no real system PATH fallback) so a real
+    // `omarchy` binary elsewhere on this machine cannot mask the failure.
+    let dir = tempdir().unwrap();
+    let fx = seed_uninstall_fixture(dir.path());
+    std::fs::remove_file(fx.path_dir.join("omarchy")).unwrap();
+
+    let bin = assert_cmd::cargo::cargo_bin("agent-bar");
+    let mut child = StdCommand::new(&bin)
+        .args(["uninstall", "purge"])
+        .env("HOME", &fx.home)
+        .env("XDG_STATE_HOME", &fx.state_dir)
+        .env("XDG_CACHE_HOME", fx.cache_dir.parent().unwrap())
+        .env("XDG_CONFIG_HOME", fx.settings_dir.parent().unwrap())
+        .env("PATH", &fx.path_dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        use std::io::Write as _;
+        let mut stdin = child.stdin.take().unwrap();
+        stdin
+            .write_all(
+                br#"{"schemaVersion":1,"operation":"uninstall","confirmed":true,"purgeSettingsAndBackups":true}"#,
+            )
+            .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+
+    assert!(
+        !output.status.success(),
+        "must fail closed when omarchy cannot be resolved: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "no delegation document on preflight failure"
+    );
+
+    assert!(
+        fx.settings_dir.join("settings.json").is_file(),
+        "settings must survive a failed tool resolution"
+    );
+    assert!(
+        fx.cache_dir.join("status-v2.json").is_file(),
+        "cache must survive a failed tool resolution"
+    );
+    assert!(
+        fx.state_dir.join("agent-bar").exists(),
+        "state dir must survive a failed tool resolution"
+    );
+
+    let shell_after = std::fs::read(&fx.shell_path).unwrap();
+    assert_eq!(
+        shell_after, fx.shell_before,
+        "uninstall must never touch shell.json — omarchy owns it now"
     );
 }

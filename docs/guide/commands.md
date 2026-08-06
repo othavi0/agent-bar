@@ -68,30 +68,32 @@ returns the canonical stored document.
 
 ```bash
 "$PLUGIN" setup
-"$PLUGIN" setup plugins-dir /temporary/plugins
 "$PLUGIN" doctor scan
 "$PLUGIN" doctor clean
 ```
 
-The `plugins-dir` argument is an existing writable absolute parent that
-contains or receives the `agent-bar.usage` child. `doctor scan` never writes.
-`doctor clean` backs up and removes only confirmed owned legacy artifacts.
+`setup` takes no arguments; it migrates settings to the current schema.
+Install and update go through `omarchy plugin add|update agent-bar.usage`.
+`doctor scan` never writes. `doctor clean` backs up and removes only
+confirmed owned legacy artifacts.
 
 ## Update
 
 ```bash
 "$PLUGIN" update
 "$PLUGIN" update check
-"$PLUGIN" update apply 10.1.0
+"$PLUGIN" update apply
 ```
 
-- `update` is the interactive recovery flow.
-- `update check` returns machine-readable compatibility metadata.
-- `update apply <version>` accepts only the exact version selected by a fresh
-  official check.
-
-Bare `update` requires TTY stdin and the exact confirmation line
-`update agent-bar`; non-TTY automation uses `update check`/`update apply`.
+- Bare `update` has no interactive flow; it prints usage pointing at `update
+  check` and `update apply`.
+- `update check` returns machine-readable compatibility metadata read from the
+  dist repo's git receipt.
+- `update apply` takes no argument. It delegates unconditionally to
+  `omarchy plugin update agent-bar.usage --yes` as a detached transient unit
+  and returns as soon as the handoff is accepted; that command owns the
+  fast-forward, re-validation, and automatic rollback on a failed
+  validation.
 
 Normal users use the Maintenance UI.
 
@@ -120,8 +122,23 @@ Both forms require confirmation before any mutation:
   `uninstall purge`), `confirmed` must be `true`, and trailing bytes after
   the JSON object are rejected.
 
-Standard uninstall preserves settings and migration backups. Purge
-additionally removes settings and owned backups.
+After confirmation, `uninstall` purges only Agent Bar's own XDG state, then
+delegates unconditionally to `omarchy plugin remove agent-bar.usage --yes`
+as a detached transient unit — that command owns the plugin tree and the
+`shell.json` entry now. Standard uninstall preserves settings, cache, and
+migration backups. Purge additionally removes `$XDG_CONFIG_HOME/agent-bar`,
+`$XDG_CACHE_HOME/agent-bar`, and `$XDG_STATE_HOME/agent-bar` before the
+handoff. Both forms print one stdout JSON line once the handoff is accepted:
+
+```json
+{
+  "schemaVersion": 1,
+  "operation": "uninstall",
+  "purged": false,
+  "delegated": true,
+  "unit": "agent-bar-remove-<txid>.service"
+}
+```
 
 ## Help and version
 
@@ -148,7 +165,7 @@ stderr.
 | `2` | CLI grammar or unsupported value |
 | `3` | Settings/input validation surfaced by `config` commands |
 | `4` | Status/schema/serialization invariant; `status` also exits 4 when settings fail to load |
-| `5` | Plugin integration or transaction failure |
+| `5` | Plugin integration or delegation failure |
 | `70` | Unexpected internal failure |
 
 `login <provider>` passes the delegated provider CLI's own exit code

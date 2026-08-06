@@ -10,7 +10,7 @@ pub const GRAMMAR: i32 = 2;
 pub const VALIDATION: i32 = 3;
 /// Status/schema/serialization invariant.
 pub const SERIALIZATION: i32 = 4;
-/// Plugin integration or transaction failure.
+/// Plugin integration or delegation failure.
 pub const PLUGIN: i32 = 5;
 /// Unexpected internal failure.
 pub const INTERNAL: i32 = 70;

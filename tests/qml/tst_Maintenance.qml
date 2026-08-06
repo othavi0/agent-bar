@@ -52,9 +52,8 @@ TestCase {
   function test_update_and_uninstall_argv() {
     var check = Core.updateCheckArgv("/bin/agent-bar")
     compare(check.join(" "), "/bin/agent-bar update check")
-    var apply = Core.updateApplyArgv("/bin/agent-bar", "10.1.0")
-    compare(apply.join(" "), "/bin/agent-bar update apply 10.1.0")
-    compare(Core.updateApplyArgv("/bin/agent-bar", ""), null)
+    var apply = Core.updateApplyArgv("/bin/agent-bar")
+    compare(apply.join(" "), "/bin/agent-bar update apply")
     compare(Core.uninstallArgv("/bin/agent-bar", false).join(" "), "/bin/agent-bar uninstall")
     compare(Core.uninstallArgv("/bin/agent-bar", true).join(" "), "/bin/agent-bar uninstall purge")
   }
@@ -79,29 +78,44 @@ TestCase {
   }
 
   function test_update_check_parse_available() {
-    var ui = Core.maintenanceUiIdle("10.2.0")
-    ui = Core.maintenanceUiFromCheck(ui, checkFixture("available.json"), 0, "10.2.0")
+    var ui = Core.maintenanceUiIdle("10.3.1")
+    ui = Core.maintenanceUiFromCheck(ui, checkFixture("available.json"), 0, "10.3.1")
     compare(ui.phase, "update_available")
-    compare(ui.installedVersion, "10.2.0")
-    compare(ui.targetVersion, "10.3.0")
-    compare(ui.releaseNotesUrl, "https://github.com/othavi0/agent-bar/releases/tag/v10.3.0")
-    verify(ui.message.indexOf("10.3.0") >= 0)
+    compare(ui.installedVersion, "10.3.1")
+    compare(ui.targetVersion, "10.4.0")
+    compare(ui.releaseNotesUrl, "https://github.com/othavi0/agent-bar/releases/tag/v10.4.0")
+    verify(ui.message.indexOf("10.4.0") >= 0)
   }
 
   function test_update_check_up_to_date() {
     // A stale target from an earlier check must not survive the new answer.
     var ui = Core.maintenanceUiIdle("")
-    ui.targetVersion = "10.3.0"
-    ui.releaseNotesUrl = "https://github.com/othavi0/agent-bar/releases/tag/v10.3.0"
+    ui.targetVersion = "10.4.0"
+    ui.releaseNotesUrl = "https://github.com/othavi0/agent-bar/releases/tag/v10.4.0"
     ui = Core.maintenanceUiFromCheck(ui, checkFixture("up-to-date.json"), 0, "")
     compare(ui.phase, "up_to_date")
-    compare(ui.installedVersion, "10.3.0")
+    compare(ui.installedVersion, "10.4.0")
     compare(ui.targetVersion, "")
     compare(ui.releaseNotesUrl, "")
     // latestCompatible is null when no release fits this target/contract;
     // there is still nothing to offer, so the UI answer is the same.
-    var none = Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("10.3.0"), checkFixture("no-compatible.json"), 0, "10.3.0")
+    var none = Core.maintenanceUiFromCheck(Core.maintenanceUiIdle("10.3.1"), checkFixture("no-compatible.json"), 0, "10.3.1")
     compare(none.phase, "up_to_date")
+  }
+
+  // reinstallRequired short-circuits before the available/up-to-date branches
+  // even though this fixture's `available` is false — the git-less install
+  // sentinel takes priority over the ordinary "nothing to offer" answer.
+  function test_update_check_reinstall_required() {
+    var ui = Core.maintenanceUiIdle("10.3.1")
+    ui.targetVersion = "10.4.0"
+    ui.releaseNotesUrl = "https://github.com/othavi0/agent-bar/releases/tag/v10.4.0"
+    ui = Core.maintenanceUiFromCheck(ui, checkFixture("reinstall-required.json"), 0, "10.3.1")
+    compare(ui.phase, "reinstall_required")
+    compare(ui.targetVersion, "")
+    compare(ui.releaseNotesUrl, "")
+    verify(ui.message.indexOf("omarchy plugin remove agent-bar.usage") >= 0)
+    verify(ui.message.indexOf("omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git") >= 0)
   }
 
   // BUNDLE-021: a successful check always writes exactly the JSON document,
@@ -118,16 +132,11 @@ TestCase {
     var ui = Core.maintenanceUiIdle("10.0.0")
     ui.targetVersion = "10.2.0"
     var msg = Core.updateConfirmMessage(ui)
-    verify(msg.indexOf("10.0.0") >= 0)
-    verify(msg.indexOf("10.2.0") >= 0)
-    verify(msg.toLowerCase().indexOf("settings") >= 0)
-    // Checks that rollback is communicated, not the exact phrasing — any of
-    // these three forms says it.
-    verify(msg.toLowerCase().indexOf("roll back") >= 0
-        || msg.toLowerCase().indexOf("rollback") >= 0
-        || msg.toLowerCase().indexOf("rolls back") >= 0)
+    compare(msg, "Updates 10.0.0 → 10.2.0. Settings stay. "
+        + "Fast-forwards to the latest release; a failed validation rolls back.")
     // §5.6 shortened it; the old sentence must not come back.
     verify(msg.indexOf("This replaces the plugin bundle") < 0)
+    verify(msg.indexOf("Rolls back if it fails") < 0)
   }
 
   function test_update_check_failure_has_one_string() {

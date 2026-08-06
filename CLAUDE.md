@@ -37,8 +37,9 @@ v10 includes:
 
 - Claude, Codex, Amp, and Grok percentage quota windows.
 - One shared Quickshell service and monitor-local bar widgets.
-- Consolidated popup, Settings, login delegation, update, and uninstall.
-- Typed status JSON, cache, notifications, migration, backup, and rollback.
+- Consolidated popup, Settings, login delegation, update, and uninstall
+  delegated to the Omarchy plugin manager.
+- Typed status JSON, cache, notifications, settings migration, and backup.
 
 v10 removes:
 
@@ -61,8 +62,9 @@ dependencies.
 - `Service.qml` is the sole polling/process owner.
 - `BarWidget.qml` resolves the service through
   `bar.shell.serviceFor(moduleName)`.
-- Fresh setup uses `omarchy plugin enable agent-bar.usage`.
-- Existing setup/update uses `omarchy plugin rescan`.
+- Fresh installs use `omarchy plugin add <dist-repo-url>`, which clones,
+  validates, and moves the tree; enabling it is a separate confirmation.
+- Existing installs update with `omarchy plugin update agent-bar.usage`.
 - Never run an unconditional `omarchy bar plugin add`.
 - Update never edits `shell.json`.
 
@@ -116,9 +118,11 @@ its exit code as a verdict: it exits 0 while printing warnings. Type errors,
 dangling references, and readonly-property assignments in plugin QML reach
 only `qmltestrunner`, `omarchy plugin validate`, and live QA.
 
-Shell changes run ShellCheck. Bundle changes run the complete archive,
-inventory, mode, architecture, version, traversal, and rollback matrix in the
-v10 specification.
+Shell changes run ShellCheck. Bundle changes run `cargo test --test
+dist_tree_validate`, which mirrors `omarchy-plugin-validate` and the complete
+inventory/mode/architecture/version matrix; see
+[docs/specs/v10/08-plugin-bundle-and-release.md](docs/specs/v10/08-plugin-bundle-and-release.md)
+for the amended contract.
 
 Tests use fake providers, fake clock/process/HTTP/filesystem seams, temporary
 plugin roots, and isolated XDG directories. No live network or credentials.

@@ -30,6 +30,7 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
     "displayName": "Agent Bar",
     "description": "Shows normalized provider quota and reset information.",
     "category": "AI",
+    "defaultSection": "right",
     "aliases": ["agent-bar"],
     "allowMultiple": false,
     "defaults": {},
@@ -39,7 +40,9 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
 ```
 
 `__AGENT_BAR_VERSION__` is a build-time placeholder substituted with the
-crate version when the bundle is assembled.
+crate version when the bundle is assembled. `barWidget.defaultSection`
+drives the section `omarchy plugin add`'s interactive placement prompt
+preselects, and the section used when that prompt is skipped.
 
 Do not add `activation`, `keepLoaded`, or inline Agent Bar settings.
 
@@ -91,19 +94,33 @@ shows an as-needed scrollbar. Do not add custom wheel handling.
 
 ## Commands
 
-Fresh entry:
+Install (clones, validates, and moves the tree; prompts to enable):
+
+```bash
+omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
+```
+
+Update (git fetch, fast-forward, re-validate; rolls back on a failed
+validation):
+
+```bash
+omarchy plugin update agent-bar.usage
+```
+
+Remove (disables the bar entry, deletes or backs up the tree, rescans):
+
+```bash
+omarchy plugin remove agent-bar.usage
+```
+
+An already-installed but disabled plugin can be enabled directly:
 
 ```bash
 omarchy plugin enable agent-bar.usage
 ```
 
-Reload existing code:
-
-```bash
-omarchy plugin rescan
-```
-
-Do not run `omarchy bar plugin add agent-bar.usage` over an existing entry.
+Do not run `omarchy bar plugin add agent-bar.usage` over an existing entry;
+it can reset placement.
 
 ## Interactive login
 

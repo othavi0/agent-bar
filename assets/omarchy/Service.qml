@@ -683,7 +683,7 @@ Item {
     var intention = pendingMaintenanceIntention
     var argv = null
     if (intention && intention.kind === "update_apply")
-      argv = Maintenance.updateApplyArgv(helper, intention.version)
+      argv = Maintenance.updateApplyArgv(helper)
     else if (intention && intention.kind === "uninstall")
       argv = Maintenance.uninstallArgv(helper, intention.purge)
     else
