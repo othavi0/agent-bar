@@ -1,6 +1,6 @@
 //! Distribution-tree completeness (git-plugin-distribution Task 6).
 //!
-//! The assembled `agent-bar.usage/` tree is pushed verbatim as the
+//! The assembled `othavi0.agent-bar/` tree is pushed verbatim as the
 //! distribution repo's complete state, so it has to satisfy two things at
 //! once: the Omarchy plugin contract the shell enforces at install time, and
 //! the marketplace expectation of a README/LICENSE/preview at the repo root.
@@ -151,7 +151,7 @@ fn assemble_fake_tree(dir: &Path) -> (PathBuf, agent_bar::plugin::bundle::Bundle
     let helper = dir.join("agent-bar");
     fake_helper(&helper, version);
 
-    let out = dir.join("agent-bar.usage");
+    let out = dir.join("othavi0.agent-bar");
     let builder = BundleBuilder::new(version, "0".repeat(40)).unwrap();
     let receipt = builder.assemble(&out, &repo_root, &helper).unwrap();
     (out, receipt)

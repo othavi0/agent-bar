@@ -888,7 +888,7 @@ Item {
   }
 
   IpcHandler {
-    target: "agent-bar.usage"
+    target: "othavi0.agent-bar"
     function health(expectedVersion): string { return root.health(expectedVersion) }
     function refresh(providerId): string { return root.refresh(providerId) }
   }

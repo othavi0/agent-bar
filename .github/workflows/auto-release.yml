@@ -84,15 +84,15 @@ jobs:
           mkdir -p target/release
           cp -f target/x86_64-unknown-linux-gnu/release/agent-bar target/release/agent-bar
           cargo run --bin agent-bar-bundle -- \
-            assemble output target/release/agent-bar.usage \
+            assemble output target/release/othavi0.agent-bar \
             source-commit "$SOURCE_COMMIT"
           scripts/check-version "v${{ steps.cut.outputs.version }}" \
-            target/release/agent-bar.usage
+            target/release/othavi0.agent-bar
 
       - name: Bundle inventory / modes / architecture
         run: |
           set -euo pipefail
-          ROOT=target/release/agent-bar.usage
+          ROOT=target/release/othavi0.agent-bar
           test -f "$ROOT/bundle.json"
           test -f "$ROOT/manifest.json"
           test -x "$ROOT/bin/agent-bar"
@@ -119,7 +119,7 @@ jobs:
           SOURCE_COMMIT="$(git rev-parse HEAD)"
           git clone --depth 1 git@github.com:othavi0/omarchy-agent-bar.git dist
           find dist -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
-          cp -a target/release/agent-bar.usage/. dist/
+          cp -a target/release/othavi0.agent-bar/. dist/
           git -C dist config user.name "github-actions[bot]"
           git -C dist config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C dist add -A

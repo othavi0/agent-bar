@@ -112,7 +112,7 @@ async fn successful_login_runs_exact_refresh_ipc_argv() {
         &vec![
             "omarchy-shell".to_owned(),
             "-q".to_owned(),
-            "agent-bar.usage".to_owned(),
+            "othavi0.agent-bar".to_owned(),
             "refresh".to_owned(),
             "claude".to_owned(),
         ]
@@ -124,7 +124,7 @@ async fn successful_login_runs_exact_refresh_ipc_argv() {
         ipc_specs[0].args,
         vec![
             "-q".to_owned(),
-            "agent-bar.usage".to_owned(),
+            "othavi0.agent-bar".to_owned(),
             "refresh".to_owned(),
             "claude".to_owned(),
         ]

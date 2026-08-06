@@ -131,8 +131,8 @@ themselves:
    (fails closed before anything destructive if either is missing);
 2. `uninstall purge` removes Agent Bar's own XDG state here, before the
    handoff;
-3. run `omarchy plugin update agent-bar.usage --yes` or
-   `omarchy plugin remove agent-bar.usage --yes` as a detached transient
+3. run `omarchy plugin update othavi0.agent-bar --yes` or
+   `omarchy plugin remove othavi0.agent-bar --yes` as a detached transient
    `systemd-run --user` unit;
 4. return once systemd has accepted and started the unit.
 

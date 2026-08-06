@@ -30,7 +30,7 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
             let mut out = String::new();
             out.push_str("Agent Bar — Omarchy Quattro plugin helper\n");
             out.push('\n');
-            out.push_str("The normal interface is the agent-bar.usage Quickshell plugin.\n");
+            out.push_str("The normal interface is the othavi0.agent-bar Quickshell plugin.\n");
             out.push_str("This private helper is for diagnostics, recovery, and tests.\n");
             out.push('\n');
             out.push_str("Usage:\n");
@@ -70,12 +70,12 @@ pub fn help_text(topic: Option<HelpTopic>) -> String {
             .to_owned(),
         Some(HelpTopic::Setup) => {
             "setup — migrate settings to the current schema; takes no arguments\n\
-             Install and update are 'omarchy plugin add|update agent-bar.usage'.\n"
+             Install and update are 'omarchy plugin add|update othavi0.agent-bar'.\n"
                 .to_owned()
         }
         Some(HelpTopic::Update) => "update — print usage; no interactive flow\n\
              update check — report whether a newer release exists\n\
-             update apply — delegate to 'omarchy plugin update agent-bar.usage'\n"
+             update apply — delegate to 'omarchy plugin update othavi0.agent-bar'\n"
             .to_owned(),
         Some(HelpTopic::Uninstall) => {
             "uninstall — remove the plugin (keeps settings and backups)\n\
@@ -121,7 +121,7 @@ pub fn dispatch(command: Command) -> Result<(), CliFailure> {
 /// `setup`: settings migration only (git-plugin-distribution Task 4).
 ///
 /// The plugin tree install/activate that used to live here is gone —
-/// `omarchy plugin add agent-bar.usage` is the install now, and `update`
+/// `omarchy plugin add othavi0.agent-bar` is the install now, and `update`
 /// (Task 2) / `uninstall` (Task 3) already delegate their tree mutations to
 /// the omarchy CLI the same way. `setup` keeps the one piece of state only
 /// this helper owns: MIG-007..016 explicit settings/shell v9-to-v10
@@ -404,7 +404,7 @@ fn dispatch_uninstall(purge: bool) -> Result<(), CliFailure> {
         omarchy_bin.as_str(),
         "plugin",
         "remove",
-        "agent-bar.usage",
+        "othavi0.agent-bar",
         "--yes",
     ];
 
@@ -463,7 +463,7 @@ fn dispatch_update_check() -> Result<(), CliFailure> {
 /// Exact successful `update apply` stdout document (git-plugin-distribution
 /// Task 2). `update apply` no longer downloads, stages, or swaps the plugin
 /// tree itself — it hands the whole fast-forward to
-/// `omarchy plugin update agent-bar.usage --yes`, running as a detached
+/// `omarchy plugin update othavi0.agent-bar --yes`, running as a detached
 /// transient unit so this process can return as soon as the handoff is
 /// accepted.
 #[derive(Serialize)]
@@ -519,7 +519,7 @@ fn dispatch_update_apply() -> Result<(), CliFailure> {
         omarchy_bin.as_str(),
         "plugin",
         "update",
-        "agent-bar.usage",
+        "othavi0.agent-bar",
         "--yes",
     ];
 

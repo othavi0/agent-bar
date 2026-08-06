@@ -84,7 +84,7 @@ TestCase {
   // Chip logic matching BarWidget.qml agentService resolution (without qs.Ui).
   component AgentChip: Item {
     property var bar: null
-    property string moduleName: "agent-bar.usage"
+    property string moduleName: "othavi0.agent-bar"
     readonly property var agentService: bar && bar.shell
         ? bar.shell.serviceFor(moduleName)
         : null
@@ -129,15 +129,15 @@ TestCase {
 
   function test_two_widgets_resolve_same_service() {
     var svc = Qt.createQmlObject('import QtQuick; Item { property string helperVersion: "10.0.0"; property bool versionReady: true; property bool versionFailed: false }', testCase)
-    fakeShell.registerService("agent-bar.usage", svc)
+    fakeShell.registerService("othavi0.agent-bar", svc)
 
     var w1 = agentChipComp.createObject(testCase, {
       bar: fakeBar,
-      moduleName: "agent-bar.usage"
+      moduleName: "othavi0.agent-bar"
     })
     var w2 = agentChipComp.createObject(testCase, {
       bar: fakeBar,
-      moduleName: "agent-bar.usage"
+      moduleName: "othavi0.agent-bar"
     })
     verify(w1.agentService !== null)
     verify(w2.agentService !== null)
@@ -154,7 +154,7 @@ TestCase {
   function test_widget_without_shell_has_null_service() {
     var w = agentChipComp.createObject(testCase, {
       bar: null,
-      moduleName: "agent-bar.usage"
+      moduleName: "othavi0.agent-bar"
     })
     compare(w.agentService, null)
     w.destroy()
@@ -166,7 +166,7 @@ TestCase {
     xhr.send()
     var src = String(xhr.responseText)
     verify(src.indexOf("serviceFor(moduleName)") >= 0)
-    verify(src.indexOf("moduleName: \"agent-bar.usage\"") >= 0)
+    verify(src.indexOf("moduleName: \"othavi0.agent-bar\"") >= 0)
     verify(src.indexOf("Qt.resolvedUrl") >= 0) // icons only
   }
 

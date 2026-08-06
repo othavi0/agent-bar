@@ -3,7 +3,7 @@
 Resolve the private helper:
 
 ```bash
-PLUGIN="$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar"
+PLUGIN="$HOME/.config/omarchy/plugins/othavi0.agent-bar/bin/agent-bar"
 ```
 
 ## Start with doctor
@@ -61,7 +61,7 @@ Context is no longer a product window.
 Check:
 
 ```bash
-omarchy plugin validate "$HOME/.config/omarchy/plugins/agent-bar.usage"
+omarchy plugin validate "$HOME/.config/omarchy/plugins/othavi0.agent-bar"
 omarchy-shell shell rescanPlugins
 ```
 
@@ -69,7 +69,7 @@ Then inspect:
 
 - manifest ID and version;
 - `service` and `bar-widget` entry points;
-- one exact `agent-bar.usage` entry in `shell.json`;
+- one exact `othavi0.agent-bar` entry in `shell.json`;
 - helper/manifest version equality.
 
 Do not run `omarchy bar plugin add` over an existing entry; it can reset
@@ -91,7 +91,7 @@ until then.
 
 ## Update failed
 
-`update apply` only hands off to `omarchy plugin update agent-bar.usage
+`update apply` only hands off to `omarchy plugin update othavi0.agent-bar
 --yes`; that command owns the actual result. Its failure modes:
 
 - **Non-fast-forward**: `omarchy plugin update` refuses to update a plugin
@@ -109,7 +109,7 @@ until then.
   the one-time migration instruction:
 
   ```bash
-  omarchy plugin remove agent-bar.usage
+  omarchy plugin remove othavi0.agent-bar
   omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
   ```
 

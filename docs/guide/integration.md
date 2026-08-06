@@ -11,7 +11,7 @@ omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
 
 This clones the distribution repository, validates the clone with
 `omarchy-plugin-validate`, and moves it to
-`$HOME/.config/omarchy/plugins/agent-bar.usage`. Omarchy then asks whether
+`$HOME/.config/omarchy/plugins/othavi0.agent-bar`. Omarchy then asks whether
 to enable the plugin now; enabling it prompts for a bar section, defaulting
 to `right` from the manifest's `barWidget.defaultSection` when the prompt is
 skipped.
@@ -20,8 +20,8 @@ Update and remove use the matching Omarchy commands, or the Settings
 Maintenance buttons, which delegate to them:
 
 ```bash
-omarchy plugin update agent-bar.usage
-omarchy plugin remove agent-bar.usage
+omarchy plugin update othavi0.agent-bar
+omarchy plugin remove othavi0.agent-bar
 ```
 
 `omarchy plugin update` fetches, fast-forwards, and re-validates the
@@ -42,7 +42,7 @@ the missing `.git` and reports `reinstallRequired: true`; the Settings UI
 shows a one-time migration instruction instead of a false "up to date":
 
 ```bash
-omarchy plugin remove agent-bar.usage
+omarchy plugin remove othavi0.agent-bar
 omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
 ```
 
@@ -55,9 +55,9 @@ plugin directory under XDG paths and are untouched by either command.
 
 `shell.json` owns plugin presence and placement. Agent Bar:
 
-- creates one `{ "id": "agent-bar.usage" }` entry only when enabled, either
+- creates one `{ "id": "othavi0.agent-bar" }` entry only when enabled, either
   through the `omarchy plugin add` placement prompt or a later
-  `omarchy plugin enable agent-bar.usage`;
+  `omarchy plugin enable othavi0.agent-bar`;
 - does not edit `shell.json` during update;
 - removes only its own entry during uninstall, which `omarchy plugin
   remove` performs.
@@ -83,10 +83,10 @@ as a detached transient unit:
 
 ```text
 systemd-run --user --collect --unit=agent-bar-update-<txid>.service \
-  -- <omarchy> plugin update agent-bar.usage --yes
+  -- <omarchy> plugin update othavi0.agent-bar --yes
 
 systemd-run --user --collect --unit=agent-bar-remove-<txid>.service \
-  -- <omarchy> plugin remove agent-bar.usage --yes
+  -- <omarchy> plugin remove othavi0.agent-bar --yes
 ```
 
 Detachment lets the helper return as soon as systemd accepts the unit,
@@ -124,7 +124,7 @@ legacy. Modified and ambiguous paths remain untouched.
 
 After confirmation, `uninstall` purges only Agent Bar's own XDG state (when
 invoked with `purge`) under the exclusive maintenance lock, then delegates
-unconditionally to `omarchy plugin remove agent-bar.usage --yes` as above.
+unconditionally to `omarchy plugin remove othavi0.agent-bar --yes` as above.
 Standard uninstall preserves settings, cache, and migration backups; purge
 additionally removes `$XDG_CONFIG_HOME/agent-bar`, `$XDG_CACHE_HOME/agent-bar`,
 and `$XDG_STATE_HOME/agent-bar` before the handoff. Purge and the delegated

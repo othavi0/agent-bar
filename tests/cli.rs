@@ -605,7 +605,7 @@ fn update_apply_emits_delegation_document() {
     // record argv (git-plugin-distribution Task 2): `update apply` never
     // downloads/stages/exchanges anymore, it hands off to
     // `systemd-run --user --collect --unit=... -- <omarchy> plugin update
-    // agent-bar.usage --yes` and prints the delegation document.
+    // othavi0.agent-bar --yes` and prints the delegation document.
     let dir = tempdir().unwrap();
     let home = dir.path().join("home");
     std::fs::create_dir_all(&home).unwrap();
@@ -660,7 +660,7 @@ fn update_apply_emits_delegation_document() {
         argv.ends_with(&[
             "plugin".to_string(),
             "update".to_string(),
-            "agent-bar.usage".to_string(),
+            "othavi0.agent-bar".to_string(),
             "--yes".to_string(),
         ]),
         "argv={argv:?}"
@@ -708,7 +708,7 @@ fn seed_uninstall_fixture(root: &Path) -> UninstallFixture {
 
     let shell_path = home.join(".config/omarchy/shell.json");
     std::fs::create_dir_all(shell_path.parent().unwrap()).unwrap();
-    let shell_before: &'static [u8] = br#"{"bar":{"left":[{"id":"agent-bar.usage"}]}}"#;
+    let shell_before: &'static [u8] = br#"{"bar":{"left":[{"id":"othavi0.agent-bar"}]}}"#;
     std::fs::write(&shell_path, shell_before).unwrap();
 
     let path_dir = root.join("pathbin");
@@ -815,7 +815,7 @@ fn uninstall_purge_removes_xdg_state_and_delegates_remove() {
         argv.ends_with(&[
             "plugin".to_string(),
             "remove".to_string(),
-            "agent-bar.usage".to_string(),
+            "othavi0.agent-bar".to_string(),
             "--yes".to_string(),
         ]),
         "argv={argv:?}"
@@ -873,7 +873,7 @@ fn uninstall_without_purge_preserves_xdg_state_and_delegates_remove() {
         argv.ends_with(&[
             "plugin".to_string(),
             "remove".to_string(),
-            "agent-bar.usage".to_string(),
+            "othavi0.agent-bar".to_string(),
             "--yes".to_string(),
         ]),
         "argv={argv:?}"

@@ -90,7 +90,9 @@ The final Quattro-validated manifest is:
 It must:
 
 - use schema version 1;
-- retain ID `agent-bar.usage`;
+- retain ID `agent-bar.usage` (superseded 2026-08-06: the ID is
+  `othavi0.agent-bar`, renamed before the marketplace listing went live; see
+  `docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`);
 - declare `service` and `bar-widget`;
 - map the service to `Service.qml`;
 - map the bar widget to `BarWidget.qml`;

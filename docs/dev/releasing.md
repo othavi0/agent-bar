@@ -32,7 +32,7 @@ or global installation.
    exact tagged commit.
 4. The plugin tree is built and verified: the helper builds for
    `x86_64-unknown-linux-gnu`, the assemble step writes
-   `target/release/agent-bar.usage` and runs `scripts/check-version`, and
+   `target/release/othavi0.agent-bar` and runs `scripts/check-version`, and
    an inventory step checks required files, executable modes, and the
    target architecture.
 5. The assembled tree is pushed to the distribution repository first. A
@@ -87,13 +87,13 @@ After merging:
 
    ```bash
    # The Settings button's first stage: must report the new version.
-   ~/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar update check
+   ~/.config/omarchy/plugins/othavi0.agent-bar/bin/agent-bar update check
 
    # The apply path (the Settings button delegates to this same command).
-   omarchy plugin update agent-bar.usage
+   omarchy plugin update othavi0.agent-bar
 
    # Must now report available: false with current == the new version.
-   ~/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar update check
+   ~/.config/omarchy/plugins/othavi0.agent-bar/bin/agent-bar update check
    ```
 
    Then glance at the bar: chips must render with live data after the
@@ -183,6 +183,6 @@ Local bundle reproduction for debugging:
 ```bash
 SOURCE_COMMIT="$(git rev-parse HEAD)"
 cargo run --bin agent-bar-bundle -- assemble \
-  output target/release-candidate/agent-bar.usage \
+  output target/release-candidate/othavi0.agent-bar \
   source-commit "$SOURCE_COMMIT"
 ```

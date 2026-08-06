@@ -17,7 +17,7 @@ The approved v10 design and implementation plan are in
 ## Hard bootstrap
 
 - Rust/Cargo and QML only; no Node runtime or test tooling.
-- Product is only the Quickshell plugin `agent-bar.usage`.
+- Product is only the Quickshell plugin `othavi0.agent-bar`.
 - The Rust helper is private inside the plugin bundle.
 - Keep the terminal helper as argv-safe Bash.
 - Do not run live setup, update, uninstall, rescan, shell restart, or config

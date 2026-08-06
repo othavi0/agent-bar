@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 | --- | --- |
-| `$HOME/.config/omarchy/plugins/agent-bar.usage/` | Complete plugin bundle |
+| `$HOME/.config/omarchy/plugins/othavi0.agent-bar/` | Complete plugin bundle |
 | `$XDG_CONFIG_HOME/agent-bar/settings.json` | Canonical product settings |
 | `$XDG_CACHE_HOME/agent-bar/status-v2.json` | Normalized provider cache |
 | `$XDG_CACHE_HOME/agent-bar/status.lock` | Cross-process collection lock |

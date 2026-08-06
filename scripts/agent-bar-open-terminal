@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Interactive provider login launcher for the agent-bar.usage plugin bundle.
+# Interactive provider login launcher for the othavi0.agent-bar plugin bundle.
 # Exact contract: login <provider> → xdg-terminal-exec → private bin/agent-bar.
 set -euo pipefail
 

@@ -210,7 +210,7 @@ TestCase {
 
   function test_manifest_shape() {
     var m = loadManifest()
-    compare(m.id, "agent-bar.usage")
+    compare(m.id, "othavi0.agent-bar")
     verify(m.kinds.indexOf("service") >= 0)
     verify(m.kinds.indexOf("bar-widget") >= 0)
     compare(m.barWidget.schema.length, 0)
@@ -403,7 +403,7 @@ TestCase {
     verify(src.indexOf("id: maintenanceCheckProcess") >= 0)
     verify(src.indexOf("id: maintenanceHandoffProcess") >= 0)
     verify(src.indexOf("id: pollTimer") >= 0)
-    verify(src.indexOf('target: "agent-bar.usage"') >= 0)
+    verify(src.indexOf('target: "othavi0.agent-bar"') >= 0)
   }
 
   // Live Quattro: duplicate Component.onCompleted → "Property value set multiple times"

@@ -106,7 +106,7 @@ pub enum ConfigInput {
 
 /// Update subcommands. `Apply` takes no argument: `update apply` is an
 /// unconditional detached delegation to `omarchy plugin update
-/// agent-bar.usage --yes` (git-plugin-distribution Task 2), not a
+/// othavi0.agent-bar --yes` (git-plugin-distribution Task 2), not a
 /// version-gated apply of a specific release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateCommand {

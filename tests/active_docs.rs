@@ -232,13 +232,14 @@ fn extract_helper_argv(line: &str) -> Option<Vec<String>> {
     } else if rest.starts_with("$PLUGIN") {
         rest = rest["$PLUGIN".len()..].trim_start();
     } else if let Some(after) = rest.strip_prefix("agent-bar") {
-        // Reject archive/product filenames like `agent-bar.usage-10.0.0-…`.
+        // Reject archive/product filenames like `othavi0.agent-bar-10.0.0-…`.
         if !after.is_empty() && !after.starts_with(char::is_whitespace) {
             return None;
         }
         rest = after.trim_start();
-    } else if rest.starts_with("\"$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar\"") {
-        rest = rest["\"$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar\"".len()..]
+    } else if rest.starts_with("\"$HOME/.config/omarchy/plugins/othavi0.agent-bar/bin/agent-bar\"")
+    {
+        rest = rest["\"$HOME/.config/omarchy/plugins/othavi0.agent-bar/bin/agent-bar\"".len()..]
             .trim_start();
     } else {
         return None;
@@ -602,6 +603,8 @@ fn active_docs_release_notes_10_0_0_exist() {
         body.contains("10.0.0"),
         "release notes must mention version 10.0.0"
     );
+    // Historical document: 10.0.0 shipped under the original plugin ID and
+    // keeps it (the ID became othavi0.agent-bar on 2026-08-06).
     assert!(
         body.contains("agent-bar.usage"),
         "release notes must name the plugin product agent-bar.usage"

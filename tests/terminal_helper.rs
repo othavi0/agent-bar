@@ -21,7 +21,7 @@ fn write_executable(path: &Path, body: &str) {
 
 /// Minimal plugin root: scripts/helper + bin/agent-bar stub + PATH fake xdg-terminal-exec.
 fn fixture_plugin_root(tmp: &Path) -> PathBuf {
-    let plugin = tmp.join("agent-bar.usage");
+    let plugin = tmp.join("othavi0.agent-bar");
     let scripts = plugin.join("scripts");
     let bin = plugin.join("bin");
     fs::create_dir_all(&scripts).unwrap();

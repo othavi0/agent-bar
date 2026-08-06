@@ -54,7 +54,10 @@ The manifest records:
 ## v9-to-v10 migration
 
 - `MIG-007`: Migration is data migration only. No v9 behavior remains callable.
-- `MIG-008`: Keep plugin ID `agent-bar.usage`.
+- `MIG-008`: Keep plugin ID `agent-bar.usage`. (Superseded 2026-08-06: the
+  live ID is `othavi0.agent-bar`. The v9 migration matcher still recognizes
+  the literal `agent-bar.usage` in legacy `shell.json` data on disk; see
+  `docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`.)
 - `MIG-009`: Preserve valid provider enablement, order, display metric, refresh
   interval, notification preference, bar section, index, and compatible inline
   layout.

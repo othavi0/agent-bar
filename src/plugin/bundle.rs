@@ -144,7 +144,7 @@ impl BundleReceipt {
     }
 }
 
-/// Builds a complete `agent-bar.usage/` tree and writes `bundle.json`.
+/// Builds a complete `othavi0.agent-bar/` tree and writes `bundle.json`.
 #[derive(Debug, Clone)]
 pub struct BundleBuilder {
     pub version: String,
@@ -815,7 +815,7 @@ mod tests {
         let parsed = BundleReceipt::parse_json(json.as_bytes()).expect("parse");
         assert_eq!(parsed, r);
         assert!(json.contains("\"schemaVersion\": 1"));
-        assert!(json.contains("\"pluginId\": \"agent-bar.usage\""));
+        assert!(json.contains("\"pluginId\": \"othavi0.agent-bar\""));
         assert!(json.contains("\"omarchyContract\": 1"));
         assert!(json.contains("\"minimumQuickshellVersion\": \"0.3.0\""));
     }
@@ -892,7 +892,7 @@ mod tests {
             format!(
                 r#"{{
   "schemaVersion": 1,
-  "id": "agent-bar.usage",
+  "id": "othavi0.agent-bar",
   "name": "Agent Bar",
   "version": "{version}",
   "author": "othavi0",
@@ -962,7 +962,7 @@ mod tests {
     #[test]
     fn build_receipt_and_validate_tree() {
         let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
+        let root = dir.path().join("othavi0.agent-bar");
         write_minimal_plugin(&root, "10.0.0");
         let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
         let receipt = BundleValidator::build_receipt(&builder, &root).unwrap();
@@ -984,7 +984,7 @@ mod tests {
     #[test]
     fn validate_detects_version_mismatch_and_extra_file() {
         let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
+        let root = dir.path().join("othavi0.agent-bar");
         write_minimal_plugin(&root, "10.0.0");
         let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
         let receipt = BundleValidator::build_receipt(&builder, &root).unwrap();
@@ -1005,7 +1005,7 @@ mod tests {
     #[test]
     fn validate_detects_checksum_and_mode_mismatch() {
         let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
+        let root = dir.path().join("othavi0.agent-bar");
         write_minimal_plugin(&root, "10.0.0");
         let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
         let mut receipt = BundleValidator::build_receipt(&builder, &root).unwrap();
@@ -1025,7 +1025,7 @@ mod tests {
     #[test]
     fn validate_rejects_symlink_in_tree() {
         let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
+        let root = dir.path().join("othavi0.agent-bar");
         write_minimal_plugin(&root, "10.0.0");
         std::os::unix::fs::symlink("/etc/passwd", root.join("link")).unwrap();
         let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
@@ -1049,7 +1049,7 @@ mod tests {
         .unwrap();
         fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
 
-        let out = dir.path().join("agent-bar.usage");
+        let out = dir.path().join("othavi0.agent-bar");
         let builder = BundleBuilder::new(version, ZERO_COMMIT).unwrap();
         let receipt = builder.assemble(&out, &repo, &helper).unwrap();
         assert_eq!(receipt.version, version);
@@ -1068,7 +1068,7 @@ mod tests {
     #[test]
     fn validate_tree_rejects_helper_version_mismatch() {
         let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
+        let root = dir.path().join("othavi0.agent-bar");
         write_minimal_plugin(&root, "10.0.0");
         // Helper reports a different version than the receipt/manifest.
         fs::write(

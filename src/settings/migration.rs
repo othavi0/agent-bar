@@ -11,7 +11,10 @@ use super::schema::{
     DisplayMetric, DisplaySettings, NotificationSettings, ProviderIdJson, ProviderSetting, Settings,
 };
 use crate::cli::ProviderId;
-use crate::plugin::paths::PLUGIN_ID;
+/// The v9-era plugin ID exactly as legacy `shell.json` files carry it on
+/// disk. The live plugin ID was renamed to `othavi0.agent-bar` (2026-08-06);
+/// this module must keep recognizing what v9 actually wrote.
+const LEGACY_PLUGIN_ID: &str = "agent-bar.usage";
 use crate::support::atomic_file::replace_atomically;
 
 /// Keys that Agent Bar previously stored inline on the shell entry.
@@ -274,7 +277,7 @@ fn extract_inline_refresh_seconds(raw: &[u8]) -> Result<Option<u32>, MigrationEr
                 let is_entry = map
                     .get("id")
                     .and_then(|v| v.as_str())
-                    .is_some_and(|id| id == PLUGIN_ID);
+                    .is_some_and(|id| id == LEGACY_PLUGIN_ID);
                 if is_entry {
                     for key in AGENT_BAR_INLINE_KEYS {
                         if let Some(v) = map.get(*key) {
@@ -493,7 +496,7 @@ fn strip_inline_in_value(value: &mut Value, changed: &mut bool) {
             let is_entry = map
                 .get("id")
                 .and_then(|v| v.as_str())
-                .is_some_and(|id| id == PLUGIN_ID);
+                .is_some_and(|id| id == LEGACY_PLUGIN_ID);
             if is_entry {
                 for key in AGENT_BAR_INLINE_KEYS {
                     if map.remove(*key).is_some() {
@@ -526,7 +529,7 @@ pub fn find_plugin_entry_path(shell: &Value) -> Option<String> {
                 if map
                     .get("id")
                     .and_then(|v| v.as_str())
-                    .is_some_and(|id| id == PLUGIN_ID)
+                    .is_some_and(|id| id == LEGACY_PLUGIN_ID)
                 {
                     return Some(path.to_string());
                 }
@@ -557,7 +560,7 @@ pub fn count_plugin_entries(shell: &Value) -> usize {
                 if map
                     .get("id")
                     .and_then(|v| v.as_str())
-                    .is_some_and(|id| id == PLUGIN_ID)
+                    .is_some_and(|id| id == LEGACY_PLUGIN_ID)
                 {
                     *count += 1;
                 }
@@ -583,7 +586,7 @@ pub fn remaining_inline_keys(shell_raw: &[u8]) -> Result<Vec<String>, MigrationE
                 let is_entry = map
                     .get("id")
                     .and_then(|v| v.as_str())
-                    .is_some_and(|id| id == PLUGIN_ID);
+                    .is_some_and(|id| id == LEGACY_PLUGIN_ID);
                 if is_entry {
                     for key in AGENT_BAR_INLINE_KEYS {
                         if map.contains_key(*key) {
@@ -603,7 +606,7 @@ pub fn remaining_inline_keys(shell_raw: &[u8]) -> Result<Vec<String>, MigrationE
 /// Build a minimal shell.json object for fixtures (bar.left style).
 pub fn fixture_shell_with_entry(section: &str, index: usize, with_inline: bool) -> Value {
     let mut entry = Map::new();
-    entry.insert("id".into(), Value::String(PLUGIN_ID.into()));
+    entry.insert("id".into(), Value::String(LEGACY_PLUGIN_ID.into()));
     if with_inline {
         entry.insert("refreshIntervalSec".into(), Value::from(90));
     }
@@ -709,7 +712,7 @@ mod tests {
         // Section left still has three entries; agent-bar at index 1
         let left = value["bar"]["left"].as_array().unwrap();
         assert_eq!(left.len(), 3);
-        assert_eq!(left[1]["id"], PLUGIN_ID);
+        assert_eq!(left[1]["id"], LEGACY_PLUGIN_ID);
         assert!(left[1].get("refreshIntervalSec").is_none());
         // Unrelated plugins untouched
         assert_eq!(left[0]["id"], "omarchy.menu");
