@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
 /// Canonical product plugin ID and directory name.
-pub const PLUGIN_ID: &str = "agent-bar.usage";
+pub const PLUGIN_ID: &str = "othavi0.agent-bar";
 
 #[derive(Debug, Error)]
 pub enum PathError {
@@ -28,7 +28,7 @@ pub struct PluginPaths {
     pub home: PathBuf,
     /// `$HOME/.config/omarchy/plugins`.
     pub plugins_dir: PathBuf,
-    /// `plugins_dir/agent-bar.usage` — production install root.
+    /// `plugins_dir/othavi0.agent-bar` — production install root.
     pub plugin_root: PathBuf,
     pub xdg_state: PathBuf,
     pub backups_dir: PathBuf,
@@ -125,7 +125,7 @@ mod tests {
         );
         assert_eq!(
             p.plugin_root,
-            PathBuf::from("/home/alice/.config/omarchy/plugins/agent-bar.usage")
+            PathBuf::from("/home/alice/.config/omarchy/plugins/othavi0.agent-bar")
         );
         assert_eq!(
             p.maintenance_lock,

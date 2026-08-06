@@ -50,17 +50,17 @@ that choice, the widget defaults to the right section of the bar. This
 clones one verified directory and nothing else:
 
 ```text
-~/.config/omarchy/plugins/agent-bar.usage/
+~/.config/omarchy/plugins/othavi0.agent-bar/
 ```
 
-Update and remove with `omarchy plugin update agent-bar.usage` and
-`omarchy plugin remove agent-bar.usage`, or use the buttons in Settings.
+Update and remove with `omarchy plugin update othavi0.agent-bar` and
+`omarchy plugin remove othavi0.agent-bar`, or use the buttons in Settings.
 
 If you installed Agent Bar before this release (a plain directory, not a
 git checkout), the update button shows a one-time migration notice. Run:
 
 ```bash
-omarchy plugin remove agent-bar.usage
+omarchy plugin remove othavi0.agent-bar
 omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
 ```
 

@@ -64,7 +64,7 @@ pub struct CollectionContext<'a> {
     pub fs: &'a dyn FileSystem,
     pub process: &'a dyn ProcessRunner,
     pub http: &'a dyn HttpClient,
-    /// Absolute plugin root for login IPC refresh (`…/agent-bar.usage`).
+    /// Absolute plugin root for login IPC refresh (`…/othavi0.agent-bar`).
     pub plugin_root: Option<&'a Path>,
 }
 
@@ -168,13 +168,13 @@ pub async fn run_login<R: ProcessRunner + ?Sized, I: ProcessRunner + ?Sized>(
     let refresh_argv = vec![
         "omarchy-shell".to_owned(),
         "-q".to_owned(),
-        "agent-bar.usage".to_owned(),
+        "othavi0.agent-bar".to_owned(),
         "refresh".to_owned(),
         provider_id.to_owned(),
     ];
     let refresh_spec = ProcessSpec::new(
         "omarchy-shell",
-        ["-q", "agent-bar.usage", "refresh", provider_id],
+        ["-q", "othavi0.agent-bar", "refresh", provider_id],
     )
     .with_timeout(std::time::Duration::from_secs(5))
     .with_max_output(64 * 1024);

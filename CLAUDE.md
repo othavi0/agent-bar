@@ -8,7 +8,7 @@ contract when documentation and behavior disagree.
 ## Hard rules
 
 - Rust/Cargo and QML only. No Node, npm, Bun, pnpm, Yarn, ts-node, or Deno.
-- Product artifact is only the Omarchy Quattro plugin `agent-bar.usage`.
+- Product artifact is only the Omarchy Quattro plugin `othavi0.agent-bar`.
 - The Rust helper is private at plugin path `bin/agent-bar`.
 - Do not create a global executable, standalone application, AUR package, or
   cargo-binstall product.
@@ -56,7 +56,7 @@ dependencies.
 ## Quattro contract
 
 - Plugin root is literal
-  `$HOME/.config/omarchy/plugins/agent-bar.usage`.
+  `$HOME/.config/omarchy/plugins/othavi0.agent-bar`.
 - Agent Bar settings/cache/state follow XDG.
 - Manifest schema remains 1 with kinds `service` and `bar-widget`.
 - `Service.qml` is the sole polling/process owner.
@@ -64,7 +64,7 @@ dependencies.
   `bar.shell.serviceFor(moduleName)`.
 - Fresh installs use `omarchy plugin add <dist-repo-url>`, which clones,
   validates, and moves the tree; enabling it is a separate confirmation.
-- Existing installs update with `omarchy plugin update agent-bar.usage`.
+- Existing installs update with `omarchy plugin update othavi0.agent-bar`.
 - Never run an unconditional `omarchy bar plugin add`.
 - Update never edits `shell.json`.
 

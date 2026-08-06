@@ -909,7 +909,7 @@ mod tests {
         fs::write(
             root.join("manifest.json"),
             format!(
-                r#"{{"schemaVersion":1,"id":"agent-bar.usage","name":"Agent Bar","version":"{version}","author":"othavi0","license":"MIT","description":"x","kinds":["service","bar-widget"],"entryPoints":{{"service":"Service.qml","barWidget":"BarWidget.qml"}},"barWidget":{{"displayName":"Agent Bar","description":"x","category":"AI","aliases":["agent-bar"],"allowMultiple":false,"defaults":{{}},"schema":[]}}}}"#
+                r#"{{"schemaVersion":1,"id":"othavi0.agent-bar","name":"Agent Bar","version":"{version}","author":"othavi0","license":"MIT","description":"x","kinds":["service","bar-widget"],"entryPoints":{{"service":"Service.qml","barWidget":"BarWidget.qml"}},"barWidget":{{"displayName":"Agent Bar","description":"x","category":"AI","aliases":["agent-bar"],"allowMultiple":false,"defaults":{{}},"schema":[]}}}}"#
             ),
         )
         .unwrap();
@@ -953,7 +953,7 @@ mod tests {
     fn no_global_executable_in_bundle_layout() {
         // Product is plugin-only: helper lives at bin/agent-bar inside the plugin.
         let dir = tempdir().unwrap();
-        let root = dir.path().join("agent-bar.usage");
+        let root = dir.path().join("othavi0.agent-bar");
         write_min_plugin(&root, "10.0.0");
         write_receipt(&root, "10.0.0");
         assert!(root.join("bin/agent-bar").is_file());

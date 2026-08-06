@@ -6,7 +6,7 @@ Consumed by the shared Quickshell service. The checked-in structural schema is
 Request:
 
 ```bash
-PLUGIN="$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar"
+PLUGIN="$HOME/.config/omarchy/plugins/othavi0.agent-bar/bin/agent-bar"
 "$PLUGIN" status format json
 ```
 

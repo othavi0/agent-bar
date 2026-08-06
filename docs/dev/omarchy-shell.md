@@ -5,7 +5,7 @@
 Quattro discovers user plugins at the literal path:
 
 ```text
-$HOME/.config/omarchy/plugins/agent-bar.usage/
+$HOME/.config/omarchy/plugins/othavi0.agent-bar/
 ```
 
 It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
@@ -15,7 +15,7 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
 ```json
 {
   "schemaVersion": 1,
-  "id": "agent-bar.usage",
+  "id": "othavi0.agent-bar",
   "name": "Agent Bar",
   "version": "__AGENT_BAR_VERSION__",
   "author": "othavi0",
@@ -70,7 +70,7 @@ readonly property var agentService:
     bar && bar.shell ? bar.shell.serviceFor(moduleName) : null
 ```
 
-`Service.qml` owns one `IpcHandler` target `agent-bar.usage`. Its closed
+`Service.qml` owns one `IpcHandler` target `othavi0.agent-bar`. Its closed
 surface is `health(expectedVersion)` for maintenance and `refresh(providerId)`
 for successful interactive login. The target architecture fixes the exact
 return values and validation.
@@ -104,22 +104,22 @@ Update (git fetch, fast-forward, re-validate; rolls back on a failed
 validation):
 
 ```bash
-omarchy plugin update agent-bar.usage
+omarchy plugin update othavi0.agent-bar
 ```
 
 Remove (disables the bar entry, deletes or backs up the tree, rescans):
 
 ```bash
-omarchy plugin remove agent-bar.usage
+omarchy plugin remove othavi0.agent-bar
 ```
 
 An already-installed but disabled plugin can be enabled directly:
 
 ```bash
-omarchy plugin enable agent-bar.usage
+omarchy plugin enable othavi0.agent-bar
 ```
 
-Do not run `omarchy bar plugin add agent-bar.usage` over an existing entry;
+Do not run `omarchy bar plugin add othavi0.agent-bar` over an existing entry;
 it can reset placement.
 
 ## Interactive login
@@ -133,9 +133,9 @@ own terminal-emulator fallback list.
 ## Validation
 
 ```bash
-omarchy plugin validate /path/to/agent-bar.usage
+omarchy plugin validate /path/to/othavi0.agent-bar
 # PATH qmllint is a stub; the Qt6 binary path is mandatory
-find /path/to/agent-bar.usage -type f -name '*.qml' -exec \
+find /path/to/othavi0.agent-bar -type f -name '*.qml' -exec \
   /usr/lib/qt6/bin/qmllint -I /usr/share/omarchy/shell {} +
 ```
 

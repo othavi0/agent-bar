@@ -137,7 +137,7 @@ function maintenanceUiFromCheck(ui, stdout, exitCode, fallbackVersion) {
           next.phase = "reinstall_required"
           next.targetVersion = ""
           next.releaseNotesUrl = ""
-          next.message = "Installed without git. Run: omarchy plugin remove agent-bar.usage, "
+          next.message = "Installed without git. Run: omarchy plugin remove othavi0.agent-bar, "
               + "then omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git"
           return next
         }

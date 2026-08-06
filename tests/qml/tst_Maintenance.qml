@@ -27,9 +27,9 @@ TestCase {
   // ---- Login argv ----
 
   function test_login_detached_argv() {
-    var argv = Core.loginDetachedArgv("/home/u/.config/omarchy/plugins/agent-bar.usage", "claude")
+    var argv = Core.loginDetachedArgv("/home/u/.config/omarchy/plugins/othavi0.agent-bar", "claude")
     compare(argv.length, 3)
-    compare(argv[0], "/home/u/.config/omarchy/plugins/agent-bar.usage/scripts/agent-bar-open-terminal")
+    compare(argv[0], "/home/u/.config/omarchy/plugins/othavi0.agent-bar/scripts/agent-bar-open-terminal")
     compare(argv[1], "login")
     compare(argv[2], "claude")
     compare(Core.loginDetachedArgv("/x", "nope"), null)
@@ -114,7 +114,7 @@ TestCase {
     compare(ui.phase, "reinstall_required")
     compare(ui.targetVersion, "")
     compare(ui.releaseNotesUrl, "")
-    verify(ui.message.indexOf("omarchy plugin remove agent-bar.usage") >= 0)
+    verify(ui.message.indexOf("omarchy plugin remove othavi0.agent-bar") >= 0)
     verify(ui.message.indexOf("omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git") >= 0)
   }
 

@@ -7,7 +7,7 @@ recovery, and the shared service.
 Resolve it with:
 
 ```bash
-PLUGIN="$HOME/.config/omarchy/plugins/agent-bar.usage/bin/agent-bar"
+PLUGIN="$HOME/.config/omarchy/plugins/othavi0.agent-bar/bin/agent-bar"
 ```
 
 ## Status
@@ -73,7 +73,7 @@ returns the canonical stored document.
 ```
 
 `setup` takes no arguments; it migrates settings to the current schema.
-Install and update go through `omarchy plugin add|update agent-bar.usage`.
+Install and update go through `omarchy plugin add|update othavi0.agent-bar`.
 `doctor scan` never writes. `doctor clean` backs up and removes only
 confirmed owned legacy artifacts.
 
@@ -90,7 +90,7 @@ confirmed owned legacy artifacts.
 - `update check` returns machine-readable compatibility metadata read from the
   dist repo's git receipt.
 - `update apply` takes no argument. It delegates unconditionally to
-  `omarchy plugin update agent-bar.usage --yes` as a detached transient unit
+  `omarchy plugin update othavi0.agent-bar --yes` as a detached transient unit
   and returns as soon as the handoff is accepted; that command owns the
   fast-forward, re-validation, and automatic rollback on a failed
   validation.
@@ -123,7 +123,7 @@ Both forms require confirmation before any mutation:
   the JSON object are rejected.
 
 After confirmation, `uninstall` purges only Agent Bar's own XDG state, then
-delegates unconditionally to `omarchy plugin remove agent-bar.usage --yes`
+delegates unconditionally to `omarchy plugin remove othavi0.agent-bar --yes`
 as a detached transient unit — that command owns the plugin tree and the
 `shell.json` entry now. Standard uninstall preserves settings, cache, and
 migration backups. Purge additionally removes `$XDG_CONFIG_HOME/agent-bar`,

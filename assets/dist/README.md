@@ -17,13 +17,13 @@ skip that choice, the widget defaults to the right section of the bar.
 ## Update
 
 ```bash
-omarchy plugin update agent-bar.usage
+omarchy plugin update othavi0.agent-bar
 ```
 
 ## Remove
 
 ```bash
-omarchy plugin remove agent-bar.usage
+omarchy plugin remove othavi0.agent-bar
 ```
 
 ## Source and issues
