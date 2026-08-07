@@ -230,6 +230,63 @@ TestCase {
     compare(layout.lead.id, "b")
   }
 
+  // UX-020D step 2 (amended 2026-08-07): plan windows outrank non-plan
+  // windows when nothing is critical, so a subscriber leads with the
+  // subscription instead of the daily free window's nearer reset.
+  function test_lead_election_plan_beats_nearest_reset() {
+    var layout = layoutOf([
+      { id: "daily", label: "Daily (1d)", usedPercent: 31, remainingPercent: 69,
+        resetsAt: "2026-08-08T00:00:00Z" },
+      { id: "plan-other", label: "Plan · agent", usedPercent: 8, remainingPercent: 92,
+        resetsAt: null },
+      { id: "plan-orb", label: "Plan · orbs", usedPercent: 0, remainingPercent: 100,
+        resetsAt: null }
+    ], "2026-08-07T15:00:00Z")
+    compare(layout.lead.id, "plan-other")
+    // The rest keeps delivered order: free first, then the healthier bucket.
+    compare(layout.rest.length, 2)
+    compare(layout.rest[0].id, "daily")
+    compare(layout.rest[1].id, "plan-orb")
+  }
+
+  function test_lead_election_lowest_remaining_among_plan_windows() {
+    var layout = layoutOf([
+      { id: "plan-other", label: "Plan · agent", usedPercent: 20, remainingPercent: 80,
+        resetsAt: null },
+      { id: "plan-orb", label: "Plan · orbs", usedPercent: 65, remainingPercent: 35,
+        resetsAt: null }
+    ], "2026-08-07T15:00:00Z")
+    compare(layout.lead.id, "plan-orb")
+  }
+
+  // A critical plan window leads through rule 1 (severity), not rule 2 —
+  // same lead either way, but the severity tag must say Critical.
+  function test_lead_election_critical_plan_leads_by_severity() {
+    var layout = layoutOf([
+      { id: "daily", label: "Daily (1d)", usedPercent: 31, remainingPercent: 69,
+        resetsAt: "2026-08-08T00:00:00Z" },
+      { id: "plan-other", label: "Plan · agent", usedPercent: 97, remainingPercent: 3,
+        resetsAt: null },
+      { id: "plan-orb", label: "Plan · orbs", usedPercent: 0, remainingPercent: 100,
+        resetsAt: null }
+    ], "2026-08-07T15:00:00Z")
+    compare(layout.lead.id, "plan-other")
+    compare(layout.lead.severity, "critical")
+  }
+
+  // Severity is the one signal plan preference never displaces: an exhausted
+  // free window still takes the lead over a healthy subscription.
+  function test_lead_election_critical_free_beats_healthy_plan() {
+    var layout = layoutOf([
+      { id: "daily", label: "Daily (1d)", usedPercent: 96, remainingPercent: 4,
+        resetsAt: "2026-08-08T00:00:00Z" },
+      { id: "plan-other", label: "Plan · agent", usedPercent: 8, remainingPercent: 92,
+        resetsAt: null }
+    ], "2026-08-07T15:00:00Z")
+    compare(layout.lead.id, "daily")
+    compare(layout.lead.severity, "critical")
+  }
+
   function test_lead_election_nearest_future_reset_when_healthy() {
     var layout = layoutOf([
       { id: "weekly", label: "Weekly (7d)", usedPercent: 40, remainingPercent: 60,

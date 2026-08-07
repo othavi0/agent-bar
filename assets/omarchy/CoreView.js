@@ -614,9 +614,10 @@ function remainingRank(line) {
   return line.remainingPercent === null ? Infinity : line.remainingPercent
 }
 
-// §8: deterministic lead election, replacing the old id allowlist that
-// silently demoted any window id it did not know. Returns an index into
-// `lines`, or -1 when there is nothing to lead.
+// §8: deterministic four-step lead election: critical, plan, nearest future
+// reset, then first delivered. This replaces the old id allowlist that silently
+// demoted any window id it did not know. Returns an index into `lines`, or -1
+// when there is nothing to lead.
 //
 // Delivered order is unique per line, so `<` on the index is already a total
 // tiebreak; the spec's further "then by window id" step is unreachable and is
@@ -638,7 +639,20 @@ function electLeadIndex(lines) {
   if (best >= 0)
     return best
 
-  // 2. Otherwise the nearest reset still in the future. A missing timestamp
+  // 2. UX-020D (amended 2026-08-07): a plan window (id prefix "plan-")
+  //    outranks every non-plan window; among plan windows the lowest
+  //    remaining leads. Ids are typed schema data authored by the Rust
+  //    mappers, so the prefix is a contract, not raw-output parsing.
+  for (i = 0; i < lines.length; i++) {
+    if (lines[i].id.indexOf("plan-") !== 0)
+      continue
+    if (best < 0 || remainingRank(lines[i]) < remainingRank(lines[best]))
+      best = i
+  }
+  if (best >= 0)
+    return best
+
+  // 3. Otherwise the nearest reset still in the future. A missing timestamp
   //    or one that already elapsed ("now") does not compete.
   var bestMs = NaN
   for (i = 0; i < lines.length; i++) {
@@ -655,7 +669,7 @@ function electLeadIndex(lines) {
   if (best >= 0)
     return best
 
-  // 3. Nothing has a future reset: the first delivered window leads.
+  // 4. Nothing has a future reset: the first delivered window leads.
   return 0
 }
 
