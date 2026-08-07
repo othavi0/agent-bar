@@ -303,18 +303,17 @@ impl ProviderAdapter for CodexAdapter {
                 }
             }
 
-            // 2. Explicit rate-limits.json if present
-            let rates_path = home.join(".codex/rate-limits.json");
-            if let Ok(bytes) = context.fs.read(&rates_path) {
-                return codex_from_rate_limits_json(&bytes, context.clock.now_utc());
+            // 2. Bounded session-log fallback (~/.codex/sessions/**/*.jsonl).
+            // The log's own event timestamp — not collection time — becomes
+            // last_success_at, since this data may be hours or days old.
+            if let Some((bytes, log_timestamp)) =
+                find_latest_rate_limits(&home.join(".codex/sessions"))
+            {
+                let now = log_timestamp.unwrap_or_else(|| context.clock.now_utc());
+                return codex_from_rate_limits_json(&bytes, now);
             }
 
-            // 3. Bounded session-log fallback (~/.codex/sessions/**/*.jsonl)
-            if let Some(bytes) = find_latest_rate_limits(&home.join(".codex/sessions")) {
-                return codex_from_rate_limits_json(&bytes, context.clock.now_utc());
-            }
-
-            // 4. Typed miss / cli_missing
+            // 3. Typed miss / cli_missing
             if collection_exe(discovery).is_none() {
                 return missing_collection(
                     ProviderId::Codex,
@@ -1079,28 +1078,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn codex_from_home_rate_limits_file() {
-        let process = ScriptedProcess::one(ProcessOutput {
-            exit_code: Some(0),
-            stdout: String::new(),
-            stderr: String::new(),
-            timed_out: false,
-            stdout_truncated: false,
-            stderr_truncated: false,
-        });
+    async fn codex_session_log_last_success_at_uses_log_timestamp_not_clock() {
+        let process = empty_process();
         let http = ScriptedHttpClient::default();
-        let mut fs = MapFileSystem::default();
-        let home = std::path::PathBuf::from("/home/u");
-        fs.files.insert(
-            home.join(".codex/rate-limits.json"),
-            br#"{"primary":{"usedPercent":25.0,"windowDurationMins":300,"resetsAt":1700000000},"secondary":{"usedPercent":40.0,"windowDurationMins":10080,"resetsAt":1700000000}}"#.to_vec(),
+        let fs = MapFileSystem::default();
+
+        // Real tempdir: find_latest_rate_limits walks std::fs directly, not
+        // the injected fs seam.
+        let home_dir = tempfile::tempdir().expect("tempdir");
+        let home = home_dir.path().to_path_buf();
+        let sessions = home.join(".codex/sessions/2026/07/28");
+        std::fs::create_dir_all(&sessions).expect("mkdir sessions");
+        let jsonl = concat!(
+            r#"{"timestamp":"2026-07-28T10:00:00Z","type":"event","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12.5,"window_minutes":10080}}}}"#,
+            "\n",
         );
+        std::fs::write(sessions.join("rollout.jsonl"), jsonl).expect("write jsonl");
+
         let env = ExecutionEnvironment {
             home,
             path_dirs: vec![],
             grok_home: None,
         };
-        let clock = FixedClock(datetime!(2026-07-26 18:00:00 UTC));
+        // Fake clock's "now" is far after the log's own timestamp — asserts
+        // last_success_at reflects data generation, not collection time.
+        let clock = FixedClock(datetime!(2026-08-06 12:00:00 UTC));
         let ctx = CollectionContext {
             env: &env,
             clock: &clock,
@@ -1109,16 +1111,20 @@ mod tests {
             http: &http,
             plugin_root: None,
         };
-        // Non-existent exe so app-server spawn fails immediately and collection
-        // falls through to rate-limits.json (no live Codex dependency).
+        // Non-existent exe so app-server spawn fails immediately and
+        // collection falls through to the session-log fallback (no live
+        // Codex dependency, no rate-limits.json — that stage is gone).
         let discovery = discovery_with_exe(Path::new("/nonexistent/codex"));
         let result = CODEX_ADAPTER.collect(&ctx, &discovery).await;
         assert_no_money(&result);
         match result {
-            ProviderResult::Ready { windows, .. } => {
-                assert_eq!(windows.len(), 2);
-                assert_eq!(windows[0].id(), "session");
-                assert_eq!(windows[1].id(), "weekly");
+            ProviderResult::Ready {
+                windows,
+                last_success_at,
+                ..
+            } => {
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(last_success_at, datetime!(2026-07-28 10:00:00 UTC));
             }
             other => panic!("{other:?}"),
         }

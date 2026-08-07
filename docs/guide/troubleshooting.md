@@ -44,11 +44,11 @@ substitute percentage.
 
 ## Codex Retry loops with “rate limits not available”
 
-Ensure the Codex CLI is logged in. Agent Bar collects Codex rate limits in
-three ordered tiers: `codex app-server` JSON-RPC `account/rateLimits/read`
-first, then an explicit `~/.codex/rate-limits.json` read when the file
-exists, and finally the newest valid rate-limit events under
-`~/.codex/sessions`.
+Ensure the Codex CLI is logged in. Agent Bar collects Codex rate limits in two
+ordered tiers: `codex app-server` JSON-RPC `account/rateLimits/read` first,
+then the newest valid rate-limit event under `~/.codex/sessions`. When the
+session-log tier is used, `lastSuccessAt` reflects that event's own
+timestamp, not collection time — the data may be hours or days old.
 
 ## Grok shows `—` or missing Weekly
 

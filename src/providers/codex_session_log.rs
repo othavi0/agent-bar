@@ -6,9 +6,15 @@
 
 use std::path::Path;
 
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
 /// Reverse-scan JSONL bytes; first `payload.type == "token_count"` with a
-/// `payload.rate_limits` object wins. Returns re-serialized rate_limits JSON.
-pub fn extract_rate_limits_from_jsonl(bytes: &[u8]) -> Option<Vec<u8>> {
+/// `payload.rate_limits` object wins. Returns the re-serialized rate_limits
+/// JSON alongside that event's own RFC3339 `timestamp` field (when present
+/// and parseable), normalized to UTC — this is when the data was generated,
+/// not when it was read.
+pub fn extract_rate_limits_from_jsonl(bytes: &[u8]) -> Option<(Vec<u8>, Option<OffsetDateTime>)> {
     let text = std::str::from_utf8(bytes).ok()?;
     for line in text.lines().rev() {
         let line = line.trim();
@@ -32,7 +38,13 @@ pub fn extract_rate_limits_from_jsonl(bytes: &[u8]) -> Option<Vec<u8>> {
         if !rate_limits.is_object() {
             continue;
         }
-        return serde_json::to_vec(rate_limits).ok();
+        let raw = serde_json::to_vec(rate_limits).ok()?;
+        let timestamp = value
+            .get("timestamp")
+            .and_then(|v| v.as_str())
+            .and_then(|s| OffsetDateTime::parse(s, &Rfc3339).ok())
+            .map(|dt| dt.to_offset(time::UtcOffset::UTC));
+        return Some((raw, timestamp));
     }
     None
 }
@@ -44,7 +56,7 @@ const MAX_SESSION_JSONL_BYTES: u64 = 1024 * 1024;
 /// candidates ≤ 256 jsonl files, each file ≤ 1 MiB. Sort mtime desc then path
 /// asc; scan each candidate reverse for token_count; return first hit's
 /// rate_limits JSON.
-pub fn find_latest_rate_limits(sessions_dir: &Path) -> Option<Vec<u8>> {
+pub fn find_latest_rate_limits(sessions_dir: &Path) -> Option<(Vec<u8>, Option<OffsetDateTime>)> {
     use std::cmp::Ordering;
     use std::fs;
 
@@ -108,8 +120,8 @@ pub fn find_latest_rate_limits(sessions_dir: &Path) -> Option<Vec<u8>> {
         let Ok(bytes) = fs::read(path) else {
             continue;
         };
-        if let Some(raw) = extract_rate_limits_from_jsonl(&bytes) {
-            return Some(raw);
+        if let Some(hit) = extract_rate_limits_from_jsonl(&bytes) {
+            return Some(hit);
         }
     }
     None
@@ -126,7 +138,8 @@ mod tests {
     fn extract_token_count_rate_limits_from_jsonl() {
         let bytes =
             include_bytes!("../../tests/fixtures/providers/codex/session-token-count.jsonl");
-        let raw = extract_rate_limits_from_jsonl(bytes).expect("limits");
+        let (raw, timestamp) = extract_rate_limits_from_jsonl(bytes).expect("limits");
+        assert_eq!(timestamp, Some(datetime!(2026-07-25 23:01:00 UTC)));
         let now = datetime!(2026-07-26 18:00:00 UTC);
         match codex_from_rate_limits_json(&raw, now) {
             ProviderResult::Ready { windows, .. } => {
@@ -135,6 +148,13 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn extract_rate_limits_returns_none_timestamp_when_absent() {
+        let jsonl = r#"{"payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":1.0,"window_minutes":10080}}}}"#;
+        let (_raw, timestamp) = extract_rate_limits_from_jsonl(jsonl.as_bytes()).expect("limits");
+        assert_eq!(timestamp, None);
     }
 
     #[test]
@@ -147,7 +167,8 @@ mod tests {
             include_bytes!("../../tests/fixtures/providers/codex/session-token-count.jsonl");
         std::fs::write(nested.join("rollout.jsonl"), fixture).expect("write");
 
-        let raw = find_latest_rate_limits(&sessions).expect("limits from walk");
+        let (raw, timestamp) = find_latest_rate_limits(&sessions).expect("limits from walk");
+        assert_eq!(timestamp, Some(datetime!(2026-07-25 23:01:00 UTC)));
         let now = datetime!(2026-07-26 18:00:00 UTC);
         match codex_from_rate_limits_json(&raw, now) {
             ProviderResult::Ready { windows, .. } => {
@@ -168,7 +189,8 @@ mod tests {
             r#"{"payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":99.0,"window_minutes":10080}}}}"#,
             "\n",
         );
-        let raw = extract_rate_limits_from_jsonl(jsonl.as_bytes()).expect("limits");
+        let (raw, timestamp) = extract_rate_limits_from_jsonl(jsonl.as_bytes()).expect("limits");
+        assert_eq!(timestamp, None);
         let now = datetime!(2026-07-26 18:00:00 UTC);
         match codex_from_rate_limits_json(&raw, now) {
             ProviderResult::Ready { windows, .. } => {
@@ -194,7 +216,8 @@ mod tests {
             include_bytes!("../../tests/fixtures/providers/codex/session-token-count.jsonl");
         std::fs::write(sessions.join("good.jsonl"), fixture).expect("write good");
 
-        let raw = find_latest_rate_limits(&sessions).expect("skip empty, use good");
+        let (raw, timestamp) = find_latest_rate_limits(&sessions).expect("skip empty, use good");
+        assert_eq!(timestamp, Some(datetime!(2026-07-25 23:01:00 UTC)));
         let now = datetime!(2026-07-26 18:00:00 UTC);
         match codex_from_rate_limits_json(&raw, now) {
             ProviderResult::Ready { windows, .. } => {
@@ -240,7 +263,7 @@ mod tests {
             include_bytes!("../../tests/fixtures/providers/codex/session-token-count.jsonl");
         std::fs::write(sessions.join("z-good.jsonl"), fixture).expect("write good");
 
-        let raw = find_latest_rate_limits(&sessions).expect("skip huge, use good");
+        let (raw, _timestamp) = find_latest_rate_limits(&sessions).expect("skip huge, use good");
         let now = datetime!(2026-07-26 18:00:00 UTC);
         match codex_from_rate_limits_json(&raw, now) {
             ProviderResult::Ready { windows, .. } => {
