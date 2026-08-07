@@ -72,11 +72,44 @@ pub fn amp_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult 
         }
     }
 
+    // Subscription line (2026-07-18 Amp subscriptions): two percentage buckets.
+    // "orb usage" = included orb-hours allowance; "other usage" = included agent
+    // usage. The plan name doubles as the Plan badge. The "Individual credits: $"
+    // line is monetary and intentionally never parsed into a window (JSON-022B).
+    let mut plan = None;
+    if let Some(caps) = Regex::new(
+        r"Subscription\s+(\S+):\s*([0-9.]+)%\s*other usage and\s*([0-9.]+)%\s*orb usage remaining",
+    )
+    .ok()
+    .and_then(|re| re.captures(&text))
+    {
+        if let Some(name) = caps.get(1).map(|m| m.as_str()) {
+            plan = Some(Plan {
+                id: name.to_ascii_lowercase(),
+                label: name.to_owned(),
+            });
+        }
+        for (idx, id, label) in [
+            (2usize, "plan-other", "Plan · other"),
+            (3usize, "plan-orb", "Plan · orb"),
+        ] {
+            if let Some(rem) = caps.get(idx).and_then(|m| m.as_str().parse::<f64>().ok()) {
+                let rem = rem.clamp(0.0, 100.0);
+                let used = (100.0 - rem).clamp(0.0, 100.0);
+                // No resets_at: Amp documents only "replenishes at the end of
+                // each monthly period", with no timestamp exposed.
+                if let Ok(w) = UsageWindow::try_new(id, label, used, rem, None) {
+                    windows.push(w);
+                }
+            }
+        }
+    }
+
     ProviderResult::Ready {
         id: ProviderId::Amp,
         name: AMP.display_name.to_owned(),
         source: DataSource::Live,
-        plan: None,
+        plan,
         account: account.map(|label| Account {
             label: sanitize_account_label(&label),
         }),
@@ -642,6 +675,26 @@ pub fn weekly_model_id(raw: &str, ordinal: usize) -> String {
     }
 }
 
+/// Title-case a raw plan/tier id for display: "pro" → "Pro",
+/// "self_serve_business_usage_based" → "Self Serve Business Usage Based".
+///
+/// Amp keeps its own label verbatim; Grok (Task 3) and Codex (PR2 Task 9)
+/// consume this for their raw tier ids.
+#[allow(dead_code)]
+pub(crate) fn format_plan_label(raw: &str) -> String {
+    raw.split('_')
+        .filter(|s| !s.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn sanitize_account_label(raw: &str) -> String {
     let cleaned = strip_ansi_and_controls(raw);
     // Drop anything that looks like a token-ish secret.
@@ -699,6 +752,59 @@ mod tests {
                 assert!((windows[0].remaining_percent() - 70.0).abs() < 0.01);
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn amp_subscription_fixture_emits_plan_windows_and_plan() {
+        let fixture = include_str!("../../tests/fixtures/amp/usage-subscription-pct.txt");
+        let result = amp_from_usage_text(fixture, datetime!(2026-08-07 12:00:00 UTC));
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                let ids: Vec<&str> = windows.iter().map(|w| w.id()).collect();
+                assert_eq!(ids, vec!["daily", "plan-other", "plan-orb"]);
+                assert_eq!(windows[1].label(), "Plan · other");
+                assert!((windows[1].remaining_percent() - 92.0).abs() < 0.01);
+                assert!((windows[1].used_percent() - 8.0).abs() < 0.01);
+                assert_eq!(windows[2].label(), "Plan · orb");
+                assert!((windows[2].remaining_percent() - 100.0).abs() < 0.01);
+                // Amp exposes no subscription reset timestamp ("monthly" only).
+                assert!(windows[1].resets_at().is_none());
+                assert!(windows[2].resets_at().is_none());
+                let plan = plan.expect("plan from Subscription line");
+                assert_eq!(plan.id, "megawatt");
+                assert_eq!(plan.label, "Megawatt");
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn amp_free_only_fixture_still_has_no_plan() {
+        let fixture = include_str!("../../tests/fixtures/amp/usage-free-pct.txt");
+        let result = amp_from_usage_text(fixture, datetime!(2026-08-07 12:00:00 UTC));
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert!(plan.is_none());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn amp_individual_credits_line_never_emits_window() {
+        // Only the monetary line plus account: Ready with zero windows, no money.
+        let text = "Signed in as user@email.com (nick)\nIndividual credits: $4.19 remaining (replenishes automatically)\n";
+        let result = amp_from_usage_text(text, datetime!(2026-08-07 12:00:00 UTC));
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert!(windows.is_empty());
+                assert!(plan.is_none());
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
