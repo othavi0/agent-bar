@@ -333,6 +333,8 @@ pub struct ProviderStatus {
     last_success_at: Option<OffsetDateTime>,
     error: Option<ProviderError>,
     action: Option<ProviderAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rate_limit_resets_available: Option<u32>,
 }
 
 /// Serde adapter so [`ProviderId`] serializes as a lowercase string.
@@ -401,6 +403,18 @@ impl ProviderStatus {
         self.account.as_ref()
     }
 
+    pub fn rate_limit_resets_available(&self) -> Option<u32> {
+        self.rate_limit_resets_available
+    }
+
+    /// Attach a provider-granted rate-limit reset count after construction.
+    /// Used by the `ProviderResult::Ready` conversion and by stale/cache-hit
+    /// rebuilds that must carry the previous value through.
+    pub(crate) fn with_rate_limit_resets_available(mut self, value: Option<u32>) -> Self {
+        self.rate_limit_resets_available = value;
+        self
+    }
+
     /// When serving a previously live ready row from cache, label source as `cache`.
     pub fn for_cache_hit(&self) -> Result<Self, SchemaError> {
         match self.state {
@@ -417,6 +431,9 @@ impl ProviderStatus {
                     self.windows.clone(),
                     last,
                 )
+                .map(|status| {
+                    status.with_rate_limit_resets_available(self.rate_limit_resets_available)
+                })
             }
             // Stale already uses source=cache; other states keep their shape.
             _ => Ok(self.clone()),
@@ -443,6 +460,7 @@ impl ProviderStatus {
             error,
             ProviderAction::retry("Retry"),
         )
+        .map(|status| status.with_rate_limit_resets_available(self.rate_limit_resets_available))
     }
 
     /// Temporary failures eligible for stale retention. Rejected auth and
@@ -479,6 +497,7 @@ impl ProviderStatus {
             last_success_at: Some(last_success_at),
             error: None,
             action: None,
+            rate_limit_resets_available: None,
         })
     }
 
@@ -509,6 +528,7 @@ impl ProviderStatus {
             last_success_at: Some(last_success_at),
             error: Some(error),
             action: Some(action),
+            rate_limit_resets_available: None,
         })
     }
 
@@ -539,6 +559,7 @@ impl ProviderStatus {
             last_success_at: None,
             error: Some(error),
             action: Some(action),
+            rate_limit_resets_available: None,
         })
     }
 
@@ -572,6 +593,7 @@ impl ProviderStatus {
             last_success_at: None,
             error: Some(error),
             action: Some(action),
+            rate_limit_resets_available: None,
         })
     }
 
@@ -634,6 +656,7 @@ impl ProviderStatus {
             last_success_at: None,
             error: Some(error),
             action: Some(action),
+            rate_limit_resets_available: None,
         })
     }
 
@@ -739,6 +762,7 @@ fn failure_state(
         last_success_at: None,
         error: Some(error),
         action: Some(action),
+        rate_limit_resets_available: None,
     })
 }
 
@@ -932,6 +956,7 @@ pub enum ProviderResult {
         account: Option<Account>,
         windows: Vec<UsageWindow>,
         last_success_at: OffsetDateTime,
+        rate_limit_resets_available: Option<u32>,
     },
     Stale {
         id: ProviderId,
@@ -1428,5 +1453,24 @@ mod tests {
             .map(|e| e.to_string())
             .collect();
         assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn provider_status_serializes_reset_count_only_when_present() {
+        // ProviderStatus derives Deserialize: build both rows via serde and
+        // assert the key round-trips only when present.
+        let base = serde_json::json!({
+            "id": "codex", "name": "Codex", "state": "ready", "source": "live",
+            "plan": null, "account": null, "windows": [],
+            "lastSuccessAt": "2026-08-07T12:00:00Z", "error": null, "action": null
+        });
+        let mut with = base.clone();
+        with["rateLimitResetsAvailable"] = serde_json::json!(2);
+        let with: ProviderStatus = serde_json::from_value(with).expect("row with resets");
+        let text = serde_json::to_string(&with).expect("serialize");
+        assert!(text.contains("\"rateLimitResetsAvailable\":2"));
+        let without: ProviderStatus = serde_json::from_value(base).expect("row without resets");
+        let text = serde_json::to_string(&without).expect("serialize");
+        assert!(!text.contains("rateLimitResetsAvailable"));
     }
 }

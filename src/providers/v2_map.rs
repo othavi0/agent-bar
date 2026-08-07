@@ -115,6 +115,7 @@ pub fn amp_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult 
         }),
         windows,
         last_success_at: now,
+        rate_limit_resets_available: None,
     }
 }
 
@@ -249,6 +250,7 @@ pub fn grok_from_billing_json(
         }),
         windows,
         last_success_at: now,
+        rate_limit_resets_available: None,
     }
 }
 
@@ -324,6 +326,7 @@ pub fn grok_from_auth_and_signals(
         }),
         windows,
         last_success_at: now,
+        rate_limit_resets_available: None,
     }
 }
 
@@ -352,6 +355,30 @@ struct CodexRateLimitsDoc {
     /// Explicitly ignored monetary field.
     #[serde(default)]
     credits: Option<Value>,
+    #[serde(default, rename = "individualLimit")]
+    individual_limit: Option<CodexIndividualLimitRaw>,
+    #[serde(default, rename = "extraBuckets")]
+    extra_buckets: Vec<CodexExtraBucketRaw>,
+    #[serde(default, rename = "rateLimitResetsAvailable")]
+    rate_limit_resets_available: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexIndividualLimitRaw {
+    #[serde(rename = "remainingPercent")]
+    remaining_percent: f64,
+    #[serde(default, rename = "resetsAt")]
+    resets_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexExtraBucketRaw {
+    #[serde(rename = "limitId")]
+    limit_id: String,
+    #[serde(default)]
+    primary: Option<CodexWindowRaw>,
+    #[serde(default)]
+    secondary: Option<CodexWindowRaw>,
 }
 
 /// Parse Codex rate-limit JSON. Credits are discarded.
@@ -384,6 +411,42 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
             windows.push(w);
         }
     }
+
+    for bucket in &doc.extra_buckets {
+        let sanitized = sanitize_bucket_id(&bucket.limit_id);
+        if let Some(raw) = bucket.primary.as_ref() {
+            let id = format!("codex:{sanitized}");
+            let label = codex_extra_bucket_label(&sanitized, raw.window_minutes);
+            if let Some(w) = codex_window(&id, &label, raw) {
+                windows.push(w);
+            }
+        }
+        if let Some(raw) = bucket.secondary.as_ref() {
+            let id = format!("codex:{sanitized}:2");
+            let label = codex_extra_bucket_label(&sanitized, raw.window_minutes);
+            if let Some(w) = codex_window(&id, &label, raw) {
+                windows.push(w);
+            }
+        }
+    }
+
+    if let Some(il) = doc.individual_limit.as_ref() {
+        if il.remaining_percent.is_finite() {
+            let rem = il.remaining_percent.clamp(0.0, 100.0);
+            let used = (100.0 - rem).clamp(0.0, 100.0);
+            let resets = il
+                .resets_at
+                .filter(|&ts| ts > 0)
+                .and_then(|ts| OffsetDateTime::from_unix_timestamp(ts).ok())
+                .map(|ts| ts.to_offset(UtcOffset::UTC));
+            if let Ok(w) =
+                UsageWindow::try_new("workspace-limit", "Workspace limit", used, rem, resets)
+            {
+                windows.push(w);
+            }
+        }
+    }
+
     let _ = doc.credits; // discarded
 
     ProviderResult::Ready {
@@ -391,12 +454,38 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
         name: CODEX.display_name.to_owned(),
         source: DataSource::Live,
         plan: doc.plan_type.map(|id| Plan {
-            label: id.clone(),
+            label: format_plan_label(&id),
             id,
         }),
         account: None,
         windows,
         last_success_at: now,
+        rate_limit_resets_available: doc.rate_limit_resets_available,
+    }
+}
+
+/// Lowercase ASCII letters/digits/hyphens; empty input falls back to `bucket`.
+/// Mirrors the sanitization in [`weekly_model_id`].
+fn sanitize_bucket_id(raw: &str) -> String {
+    let sanitized: String = raw
+        .chars()
+        .flat_map(|c| c.to_lowercase())
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    if sanitized.is_empty() {
+        "bucket".into()
+    } else {
+        sanitized
+    }
+}
+
+/// Display label for a Codex extra rate-limit bucket window.
+fn codex_extra_bucket_label(sanitized: &str, window_minutes: Option<i64>) -> String {
+    let name = format_plan_label(sanitized);
+    match window_minutes {
+        Some(10080) => format!("{name} (7d)"),
+        Some(mins) => format!("{name} ({mins}m)"),
+        None => name,
     }
 }
 
@@ -630,6 +719,7 @@ pub fn claude_from_usage_json(
         account,
         windows,
         last_success_at: now,
+        rate_limit_resets_available: None,
     }
 }
 
@@ -1016,6 +1106,38 @@ mod tests {
                 assert_eq!(windows[1].id(), "weekly");
                 assert_eq!(windows[1].label(), "Weekly (7d)");
                 assert!((windows[1].used_percent() - 40.0).abs() < 0.01);
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn codex_maps_extra_buckets_individual_limit_and_resets() {
+        let json = serde_json::json!({
+            "primary": {"usedPercent": 36.0, "windowDurationMins": 10080, "resetsAt": 1791000000},
+            "plan_type": "plus",
+            "individualLimit": {"remainingPercent": 40.0, "resetsAt": 1791000000},
+            "extraBuckets": [{"limitId": "premium",
+                "primary": {"usedPercent": 10.0, "windowDurationMins": 10080, "resetsAt": 0}}],
+            "rateLimitResetsAvailable": 2
+        });
+        let bytes = serde_json::to_vec(&json).expect("fixture json");
+        let result = codex_from_rate_limits_json(&bytes, datetime!(2026-08-07 12:00:00 UTC));
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready {
+                windows,
+                plan,
+                rate_limit_resets_available,
+                ..
+            } => {
+                let ids: Vec<&str> = windows.iter().map(|w| w.id()).collect();
+                assert_eq!(ids, vec!["weekly", "codex:premium", "workspace-limit"]);
+                assert_eq!(windows[1].label(), "Premium (7d)");
+                assert_eq!(windows[2].label(), "Workspace limit");
+                assert!((windows[2].remaining_percent() - 40.0).abs() < 0.01);
+                assert_eq!(rate_limit_resets_available, Some(2));
+                assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("Plus"));
             }
             other => panic!("expected ready, got {other:?}"),
         }

@@ -60,7 +60,7 @@ design doc that now govern the amended behavior. See
 | `JSON-009`–`JSON-015` | 1, 3 | structural schema, semantic validator, invalid fixtures |
 | `JSON-009A` | 1, 3, 8, 17 | helper/manifest semantic-version equality tests |
 | `JSON-016`–`JSON-022` | 3, 6–7 | order, explicit-provider, partial-failure tests |
-| `JSON-022A`–`JSON-022B` | 1, 3, 6 | empty-window and rejected-money fixtures |
+| `JSON-022A`–`JSON-022C` | 1, 3, 6 | empty-window and rejected-money fixtures |
 | `JSON-023`–`JSON-028` | 3, 5–6, 11 | URL/action enums, redaction, plain-text QML tests |
 
 ## Quickshell UX and accessibility

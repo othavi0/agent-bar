@@ -15,7 +15,9 @@ pub fn provider_status_from_result(result: ProviderResult) -> Result<ProviderSta
             account,
             windows,
             last_success_at,
-        } => ProviderStatus::ready(id, name, source, plan, account, windows, last_success_at),
+            rate_limit_resets_available,
+        } => ProviderStatus::ready(id, name, source, plan, account, windows, last_success_at)
+            .map(|status| status.with_rate_limit_resets_available(rate_limit_resets_available)),
         ProviderResult::Stale {
             id,
             name,
@@ -108,6 +110,7 @@ mod tests {
             account: None,
             windows: vec![UsageWindow::try_new("session", "Session", 10.0, 90.0, None).unwrap()],
             last_success_at: datetime!(2026-07-26 18:42:00 UTC),
+            rate_limit_resets_available: None,
         })
         .unwrap();
         assert_eq!(ready.state(), ProviderState::Ready);
