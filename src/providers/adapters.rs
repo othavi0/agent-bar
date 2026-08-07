@@ -10,7 +10,7 @@ use super::adapter::{
 use super::catalog::{AMP, CLAUDE, CODEX, GROK};
 use super::codex_app_server::{fetch_rate_limits_via_appserver, AppServerOutcome};
 use super::codex_session_log::find_latest_rate_limits;
-use super::process::ProcessSpec;
+use super::process::{ProcessOutput, ProcessSpec};
 use super::v2_map::{
     amp_from_usage_text, claude_from_usage_json, codex_from_rate_limits_json,
     grok_from_billing_json,
@@ -51,25 +51,7 @@ impl ProviderAdapter for AmpAdapter {
                     message: "Amp usage timed out.".into(),
                 },
                 Ok(out) if out.exit_code != Some(0) => {
-                    if out.stderr.to_ascii_lowercase().contains("auth")
-                        || out.stdout.to_ascii_lowercase().contains("not signed")
-                    {
-                        unauthenticated(
-                            ProviderId::Amp,
-                            AMP.display_name,
-                            "Amp is not authenticated.",
-                            login_available(discovery),
-                            AMP.installation_url,
-                            false,
-                        )
-                    } else {
-                        ProviderResult::ProviderError {
-                            id: ProviderId::Amp,
-                            name: AMP.display_name.to_owned(),
-                            message: "Amp usage command failed.".into(),
-                            retryable: false,
-                        }
-                    }
+                    classify_amp_failure(&out, login_available(discovery))
                 }
                 Ok(out) => amp_from_usage_text(&out.stdout, context.clock.now_utc()),
                 Err(_) => ProviderResult::NetworkError {
@@ -79,6 +61,34 @@ impl ProviderAdapter for AmpAdapter {
                 },
             }
         })
+    }
+}
+
+/// Classify a non-zero `amp usage` exit. Unauthenticated requires an explicit
+/// marker; a bare "auth" substring (e.g. "authorization server unavailable")
+/// is an operational failure, not a login problem.
+fn classify_amp_failure(out: &ProcessOutput, login_available: bool) -> ProviderResult {
+    let stdout = out.stdout.to_ascii_lowercase();
+    let stderr = out.stderr.to_ascii_lowercase();
+    let explicit = ["not signed", "sign in", "unauthorized", "please log in"];
+    if explicit
+        .iter()
+        .any(|m| stdout.contains(m) || stderr.contains(m))
+    {
+        return unauthenticated(
+            ProviderId::Amp,
+            AMP.display_name,
+            "Amp is not authenticated.",
+            login_available,
+            AMP.installation_url,
+            false,
+        );
+    }
+    ProviderResult::ProviderError {
+        id: ProviderId::Amp,
+        name: AMP.display_name.to_owned(),
+        message: "Amp usage command failed.".into(),
+        retryable: false,
     }
 }
 
@@ -656,6 +666,32 @@ mod tests {
         let spec = process.last_spec.lock().unwrap().clone().unwrap();
         assert_eq!(spec.args, vec!["usage".to_owned()]);
         assert!(spec.env.iter().any(|(k, v)| k == "NO_COLOR" && v == "1"));
+    }
+
+    fn fake_process_output(exit_code: i32, stdout: &str, stderr: &str) -> ProcessOutput {
+        ProcessOutput {
+            exit_code: Some(exit_code),
+            stdout: stdout.to_owned(),
+            stderr: stderr.to_owned(),
+            timed_out: false,
+            stdout_truncated: false,
+            stderr_truncated: false,
+        }
+    }
+
+    #[test]
+    fn amp_network_flavored_auth_substring_is_not_unauthenticated() {
+        // "authorization server unavailable" contains "auth" but is operational.
+        let out = fake_process_output(1, "", "authorization server unavailable");
+        let result = classify_amp_failure(&out, true);
+        assert!(matches!(result, ProviderResult::ProviderError { .. }));
+    }
+
+    #[test]
+    fn amp_not_signed_in_is_unauthenticated() {
+        let out = fake_process_output(1, "You are not signed in. Run amp login.", "");
+        let result = classify_amp_failure(&out, true);
+        assert!(matches!(result, ProviderResult::Unauthenticated { .. }));
     }
 
     #[tokio::test]

@@ -72,11 +72,44 @@ pub fn amp_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult 
         }
     }
 
+    // Subscription line (2026-07-18 Amp subscriptions): two percentage buckets.
+    // "orb usage" = included orb-hours allowance; "other usage" = included agent
+    // usage. The plan name doubles as the Plan badge. The "Individual credits: $"
+    // line is monetary and intentionally never parsed into a window (JSON-022B).
+    let mut plan = None;
+    if let Some(caps) = Regex::new(
+        r"Subscription\s+(\S+):\s*([0-9.]+)%\s*other usage and\s*([0-9.]+)%\s*orb usage remaining",
+    )
+    .ok()
+    .and_then(|re| re.captures(&text))
+    {
+        if let Some(name) = caps.get(1).map(|m| m.as_str()) {
+            plan = Some(Plan {
+                id: name.to_ascii_lowercase(),
+                label: name.to_owned(),
+            });
+        }
+        for (idx, id, label) in [
+            (2usize, "plan-other", "Plan · other"),
+            (3usize, "plan-orb", "Plan · orb"),
+        ] {
+            if let Some(rem) = caps.get(idx).and_then(|m| m.as_str().parse::<f64>().ok()) {
+                let rem = rem.clamp(0.0, 100.0);
+                let used = (100.0 - rem).clamp(0.0, 100.0);
+                // No resets_at: Amp documents only "replenishes at the end of
+                // each monthly period", with no timestamp exposed.
+                if let Ok(w) = UsageWindow::try_new(id, label, used, rem, None) {
+                    windows.push(w);
+                }
+            }
+        }
+    }
+
     ProviderResult::Ready {
         id: ProviderId::Amp,
         name: AMP.display_name.to_owned(),
         source: DataSource::Live,
-        plan: None,
+        plan,
         account: account.map(|label| Account {
             label: sanitize_account_label(&label),
         }),
@@ -129,6 +162,24 @@ struct GrokBillingDoc {
 struct GrokPeriodRaw {
     #[serde(default)]
     end: Option<String>,
+    #[serde(default, rename = "type")]
+    period_type: Option<String>,
+}
+
+/// USAGE_PERIOD_TYPE_WEEKLY → ("weekly", "Weekly (7d)"); other known-shaped
+/// values strip the prefix (lowercase id, title-case label); absent/foreign
+/// values keep the historical weekly identity.
+fn grok_window_identity(period_type: Option<&str>) -> (String, String) {
+    match period_type {
+        Some("USAGE_PERIOD_TYPE_WEEKLY") | None => ("weekly".into(), LABEL_WEEKLY.into()),
+        Some(other) => match other.strip_prefix("USAGE_PERIOD_TYPE_") {
+            Some(rest) if !rest.is_empty() => (
+                rest.to_ascii_lowercase(),
+                format_plan_label(&rest.to_ascii_lowercase()),
+            ),
+            _ => ("weekly".into(), LABEL_WEEKLY.into()),
+        },
+    }
 }
 
 /// Parse Grok billing JSON into a single weekly percentage window.
@@ -169,7 +220,12 @@ pub fn grok_from_billing_json(
             let used = used_raw.clamp(0.0, 100.0);
             let remaining = (100.0 - used).clamp(0.0, 100.0);
             let resets = grok_billing_resets_at(&doc);
-            if let Ok(w) = UsageWindow::try_new("weekly", LABEL_WEEKLY, used, remaining, resets) {
+            let (id, label) = grok_window_identity(
+                doc.current_period
+                    .as_ref()
+                    .and_then(|p| p.period_type.as_deref()),
+            );
+            if let Ok(w) = UsageWindow::try_new(&id, &label, used, remaining, resets) {
                 windows.push(w);
             }
         }
@@ -179,7 +235,7 @@ pub fn grok_from_billing_json(
         .subscription_tiers
         .filter(|s| !s.is_empty())
         .map(|id| Plan {
-            label: id.clone(),
+            label: format_plan_label(&id),
             id,
         });
 
@@ -642,6 +698,25 @@ pub fn weekly_model_id(raw: &str, ordinal: usize) -> String {
     }
 }
 
+/// Title-case a raw plan/tier id for display: "pro" → "Pro",
+/// "self_serve_business_usage_based" → "Self Serve Business Usage Based".
+///
+/// Amp keeps its own label verbatim; Grok (Task 3) and Codex (PR2 Task 9)
+/// consume this for their raw tier ids.
+pub(crate) fn format_plan_label(raw: &str) -> String {
+    raw.split('_')
+        .filter(|s| !s.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn sanitize_account_label(raw: &str) -> String {
     let cleaned = strip_ansi_and_controls(raw);
     // Drop anything that looks like a token-ish secret.
@@ -699,6 +774,59 @@ mod tests {
                 assert!((windows[0].remaining_percent() - 70.0).abs() < 0.01);
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn amp_subscription_fixture_emits_plan_windows_and_plan() {
+        let fixture = include_str!("../../tests/fixtures/amp/usage-subscription-pct.txt");
+        let result = amp_from_usage_text(fixture, datetime!(2026-08-07 12:00:00 UTC));
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                let ids: Vec<&str> = windows.iter().map(|w| w.id()).collect();
+                assert_eq!(ids, vec!["daily", "plan-other", "plan-orb"]);
+                assert_eq!(windows[1].label(), "Plan · other");
+                assert!((windows[1].remaining_percent() - 92.0).abs() < 0.01);
+                assert!((windows[1].used_percent() - 8.0).abs() < 0.01);
+                assert_eq!(windows[2].label(), "Plan · orb");
+                assert!((windows[2].remaining_percent() - 100.0).abs() < 0.01);
+                // Amp exposes no subscription reset timestamp ("monthly" only).
+                assert!(windows[1].resets_at().is_none());
+                assert!(windows[2].resets_at().is_none());
+                let plan = plan.expect("plan from Subscription line");
+                assert_eq!(plan.id, "megawatt");
+                assert_eq!(plan.label, "Megawatt");
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn amp_free_only_fixture_still_has_no_plan() {
+        let fixture = include_str!("../../tests/fixtures/amp/usage-free-pct.txt");
+        let result = amp_from_usage_text(fixture, datetime!(2026-08-07 12:00:00 UTC));
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows.len(), 1);
+                assert!(plan.is_none());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn amp_individual_credits_line_never_emits_window() {
+        // Only the monetary line plus account: Ready with zero windows, no money.
+        let text = "Signed in as user@email.com (nick)\nIndividual credits: $4.19 remaining (replenishes automatically)\n";
+        let result = amp_from_usage_text(text, datetime!(2026-08-07 12:00:00 UTC));
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert!(windows.is_empty());
+                assert!(plan.is_none());
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
@@ -943,6 +1071,35 @@ mod tests {
     }
 
     #[test]
+    fn grok_monthly_period_type_names_the_window() {
+        let json = br#"{"creditUsagePercent": 20.0,
+            "currentPeriod": {"type": "USAGE_PERIOD_TYPE_MONTHLY", "end": "2026-09-01T00:00:00Z"},
+            "subscriptionTiers": "pro"}"#;
+        let result = grok_from_billing_json(json, None, datetime!(2026-08-07 12:00:00 UTC), true);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows[0].id(), "monthly");
+                assert_eq!(windows[0].label(), "Monthly");
+                assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("Pro"));
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_missing_period_type_stays_weekly() {
+        let json = br#"{"creditUsagePercent": 10.0}"#;
+        let result = grok_from_billing_json(json, None, datetime!(2026-08-07 12:00:00 UTC), true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(windows[0].label(), "Weekly (7d)");
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn claude_dedupes_model_window_ids_across_sources() {
         // limits[] entry AND legacy seven_day_opus for the same model must not
         // produce duplicate window ids (schema rejects the whole row otherwise).
@@ -1045,5 +1202,16 @@ mod tests {
             "weekly-model:claudeopus4"
         );
         assert_eq!(weekly_model_id("X", 2), "weekly-model:x:2");
+    }
+
+    #[test]
+    fn format_plan_label_title_cases_underscore_ids() {
+        assert_eq!(format_plan_label("pro"), "Pro");
+        assert_eq!(
+            format_plan_label("self_serve_business_usage_based"),
+            "Self Serve Business Usage Based"
+        );
+        assert_eq!(format_plan_label(""), "");
+        assert_eq!(format_plan_label("_x_"), "X");
     }
 }
