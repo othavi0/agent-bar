@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "pluginId": "othavi0.agent-bar",
-  "version": "10.3.4",
+  "version": "10.3.5",
   "target": "x86_64-unknown-linux-gnu",
   "omarchyContract": 1,
   "minimumQuickshellVersion": "0.3.0",
-  "sourceCommit": "da861f1196568fe7aeba5a2a22635e76dc627162",
+  "sourceCommit": "3232877be30cb3c926cedc786098b22a2d9f8418",
   "files": [
     {
       "path": "BarWidget.qml",
@@ -39,8 +39,8 @@
     },
     {
       "path": "CoreView.js",
-      "sha256": "02fdb6566bab5b4010c5b73f23d7ec266a206bebbc57b8be5bd3f4e15cf9b878",
-      "size": 21607,
+      "sha256": "05cf16a28652b4584132187abc0ad3c9a146a26c373d1b21a7dab4d0435af302",
+      "size": 22029,
       "mode": "0644"
     },
     {
@@ -69,8 +69,8 @@
     },
     {
       "path": "ProviderView.qml",
-      "sha256": "21faa4d3d1db26e447e9191226ded8a1910066459a08d9b9a9f7385b4823a5e3",
-      "size": 8401,
+      "sha256": "665030a7aff9a0b36d4ec1f4b456d19de181c4fa6317e2f10f90f979ba985ec3",
+      "size": 8732,
       "mode": "0644"
     },
     {
@@ -93,8 +93,8 @@
     },
     {
       "path": "bin/agent-bar",
-      "sha256": "50f504d677283e3cf6f5e5875d6eaf3206b95eb3bca7ab54ba3f2ac8fee98808",
-      "size": 4047216,
+      "sha256": "395578dccf1c5fae2545672da9c8e8b69db1433e036b60e02061c94b915c41e9",
+      "size": 4065528,
       "mode": "0755"
     },
     {
@@ -171,7 +171,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "24fee41589ab42deb473f0c7f762278e6cb7fc43d9add179843e86b1058e2d80",
+      "sha256": "e42bb1bb46b2a540628fcedb1958747550ad187414a4909510dad01f70508cd7",
       "size": 619,
       "mode": "0644"
     },

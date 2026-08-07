@@ -206,6 +206,17 @@ Item {
           }
         }
       }
+
+      Text {
+        width: parent.width
+        visible: text.length > 0
+        text: Core.rateLimitResetsText(root.provider)
+        color: Util.alpha(root.foreground, 0.72)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        textFormat: Text.PlainText
+        Accessible.name: text
+      }
     }
 
     StateMessage {
