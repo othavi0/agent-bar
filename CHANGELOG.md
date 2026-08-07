@@ -35,6 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.5] - 2026-08-07
+
+### Changed
+
+- fix: dedupe codex extra bucket window ids
+- refactor: drop dead codex rate-limits.json stage
+- feat: popup line for codex reset count
+- feat: surface codex rate-limit reset count
+- fix: keep extra codex buckets with root windows
+- feat: iterate codex multi-bucket rate limits
+- feat: declare full codex rate-limit payload
+
 ## [10.3.4] - 2026-08-07
 
 ### Changed
