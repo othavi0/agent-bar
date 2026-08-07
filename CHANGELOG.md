@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.3] - 2026-08-07
+
+### Changed
+
+- feat: rename plugin ID to othavi0.agent-bar
+- docs: add update-path release verification
+
 ## [10.3.2] - 2026-08-06
 
 ### Changed
