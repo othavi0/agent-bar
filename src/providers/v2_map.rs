@@ -162,6 +162,24 @@ struct GrokBillingDoc {
 struct GrokPeriodRaw {
     #[serde(default)]
     end: Option<String>,
+    #[serde(default, rename = "type")]
+    period_type: Option<String>,
+}
+
+/// USAGE_PERIOD_TYPE_WEEKLY → ("weekly", "Weekly (7d)"); other known-shaped
+/// values strip the prefix (lowercase id, title-case label); absent/foreign
+/// values keep the historical weekly identity.
+fn grok_window_identity(period_type: Option<&str>) -> (String, String) {
+    match period_type {
+        Some("USAGE_PERIOD_TYPE_WEEKLY") | None => ("weekly".into(), LABEL_WEEKLY.into()),
+        Some(other) => match other.strip_prefix("USAGE_PERIOD_TYPE_") {
+            Some(rest) if !rest.is_empty() => (
+                rest.to_ascii_lowercase(),
+                format_plan_label(&rest.to_ascii_lowercase()),
+            ),
+            _ => ("weekly".into(), LABEL_WEEKLY.into()),
+        },
+    }
 }
 
 /// Parse Grok billing JSON into a single weekly percentage window.
@@ -202,7 +220,12 @@ pub fn grok_from_billing_json(
             let used = used_raw.clamp(0.0, 100.0);
             let remaining = (100.0 - used).clamp(0.0, 100.0);
             let resets = grok_billing_resets_at(&doc);
-            if let Ok(w) = UsageWindow::try_new("weekly", LABEL_WEEKLY, used, remaining, resets) {
+            let (id, label) = grok_window_identity(
+                doc.current_period
+                    .as_ref()
+                    .and_then(|p| p.period_type.as_deref()),
+            );
+            if let Ok(w) = UsageWindow::try_new(&id, &label, used, remaining, resets) {
                 windows.push(w);
             }
         }
@@ -212,7 +235,7 @@ pub fn grok_from_billing_json(
         .subscription_tiers
         .filter(|s| !s.is_empty())
         .map(|id| Plan {
-            label: id.clone(),
+            label: format_plan_label(&id),
             id,
         });
 
@@ -680,7 +703,6 @@ pub fn weekly_model_id(raw: &str, ordinal: usize) -> String {
 ///
 /// Amp keeps its own label verbatim; Grok (Task 3) and Codex (PR2 Task 9)
 /// consume this for their raw tier ids.
-#[allow(dead_code)]
 pub(crate) fn format_plan_label(raw: &str) -> String {
     raw.split('_')
         .filter(|s| !s.is_empty())
@@ -1045,6 +1067,35 @@ mod tests {
                 assert!(windows[0].resets_at().is_some());
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_monthly_period_type_names_the_window() {
+        let json = br#"{"creditUsagePercent": 20.0,
+            "currentPeriod": {"type": "USAGE_PERIOD_TYPE_MONTHLY", "end": "2026-09-01T00:00:00Z"},
+            "subscriptionTiers": "pro"}"#;
+        let result = grok_from_billing_json(json, None, datetime!(2026-08-07 12:00:00 UTC), true);
+        match result {
+            ProviderResult::Ready { windows, plan, .. } => {
+                assert_eq!(windows[0].id(), "monthly");
+                assert_eq!(windows[0].label(), "Monthly");
+                assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("Pro"));
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn grok_missing_period_type_stays_weekly() {
+        let json = br#"{"creditUsagePercent": 10.0}"#;
+        let result = grok_from_billing_json(json, None, datetime!(2026-08-07 12:00:00 UTC), true);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows[0].id(), "weekly");
+                assert_eq!(windows[0].label(), "Weekly (7d)");
+            }
+            other => panic!("expected ready, got {other:?}"),
         }
     }
 
