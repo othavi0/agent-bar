@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.4] - 2026-08-07
+
+### Changed
+
+- fix: grok window id follows period type
+- fix: amp auth classifier needs explicit marker
+- test: cover format_plan_label helper
+- feat: parse amp subscription usage windows
+- docs: add amp/codex usage improvements plan
+- docs: add amp/codex usage improvements spec
+
 ## [10.3.3] - 2026-08-07
 
 ### Changed
