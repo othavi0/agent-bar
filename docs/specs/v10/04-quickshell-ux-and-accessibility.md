@@ -11,7 +11,8 @@ verified Quattro-native glyphs or explicit English text labels.
 
 - `UX-001`: Render one compact chip per enabled provider in settings order.
 - `UX-002`: A chip contains the provider icon and the configured used or
-  remaining percentage.
+  remaining percentage of the elected lead window (per `UX-020D`), so the
+  chip and the popup always name the same number.
 - `UX-003`: Do not render `AB`, `Agent Bar`, or a generic leading product icon.
 - `UX-004`: Left click opens the clicked provider.
 - `UX-005`: Left-clicking the same provider while open closes the popup.
@@ -77,11 +78,13 @@ not literal UI.
   bar chip. Every level carries a word; no level is colour-only.
 - `UX-020D`: The popup renders exactly one lead window, elected
   deterministically: a critical window wins, and among criticals the one with
-  the lowest remaining percentage; otherwise the window whose reset comes
-  soonest; ties keep the delivered order; when no window has a future reset
-  the first delivered window leads. Every other window renders as a compact
-  row in delivered order. Reset times render as a countdown, in hours below
-  24 hours.
+  the lowest remaining percentage; otherwise a plan window (window id
+  starting `plan-`) wins, and among plan windows the one with the lowest
+  remaining percentage; otherwise the window whose reset comes soonest; ties
+  keep the delivered order; when no window has a future reset the first
+  delivered window leads. Every other window renders as a compact row in
+  delivered order. Reset times render as a countdown, in hours below 24
+  hours.
 - `UX-020B`: The selected rail icon uses a neutral soft plate only for the
   provider that owns the open content; no accent edge tick; Settings has no
   idle selected-looking border.
