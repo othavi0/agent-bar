@@ -423,4 +423,21 @@ TestCase {
     verify(popup.indexOf("active: root.isOpen") >= 0,
         "Popup must drive ProviderView.active from its own open state")
   }
+
+  // JSON-022C: Codex's rate-limit reset count renders as a muted popup line,
+  // singular/plural, and stays empty for absent or zero (byte-identical
+  // popup for every other provider).
+  function test_reset_line_visible_only_when_positive() {
+    var withResets = { id: "codex", name: "Codex", state: "ready", windows: [],
+                        rateLimitResetsAvailable: 2 }
+    compare(Core.rateLimitResetsText(withResets), "↻ 2 rate-limit resets available")
+    var one = { id: "codex", name: "Codex", state: "ready", windows: [],
+                rateLimitResetsAvailable: 1 }
+    compare(Core.rateLimitResetsText(one), "↻ 1 rate-limit reset available")
+    var without = { id: "codex", name: "Codex", state: "ready", windows: [] }
+    compare(Core.rateLimitResetsText(without), "")
+    var zero = { id: "codex", name: "Codex", state: "ready", windows: [],
+                 rateLimitResetsAvailable: 0 }
+    compare(Core.rateLimitResetsText(zero), "")
+  }
 }

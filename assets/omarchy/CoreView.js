@@ -674,6 +674,18 @@ function windowLayout(provider, metric, nowMs) {
   return layout
 }
 
+// Codex rate-limit reset count (JSON-022C). Singular/plural, empty when
+// absent or zero so the popup stays byte-identical for every other provider.
+function rateLimitResetsText(provider) {
+  if (!provider)
+    return ""
+  var n = Number(provider.rateLimitResetsAvailable)
+  if (!isFinite(n) || n <= 0)
+    return ""
+  n = Math.floor(n)
+  return "↻ " + n + " rate-limit reset" + (n === 1 ? "" : "s") + " available"
+}
+
 function headerModel(provider, refreshing) {
   if (!provider) {
     return {
