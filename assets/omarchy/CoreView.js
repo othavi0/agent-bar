@@ -92,8 +92,8 @@ function visibleProviders(snapshot, settings) {
 // window's used|remaining percent — the same election the popup runs — or an
 // em-dash when there is no window. Chip and popup can never disagree on
 // which window a number belongs to.
-function chipPercentText(provider, metric) {
-  var lines = windowDisplayLines(provider, metric, undefined)
+function chipPercentText(provider, metric, nowMs) {
+  var lines = windowDisplayLines(provider, metric, nowMs)
   var lead = electLeadIndex(lines)
   if (lead < 0)
     return "\u2014"
@@ -226,10 +226,10 @@ function stateQualifier(state) {
 
 // Numeral box content: loading renders the loading cue in place of the
 // number so the cue is visually distinct from the — no-data glyph (§5).
-function chipNumeralText(provider, metric) {
+function chipNumeralText(provider, metric, nowMs) {
   if (provider && String(provider.state || "") === "loading")
     return "···"
-  return chipPercentText(provider, metric)
+  return chipPercentText(provider, metric, nowMs)
 }
 
 function chipDimmed(provider) {
@@ -244,13 +244,13 @@ function chipDimmed(provider) {
 // provider, the displayed percentage when one exists, and a plain-language
 // qualifier when not ready. The raw enum value never renders (copy design
 // §5.4). Single-line by construction: no window detail, no live clock.
-function chipAccessibleLabel(provider, metric) {
+function chipAccessibleLabel(provider, metric, nowMs) {
   if (!provider)
     return ""
   var name = provider.name ? String(provider.name) : providerDisplayName(provider.id)
   var parts = [name]
   var state = provider.state ? String(provider.state) : "unknown"
-  var pct = chipPercentText(provider, metric)
+  var pct = chipPercentText(provider, metric, nowMs)
   if (pct !== "—" || state === "ready")
     parts.push(pct)
   var qualifier = stateQualifier(state)

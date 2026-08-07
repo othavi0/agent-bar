@@ -499,7 +499,7 @@ TestCase {
            "the chip must not reference the host tooltip property")
   }
 
-  function test_source_guard_no_process_timer_shell() {
+  function test_source_guard_no_process_or_shell() {
     var files = [widgetUrl, chipUrl]
     for (var i = 0; i < files.length; i++) {
       var xhr = new XMLHttpRequest()
@@ -511,10 +511,16 @@ TestCase {
       // Strip line comments then re-check forbidden owners.
       var code = src.replace(/\/\/[^\n]*/g, "")
       verify(code.indexOf("Process") < 0, files[i] + " must not own Process")
-      verify(code.indexOf("Timer") < 0, files[i] + " must not own Timer")
+      if (files[i] === chipUrl)
+        verify(code.indexOf("Timer") < 0, files[i] + " must not own Timer")
       verify(src.indexOf("bash -lc") < 0, files[i])
       verify(src.indexOf("sh -c") < 0, files[i])
     }
+
+    var widget = sourceAt(widgetUrl)
+    verify(widget.indexOf("interval: 30000") >= 0)
+    verify(widget.indexOf("onTriggered: root.nowMs = Date.now()") >= 0)
+    verify(widget.indexOf("root.displayMetric, root.nowMs") >= 0)
   }
 
   function test_source_chip_is_widgetbutton_no_wheel() {
