@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
-  "pluginId": "agent-bar.usage",
-  "version": "10.3.2",
+  "pluginId": "othavi0.agent-bar",
+  "version": "10.3.3",
   "target": "x86_64-unknown-linux-gnu",
   "omarchyContract": 1,
   "minimumQuickshellVersion": "0.3.0",
-  "sourceCommit": "7f5a60b266b8971ec0d4f86663e9fe3383e70988",
+  "sourceCommit": "ce86ad5ac8bb33a1c432f8ec57042e8800d3c46c",
   "files": [
     {
       "path": "BarWidget.qml",
-      "sha256": "6f1d90cd2593ffd61526adaa7e1ffe07476eb5e9181da23a4b16b13eebe368f4",
-      "size": 7894,
+      "sha256": "0c0228b77b14b654a4ee10ae47ffb91e04c76df5c88a844334fc8ea4d44654c7",
+      "size": 7896,
       "mode": "0644"
     },
     {
       "path": "CoreMaintenance.js",
-      "sha256": "dd56da4b8b8e8646803d00262ae4a80c0965d53d40da8fbbbcb735d0d6b23dee",
-      "size": 8122,
+      "sha256": "a34b9c2c28591c7840d6c957b13be9a8127e32b519d2c2d894adaf5bbdaa1ced",
+      "size": 8124,
       "mode": "0644"
     },
     {
@@ -75,14 +75,14 @@
     },
     {
       "path": "README.md",
-      "sha256": "c1767a5c8adf75a73fd8dd73bd808ff2bf71502b4a647d359e04e9faf532fffa",
-      "size": 734,
+      "sha256": "091c51ee94c55d158dadf26a7bf39d21750bd99945e6d43e7fc89962164af3e1",
+      "size": 738,
       "mode": "0644"
     },
     {
       "path": "Service.qml",
-      "sha256": "92b6a302cee3558d27e2583fa683a81899218bf61dd1c9dbcf50c9968f861128",
-      "size": 29066,
+      "sha256": "8fdfd181f9b6650b132f0969300297d0b587df9fc8f2ec8779fb81d95137616e",
+      "size": 29068,
       "mode": "0644"
     },
     {
@@ -93,7 +93,7 @@
     },
     {
       "path": "bin/agent-bar",
-      "sha256": "74b160116e86d476cb2ccddb2f558644a8c06234fe52f59fd5de97e8c43a30b7",
+      "sha256": "4cd6ae74b9714f78ef449ae465f7f1a4d7ec3aecbd41cc2732f371ab4dd9a67b",
       "size": 4037680,
       "mode": "0755"
     },
@@ -171,8 +171,8 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "b6d6a38135bb51a92d508979c9995aad5f501f3dc5db7c41fc3fb4eefdad66ed",
-      "size": 617,
+      "sha256": "b1ce6de05b6b4c5c174e7212971b5bc6c478acc9524aaf989ad4be0755fbe4e6",
+      "size": 619,
       "mode": "0644"
     },
     {
@@ -183,8 +183,8 @@
     },
     {
       "path": "scripts/agent-bar-open-terminal",
-      "sha256": "90b82ef083fbf9f4326b5ec7cb3be4b748a9a08b8637c8c4107b861c5e7590b6",
-      "size": 1455,
+      "sha256": "13d39d0494d19f91230bbe0d50e837b128033d61b524e72a70812d0614c581ba",
+      "size": 1457,
       "mode": "0755"
     }
   ]

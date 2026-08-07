@@ -11,7 +11,7 @@ import "components"
 // Presentation only — Service owns I/O and polling (ARCH-023).
 BarWidget {
   id: root
-  moduleName: "agent-bar.usage"
+  moduleName: "othavi0.agent-bar"
 
   readonly property var agentService: bar && bar.shell
       ? bar.shell.serviceFor(moduleName)

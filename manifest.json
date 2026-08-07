@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "agent-bar.usage",
+  "id": "othavi0.agent-bar",
   "name": "Agent Bar",
-  "version": "10.3.2",
+  "version": "10.3.3",
   "author": "othavi0",
   "license": "MIT",
   "description": "LLM quota monitor for Claude, Codex, Amp, and Grok.",
