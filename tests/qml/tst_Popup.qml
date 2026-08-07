@@ -297,6 +297,34 @@ TestCase {
   // reference to a deleted function is invisible to them. These guards ban the
   // exact dead identifiers by name.
   function test_primary_window_allowlist_is_gone() {
+    var files = [
+      "assets/omarchy/BarWidget.qml",
+      "assets/omarchy/components/ConfirmDialog.qml",
+      "assets/omarchy/components/FocusController.qml",
+      "assets/omarchy/components/HeaderTag.qml",
+      "assets/omarchy/components/ProviderChip.qml",
+      "assets/omarchy/components/ProviderHeader.qml",
+      "assets/omarchy/components/SettingsProviderRow.qml",
+      "assets/omarchy/components/StateMessage.qml",
+      "assets/omarchy/components/UsageWindow.qml",
+      "assets/omarchy/CoreMaintenance.js",
+      "assets/omarchy/CoreScroll.js",
+      "assets/omarchy/CoreService.js",
+      "assets/omarchy/CoreSettings.js",
+      "assets/omarchy/CoreView.js",
+      "assets/omarchy/MaintenanceView.qml",
+      "assets/omarchy/Popup.qml",
+      "assets/omarchy/ProviderRail.qml",
+      "assets/omarchy/ProviderView.qml",
+      "assets/omarchy/Service.qml",
+      "assets/omarchy/SettingsView.qml"
+    ]
+    for (var i = 0; i < files.length; i++) {
+      var source = read(files[i])
+      verify(source.indexOf("primaryWindow") < 0,
+             files[i] + " still references the deleted lead selector")
+    }
+
     var core = read("assets/omarchy/CoreView.js")
     verify(core.indexOf("PRIMARY_WINDOW_IDS") < 0,
            "the id allowlist must be deleted, not left dormant")

@@ -225,6 +225,25 @@ TestCase {
     compare(Core.displayMetric(null), "remaining")
   }
 
+  // UX-002 (amended 2026-08-07): the chip shows the elected lead window —
+  // for a subscriber that is the subscription bucket, not windows[0]
+  // (Amp Free), even though the free window has the nearer reset.
+  function test_chip_shows_elected_lead_for_subscriber() {
+    var p = {
+      id: "amp",
+      name: "Amp",
+      state: "ready",
+      windows: [
+        { id: "daily", label: "Daily (1d)", usedPercent: 31, remainingPercent: 69,
+          resetsAt: "2099-01-01T00:00:00Z" },
+        { id: "plan-other", label: "Plan · agent", usedPercent: 8, remainingPercent: 92 },
+        { id: "plan-orb", label: "Plan · orbs", usedPercent: 0, remainingPercent: 100 }
+      ]
+    }
+    compare(Core.chipPercentText(p, "remaining"), "92%")
+    compare(Core.chipPercentText(p, "used"), "8%")
+  }
+
   // Live Quattro: snapshot windows arrive as array-like QVariantList where
   // Array.isArray is false but .length / [0] still work (chips stuck on "—").
   function test_array_like_windows_render_percent() {
@@ -480,7 +499,7 @@ TestCase {
            "the chip must not reference the host tooltip property")
   }
 
-  function test_source_guard_no_process_timer_shell() {
+  function test_source_guard_no_process_or_shell() {
     var files = [widgetUrl, chipUrl]
     for (var i = 0; i < files.length; i++) {
       var xhr = new XMLHttpRequest()
@@ -492,10 +511,16 @@ TestCase {
       // Strip line comments then re-check forbidden owners.
       var code = src.replace(/\/\/[^\n]*/g, "")
       verify(code.indexOf("Process") < 0, files[i] + " must not own Process")
-      verify(code.indexOf("Timer") < 0, files[i] + " must not own Timer")
+      if (files[i] === chipUrl)
+        verify(code.indexOf("Timer") < 0, files[i] + " must not own Timer")
       verify(src.indexOf("bash -lc") < 0, files[i])
       verify(src.indexOf("sh -c") < 0, files[i])
     }
+
+    var widget = sourceAt(widgetUrl)
+    verify(widget.indexOf("interval: 30000") >= 0)
+    verify(widget.indexOf("onTriggered: root.nowMs = Date.now()") >= 0)
+    verify(widget.indexOf("root.displayMetric, root.nowMs") >= 0)
   }
 
   function test_source_chip_is_widgetbutton_no_wheel() {

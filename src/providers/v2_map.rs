@@ -76,6 +76,8 @@ pub fn amp_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult 
     // "orb usage" = included orb-hours allowance; "other usage" = included agent
     // usage. The plan name doubles as the Plan badge. The "Individual credits: $"
     // line is monetary and intentionally never parsed into a window (JSON-022B).
+    // Labels render the meaning, not the CLI word: "other" is included agent
+    // usage, "orb" is included orb-hours (design 2026-08-07).
     let mut plan = None;
     if let Some(caps) = Regex::new(
         r"Subscription\s+(\S+):\s*([0-9.]+)%\s*other usage and\s*([0-9.]+)%\s*orb usage remaining",
@@ -90,8 +92,8 @@ pub fn amp_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult 
             });
         }
         for (idx, id, label) in [
-            (2usize, "plan-other", "Plan · other"),
-            (3usize, "plan-orb", "Plan · orb"),
+            (2usize, "plan-other", "Plan · agent"),
+            (3usize, "plan-orb", "Plan · orbs"),
         ] {
             if let Some(rem) = caps.get(idx).and_then(|m| m.as_str().parse::<f64>().ok()) {
                 let rem = rem.clamp(0.0, 100.0);
@@ -876,10 +878,10 @@ mod tests {
             ProviderResult::Ready { windows, plan, .. } => {
                 let ids: Vec<&str> = windows.iter().map(|w| w.id()).collect();
                 assert_eq!(ids, vec!["daily", "plan-other", "plan-orb"]);
-                assert_eq!(windows[1].label(), "Plan · other");
+                assert_eq!(windows[1].label(), "Plan · agent");
                 assert!((windows[1].remaining_percent() - 92.0).abs() < 0.01);
                 assert!((windows[1].used_percent() - 8.0).abs() < 0.01);
-                assert_eq!(windows[2].label(), "Plan · orb");
+                assert_eq!(windows[2].label(), "Plan · orbs");
                 assert!((windows[2].remaining_percent() - 100.0).abs() < 0.01);
                 // Amp exposes no subscription reset timestamp ("monthly" only).
                 assert!(windows[1].resets_at().is_none());
