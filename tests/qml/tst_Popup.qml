@@ -302,6 +302,8 @@ TestCase {
            "the id allowlist must be deleted, not left dormant")
     verify(core.indexOf("windowGroups") < 0,
            "windowGroups is replaced by windowLayout")
+    verify(core.indexOf("primaryWindow") < 0,
+           "primaryWindow is replaced by the elected lead window")
     verify(core.indexOf("function electLeadIndex") >= 0)
     var view = read("assets/omarchy/ProviderView.qml")
     verify(view.indexOf("groups.primary") < 0)

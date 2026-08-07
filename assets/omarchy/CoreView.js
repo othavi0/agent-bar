@@ -88,22 +88,16 @@ function visibleProviders(snapshot, settings) {
   return out
 }
 
-function primaryWindow(provider) {
-  if (!provider || !Kernel.isArrayLike(provider.windows) || provider.windows.length === 0)
-    return null
-  return provider.windows[0]
-}
-
-// UX-002 / UX-032A: used|remaining percent, or em-dash when empty.
+// UX-002 / UX-032A (amended 2026-08-07): the chip renders the elected lead
+// window's used|remaining percent — the same election the popup runs — or an
+// em-dash when there is no window. Chip and popup can never disagree on
+// which window a number belongs to.
 function chipPercentText(provider, metric) {
-  var w = primaryWindow(provider)
-  if (!w)
+  var lines = windowDisplayLines(provider, metric, undefined)
+  var lead = electLeadIndex(lines)
+  if (lead < 0)
     return "\u2014"
-  var mode = metric === "used" ? "used" : "remaining"
-  var v = mode === "used" ? Number(w.usedPercent) : Number(w.remainingPercent)
-  if (!isFinite(v))
-    return "\u2014"
-  return Math.round(v) + "%"
+  return lines[lead].percentText
 }
 
 // Typed error/collection-failure states shared by the chip cue and the

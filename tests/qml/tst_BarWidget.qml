@@ -225,6 +225,25 @@ TestCase {
     compare(Core.displayMetric(null), "remaining")
   }
 
+  // UX-002 (amended 2026-08-07): the chip shows the elected lead window —
+  // for a subscriber that is the subscription bucket, not windows[0]
+  // (Amp Free), even though the free window has the nearer reset.
+  function test_chip_shows_elected_lead_for_subscriber() {
+    var p = {
+      id: "amp",
+      name: "Amp",
+      state: "ready",
+      windows: [
+        { id: "daily", label: "Daily (1d)", usedPercent: 31, remainingPercent: 69,
+          resetsAt: "2099-01-01T00:00:00Z" },
+        { id: "plan-other", label: "Plan · agent", usedPercent: 8, remainingPercent: 92 },
+        { id: "plan-orb", label: "Plan · orbs", usedPercent: 0, remainingPercent: 100 }
+      ]
+    }
+    compare(Core.chipPercentText(p, "remaining"), "92%")
+    compare(Core.chipPercentText(p, "used"), "8%")
+  }
+
   // Live Quattro: snapshot windows arrive as array-like QVariantList where
   // Array.isArray is false but .length / [0] still work (chips stuck on "—").
   function test_array_like_windows_render_percent() {
