@@ -33,6 +33,15 @@ BarWidget {
   readonly property color chipForeground: bar ? bar.foreground : Color.foreground
   readonly property string chipFontFamily: bar ? bar.fontFamily : "monospace"
 
+  property double nowMs: Date.now()
+  Timer {
+    id: nowTimer
+    interval: 30000
+    running: true
+    repeat: true
+    onTriggered: root.nowMs = Date.now()
+  }
+
   // Popup is open on another monitor → this instance hosts dismiss-only overlay.
   readonly property bool foreignDismissActive: Service.foreignPopupOpen(
     agentService ? agentService.popupOwner : null,
@@ -91,11 +100,11 @@ BarWidget {
         bar: root.bar
         providerId: String(modelData.id || "")
         displayName: modelData.name ? String(modelData.name) : Core.providerDisplayName(providerId)
-        numeralText: Core.chipNumeralText(modelData, root.displayMetric)
+        numeralText: Core.chipNumeralText(modelData, root.displayMetric, root.nowMs)
         stateCue: Core.chipStateCue(modelData)
         cueLabel: Core.chipCueLabel(modelData)
         severityUrgent: Core.chipSeverityUrgent(modelData)
-        accessibleLabel: Core.chipAccessibleLabel(modelData, root.displayMetric)
+        accessibleLabel: Core.chipAccessibleLabel(modelData, root.displayMetric, root.nowMs)
         iconSource: root.iconUrl(providerId)
         tinted: Core.iconTinted(providerId)
         iconScale: Core.iconOpticalScale(providerId)

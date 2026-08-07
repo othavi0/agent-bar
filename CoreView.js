@@ -88,22 +88,16 @@ function visibleProviders(snapshot, settings) {
   return out
 }
 
-function primaryWindow(provider) {
-  if (!provider || !Kernel.isArrayLike(provider.windows) || provider.windows.length === 0)
-    return null
-  return provider.windows[0]
-}
-
-// UX-002 / UX-032A: used|remaining percent, or em-dash when empty.
-function chipPercentText(provider, metric) {
-  var w = primaryWindow(provider)
-  if (!w)
+// UX-002 / UX-032A (amended 2026-08-07): the chip renders the elected lead
+// window's used|remaining percent — the same election the popup runs — or an
+// em-dash when there is no window. Chip and popup can never disagree on
+// which window a number belongs to.
+function chipPercentText(provider, metric, nowMs) {
+  var lines = windowDisplayLines(provider, metric, nowMs)
+  var lead = electLeadIndex(lines)
+  if (lead < 0)
     return "\u2014"
-  var mode = metric === "used" ? "used" : "remaining"
-  var v = mode === "used" ? Number(w.usedPercent) : Number(w.remainingPercent)
-  if (!isFinite(v))
-    return "\u2014"
-  return Math.round(v) + "%"
+  return lines[lead].percentText
 }
 
 // Typed error/collection-failure states shared by the chip cue and the
@@ -232,10 +226,10 @@ function stateQualifier(state) {
 
 // Numeral box content: loading renders the loading cue in place of the
 // number so the cue is visually distinct from the — no-data glyph (§5).
-function chipNumeralText(provider, metric) {
+function chipNumeralText(provider, metric, nowMs) {
   if (provider && String(provider.state || "") === "loading")
     return "···"
-  return chipPercentText(provider, metric)
+  return chipPercentText(provider, metric, nowMs)
 }
 
 function chipDimmed(provider) {
@@ -250,13 +244,13 @@ function chipDimmed(provider) {
 // provider, the displayed percentage when one exists, and a plain-language
 // qualifier when not ready. The raw enum value never renders (copy design
 // §5.4). Single-line by construction: no window detail, no live clock.
-function chipAccessibleLabel(provider, metric) {
+function chipAccessibleLabel(provider, metric, nowMs) {
   if (!provider)
     return ""
   var name = provider.name ? String(provider.name) : providerDisplayName(provider.id)
   var parts = [name]
   var state = provider.state ? String(provider.state) : "unknown"
-  var pct = chipPercentText(provider, metric)
+  var pct = chipPercentText(provider, metric, nowMs)
   if (pct !== "—" || state === "ready")
     parts.push(pct)
   var qualifier = stateQualifier(state)
@@ -614,9 +608,10 @@ function remainingRank(line) {
   return line.remainingPercent === null ? Infinity : line.remainingPercent
 }
 
-// §8: deterministic lead election, replacing the old id allowlist that
-// silently demoted any window id it did not know. Returns an index into
-// `lines`, or -1 when there is nothing to lead.
+// §8: deterministic four-step lead election: critical, plan, nearest future
+// reset, then first delivered. This replaces the old id allowlist that silently
+// demoted any window id it did not know. Returns an index into `lines`, or -1
+// when there is nothing to lead.
 //
 // Delivered order is unique per line, so `<` on the index is already a total
 // tiebreak; the spec's further "then by window id" step is unreachable and is
@@ -638,7 +633,20 @@ function electLeadIndex(lines) {
   if (best >= 0)
     return best
 
-  // 2. Otherwise the nearest reset still in the future. A missing timestamp
+  // 2. UX-020D (amended 2026-08-07): a plan window (id prefix "plan-")
+  //    outranks every non-plan window; among plan windows the lowest
+  //    remaining leads. Ids are typed schema data authored by the Rust
+  //    mappers, so the prefix is a contract, not raw-output parsing.
+  for (i = 0; i < lines.length; i++) {
+    if (lines[i].id.indexOf("plan-") !== 0)
+      continue
+    if (best < 0 || remainingRank(lines[i]) < remainingRank(lines[best]))
+      best = i
+  }
+  if (best >= 0)
+    return best
+
+  // 3. Otherwise the nearest reset still in the future. A missing timestamp
   //    or one that already elapsed ("now") does not compete.
   var bestMs = NaN
   for (i = 0; i < lines.length; i++) {
@@ -655,7 +663,7 @@ function electLeadIndex(lines) {
   if (best >= 0)
     return best
 
-  // 3. Nothing has a future reset: the first delivered window leads.
+  // 4. Nothing has a future reset: the first delivered window leads.
   return 0
 }
 
