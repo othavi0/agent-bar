@@ -1152,4 +1152,15 @@ mod tests {
         );
         assert_eq!(weekly_model_id("X", 2), "weekly-model:x:2");
     }
+
+    #[test]
+    fn format_plan_label_title_cases_underscore_ids() {
+        assert_eq!(format_plan_label("pro"), "Pro");
+        assert_eq!(
+            format_plan_label("self_serve_business_usage_based"),
+            "Self Serve Business Usage Based"
+        );
+        assert_eq!(format_plan_label(""), "");
+        assert_eq!(format_plan_label("_x_"), "X");
+    }
 }
