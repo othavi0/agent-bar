@@ -56,6 +56,8 @@ struct CodexAppServerResetCredits {
 #[serde(rename_all = "camelCase")]
 struct CodexAppServerLimitBucket {
     #[serde(default)]
+    limit_id: Option<String>,
+    #[serde(default)]
     primary: Option<CodexAppServerWindow>,
     #[serde(default)]
     secondary: Option<CodexAppServerWindow>,
@@ -143,13 +145,27 @@ fn normalize_to_rate_limits_json(
     let mut secondary = root.and_then(|r| r.secondary.as_ref());
     let mut individual_limit = root.and_then(|r| r.individual_limit.as_ref());
 
-    // Preferred bucket: explicit `codex` key first (mirrors the upstream
-    // backend's own preference), then any bucket that actually carries
-    // windows. Every other data-carrying bucket is preserved as an extra
-    // bucket instead of being silently dropped.
+    // Preferred bucket: root `rateLimits` first when it carries windows,
+    // otherwise explicit `codex` key (mirrors the upstream backend's own
+    // preference), then any bucket that actually carries windows. Every
+    // other data-carrying bucket in `rateLimitsByLimitId` is preserved as an
+    // extra bucket instead of being silently dropped — this must happen even
+    // when the root already supplied primary/secondary, since the real
+    // payload has root and the by-id map coexist.
+    let root_has_windows = primary.is_some() || secondary.is_some();
     let mut extra: Vec<serde_json::Value> = Vec::new();
-    if primary.is_none() && secondary.is_none() {
-        if let Some(by_id) = raw.rate_limits_by_limit_id.as_ref() {
+    if let Some(by_id) = raw.rate_limits_by_limit_id.as_ref() {
+        if root_has_windows {
+            // Root already won; skip only the map entry that IS the root
+            // bucket (same limit_id, falling back to "codex" when absent) so
+            // it isn't duplicated into extraBuckets.
+            let root_limit_id = root.and_then(|r| r.limit_id.as_deref()).unwrap_or("codex");
+            for (k, b) in by_id.iter() {
+                if k.as_str() != root_limit_id && has_window_data(b) {
+                    extra.push(extra_bucket_to_json(k, b));
+                }
+            }
+        } else {
             let preferred_key = if by_id.get("codex").is_some_and(has_window_data) {
                 Some("codex".to_string())
             } else {
@@ -564,6 +580,67 @@ mod tests {
             doc.get("extraBuckets").is_none(),
             "empty premium bucket must not appear"
         );
+    }
+
+    #[test]
+    fn normalize_keeps_extra_buckets_when_root_has_windows() {
+        let raw: CodexAppServerRateLimitsReadResult = serde_json::from_value(serde_json::json!({
+            "rateLimits": {
+                "limitId": "codex",
+                "primary": {"usedPercent": 12.0, "windowDurationMins": 10080, "resetsAt": 0}
+            },
+            "rateLimitsByLimitId": {
+                "codex": {"primary": {"usedPercent": 12.0, "windowDurationMins": 10080, "resetsAt": 0}},
+                "alpha": {"primary": {"usedPercent": 50.0, "windowDurationMins": 300, "resetsAt": 0}}
+            }
+        }))
+        .expect("wire parse");
+        let bytes = normalize_to_rate_limits_json(&raw, None).expect("normalized");
+        let doc: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(doc["primary"]["usedPercent"], 12.0);
+        let extras = doc["extraBuckets"].as_array().expect("extraBuckets array");
+        assert_eq!(
+            extras.len(),
+            1,
+            "codex must not duplicate itself: {extras:?}"
+        );
+        assert_eq!(extras[0]["limitId"], "alpha");
+    }
+
+    #[test]
+    fn normalize_uses_preferred_by_id_bucket_individual_limit() {
+        let raw: CodexAppServerRateLimitsReadResult = serde_json::from_value(serde_json::json!({
+            "rateLimitsByLimitId": {
+                "codex": {
+                    "primary": {"usedPercent": 12.0, "windowDurationMins": 10080, "resetsAt": 0},
+                    "individualLimit": {"remainingPercent": 40.0, "resetsAt": 1791000000}
+                }
+            }
+        }))
+        .expect("wire parse");
+        let bytes = normalize_to_rate_limits_json(&raw, None).expect("normalized");
+        let doc: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(doc["individualLimit"]["remainingPercent"], 40.0);
+    }
+
+    #[test]
+    fn normalize_root_individual_limit_wins_when_root_has_windows() {
+        let raw: CodexAppServerRateLimitsReadResult = serde_json::from_value(serde_json::json!({
+            "rateLimits": {
+                "primary": {"usedPercent": 12.0, "windowDurationMins": 10080, "resetsAt": 0},
+                "individualLimit": {"remainingPercent": 77.0, "resetsAt": 1791000000}
+            },
+            "rateLimitsByLimitId": {
+                "codex": {
+                    "primary": {"usedPercent": 12.0, "windowDurationMins": 10080, "resetsAt": 0},
+                    "individualLimit": {"remainingPercent": 5.0, "resetsAt": 0}
+                }
+            }
+        }))
+        .expect("wire parse");
+        let bytes = normalize_to_rate_limits_json(&raw, None).expect("normalized");
+        let doc: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(doc["individualLimit"]["remainingPercent"], 77.0);
     }
 
     #[tokio::test]
