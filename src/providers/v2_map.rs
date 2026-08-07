@@ -418,14 +418,14 @@ pub fn codex_from_rate_limits_json(bytes: &[u8], now: OffsetDateTime) -> Provide
             let id = format!("codex:{sanitized}");
             let label = codex_extra_bucket_label(&sanitized, raw.window_minutes);
             if let Some(w) = codex_window(&id, &label, raw) {
-                windows.push(w);
+                push_window_unique(&mut windows, w);
             }
         }
         if let Some(raw) = bucket.secondary.as_ref() {
             let id = format!("codex:{sanitized}:2");
             let label = codex_extra_bucket_label(&sanitized, raw.window_minutes);
             if let Some(w) = codex_window(&id, &label, raw) {
-                windows.push(w);
+                push_window_unique(&mut windows, w);
             }
         }
     }
@@ -1138,6 +1138,39 @@ mod tests {
                 assert!((windows[2].remaining_percent() - 40.0).abs() < 0.01);
                 assert_eq!(rate_limit_resets_available, Some(2));
                 assert_eq!(plan.as_ref().map(|p| p.label.as_str()), Some("Plus"));
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn codex_dedupes_extra_bucket_window_ids_across_case_variants() {
+        // Two limitId keys that differ only by case sanitize to the same
+        // window id ("codex:team-a"); the second must be dropped, not
+        // silently pushed twice (duplicate window ids make
+        // ensure_unique_window_ids reject the entire status).
+        let json = serde_json::json!({
+            "primary": {"usedPercent": 36.0, "windowDurationMins": 10080, "resetsAt": 1791000000},
+            "extraBuckets": [
+                {"limitId": "Team-A",
+                    "primary": {"usedPercent": 10.0, "windowDurationMins": 10080, "resetsAt": 0}},
+                {"limitId": "TEAM-A",
+                    "primary": {"usedPercent": 20.0, "windowDurationMins": 10080, "resetsAt": 0}}
+            ]
+        });
+        let bytes = serde_json::to_vec(&json).expect("fixture json");
+        let result = codex_from_rate_limits_json(&bytes, datetime!(2026-08-07 12:00:00 UTC));
+        let status = crate::status::collect::provider_status_from_result(result.clone());
+        assert!(status.is_ok(), "row failed schema validation: {status:?}");
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 2, "got {windows:?}");
+                let team_a: Vec<_> = windows
+                    .iter()
+                    .filter(|w| w.id() == "codex:team-a")
+                    .collect();
+                assert_eq!(team_a.len(), 1, "duplicate codex:team-a windows");
+                assert!((team_a[0].used_percent() - 10.0).abs() < 0.01);
             }
             other => panic!("expected ready, got {other:?}"),
         }
