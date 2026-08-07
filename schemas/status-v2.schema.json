@@ -207,7 +207,8 @@
         },
         "action": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/action" }]
-        }
+        },
+        "rateLimitResetsAvailable": { "type": "integer", "minimum": 0 }
       }
     },
     "provider": {
