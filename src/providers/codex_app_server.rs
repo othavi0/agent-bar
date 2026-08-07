@@ -37,6 +37,23 @@ struct CodexAppServerWindow {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CodexAppServerIndividualLimit {
+    #[serde(default)]
+    remaining_percent: Option<f64>,
+    #[serde(default)]
+    resets_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexAppServerResetCredits {
+    #[serde(default)]
+    available_count: Option<u32>,
+}
+
+// credits{balance,...} is monetary and intentionally undeclared (JSON-022B).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CodexAppServerLimitBucket {
     #[serde(default)]
     primary: Option<CodexAppServerWindow>,
@@ -44,6 +61,8 @@ struct CodexAppServerLimitBucket {
     secondary: Option<CodexAppServerWindow>,
     #[serde(default)]
     plan_type: Option<String>,
+    #[serde(default)]
+    individual_limit: Option<CodexAppServerIndividualLimit>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -55,6 +74,8 @@ struct CodexAppServerRateLimitsReadResult {
     rate_limits_by_limit_id: Option<BTreeMap<String, CodexAppServerLimitBucket>>,
     #[serde(default)]
     plan_type: Option<String>,
+    #[serde(default)]
+    rate_limit_reset_credits: Option<CodexAppServerResetCredits>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -134,6 +155,24 @@ fn normalize_to_rate_limits_json(
     }
     if let Some(pt) = plan_type {
         doc.insert("plan_type".into(), serde_json::Value::String(pt));
+    }
+    if let Some(il) = root.and_then(|r| r.individual_limit.as_ref()) {
+        if let Some(rem) = il.remaining_percent {
+            doc.insert(
+                "individualLimit".into(),
+                serde_json::json!({
+                    "remainingPercent": rem,
+                    "resetsAt": il.resets_at.unwrap_or(0),
+                }),
+            );
+        }
+    }
+    if let Some(n) = raw
+        .rate_limit_reset_credits
+        .as_ref()
+        .and_then(|c| c.available_count)
+    {
+        doc.insert("rateLimitResetsAvailable".into(), serde_json::json!(n));
     }
     serde_json::to_vec(&serde_json::Value::Object(doc)).ok()
 }
@@ -433,6 +472,25 @@ mod tests {
         }
         // Keep the stream open briefly so the client can finish.
         tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    #[test]
+    fn normalize_passes_individual_limit_and_reset_count_through() {
+        let raw: CodexAppServerRateLimitsReadResult = serde_json::from_value(serde_json::json!({
+            "rateLimits": {
+                "limitId": "codex",
+                "primary": {"usedPercent": 12.0, "windowDurationMins": 10080, "resetsAt": 1791000000},
+                "secondary": null,
+                "individualLimit": {"remainingPercent": 40.0, "resetsAt": 1791000000},
+                "planType": "plus"
+            },
+            "rateLimitResetCredits": {"availableCount": 2, "credits": []}
+        }))
+        .expect("wire parse");
+        let bytes = normalize_to_rate_limits_json(&raw, Some("plus")).expect("normalized");
+        let doc: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(doc["individualLimit"]["remainingPercent"], 40.0);
+        assert_eq!(doc["rateLimitResetsAvailable"], 2);
     }
 
     #[tokio::test]
