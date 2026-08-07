@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.6] - 2026-08-07
+
+### Changed
+
+- docs: amp subscription lead window design
+- fix: chip election shares the popup clock
+- docs: amend UX-002/UX-020D for plan lead
+- feat: chip renders elected lead window
+- feat: plan windows outrank free in election
+- feat: rename amp plan labels to agent/orbs
+
 ## [10.3.5] - 2026-08-07
 
 ### Changed
