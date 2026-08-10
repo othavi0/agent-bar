@@ -54,7 +54,7 @@ TestCase {
 
   // Every numeric literal that appears in the opacity slot of a
   // Util.alpha(color, opacity) call, read from source. Handles both plain
-  // literals and conditional expressions (the showStale ternary).
+  // literals and conditional expressions.
   function alphaArgValues(code) {
     var values = []
     var callRe = /Util\.alpha\(([^()]*)\)/g

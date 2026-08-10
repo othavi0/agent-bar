@@ -36,11 +36,12 @@ Item {
   readonly property bool isCritical: root.severity === "critical"
   readonly property color valueColor: root.isCritical ? Color.urgent : root.foreground
   // Severity describes the numbers on screen, so it outranks dimming: a
-  // stale window still shows the last reading, and a critical last reading
-  // is still critical. Staleness is carried by the root opacity, the reduced
-  // fill opacity, and the stale banner — not by hiding the severity colour.
-  // valueColor and fillColor must agree on this; they disagreed once, and
-  // the numeral and its own track rendered two different verdicts.
+  // window still shows its reading, and a critical reading is still
+  // critical. valueColor and fillColor must agree on this; they disagreed
+  // once, and the numeral and its own track rendered two different verdicts.
+  // UX-028 (amended) retired the one caller that ever set `dimmed` — stale
+  // no longer dims anything. The property stays because it is the component's
+  // own low-emphasis mode, not a staleness signal; no caller sets it today.
   readonly property color fillColor: root.isCritical
       ? Color.urgent
       : (root.dimmed ? root.foreground : root.accent)

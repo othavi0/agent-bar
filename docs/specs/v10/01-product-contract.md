@@ -77,7 +77,7 @@ Notifications: enabled
 2. Left-clicking a chip opens that provider in the consolidated popup.
 3. The popup shows plan, usage windows, reset times, and typed error/action
    state; connection state is implied structurally and the last-success age
-   appears in the stale banner.
+   appears as a neutral caption while a reading is retained (`UX-028`).
 4. Clicking the same chip closes the popup; clicking another chip switches
    provider without closing it.
 

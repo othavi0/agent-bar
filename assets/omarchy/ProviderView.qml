@@ -5,10 +5,11 @@ import "CoreView.js" as Core
 import "components"
 
 // Single selected-provider content pane, visual design §3.4/§8:
-// header -> [stale banner] -> lead window (large) -> compact rows
-// -> state message (non-window, non-stale modes). Plan 03 removed the meta
-// footer; last-success age now lives in the stale banner and is otherwise
-// implied structurally (windows render only when ready).
+// header -> [age line] -> lead window (large) -> compact rows
+// -> state message (non-window modes). Plan 03 removed the meta footer;
+// last-success age now lives in one neutral caption shown while the reading
+// is retained (UX-028 amended). Staleness changes no colour, no opacity, and
+// no layout — only that caption's presence.
 Item {
   id: root
 
@@ -43,13 +44,16 @@ Item {
   readonly property var windows: Core.windowLayout(provider, displayMetric, nowMs)
   readonly property string severity: Core.providerSeverity(provider)
   readonly property var actions: Core.stateActions(provider)
-  // Adjusted (plan 03): was mode === "stale_windows" only, which fed the
-  // banner's Retry Repeater and left the no-windows stale mode ("state")
-  // without a Retry control. Both stale modes share one provider.state
-  // check; dimmed: root.isStale on the windows Column is unaffected since
-  // that Column is only visible in the "windows"/"stale_windows" modes,
-  // where state === "stale" iff mode === "stale_windows" anyway.
-  readonly property bool isStale: String(root.provider && root.provider.state || "") === "stale"
+  // UX-028 (amended): staleness is reported as a fact, never as a fault. The
+  // pane states when the reading was taken and stops there — no glyph, no
+  // urgent colour, no error text, no Retry (the header's own refresh control
+  // already covers the action).
+  readonly property bool showsAge: String(root.provider && root.provider.state || "") === "stale"
+  readonly property string ageText: {
+    var age = Core.formatAgoText(
+      root.header.lastSuccessAt ? root.header.lastSuccessAt : "", root.nowMs)
+    return age.length ? "Updated " + age : ""
+  }
   readonly property string unitText: root.displayMetric === "used" ? "used" : "left"
   readonly property color accentColor: Color.accent
 
@@ -67,7 +71,6 @@ Item {
       name: root.header.name
       plan: root.header.plan
       refreshing: root.header.refreshing
-      showStale: root.header.showStale
       severityText: Core.severityTagText(root.severity)
       severityUrgent: root.severity === "critical"
       foreground: root.foreground
@@ -83,67 +86,20 @@ Item {
       foreground: root.foreground
     }
 
-    // Stale banner (UX-028): carries last-success age + safe error + Retry.
-    // Never color-only (A11Y-012): glyph and words, urgent-tinted per the
-    // approved mockup.
-    Row {
-      visible: root.isStale
+    // Age line (UX-028 amended): one caption in the pane's own foreground at
+    // the same 0.72 alpha the header tags use. Plain statement of when the
+    // reading was taken — the eye reads it as metadata, not as an alert, and
+    // assistive tech hears exactly the same words (A11Y-012).
+    Text {
+      visible: root.showsAge && root.ageText.length > 0
       width: parent.width
-      spacing: Style.space(8)
-
-      Text {
-        text: "󰅐"
-        color: Color.urgent
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-        textFormat: Text.PlainText
-        Accessible.ignored: true
-      }
-      Text {
-        width: Math.max(0, parent.width - Style.space(120))
-        text: {
-          var age = Core.formatAgoText(
-            root.header.lastSuccessAt ? root.header.lastSuccessAt : "", root.nowMs)
-          var line = "Last data " + (age.length ? age : "unknown")
-          var err = Core.errorMessage(root.provider)
-          if (err.length)
-            line += " · " + err
-          return line
-        }
-        color: Color.urgent
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        wrapMode: Text.WordWrap
-        textFormat: Text.PlainText
-        Accessible.name: text
-      }
-      Repeater {
-        model: root.isStale ? root.actions : []
-        Text {
-          required property var modelData
-          visible: String(modelData.kind || "") === "retry"
-          text: modelData.label
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          font.underline: true
-          textFormat: Text.PlainText
-          Accessible.name: text
-          Accessible.role: Accessible.Button
-          Accessible.onPressAction: activate()
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.activate()
-          }
-          function activate() {
-            if (!root.provider)
-              return
-            root.actionRequested(String(root.provider.id),
-                                 String(modelData.kind || ""), modelData.target)
-          }
-        }
-      }
+      text: root.ageText
+      color: Util.alpha(root.foreground, 0.72)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      wrapMode: Text.WordWrap
+      textFormat: Text.PlainText
+      Accessible.name: text
     }
 
     // §3.4/§8: one elected lead window rendered large, every other window as
@@ -152,7 +108,7 @@ Item {
     Column {
       width: parent.width
       spacing: Style.spacing.xxxl
-      visible: root.mode === "windows" || root.mode === "stale_windows"
+      visible: root.mode === "windows"
 
       Repeater {
         model: root.windows.lead ? [root.windows.lead] : []
@@ -173,7 +129,6 @@ Item {
           severity: modelData.severity ? modelData.severity : ""
           unitText: root.unitText
           emphasis: true
-          dimmed: root.isStale
           foreground: root.foreground
           accent: root.accentColor
           fontFamily: root.fontFamily
@@ -199,7 +154,6 @@ Item {
             severity: modelData.severity ? modelData.severity : ""
             unitText: root.unitText
             emphasis: false
-            dimmed: root.isStale
             foreground: root.foreground
             accent: root.accentColor
             fontFamily: root.fontFamily
@@ -221,8 +175,10 @@ Item {
 
     StateMessage {
       width: parent.width
-      visible: (root.mode === "skeleton" || root.mode === "empty_windows" || root.mode === "state")
-          && String(root.provider && root.provider.state || "") !== "stale"
+      // No stale exception is needed: contentMode routes stale through the
+      // ready branch, so it lands on "windows"/"empty_windows" like any other
+      // provider holding a reading.
+      visible: root.mode === "skeleton" || root.mode === "empty_windows" || root.mode === "state"
       skeleton: root.mode === "skeleton"
       title: root.mode === "skeleton" ? "" : Core.stateTitle(root.provider)
       body: root.mode === "skeleton" ? "" : Core.stateBody(root.provider)

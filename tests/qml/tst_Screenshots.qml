@@ -126,9 +126,12 @@ TestCase {
       stage.badgeText = "Connected · refreshing"
       stage.bodyText = "Weekly (7d) · resets in 23h 1m · 74% left (prior data kept)"
     } else if (name.indexOf("stale-dark") === 0) {
-      stage.titleText = "Grok"
-      stage.badgeText = "STALE"
-      stage.bodyText = "Last data 14m ago · Temporary network failure."
+      // UX-028 (amended): a retained reading is presented as a reading. The
+      // badge stays "Connected" like ready, the windows render unchanged, and
+      // the only difference from ready-dark is the neutral age caption.
+      stage.titleText = "Claude"
+      stage.badgeText = "Connected"
+      stage.bodyText = "Updated 14m ago · Session (5h) · resets in 3h 1m · 58% left · Weekly (7d) 60% · 23h 1m"
     } else if (name.indexOf("critical-dark") === 0) {
       stage.titleText = "Claude"
       stage.badgeText = "CRITICAL"
