@@ -125,24 +125,47 @@ TestCase {
     // forever regardless of ProviderView.qml's contents. Fixed to match the
     // established convention.
     var view = read("assets/omarchy/ProviderView.qml")
-    // §6/§9: the meta footer is removed in all states; its age moved to the
-    // stale banner and connection state is structural.
+    // §6/§9: the meta footer is removed in all states; connection state is
+    // structural. The `"Updated "` ban lifted with UX-028 (amended) — the age
+    // is now a neutral line owned by test_stale_age_line_is_neutral. What this
+    // test still guards is the footer's own vocabulary never coming back.
     verify(view.indexOf("connection") < 0)
-    verify(view.indexOf('"Updated "') < 0)
     verify(view.indexOf('"Cache"') < 0)
     verify(view.indexOf('"Live"') < 0)
   }
 
-  function test_stale_banner_carries_age_and_retry() {
+  // UX-028 (amended): the urgent stale banner is replaced by one neutral age
+  // line. No glyph, no urgent colour, no Retry — the header's own refresh
+  // control already covers the action, and nothing may read as a fault.
+  function test_stale_age_line_is_neutral() {
     var view = read("assets/omarchy/ProviderView.qml")
-    verify(view.indexOf("󰅐") >= 0)
-    verify(view.indexOf('"Last data "') >= 0)
+    verify(view.length > 0)
     verify(view.indexOf("formatAgoText") >= 0)
+    verify(view.indexOf('"Updated "') >= 0)
+    // The alarming shapes the old banner used must all be gone.
+    verify(view.indexOf("󰅐") < 0)
     verify(view.indexOf("⌛") < 0)
+    verify(view.indexOf('"Last data "') < 0)
+    verify(view.indexOf("Color.urgent") < 0)
+    verify(view.indexOf("errorMessage") < 0)
     // formatAgoText already returns "5m ago"/"just now" — an appended " ago"
     // literal is the regression shape this test exists to catch.
     verify(view.indexOf('+ " ago"') < 0)
-    verify(view.indexOf('"Last data " + (age.length ? age : "unknown")') >= 0)
+  }
+
+  // The retained reading must render at full strength: no opacity knob may
+  // reappear keyed on staleness.
+  function test_stale_windows_are_not_dimmed() {
+    var view = read("assets/omarchy/ProviderView.qml")
+    verify(view.length > 0)
+    verify(view.indexOf("isStale") < 0)
+    verify(view.indexOf("stale_windows") < 0)
+    verify(view.indexOf("dimmed:") < 0)
+    // Banning the `dimmed` property alone only bans one spelling. An inline
+    // `opacity:` binding keyed on provider.state would restore the same
+    // visual result under a different name, so the pane may assign none.
+    // (Prose may still say "opacity" — only the binding is banned.)
+    verify(view.indexOf("opacity:") < 0)
   }
 
   function test_full_width_separator_present() {

@@ -4,7 +4,7 @@ import qs.Ui
 
 // Provider content header — name, plan tag, severity tag, refresh only
 // (Fase 2 slim-down). Connection state is implied structurally (UX-017);
-// last-success age appears in the stale banner, not here.
+// last-success age appears in the pane's own age caption, not here.
 // UX-016: deliberately no provider icon here (icon lives only on the rail).
 Item {
   id: root
@@ -12,7 +12,6 @@ Item {
   property string name: ""
   property string plan: ""
   property bool refreshing: false
-  property bool showStale: false
   property string severityText: ""
   property bool severityUrgent: false
   property color foreground: Color.foreground

@@ -41,6 +41,10 @@ TestCase {
     property string titleText: ""
     property string bodyText: ""
     property string badgeText: ""
+    // UX-028 (amended): the age is its own neutral caption, never merged into
+    // the usage text. Modelled separately so the evidence cannot approve a
+    // presentation the pane does not produce.
+    property string captionText: ""
     property color fg: "#e4e4e7"
     property color muted: "#a1a1aa"
     property color badgeColor: "#e4e4e7"
@@ -72,6 +76,19 @@ TestCase {
         textFormat: Text.PlainText
       }
       Text {
+        // No `visible` binding: under the offscreen software backend a Text
+        // that flips visible false->true stays blank in the very next
+        // grabToImage, which is why the badge above has never rendered in any
+        // captured evidence. An always-present Text painting an empty string
+        // keeps the caption reliable and the layout identical across panels.
+        width: parent.width
+        text: stage.captionText
+        color: stage.muted
+        font.pixelSize: 11
+        wrapMode: Text.WordWrap
+        textFormat: Text.PlainText
+      }
+      Text {
         width: parent.width
         text: stage.bodyText
         color: stage.muted
@@ -97,6 +114,9 @@ TestCase {
   }
 
   function paintState(name) {
+    // Clear per-state fields first: the stage is reused across captures, so an
+    // unset field would leak the previous panel's value into this one.
+    stage.captionText = ""
     // Map evidence basename → deterministic fixture panel
     if (name.indexOf("ready-light") === 0) {
       applyTheme("light")
@@ -126,9 +146,14 @@ TestCase {
       stage.badgeText = "Connected · refreshing"
       stage.bodyText = "Weekly (7d) · resets in 23h 1m · 74% left (prior data kept)"
     } else if (name.indexOf("stale-dark") === 0) {
-      stage.titleText = "Grok"
-      stage.badgeText = "STALE"
-      stage.bodyText = "Last data 14m ago · Temporary network failure."
+      // UX-028 (amended): a retained reading is presented as a reading. This
+      // panel is ready-dark plus one neutral age caption — same title, same
+      // badge, same usage text. Any other difference would be evidence of a
+      // presentation the pane no longer produces.
+      stage.titleText = "Claude"
+      stage.badgeText = "Connected"
+      stage.captionText = "Updated 14m ago"
+      stage.bodyText = "Session (5h) · resets in 3h 1m · 58% left · Weekly (7d) 60% · 23h 1m"
     } else if (name.indexOf("critical-dark") === 0) {
       stage.titleText = "Claude"
       stage.badgeText = "CRITICAL"
@@ -185,6 +210,10 @@ TestCase {
 
   function captureOne(name) {
     paintState(name)
+    // Let the Column relayout before grabbing. Toggling a child's `visible`
+    // (the age caption) re-runs the positioner, and grabToImage otherwise
+    // captures the previous frame — the caption rendered blank without this.
+    wait(50)
     var path = evidenceDir + "/" + name
     var finished = false
     stage.grabToImage(function (result) {

@@ -264,16 +264,22 @@ TestCase {
     compare(lines[0].percentText, "100%")
   }
 
+  // UX-028 (amended): stale is retained data, not a fault. The bar renders it
+  // exactly as ready — dimming is reserved for states with no usable reading.
   function test_chip_dimmed_reflects_ready_state() {
-    verify(Core.chipDimmed(makeProvider("claude", "stale", 1, 99)))
+    verify(!Core.chipDimmed(makeProvider("claude", "stale", 1, 99)))
     verify(!Core.chipDimmed(makeProvider("claude", "ready", 1, 99)))
+    verify(Core.chipDimmed(makeProvider("claude", "cli_missing", 1, 99)))
+    verify(Core.chipDimmed(makeProvider("claude", "network_error", 1, 99)))
+    verify(Core.chipDimmed(makeProvider("claude", "loading", 1, 99)))
   }
 
   function test_chip_state_cue() {
     compare(Core.chipStateCue(null), "")
     compare(Core.chipStateCue({ state: "ready" }), "")
     compare(Core.chipStateCue({ state: "loading" }), "")
-    compare(Core.chipStateCue({ state: "stale" }), "󰅐")
+    // UX-012 (amended): stale carries no cue; the bar must not mark it.
+    compare(Core.chipStateCue({ state: "stale" }), "")
     compare(Core.chipStateCue({ state: "cli_missing" }), "!")
     compare(Core.chipStateCue({ state: "unauthenticated" }), "!")
     compare(Core.chipStateCue({ state: "rate_limited" }), "!")
@@ -282,24 +288,32 @@ TestCase {
     // §7: a ready provider over the critical threshold earns the same cue.
     compare(Core.chipStateCue({ state: "ready", windows: [{ usedPercent: 96 }] }), "!")
     compare(Core.chipStateCue({ state: "ready", windows: [{ usedPercent: 92 }] }), "")
-    // A state cue outranks severity: the clock keeps the stale meaning.
-    compare(Core.chipStateCue({ state: "stale", windows: [{ usedPercent: 96 }] }), "󰅐")
+    // Severity survives staleness: a critical retained reading is still
+    // critical, so the cue comes from severity alone.
+    compare(Core.chipStateCue({ state: "stale", windows: [{ usedPercent: 96 }] }), "!")
+    compare(Core.chipStateCue({ state: "stale", windows: [{ usedPercent: 92 }] }), "")
   }
 
   // The urgent tint belongs to severity, never to the error cue — the
   // approved mockup shows critical Claude urgent and disconnected Grok plain.
+  // Stale joins ready here: UsageWindow already keeps the severity colour on
+  // a stale reading, so suppressing it on the chip would make bar and popup
+  // disagree about the same number.
   function test_chip_severity_urgent_only_when_ready_and_critical() {
     compare(Core.chipSeverityUrgent(null), false)
     compare(Core.chipSeverityUrgent({ state: "ready", windows: [{ usedPercent: 96 }] }), true)
     compare(Core.chipSeverityUrgent({ state: "ready", windows: [{ usedPercent: 92 }] }), false)
-    compare(Core.chipSeverityUrgent({ state: "stale", windows: [{ usedPercent: 96 }] }), false)
+    compare(Core.chipSeverityUrgent({ state: "stale", windows: [{ usedPercent: 96 }] }), true)
+    compare(Core.chipSeverityUrgent({ state: "stale", windows: [{ usedPercent: 92 }] }), false)
     compare(Core.chipSeverityUrgent({ state: "network_error", windows: [] }), false)
   }
 
   // Plan 02 deferred minor: the cue used to expose its raw glyph.
   function test_chip_cue_label_is_a_word() {
     compare(Core.chipCueLabel({ state: "ready", windows: [{ usedPercent: 96 }] }), "critical")
-    compare(Core.chipCueLabel({ state: "stale", windows: [] }), "stale")
+    // Stale speaks nothing extra: the cue label must match what the eye sees.
+    compare(Core.chipCueLabel({ state: "stale", windows: [] }), "")
+    compare(Core.chipCueLabel({ state: "stale", windows: [{ usedPercent: 96 }] }), "critical")
     compare(Core.chipCueLabel({ state: "cli_missing", windows: [] }), "no CLI")
     compare(Core.chipCueLabel({ state: "unauthenticated", windows: [] }), "signed out")
     compare(Core.chipCueLabel({ state: "ready", windows: [{ usedPercent: 10 }] }), "")
@@ -351,9 +365,17 @@ TestCase {
     var loading = { name: "Claude", state: "loading", windows: [] }
     compare(Core.chipAccessibleLabel(loading, "remaining"), "Claude · loading")
 
+    // Parity with the eye (A11Y-012): the bar no longer marks stale, so the
+    // accessible name must not announce it either — same chip, same words.
     var stale = { name: "Claude", state: "stale",
                   windows: [{ usedPercent: 95, remainingPercent: 5 }] }
-    compare(Core.chipAccessibleLabel(stale, "remaining"), "Claude · 5% · stale")
+    compare(Core.chipAccessibleLabel(stale, "remaining"), "Claude · 5%")
+
+    // Mirrors emptyReady above. Only this case distinguishes
+    // presentsReading(state) from state === "ready" in the percentage branch,
+    // so without it that half of the change is untested.
+    var staleEmpty = { name: "Claude", state: "stale", windows: [] }
+    compare(Core.chipAccessibleLabel(staleEmpty, "remaining"), "Claude · —")
 
     // Single-line by construction; no provider stays empty.
     compare(Core.chipAccessibleLabel(null, "remaining"), "")
@@ -580,9 +602,10 @@ TestCase {
     verify(widget.indexOf("fontPixelSize:") < 0)
   }
 
-  // Plan 03: the popup banner drops its ⌛ for 󰅐 (glyph parity with the chip
-  // stale cue) — ban the emoji repo-wide across every file that could render
-  // provider-facing copy, not just CoreView.js.
+  // Plan 03 replaced the emoji hourglass with a Nerd Font glyph; UX-028
+  // (amended) then retired the glyph itself. The ban outlives both: the
+  // emoji breaks the monospace surface, so no file that renders
+  // provider-facing copy may reintroduce it.
   function test_no_emoji_hourglass_in_assets() {
     var files = [
       "assets/omarchy/CoreView.js",

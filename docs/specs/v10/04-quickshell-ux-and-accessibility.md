@@ -28,7 +28,10 @@ verified Quattro-native glyphs or explicit English text labels.
   ready — survives as the chip's accessible name. Raw state identifiers
   never render. Reset detail lives only in the popup. See
   `docs/superpowers/specs/2026-08-06-remove-chip-tooltip-design.md`.
-- `UX-012`: Stale and error states use an icon/text cue in addition to color.
+- `UX-012` (amended 2026-08-10): Error states use an icon/text cue in addition
+  to color. Stale is excluded — it presents a real reading and is rendered
+  like ready (`UX-028`), so it carries no cue and adds no qualifier to the
+  chip's accessible name.
 
 ## Popup layout
 
@@ -58,8 +61,8 @@ not literal UI.
 - `UX-016`: The provider header does not repeat the provider icon.
 - `UX-017`: The header shows the provider name, the plan tag, severity when
   present, and the provider refresh control. Connection state is implied
-  structurally (windows render only when ready) and update age lives in the
-  stale banner.
+  structurally (windows render only when a reading exists) and update age
+  lives in the pane's neutral age caption (`UX-028`).
 - `UX-018`: Only one provider's content is visible at a time.
 - `UX-019`: Section backgrounds and separators extend through the full content
   width.
@@ -100,9 +103,20 @@ not literal UI.
 - `UX-026`: Initial collection with no prior data uses skeleton placeholders.
 - `UX-027`: Refresh with prior data keeps content and shows a subtle progress
   indicator.
-- `UX-028`: Stale content stays visible. The stale banner carries the
-  `󰅐` cue, the last success age, the safe error summary, and Retry; it
-  renders whenever the provider state is stale.
+- `UX-028` (amended 2026-08-10): Stale is retained data, not a fault, and
+  renders as such. Bar and popup treat a stale provider exactly like a ready
+  one — same opacity, same severity colour, no cue, no urgent tint, no error
+  text, and no recovery action. The popup's only acknowledgement is one
+  neutral caption, `Updated <age>`, in the pane foreground; the header's
+  refresh control remains the way to force a collection. The typed error and
+  the `retry` action stay in the status JSON for `agent-bar status`; the UI
+  does not surface them.
+
+  Rationale: the previous banner fired on the first failed refresh with no
+  grace period, so a machine woken from suspend showed dimmed icons and an
+  urgent banner for one poll interval — reporting a fault where the only fact
+  was an expired Claude OAuth token that self-heals. The reading it described
+  was still the correct last reading.
 - `UX-029`: Missing CLI keeps the enabled provider icon dimmed and shows
   `Install guide` and `Check again`.
 - `UX-030`: Unauthenticated shows `Sign in` when login discovery succeeds;

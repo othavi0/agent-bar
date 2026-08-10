@@ -53,19 +53,38 @@ TestCase {
     verify(Core.stateBody(p).indexOf("billed another way") >= 0)
   }
 
+  // UX-028 (amended): stale renders through the ready path. The dedicated
+  // "stale_windows" mode is gone — retained data is data, so the pane draws
+  // the same windows it would draw for a fresh reading.
   function test_stale_retains_windows_and_label() {
     var p = firstProvider("valid-stale.json")
-    compare(Core.contentMode(p), "stale_windows")
+    compare(Core.contentMode(p), "windows")
     compare(Core.stateTitle(p), "")
     compare(Core.stateBody(p), "")
+    // The typed error survives in the JSON for `agent-bar status`; the pane
+    // simply stops rendering it.
     verify(Core.errorMessage(p).length > 0)
-    var acts = Core.stateActions(p)
-    var kinds = acts.map(function (a) { return a.kind })
-    verify(kinds.indexOf("retry") >= 0)
+    // No recovery action either: a repair button beside a good number is the
+    // fault impression this change removes. The fixture still carries
+    // action.kind === "retry", so this proves the view filters it, not that
+    // the helper stopped sending it.
+    compare(String(p.action && p.action.kind || ""), "retry")
+    compare(Core.stateActions(p).length, 0)
     var lines = Core.windowDisplayLines(p, "used")
     compare(lines.length, 1)
     compare(lines[0].percentText, "90%")
     compare(lines[0].percent, 90)
+  }
+
+  // A stale provider whose retained reading carries no window must not fall
+  // back to the error pane: it takes the same empty-windows path as ready.
+  function test_stale_without_windows_uses_empty_windows_mode() {
+    var p = { id: "amp", name: "Amp", state: "stale", windows: [],
+              lastSuccessAt: "2026-07-26T18:42:00Z",
+              error: { code: "network_error", message: "Cannot reach Amp.",
+                       retryable: true } }
+    compare(Core.contentMode(p), "empty_windows")
+    compare(Core.stateBody(p), Core.emptyWindowsMessage())
   }
 
   function test_cli_missing_view_installation_and_check_again() {
@@ -129,7 +148,11 @@ TestCase {
     verify(h.plan.length > 0)
     verify(h.connection === undefined)
     compare(h.refreshing, true)
-    compare(h.showStale, false)
+    // showStale was computed, passed to ProviderHeader and asserted here, but
+    // never rendered by anything. UX-028 (amended) retired the concept it
+    // stood for, so the dead field goes with it.
+    verify(h.showStale === undefined)
+    verify(h.lastSuccessAt.length > 0)
   }
 
   function test_plain_text_strips_ansi_and_controls() {
@@ -397,8 +420,17 @@ TestCase {
     compare(layout.lead.resetPhrase, "resets in")
   }
 
-  function test_chip_state_cue_stale_is_clock_glyph() {
-    compare(Core.chipStateCue({ state: "stale" }), "󰅐")
+  // UX-012 (amended): the clock glyph is retired. Stale earns no cue, and no
+  // file may reintroduce one — the bar must stay silent about staleness.
+  function test_chip_state_cue_stale_is_silent() {
+    compare(Core.chipStateCue({ state: "stale" }), "")
+    var view = read("assets/omarchy/CoreView.js")
+    var pane = read("assets/omarchy/ProviderView.qml")
+    // Guard against a vacuous pass: read() returns "" for a bad path.
+    verify(view.length > 0)
+    verify(pane.length > 0)
+    verify(view.indexOf("󰅐") < 0)
+    verify(pane.indexOf("󰅐") < 0)
   }
 
   function test_state_actions_respect_retryable() {

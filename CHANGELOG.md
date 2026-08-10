@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A provider whose refresh fails no longer looks broken. Its last good
+  reading stays on the bar at full strength — same opacity, same severity
+  colour, no clock glyph — and the popup drops the urgent banner in favour of
+  one neutral `Updated <age>` caption. Waking a machine after hours away used
+  to dim every icon and raise an alert for one poll interval, because an
+  expired Claude token counts as a refresh failure even though the displayed
+  numbers were still the correct last reading. The status JSON is unchanged:
+  `agent-bar status` still reports `"state": "stale"` with its typed error.
 - Distribution is entirely git-native: install with `omarchy plugin add
   https://github.com/othavi0/omarchy-agent-bar.git`, update with
   `omarchy plugin update agent-bar.usage`, and remove with

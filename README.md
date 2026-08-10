@@ -16,9 +16,10 @@ usage track.
 
 Windows are normalized across providers, so Claude's `Session (5h)`,
 `Weekly (7d)`, and per-model windows render the same way Codex's do.
-A chip shows `!` when a provider crosses the critical threshold and an
-hourglass when its data is stale. A connected provider with no
-percentage window is valid and shows `—`.
+A chip shows `!` when a provider crosses the critical threshold. When a
+refresh fails, the last good reading stays on the bar unchanged — the
+popup notes when it was taken and nothing is marked as broken. A
+connected provider with no percentage window is valid and shows `—`.
 
 When a provider needs attention, the popup offers a safe action:
 opening the login in a terminal, installation guidance, or a retry.
