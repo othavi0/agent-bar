@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "pluginId": "othavi0.agent-bar",
-  "version": "10.3.6",
+  "version": "10.3.7",
   "target": "x86_64-unknown-linux-gnu",
   "omarchyContract": 1,
   "minimumQuickshellVersion": "0.3.0",
-  "sourceCommit": "c4290d59eebe36af742b25dbf4df7c24f2a7ebee",
+  "sourceCommit": "08fa6b255dae2316b53c0767dfffef212649f063",
   "files": [
     {
       "path": "BarWidget.qml",
@@ -39,8 +39,8 @@
     },
     {
       "path": "CoreView.js",
-      "sha256": "e3cdbfcd516102b3c6d86343ee7eefed75913d552996dfdbcc60ba404ce9453c",
-      "size": 22572,
+      "sha256": "8b52a5e214d7a1a6113efd4c80e4df8d8fc264c757d2811f7937115f1fe31bb6",
+      "size": 24420,
       "mode": "0644"
     },
     {
@@ -69,8 +69,8 @@
     },
     {
       "path": "ProviderView.qml",
-      "sha256": "665030a7aff9a0b36d4ec1f4b456d19de181c4fa6317e2f10f90f979ba985ec3",
-      "size": 8732,
+      "sha256": "f361382ae76bd276b98b70c3f6a8bacf8d1af531b2f1abf97ef9a82b3b770742",
+      "size": 7378,
       "mode": "0644"
     },
     {
@@ -93,7 +93,7 @@
     },
     {
       "path": "bin/agent-bar",
-      "sha256": "50e45013f1f94cf5343dee767ec374e01be29230f2a3437ddd8ab8efab7f4c6f",
+      "sha256": "e09dcf9a7d5175c4111793dc668facd2168c9188c981715608a55dd45ed00d8c",
       "size": 4065528,
       "mode": "0755"
     },
@@ -123,8 +123,8 @@
     },
     {
       "path": "components/ProviderHeader.qml",
-      "sha256": "74e53c166b58d8f217a643234bc62018df0415278b77377ce5aa735b5a7d00c5",
-      "size": 2732,
+      "sha256": "74f5b833dcc2fc46a60fdefc87413d7ecccb211934c9fdd712c911f49f5c3519",
+      "size": 2709,
       "mode": "0644"
     },
     {
@@ -141,8 +141,8 @@
     },
     {
       "path": "components/UsageWindow.qml",
-      "sha256": "0da095f19c548086c8144a4f254e50d570a9d3f44407d84012f8a42bb47c77ca",
-      "size": 8569,
+      "sha256": "dfed08f616d3c0303f743dcd19c3b0accd1ccf33675898c094f600ce1ac628c8",
+      "size": 8649,
       "mode": "0644"
     },
     {
@@ -171,7 +171,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "562d4c3bbea44fd4c80289d3a434d5ea176a027c79e31472637cf234c9d95fd2",
+      "sha256": "241e373ad9439c5b950f117622753d4037cde7f77c6ae5fff2cbe8fd171941f8",
       "size": 619,
       "mode": "0644"
     },

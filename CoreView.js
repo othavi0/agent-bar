@@ -160,27 +160,37 @@ function providerSeverity(provider) {
   return worst
 }
 
-// Severity tints the bar only for a ready provider: any other state already
-// dims the whole chip and spends the cue on the state itself, so an urgent
-// tint there would mean two things at once. Approved mockup: critical Claude
-// is urgent, disconnected Grok is not.
+// UX-028 (amended): a stale provider holds a real reading that the helper
+// retained through a failed refresh, so the bar renders it exactly like a
+// ready one. `presentsReading` is the single place that decides which states
+// own a number worth showing; everything below asks it instead of testing
+// `=== "ready"` on its own, so the bar can never disagree with itself.
+function presentsReading(state) {
+  var s = String(state || "")
+  return s === "ready" || s === "stale"
+}
+
+// Severity tints the bar for any provider presenting a reading: the remaining
+// states dim the whole chip and spend the cue on the state itself, so an
+// urgent tint there would mean two things at once. Approved mockup: critical
+// Claude is urgent, disconnected Grok is not. A retained reading keeps its
+// severity — UsageWindow already paints a critical stale window urgent, and
+// suppressing it here would make bar and popup contradict each other.
 function chipSeverityUrgent(provider) {
   if (!provider)
     return false
-  return String(provider.state || "") === "ready"
+  return presentsReading(provider.state)
       && providerSeverity(provider) === "critical"
 }
 
-// UX-012: text cue beyond color for stale/error. No leading space — the
-// chip separates cue from numeral with layout spacing (visual design §5).
-// 󰅐 is U+F0150 from the bar's Nerd Font family, replacing the old
-// emoji-font hourglass glyph that broke the monospace surface.
+// UX-012 (amended): text cue beyond color for error states. No leading space
+// — the chip separates cue from numeral with layout spacing (visual design
+// §5). Stale is deliberately absent: it is retained data, not a fault, and
+// marking it made a woken machine look broken for one poll interval.
 function chipStateCue(provider) {
   if (!provider)
     return ""
   var state = String(provider.state || "")
-  if (state === "stale")
-    return "󰅐"
   if (ERROR_STATES[state])
     return "!"
   if (chipSeverityUrgent(provider))
@@ -190,14 +200,16 @@ function chipStateCue(provider) {
 
 // Plan 02 deferred minor: the cue exposed its raw glyph to screen readers.
 // It now carries a word — the severity when severity produced the cue,
-// otherwise the same qualifier the tooltip already speaks.
+// otherwise the same qualifier the tooltip already speaks. Stale produces no
+// cue, so it contributes no word either (A11Y-012 parity: assistive tech
+// hears what the eye sees, never more).
 function chipCueLabel(provider) {
   if (!provider)
     return ""
   if (chipSeverityUrgent(provider))
     return "critical"
   var state = String(provider.state || "")
-  if (state === "stale" || ERROR_STATES[state])
+  if (ERROR_STATES[state])
     return stateQualifier(state)
   return ""
 }
@@ -232,18 +244,22 @@ function chipNumeralText(provider, metric, nowMs) {
   return chipPercentText(provider, metric, nowMs)
 }
 
+// Dimming means "no number to trust here" — missing CLI (PROD-022/UX-029),
+// the error states, and the loading placeholder. Stale is excluded: it has a
+// number, so it renders at full strength like ready.
 function chipDimmed(provider) {
   if (!provider)
     return true
-  var state = String(provider.state || "")
-  return state !== "ready"
+  return !presentsReading(provider.state)
 }
 
 // UX-011 (superseded 2026-08-06): the chip renders no hover tooltip. The
 // former tooltip's first line survives as the chip's accessible name — the
 // provider, the displayed percentage when one exists, and a plain-language
-// qualifier when not ready. The raw enum value never renders (copy design
-// §5.4). Single-line by construction: no window detail, no live clock.
+// qualifier when the provider presents no reading. The raw enum value never
+// renders (copy design §5.4). Single-line by construction: no window detail,
+// no live clock. A stale chip is visually identical to a ready one, so it
+// reads identically too (A11Y-012).
 function chipAccessibleLabel(provider, metric, nowMs) {
   if (!provider)
     return ""
@@ -251,11 +267,13 @@ function chipAccessibleLabel(provider, metric, nowMs) {
   var parts = [name]
   var state = provider.state ? String(provider.state) : "unknown"
   var pct = chipPercentText(provider, metric, nowMs)
-  if (pct !== "—" || state === "ready")
+  if (pct !== "—" || presentsReading(state))
     parts.push(pct)
-  var qualifier = stateQualifier(state)
-  if (qualifier.length)
-    parts.push(qualifier)
+  if (!presentsReading(state)) {
+    var qualifier = stateQualifier(state)
+    if (qualifier.length)
+      parts.push(qualifier)
+  }
   return parts.join(" · ")
 }
 
@@ -383,11 +401,13 @@ function stateTitle(provider) {
     return ""
   var name = plainText(provider.name || providerDisplayName(provider.id))
   var s = String(provider.state || "")
-  if (s === "loading" || s === "stale")
+  if (s === "loading")
     return ""
-  if (s === "ready" && (!provider.windows || provider.windows.length === 0))
+  // Stale walks the ready branch: a retained empty reading still means the
+  // account reports no quota, not that something failed.
+  if (presentsReading(s) && (!provider.windows || provider.windows.length === 0))
     return name + " reports no quota"
-  if (s === "ready")
+  if (presentsReading(s))
     return ""
   if (s === "cli_missing")
     return name + " CLI is not installed"
@@ -407,10 +427,14 @@ function stateBody(provider) {
     return ""
   var name = plainText(provider.name || providerDisplayName(provider.id))
   var s = String(provider.state || "")
-  if (s === "loading" || s === "stale")
+  if (s === "loading")
     return ""
-  if (s === "ready" && (!provider.windows || provider.windows.length === 0))
+  if (presentsReading(s) && (!provider.windows || provider.windows.length === 0))
     return emptyWindowsMessage()
+  // Reached only by the states with no reading: a stale provider carries a
+  // retryable error in JSON, but the pane must never surface it as a fault.
+  if (presentsReading(s))
+    return ""
   var err = errorMessage(provider)
   if (err.length)
     return err
@@ -441,6 +465,13 @@ function stateActions(provider) {
   if (!provider)
     return out
   var state = String(provider.state || "")
+  // UX-028 (amended): a provider presenting a reading offers no recovery
+  // action. Stale still carries `action: retry` in JSON — the helper's
+  // contract — but surfacing it would put a repair button next to a perfectly
+  // good number, which is the fault impression this pane exists to avoid. The
+  // header's refresh control remains available in every state.
+  if (presentsReading(state))
+    return out
   var seen = {}
 
   function pushAction(kind, label, target) {
@@ -460,7 +491,7 @@ function stateActions(provider) {
 
   if (state === "cli_missing")
     pushAction("retry", "Check again", null)
-  if (state === "stale" || state === "rate_limited" || state === "network_error" || state === "provider_error")
+  if (state === "rate_limited" || state === "network_error" || state === "provider_error")
     pushAction("retry", "Retry", null)
   if (state === "unauthenticated" && !seen.login && !seen.view_installation)
     pushAction("login", "Sign in", null)
@@ -700,34 +731,31 @@ function headerModel(provider, refreshing) {
       name: "",
       plan: "",
       lastSuccessAt: null,
-      refreshing: !!refreshing,
-      showStale: false
+      refreshing: !!refreshing
     }
   }
   return {
     name: plainText(provider.name || providerDisplayName(provider.id)),
     plan: plainText(planBadge(provider)),
     lastSuccessAt: provider.lastSuccessAt ? String(provider.lastSuccessAt) : null,
-    refreshing: !!refreshing,
-    showStale: String(provider.state) === "stale"
+    refreshing: !!refreshing
   }
 }
 
+// UX-028 (amended): stale shares the ready path — the dedicated
+// "stale_windows" mode is gone, so a retained reading draws the same pane a
+// fresh one would. Its age is the only difference, and ProviderView carries
+// that as one neutral line.
 function contentMode(provider) {
   if (!provider)
     return "skeleton"
   var s = String(provider.state || "")
   if (s === "loading")
     return "skeleton"
-  if (s === "ready") {
+  if (presentsReading(s)) {
     if (!provider.windows || provider.windows.length === 0)
       return "empty_windows"
     return "windows"
-  }
-  if (s === "stale") {
-    if (provider.windows && provider.windows.length > 0)
-      return "stale_windows"
-    return "state"
   }
   return "state"
 }
