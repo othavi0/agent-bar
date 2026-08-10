@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.7] - 2026-08-10
+
+### Changed
+
+- test: fix stale screenshot fixture fidelity
+- feat: stop marking stale as a fault
+
 ## [10.3.6] - 2026-08-07
 
 ### Changed
