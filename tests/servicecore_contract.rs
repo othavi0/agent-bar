@@ -24,7 +24,7 @@ fn extract_keys(source: &str, var_name: &str) -> BTreeSet<String> {
 
 #[test]
 fn servicecore_enums_match_schema() {
-    let js = std::fs::read_to_string("assets/omarchy/CoreService.js").expect("read CoreService.js");
+    let js = std::fs::read_to_string("CoreService.js").expect("read CoreService.js");
 
     let states = extract_keys(&js, "PROVIDER_STATES");
     let expected_states: BTreeSet<String> = [

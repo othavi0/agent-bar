@@ -26,7 +26,7 @@ fn js_constant(source: &str, name: &str) -> f64 {
 }
 
 fn core_view() -> String {
-    std::fs::read_to_string("assets/omarchy/CoreView.js").expect("read CoreView.js")
+    std::fs::read_to_string("CoreView.js").expect("read CoreView.js")
 }
 
 #[test]

@@ -40,16 +40,16 @@ QML/plugin verification:
 ```bash
 # PATH qmllint is a stub reporting version 1.0 that stays SILENT even on an
 # undefined type — the Qt6 binary path is mandatory here too
-find assets/omarchy -type f -name '*.qml' -exec \
-  /usr/lib/qt6/bin/qmllint -I /usr/share/omarchy/shell {} +
-omarchy plugin validate assets/omarchy
+/usr/lib/qt6/bin/qmllint -I /usr/share/omarchy/shell \
+  ./*.qml components/*.qml
+omarchy plugin validate .
 # PATH qmltestrunner is Qt5 and fails SILENTLY (errors only in journald) —
 # the Qt6 binary path and both env vars below are mandatory
 QT_QPA_PLATFORM=offscreen QML_XHR_ALLOW_FILE_READ=1 QT_LOGGING_TO_CONSOLE=1 \
   /usr/lib/qt6/bin/qmltestrunner \
   -input tests/qml \
   -import /usr/share/omarchy/shell \
-  -import assets/omarchy \
+  -import . \
   -o -,txt
 ```
 

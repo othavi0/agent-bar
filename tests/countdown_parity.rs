@@ -40,7 +40,7 @@ fn countdown_matches_the_shared_table() {
 // The seam is only real while the QML side still exists under that name.
 #[test]
 fn qml_countdown_function_still_exists() {
-    let js = std::fs::read_to_string("assets/omarchy/CoreView.js").expect("read CoreView.js");
+    let js = std::fs::read_to_string("CoreView.js").expect("read CoreView.js");
     assert!(
         js.contains("function countdownText(diffMs)"),
         "CoreView.countdownText is the other half of this seam"

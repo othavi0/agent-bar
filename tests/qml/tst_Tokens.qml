@@ -24,19 +24,19 @@ TestCase {
 
   function tokenScannedFiles() {
     return [
-      "assets/omarchy/BarWidget.qml",
-      "assets/omarchy/Popup.qml",
-      "assets/omarchy/ProviderRail.qml",
-      "assets/omarchy/ProviderView.qml",
-      "assets/omarchy/SettingsView.qml",
-      "assets/omarchy/MaintenanceView.qml",
-      "assets/omarchy/components/ProviderChip.qml",
-      "assets/omarchy/components/ProviderHeader.qml",
-      "assets/omarchy/components/HeaderTag.qml",
-      "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/components/StateMessage.qml",
-      "assets/omarchy/components/SettingsProviderRow.qml",
-      "assets/omarchy/components/ConfirmDialog.qml"
+      "BarWidget.qml",
+      "Popup.qml",
+      "ProviderRail.qml",
+      "ProviderView.qml",
+      "SettingsView.qml",
+      "MaintenanceView.qml",
+      "components/ProviderChip.qml",
+      "components/ProviderHeader.qml",
+      "components/HeaderTag.qml",
+      "components/UsageWindow.qml",
+      "components/StateMessage.qml",
+      "components/SettingsProviderRow.qml",
+      "components/ConfirmDialog.qml"
     ]
   }
 
@@ -88,11 +88,11 @@ TestCase {
   // ProviderView.qml did; it stays in tokenScannedFiles() above.
   function convertedFiles() {
     return [
-      "assets/omarchy/SettingsView.qml",
-      "assets/omarchy/MaintenanceView.qml",
-      "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/components/StateMessage.qml",
-      "assets/omarchy/components/ConfirmDialog.qml"
+      "SettingsView.qml",
+      "MaintenanceView.qml",
+      "components/UsageWindow.qml",
+      "components/StateMessage.qml",
+      "components/ConfirmDialog.qml"
     ]
   }
 
@@ -108,7 +108,7 @@ TestCase {
   // mechanism grew into a loophole instead of staying a documented rarity.
   function textAlphaExceptions() {
     return {
-      "assets/omarchy/components/UsageWindow.qml": ["0.12"]
+      "components/UsageWindow.qml": ["0.12"]
     }
   }
 
@@ -193,7 +193,7 @@ TestCase {
   // The track tint has no host token, so it gets a name and exactly one
   // declaration. Two would be a parallel system starting over.
   function test_usage_track_declared_once() {
-    var code = read("assets/omarchy/components/UsageWindow.qml")
+    var code = read("components/UsageWindow.qml")
         .replace(/\/\/[^\n]*/g, "")
     var declarations = code.split("readonly property color trackColor").length - 1
     compare(declarations, 1, "trackColor must be declared exactly once")

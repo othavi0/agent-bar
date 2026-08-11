@@ -1,8 +1,8 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreService.js" as Core
-import "../../assets/omarchy/CoreMaintenance.js" as Maintenance
-import "../../assets/omarchy/CoreSettings.js" as Settings
+import "../../CoreService.js" as Core
+import "../../CoreMaintenance.js" as Maintenance
+import "../../CoreSettings.js" as Settings
 
 TestCase {
   id: testCase
@@ -18,9 +18,9 @@ TestCase {
     parts.pop(); parts.pop()
     return parts.join("/")
   }
-  property string serviceUrl: "file://" + repoRoot + "/assets/omarchy/Service.qml"
+  property string serviceUrl: "file://" + repoRoot + "/Service.qml"
   property string fakeHelper: repoRoot + "/tests/qml/fixtures/fake-agent-bar"
-  property string manifestPath: repoRoot + "/assets/omarchy/manifest.json"
+  property string manifestPath: repoRoot + "/manifest.json"
 
   // Harness mirrors Service.qml state machine without Quickshell.Io Process.
   Item {

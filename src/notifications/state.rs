@@ -16,7 +16,7 @@ use crate::support::maintenance_gate::SharedMaintenanceGate;
 pub const NOTIFICATION_STATE_VERSION: u32 = 1;
 
 /// Severity thresholds on `usedPercent`. Duplicated in
-/// `assets/omarchy/CoreView.js` because the status schema is frozen at v2 and
+/// `CoreView.js` because the status schema is frozen at v2 and
 /// must not gain a field; `tests/severity_parity.rs` fails the build if the
 /// two sides drift.
 pub const CRITICAL_USED_PERCENT: f64 = 95.0;

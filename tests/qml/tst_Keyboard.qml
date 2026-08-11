@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreScroll.js" as Core
+import "../../CoreScroll.js" as Core
 
 TestCase {
   id: testCase
@@ -55,7 +55,7 @@ TestCase {
   }
 
   function test_popup_wires_panel_key_catcher_and_focus_controller() {
-    var src = read("assets/omarchy/Popup.qml")
+    var src = read("Popup.qml")
     verify(src.indexOf("KeyboardPanel") >= 0)
     verify(src.indexOf("PanelKeyCatcher") >= 0)
     verify(src.indexOf("FocusController") >= 0)
@@ -72,7 +72,7 @@ TestCase {
   // Live Quattro KeyboardPanel default property is contentItem (QQuickItem list).
   // Top-level Shortcut / Component children fail type checks on contentItem.
   function test_popup_shortcuts_nested_under_item_not_panel_default() {
-    var src = read("assets/omarchy/Popup.qml")
+    var src = read("Popup.qml")
     verify(src.indexOf("scrollShortcuts") >= 0)
     verify(src.indexOf("id: scrollShortcuts") >= 0)
     // Shortcuts must appear after PanelKeyCatcher opens, not as bare panel children.
@@ -86,7 +86,7 @@ TestCase {
   }
 
   function test_focus_controller_source() {
-    var src = read("assets/omarchy/components/FocusController.qml")
+    var src = read("components/FocusController.qml")
     verify(src.indexOf("function move") >= 0)
     verify(src.indexOf("function activate") >= 0)
     verify(src.indexOf("ensureVisible") >= 0)

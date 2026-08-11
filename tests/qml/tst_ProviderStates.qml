@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreView.js" as Core
+import "../../CoreView.js" as Core
 
 TestCase {
   id: testCase
@@ -424,8 +424,8 @@ TestCase {
   // file may reintroduce one — the bar must stay silent about staleness.
   function test_chip_state_cue_stale_is_silent() {
     compare(Core.chipStateCue({ state: "stale" }), "")
-    var view = read("assets/omarchy/CoreView.js")
-    var pane = read("assets/omarchy/ProviderView.qml")
+    var view = read("CoreView.js")
+    var pane = read("ProviderView.qml")
     // Guard against a vacuous pass: read() returns "" for a bad path.
     verify(view.length > 0)
     verify(pane.length > 0)
@@ -522,7 +522,7 @@ TestCase {
   // a qs.*-dependent component — see task-5-report.md). So the fix is
   // verified by source inspection instead of Qt.createComponent/createObject.
   function test_provider_view_timer_gates_on_active() {
-    var view = read("assets/omarchy/ProviderView.qml")
+    var view = read("ProviderView.qml")
     verify(view.indexOf("property bool active: true") >= 0,
         "ProviderView must expose an owner-driven active prop")
     verify(view.indexOf("running: root.active") >= 0,
@@ -534,7 +534,7 @@ TestCase {
     verify(view.indexOf("onActiveChanged") >= 0,
         "reopening the popup must refresh nowMs, not show a stale countdown")
 
-    var popup = read("assets/omarchy/Popup.qml")
+    var popup = read("Popup.qml")
     verify(popup.indexOf("active: root.isOpen") >= 0,
         "Popup must drive ProviderView.active from its own open state")
   }

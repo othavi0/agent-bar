@@ -31,7 +31,7 @@ use std::fs;
 /// be dead/legacy styling, this test is the trip wire.
 #[test]
 fn icon_assets_are_the_approved_mark_grade_assets() {
-    let codex = fs::read("assets/omarchy/icons/codex.png").expect("read codex.png");
+    let codex = fs::read("icons/codex.png").expect("read codex.png");
 
     assert_eq!(
         codex.len(),
@@ -65,7 +65,7 @@ fn icon_assets_are_the_approved_mark_grade_assets() {
         "codex.png color type drifted from truecolor+alpha (6); the old puck was gray+alpha (4)"
     );
 
-    let grok = fs::read_to_string("assets/omarchy/icons/grok.svg").expect("read grok.svg");
+    let grok = fs::read_to_string("icons/grok.svg").expect("read grok.svg");
     let white_fill_count = grok.matches(r#"fill="white""#).count();
     assert_eq!(
         white_fill_count, 2,

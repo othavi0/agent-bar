@@ -153,7 +153,7 @@ fn is_allowlisted_path(rel: &str) -> bool {
         "tests/fixtures/amp/usage-legacy-dollars.txt"
             | "tests/fixtures/amp/usage-free-pct.txt"
             | "tests/fixtures/status-v2/money-field.json"
-            | "assets/omarchy/manifest.json"
+            | "manifest.json"
             | "schemas/settings-v1.schema.json"
             | "schemas/status-v2.schema.json"
     )

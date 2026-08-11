@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreView.js" as Core
-import "../../assets/omarchy/CoreService.js" as Service
+import "../../CoreView.js" as Core
+import "../../CoreService.js" as Service
 
 TestCase {
   id: testCase
@@ -26,7 +26,7 @@ TestCase {
   }
 
   function test_popup_uses_keyboard_panel_and_rail() {
-    var src = read("assets/omarchy/Popup.qml")
+    var src = read("Popup.qml")
     verify(src.indexOf("KeyboardPanel") >= 0)
     verify(src.indexOf("ProviderRail") >= 0)
     verify(src.indexOf("ProviderView") >= 0)
@@ -35,7 +35,7 @@ TestCase {
   }
 
   function test_rail_is_icon_only_settings_at_bottom() {
-    var src = read("assets/omarchy/ProviderRail.qml")
+    var src = read("ProviderRail.qml")
     verify(src.indexOf("Image") >= 0)
     verify(src.indexOf("settingsBtn") >= 0 || src.indexOf("Settings") >= 0)
     verify(src.indexOf("󰒓") >= 0)
@@ -47,7 +47,7 @@ TestCase {
   }
 
   function test_header_has_no_provider_icon() {
-    var src = read("assets/omarchy/components/ProviderHeader.qml")
+    var src = read("components/ProviderHeader.qml")
     verify(src.indexOf("Image") < 0)
     verify(src.indexOf("iconSource") < 0)
     verify(src.indexOf("name") >= 0)
@@ -68,7 +68,7 @@ TestCase {
   // §6: name · plan tag · [severity tag] · spacer · refresh. One tag shape,
   // one urgent variant — not two hand-copied Rectangles.
   function test_header_renders_plan_and_severity_tags() {
-    var hdr = read("assets/omarchy/components/ProviderHeader.qml")
+    var hdr = read("components/ProviderHeader.qml")
     verify(hdr.indexOf("HeaderTag {") >= 0)
     verify(hdr.indexOf("id: planTag") >= 0)
     verify(hdr.indexOf("id: severityTag") >= 0)
@@ -77,7 +77,7 @@ TestCase {
     // The pill's own Rectangle is gone; the tag lives in one file now.
     verify(hdr.indexOf("border.color: Style.normalBorderColor") < 0)
 
-    var tag = read("assets/omarchy/components/HeaderTag.qml")
+    var tag = read("components/HeaderTag.qml")
     verify(tag.indexOf("Color.urgent") >= 0)
     verify(tag.indexOf("radius: Style.cornerRadius") >= 0)
     verify(tag.indexOf("Font.AllUppercase") >= 0)
@@ -87,7 +87,7 @@ TestCase {
   // The refresh glyph must stay inside the pane when both tags render; the
   // spacer subtracts the real tag widths instead of a lump constant.
   function test_header_spacer_accounts_for_both_tags() {
-    var hdr = read("assets/omarchy/components/ProviderHeader.qml")
+    var hdr = read("components/ProviderHeader.qml")
     verify(hdr.indexOf("planTag.visible ? planTag.width") >= 0)
     verify(hdr.indexOf("severityTag.visible ? severityTag.width") >= 0)
     verify(hdr.indexOf("Style.space(60)") < 0,
@@ -97,7 +97,7 @@ TestCase {
   }
 
   function test_rail_has_no_own_frame() {
-    var rail = read("assets/omarchy/ProviderRail.qml")
+    var rail = read("ProviderRail.qml")
     // §6: the rail draws no fill or border of its own inside an already
     // bordered card; the selected plate is the only chrome.
     verify(rail.indexOf("normalFill") < 0)
@@ -112,19 +112,18 @@ TestCase {
   }
 
   function test_content_and_rail_share_inset_token() {
-    var popup = read("assets/omarchy/Popup.qml")
+    var popup = read("Popup.qml")
     verify(popup.indexOf("contentMargins: Style.spacing.popupPadding") >= 0)
     verify(popup.indexOf("Style.space(14)") < 0)
   }
 
   function test_no_meta_footer() {
     // NOTE: repoRoot (above) already pops to the repo root, matching every
-    // sibling read() call in this file ("assets/omarchy/..."); the brief's
-    // literal "../../assets/omarchy/ProviderView.qml" resolves outside the
-    // repo, so XHR returns "" and both new tests would pass/fail vacuously
-    // forever regardless of ProviderView.qml's contents. Fixed to match the
-    // established convention.
-    var view = read("assets/omarchy/ProviderView.qml")
+    // sibling read() call in this file ("ProviderView.qml" etc., relative to
+    // repo root); a path like "../../ProviderView.qml" would resolve outside
+    // the repo, so XHR would return "" and the test would pass/fail
+    // vacuously regardless of ProviderView.qml's contents.
+    var view = read("ProviderView.qml")
     // §6/§9: the meta footer is removed in all states; connection state is
     // structural. The `"Updated "` ban lifted with UX-028 (amended) — the age
     // is now a neutral line owned by test_stale_age_line_is_neutral. What this
@@ -138,7 +137,7 @@ TestCase {
   // line. No glyph, no urgent colour, no Retry — the header's own refresh
   // control already covers the action, and nothing may read as a fault.
   function test_stale_age_line_is_neutral() {
-    var view = read("assets/omarchy/ProviderView.qml")
+    var view = read("ProviderView.qml")
     verify(view.length > 0)
     verify(view.indexOf("formatAgoText") >= 0)
     verify(view.indexOf('"Updated "') >= 0)
@@ -156,7 +155,7 @@ TestCase {
   // The retained reading must render at full strength: no opacity knob may
   // reappear keyed on staleness.
   function test_stale_windows_are_not_dimmed() {
-    var view = read("assets/omarchy/ProviderView.qml")
+    var view = read("ProviderView.qml")
     verify(view.length > 0)
     verify(view.indexOf("isStale") < 0)
     verify(view.indexOf("stale_windows") < 0)
@@ -169,7 +168,7 @@ TestCase {
   }
 
   function test_full_width_separator_present() {
-    var src = read("assets/omarchy/ProviderView.qml")
+    var src = read("ProviderView.qml")
     // Separator is the host's PanelSeparator (fixed 1px height internally);
     // this file only needs to place it full-width.
     verify(src.indexOf("PanelSeparator") >= 0)
@@ -178,12 +177,12 @@ TestCase {
 
   function test_plain_text_only_no_rich_text() {
     var files = [
-      "assets/omarchy/Popup.qml",
-      "assets/omarchy/ProviderRail.qml",
-      "assets/omarchy/ProviderView.qml",
-      "assets/omarchy/components/ProviderHeader.qml",
-      "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/components/StateMessage.qml"
+      "Popup.qml",
+      "ProviderRail.qml",
+      "ProviderView.qml",
+      "components/ProviderHeader.qml",
+      "components/UsageWindow.qml",
+      "components/StateMessage.qml"
     ]
     for (var i = 0; i < files.length; i++) {
       var src = read(files[i])
@@ -198,12 +197,12 @@ TestCase {
 
   function test_no_money_copy_in_popup_sources() {
     var files = [
-      "assets/omarchy/Popup.qml",
-      "assets/omarchy/ProviderView.qml",
-      "assets/omarchy/components/StateMessage.qml",
-      "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/components/ProviderHeader.qml",
-      "assets/omarchy/CoreView.js"
+      "Popup.qml",
+      "ProviderView.qml",
+      "components/StateMessage.qml",
+      "components/UsageWindow.qml",
+      "components/ProviderHeader.qml",
+      "CoreView.js"
     ]
     for (var i = 0; i < files.length; i++) {
       var src = read(files[i])
@@ -218,7 +217,7 @@ TestCase {
     // KeyboardPanel subtracts verticalContentInset (padding + top/bottom
     // border) from the inner area; sizing the card with padding alone leaves
     // the border as phantom overflow that enables a few-pixel scroll.
-    var src = read("assets/omarchy/Popup.qml")
+    var src = read("Popup.qml")
     verify(src.indexOf("verticalContentInset") >= 0)
     verify(src.indexOf("padding * 2") < 0)
   }
@@ -232,7 +231,7 @@ TestCase {
   }
 
   function test_bar_widget_hosts_popup() {
-    var src = read("assets/omarchy/BarWidget.qml")
+    var src = read("BarWidget.qml")
     verify(src.indexOf("Popup") >= 0)
     verify(src.indexOf("agentService") >= 0)
   }
@@ -260,7 +259,7 @@ TestCase {
   // §6: the lead window is 2.5x the body size with the reset promoted into
   // its label line; the old bottom "resets" row is gone.
   function test_lead_window_geometry_and_label_line() {
-    var win = read("assets/omarchy/components/UsageWindow.qml")
+    var win = read("components/UsageWindow.qml")
     verify(win.indexOf("Math.round(Style.font.body * 2.5)") >= 0)
     verify(win.indexOf("Style.font.body * 1.8") < 0)
     verify(win.indexOf("root.resetPhrase") >= 0)
@@ -273,7 +272,7 @@ TestCase {
 
   // UX-020A extended: every window row carries a track, not just the lead.
   function test_compact_rows_carry_their_own_track() {
-    var win = read("assets/omarchy/components/UsageWindow.qml")
+    var win = read("components/UsageWindow.qml")
     var compact = win.slice(win.indexOf("id: compactRow"))
     verify(compact.length > 0, "compactRow must still exist")
     verify(compact.indexOf("color: root.trackColor") >= 0,
@@ -287,7 +286,7 @@ TestCase {
   // §7: critical paints the numeral and the fill in Color.urgent; nothing
   // else in this file may introduce a colour.
   function test_critical_window_uses_the_urgent_token() {
-    var win = read("assets/omarchy/components/UsageWindow.qml")
+    var win = read("components/UsageWindow.qml")
     verify(win.indexOf("Color.urgent") >= 0)
     verify(win.indexOf('root.severity === "critical"') >= 0)
     verify(win.indexOf("Qt.rgba(") < 0)
@@ -307,7 +306,7 @@ TestCase {
   }
 
   function test_provider_view_leads_with_one_window() {
-    var view = read("assets/omarchy/ProviderView.qml")
+    var view = read("ProviderView.qml")
     verify(view.indexOf("Core.windowLayout(") >= 0)
     verify(view.indexOf("emphasis: true") >= 0)
     verify(view.indexOf("emphasis: false") >= 0)
@@ -321,26 +320,26 @@ TestCase {
   // exact dead identifiers by name.
   function test_primary_window_allowlist_is_gone() {
     var files = [
-      "assets/omarchy/BarWidget.qml",
-      "assets/omarchy/components/ConfirmDialog.qml",
-      "assets/omarchy/components/FocusController.qml",
-      "assets/omarchy/components/HeaderTag.qml",
-      "assets/omarchy/components/ProviderChip.qml",
-      "assets/omarchy/components/ProviderHeader.qml",
-      "assets/omarchy/components/SettingsProviderRow.qml",
-      "assets/omarchy/components/StateMessage.qml",
-      "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/CoreMaintenance.js",
-      "assets/omarchy/CoreScroll.js",
-      "assets/omarchy/CoreService.js",
-      "assets/omarchy/CoreSettings.js",
-      "assets/omarchy/CoreView.js",
-      "assets/omarchy/MaintenanceView.qml",
-      "assets/omarchy/Popup.qml",
-      "assets/omarchy/ProviderRail.qml",
-      "assets/omarchy/ProviderView.qml",
-      "assets/omarchy/Service.qml",
-      "assets/omarchy/SettingsView.qml"
+      "BarWidget.qml",
+      "components/ConfirmDialog.qml",
+      "components/FocusController.qml",
+      "components/HeaderTag.qml",
+      "components/ProviderChip.qml",
+      "components/ProviderHeader.qml",
+      "components/SettingsProviderRow.qml",
+      "components/StateMessage.qml",
+      "components/UsageWindow.qml",
+      "CoreMaintenance.js",
+      "CoreScroll.js",
+      "CoreService.js",
+      "CoreSettings.js",
+      "CoreView.js",
+      "MaintenanceView.qml",
+      "Popup.qml",
+      "ProviderRail.qml",
+      "ProviderView.qml",
+      "Service.qml",
+      "SettingsView.qml"
     ]
     for (var i = 0; i < files.length; i++) {
       var source = read(files[i])
@@ -348,13 +347,13 @@ TestCase {
              files[i] + " still references the deleted lead selector")
     }
 
-    var core = read("assets/omarchy/CoreView.js")
+    var core = read("CoreView.js")
     verify(core.indexOf("PRIMARY_WINDOW_IDS") < 0,
            "the id allowlist must be deleted, not left dormant")
     verify(core.indexOf("windowGroups") < 0,
            "windowGroups is replaced by windowLayout")
     verify(core.indexOf("function electLeadIndex") >= 0)
-    var view = read("assets/omarchy/ProviderView.qml")
+    var view = read("ProviderView.qml")
     verify(view.indexOf("groups.primary") < 0)
     verify(view.indexOf("groups.secondary") < 0)
   }
@@ -364,7 +363,7 @@ TestCase {
   // viewer's locale format. The plan-04 deletions stay deleted: no weekday
   // table, no fixed-format humaniser, compact rows countdown-only.
   function test_absolute_clock_humaniser_is_gone() {
-    var core = read("assets/omarchy/CoreView.js")
+    var core = read("CoreView.js")
     verify(core.indexOf("formatResetText") < 0)
     verify(core.indexOf("WEEKDAYS") < 0)
     verify(core.indexOf("Qt.formatDateTime") < 0)
@@ -372,7 +371,7 @@ TestCase {
   }
 
   function test_lead_reset_clock_is_locale_formatted() {
-    var core = read("assets/omarchy/CoreView.js")
+    var core = read("CoreView.js")
     verify(core.indexOf("function resetClockText(") >= 0)
     // The format is the caller's locale format, never hardcoded.
     verify(core.indexOf('"hh:mm"') < 0)
@@ -387,7 +386,7 @@ TestCase {
   }
 
   function test_only_the_lead_window_gets_the_clock() {
-    var view = read("assets/omarchy/ProviderView.qml")
+    var view = read("ProviderView.qml")
     // Exactly one binding site — the lead Repeater; compact rows stay bare.
     var first = view.indexOf("resetClock:")
     verify(first >= 0, "lead window must bind resetClock")
@@ -395,7 +394,7 @@ TestCase {
            "compact rows must not gain the clock")
     verify(view.indexOf("Locale.ShortFormat") >= 0,
            "the format must come from the viewer's locale")
-    var win = read("assets/omarchy/components/UsageWindow.qml")
+    var win = read("components/UsageWindow.qml")
     verify(win.indexOf("property string resetClock") >= 0)
   }
 }

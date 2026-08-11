@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreScroll.js" as Core
+import "../../CoreScroll.js" as Core
 
 TestCase {
   id: testCase
@@ -79,7 +79,7 @@ TestCase {
   }
 
   function test_popup_flickable_contract() {
-    var src = read("assets/omarchy/Popup.qml")
+    var src = read("Popup.qml")
     verify(src.indexOf("Flickable") >= 0)
     verify(src.indexOf("contentWidth: width") >= 0)
     verify(src.indexOf("flickableDirection: Flickable.VerticalFlick") >= 0)
@@ -96,13 +96,13 @@ TestCase {
   }
 
   function test_bar_widget_foreign_dismiss_contract() {
-    var src = read("assets/omarchy/BarWidget.qml")
+    var src = read("BarWidget.qml")
     verify(src.indexOf("dismissPopup") >= 0)
     verify(src.indexOf("foreignPopupOpen") >= 0 || src.indexOf("foreignDismiss") >= 0)
   }
 
   function test_provider_rail_stack_no_bottom_pin() {
-    var src = read("assets/omarchy/ProviderRail.qml")
+    var src = read("ProviderRail.qml")
     // Option A: Settings in ColumnLayout stack, not anchors.bottom over icons.
     verify(src.indexOf("ColumnLayout") >= 0)
     verify(src.indexOf("minStackHeight") >= 0)
@@ -114,7 +114,7 @@ TestCase {
   }
 
   function test_popup_content_width_accounts_for_gutter() {
-    var src = read("assets/omarchy/Popup.qml")
+    var src = read("Popup.qml")
     verify(src.indexOf("railGutter") >= 0)
     verify(src.indexOf("parent.width - rail.width - railGutter.width") >= 0)
     // Old off-by-one that clipped content text on the left.

@@ -1,8 +1,8 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreSettings.js" as Core
-import "../../assets/omarchy/CoreService.js" as Service
-import "../../assets/omarchy/CoreView.js" as View
+import "../../CoreSettings.js" as Core
+import "../../CoreService.js" as Service
+import "../../CoreView.js" as View
 
 TestCase {
   id: testCase
@@ -131,7 +131,7 @@ TestCase {
   // ---- Source / UI contracts ----
 
   function test_settings_view_source_contracts() {
-    var src = read("assets/omarchy/SettingsView.qml")
+    var src = read("SettingsView.qml")
     verify(src.indexOf("Restore defaults") >= 0)
     verify(src.indexOf("Save changes") >= 0)
     verify(src.indexOf("Cancel") >= 0)
@@ -162,7 +162,7 @@ TestCase {
   }
 
   function test_settings_row_has_icon_name_chevrons() {
-    var src = read("assets/omarchy/components/SettingsProviderRow.qml")
+    var src = read("components/SettingsProviderRow.qml")
     verify(src.indexOf("Image") >= 0)
     verify(src.indexOf("displayName") >= 0)
     verify(src.indexOf("󰅃") >= 0)
@@ -180,7 +180,7 @@ TestCase {
   }
 
   function test_service_qml_has_settings_methods() {
-    var src = read("assets/omarchy/Service.qml")
+    var src = read("Service.qml")
     verify(src.indexOf("function saveSettings") >= 0)
     verify(src.indexOf("function cancelSettings") >= 0)
     verify(src.indexOf("function restoreSettingsDefaults") >= 0)
@@ -193,7 +193,7 @@ TestCase {
   // stdin` reads until EOF, so write() must be followed by stdinEnabled=false
   // or the helper hangs forever and the save never lands.
   function test_service_settings_stdin_closes_after_write() {
-    var src = read("assets/omarchy/Service.qml")
+    var src = read("Service.qml")
     var proc = src.indexOf("id: settingsWriteProcess")
     verify(proc >= 0)
     var onStarted = src.indexOf("onStarted:", proc)
@@ -216,7 +216,7 @@ TestCase {
   }
 
   function test_popup_hosts_settings_view() {
-    var src = read("assets/omarchy/Popup.qml")
+    var src = read("Popup.qml")
     verify(src.indexOf("SettingsView") >= 0)
     verify(src.indexOf("settingsStub") < 0)
   }
@@ -263,7 +263,7 @@ TestCase {
   // Wiring lives in plugin QML the runner cannot compile (imports qs.*), so
   // the contract is asserted on source text, the repo's standing mitigation.
   function test_service_bootstraps_settings_at_startup() {
-    var src = read("assets/omarchy/Service.qml")
+    var src = read("Service.qml")
     verify(src.indexOf("id: settingsBootstrapProcess") >= 0)
     var probe = src.indexOf("function finishVersionProbeSuccess(")
     verify(probe >= 0)

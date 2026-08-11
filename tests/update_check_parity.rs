@@ -117,8 +117,7 @@ fn fixtures_carry_no_archive_fields() {
 /// The seam is only real while the QML side parses the real key set.
 #[test]
 fn qml_parser_reads_the_real_keys() {
-    let js = std::fs::read_to_string("assets/omarchy/CoreMaintenance.js")
-        .expect("read CoreMaintenance.js");
+    let js = std::fs::read_to_string("CoreMaintenance.js").expect("read CoreMaintenance.js");
     assert!(
         js.contains("function maintenanceUiFromCheck("),
         "CoreMaintenance.maintenanceUiFromCheck is the other half of this seam"

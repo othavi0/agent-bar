@@ -45,7 +45,7 @@ fi
 "${QMLTEST}" \
   -input "${QML_TEST}" \
   -import /usr/share/omarchy/shell \
-  -import "${ROOT}/assets/omarchy" \
+  -import "${ROOT}" \
   -o -,txt
 
 missing=0

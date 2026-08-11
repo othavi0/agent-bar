@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreMaintenance.js" as Core
+import "../../CoreMaintenance.js" as Core
 
 TestCase {
   id: testCase
@@ -140,7 +140,7 @@ TestCase {
   }
 
   function test_update_check_failure_has_one_string() {
-    var src = read("assets/omarchy/CoreMaintenance.js")
+    var src = read("CoreMaintenance.js")
     verify(src.indexOf("Update check returned an unusable response.") < 0)
     var first = src.indexOf("Update check failed.")
     verify(first >= 0)
@@ -176,9 +176,9 @@ TestCase {
   // string was set and never seen. The second click is communicated by the
   // confirm button flipping to "Uninstall now".
   function test_arming_sets_no_unseen_message() {
-    var src = read("assets/omarchy/CoreMaintenance.js")
+    var src = read("CoreMaintenance.js")
     verify(src.indexOf("Click Uninstall again") < 0)
-    var view = read("assets/omarchy/MaintenanceView.qml")
+    var view = read("MaintenanceView.qml")
     verify(view.indexOf('"Uninstall now"') >= 0)
   }
 
@@ -198,7 +198,7 @@ TestCase {
   // ---- Source contracts ----
 
   function test_service_login_uses_exec_detached() {
-    var src = read("assets/omarchy/Service.qml")
+    var src = read("Service.qml")
     verify(src.indexOf("Quickshell.execDetached") >= 0)
     verify(src.indexOf("loginDetachedArgv") >= 0)
     verify(src.indexOf("bash -lc") < 0)
@@ -208,7 +208,7 @@ TestCase {
   // BUNDLE-036 / UX-048: after writing uninstall confirmation, close stdin so the
   // helper's read_to_end receives EOF (write alone does not close the channel).
   function test_service_uninstall_stdin_closes_after_write() {
-    var src = read("assets/omarchy/Service.qml")
+    var src = read("Service.qml")
     var handoff = src.indexOf("id: maintenanceHandoffProcess")
     verify(handoff >= 0)
     var onStarted = src.indexOf("onStarted:", handoff)
@@ -226,7 +226,7 @@ TestCase {
   }
 
   function test_maintenance_view_ux_copy() {
-    var src = read("assets/omarchy/MaintenanceView.qml")
+    var src = read("MaintenanceView.qml")
     verify(src.indexOf("Check for updates") >= 0)
     verify(src.indexOf("Uninstall Agent Bar") >= 0)
     verify(src.indexOf("Also delete saved settings and backups") >= 0)
@@ -246,13 +246,13 @@ TestCase {
   }
 
   function test_install_type_is_gone_from_the_model() {
-    var src = read("assets/omarchy/CoreMaintenance.js")
+    var src = read("CoreMaintenance.js")
     // Dead the moment the row was deleted; the contract forbids keeping it.
     verify(src.indexOf("installType") < 0)
   }
 
   function test_settings_hosts_maintenance_view() {
-    var src = read("assets/omarchy/SettingsView.qml")
+    var src = read("SettingsView.qml")
     verify(src.indexOf("MaintenanceView") >= 0)
     verify(src.indexOf("land in the next task") < 0)
   }

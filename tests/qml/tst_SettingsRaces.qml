@@ -1,8 +1,8 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreSettings.js" as Core
-import "../../assets/omarchy/CoreService.js" as Service
-import "../../assets/omarchy/CoreMaintenance.js" as Maintenance
+import "../../CoreSettings.js" as Core
+import "../../CoreService.js" as Service
+import "../../CoreMaintenance.js" as Maintenance
 
 TestCase {
   id: testCase

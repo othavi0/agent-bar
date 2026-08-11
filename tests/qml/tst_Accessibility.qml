@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreView.js" as Core
+import "../../CoreView.js" as Core
 import "TestPalette.js" as Palette
 
 TestCase {
@@ -27,21 +27,21 @@ TestCase {
 
   function v10QmlFiles() {
     return [
-      "assets/omarchy/BarWidget.qml",
-      "assets/omarchy/Popup.qml",
-      "assets/omarchy/ProviderRail.qml",
-      "assets/omarchy/ProviderView.qml",
-      "assets/omarchy/SettingsView.qml",
-      "assets/omarchy/MaintenanceView.qml",
-      "assets/omarchy/Service.qml",
-      "assets/omarchy/components/ProviderChip.qml",
-      "assets/omarchy/components/ProviderHeader.qml",
-      "assets/omarchy/components/HeaderTag.qml",
-      "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/components/StateMessage.qml",
-      "assets/omarchy/components/SettingsProviderRow.qml",
-      "assets/omarchy/components/ConfirmDialog.qml",
-      "assets/omarchy/components/FocusController.qml"
+      "BarWidget.qml",
+      "Popup.qml",
+      "ProviderRail.qml",
+      "ProviderView.qml",
+      "SettingsView.qml",
+      "MaintenanceView.qml",
+      "Service.qml",
+      "components/ProviderChip.qml",
+      "components/ProviderHeader.qml",
+      "components/HeaderTag.qml",
+      "components/UsageWindow.qml",
+      "components/StateMessage.qml",
+      "components/SettingsProviderRow.qml",
+      "components/ConfirmDialog.qml",
+      "components/FocusController.qml"
     ]
   }
 
@@ -69,14 +69,14 @@ TestCase {
   }
 
   function test_interactive_controls_have_accessible_names() {
-    var src = read("assets/omarchy/ProviderRail.qml")
+    var src = read("ProviderRail.qml")
     verify(src.indexOf("Accessible.name") >= 0)
     verify(src.indexOf("Accessible.role") >= 0)
-    src = read("assets/omarchy/components/StateMessage.qml")
+    src = read("components/StateMessage.qml")
     verify(src.indexOf("Accessible.name") >= 0)
-    src = read("assets/omarchy/SettingsView.qml")
+    src = read("SettingsView.qml")
     verify(src.indexOf("Accessible.name") >= 0)
-    src = read("assets/omarchy/MaintenanceView.qml")
+    src = read("MaintenanceView.qml")
     verify(src.indexOf("Accessible.name") >= 0)
   }
 
@@ -94,14 +94,14 @@ TestCase {
   }
 
   function test_glyphs_and_text_labels() {
-    var header = read("assets/omarchy/components/ProviderHeader.qml")
+    var header = read("components/ProviderHeader.qml")
     verify(header.indexOf("󰑐") >= 0)
-    var rail = read("assets/omarchy/ProviderRail.qml")
+    var rail = read("ProviderRail.qml")
     verify(rail.indexOf("󰒓") >= 0)
-    var settings = read("assets/omarchy/SettingsView.qml")
+    var settings = read("SettingsView.qml")
     verify(settings.indexOf("Save changes") >= 0)
     verify(settings.indexOf("Restore defaults") >= 0)
-    var maint = read("assets/omarchy/MaintenanceView.qml")
+    var maint = read("MaintenanceView.qml")
     verify(maint.indexOf("Check for updates") >= 0)
     verify(maint.indexOf("Uninstall Agent Bar") >= 0)
   }
@@ -116,14 +116,14 @@ TestCase {
   }
 
   function test_focus_controller_ordered_activation_api() {
-    var src = read("assets/omarchy/components/FocusController.qml")
+    var src = read("components/FocusController.qml")
     verify(src.indexOf("function setTargets") >= 0)
     verify(src.indexOf("liveTargets") >= 0)
     verify(src.indexOf("focusActivate") >= 0)
   }
 
   function test_settings_editor_owns_focus_flag() {
-    var src = read("assets/omarchy/SettingsView.qml")
+    var src = read("SettingsView.qml")
     verify(src.indexOf("editorOwnsFocus") >= 0)
   }
 }

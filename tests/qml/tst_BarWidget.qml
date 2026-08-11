@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
-import "../../assets/omarchy/CoreView.js" as Core
-import "../../assets/omarchy/CoreService.js" as Kernel
+import "../../CoreView.js" as Core
+import "../../CoreService.js" as Kernel
 
 TestCase {
   id: testCase
@@ -19,9 +19,9 @@ TestCase {
     return parts.join("/")
   }
 
-  property string widgetUrl: "file://" + repoRoot + "/assets/omarchy/BarWidget.qml"
-  property string chipUrl: "file://" + repoRoot + "/assets/omarchy/components/ProviderChip.qml"
-  property string coreViewUrl: "file://" + repoRoot + "/assets/omarchy/CoreView.js"
+  property string widgetUrl: "file://" + repoRoot + "/BarWidget.qml"
+  property string chipUrl: "file://" + repoRoot + "/components/ProviderChip.qml"
+  property string coreViewUrl: "file://" + repoRoot + "/CoreView.js"
 
   // Minimal shell stand-in with Quattro serviceFor API.
   Item {
@@ -608,15 +608,15 @@ TestCase {
   // provider-facing copy may reintroduce it.
   function test_no_emoji_hourglass_in_assets() {
     var files = [
-      "assets/omarchy/CoreView.js",
-      "assets/omarchy/components/ProviderChip.qml",
-      "assets/omarchy/ProviderView.qml",
-      "assets/omarchy/components/ProviderHeader.qml",
-      "assets/omarchy/ProviderRail.qml",
-      "assets/omarchy/components/StateMessage.qml",
-      "assets/omarchy/components/UsageWindow.qml",
-      "assets/omarchy/Popup.qml",
-      "assets/omarchy/BarWidget.qml"
+      "CoreView.js",
+      "components/ProviderChip.qml",
+      "ProviderView.qml",
+      "components/ProviderHeader.qml",
+      "ProviderRail.qml",
+      "components/StateMessage.qml",
+      "components/UsageWindow.qml",
+      "Popup.qml",
+      "BarWidget.qml"
     ]
     for (var i = 0; i < files.length; i++) {
       var xhr = new XMLHttpRequest()
@@ -643,7 +643,7 @@ TestCase {
   function test_icon_files_exist_with_approved_names() {
     var names = ["claude.png", "codex.png", "amp.svg", "grok.svg"]
     for (var i = 0; i < names.length; i++) {
-      var path = "file://" + repoRoot + "/assets/omarchy/icons/" + names[i]
+      var path = "file://" + repoRoot + "/icons/" + names[i]
       var xhr = new XMLHttpRequest()
       xhr.open("GET", path, false)
       xhr.send()

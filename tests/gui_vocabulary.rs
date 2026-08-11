@@ -16,9 +16,14 @@ const BANNED: &[&str] = &[
     "adapter", "schema", "payload", "envelope", "bundle", "collect", "clause", "snapshot",
 ];
 
+/// The GUI tree now lives at the plugin root: top-level `*.qml`/`*.js` files
+/// plus everything under `components/`. Unlike the old `assets/omarchy`
+/// subtree, the repo root also holds Rust sources, docs, and build output,
+/// so the walk only descends into `components/` from the top level — it
+/// must not wander into `src/`, `target/`, `.git/`, or similar.
 fn gui_files(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let mut stack = vec![root.join("assets/omarchy")];
+    let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
             continue;
@@ -26,6 +31,9 @@ fn gui_files(root: &Path) -> Vec<PathBuf> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
+                if dir == root && entry.file_name() != "components" {
+                    continue;
+                }
                 stack.push(path);
                 continue;
             }
