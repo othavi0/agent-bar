@@ -179,7 +179,10 @@ pub struct ProviderDescriptor {
 `ExecutablePath` is a typed path template rooted in `HOME` or a
 provider-specific home variable. It is not an arbitrary shell-expanded string.
 Discovery checks `PATH` first, then the descriptor's fallback paths in order,
-and accepts only a regular file with an executable bit. The resolved absolute
+and accepts only a regular file with an executable bit. Discovery returns that
+path exactly as found and never resolves symlinks: version managers such as
+mise install their tools as shims that dispatch on `argv[0]`, so canonicalizing
+a shim would execute the manager binary instead of the tool. The discovered
 path replaces element zero of `login_argv`; every remaining element is passed
 unchanged.
 

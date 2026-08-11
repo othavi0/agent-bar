@@ -1,64 +1,70 @@
-# Design: descoberta de executável não deve canonicalizar shims (mise)
+# Design: Executable Discovery Must Not Canonicalize Shims (mise)
 
-Data: 2026-08-11
-Status: aprovado (opção A)
+Date: 2026-08-11
+Status: approved (option A)
 
-## Problema
+## Problem
 
-Com o Amp CLI instalado via mise, o único `amp` no PATH do Quickshell é o shim
-`~/.local/share/mise/shims/amp`, um symlink para `/usr/bin/mise`. A descoberta
-(`resolve_executable` em `src/providers/catalog.rs`) canonicaliza o candidato
-encontrado, então o helper executa `/usr/bin/mise usage` em vez do shim. O mise
-vê `argv[0]` = `mise`, não entra em modo shim e roda o subcomando próprio
-`mise usage` (usage-spec, ~213 KB, exit 0, ~15 ms). O parser não encontra
-nenhuma linha do Amp, o resultado vira `Ready` com `windows: []` e a UI mostra
-"Amp reports no quota / This account is billed another way."
+With the Amp CLI installed through mise, the only `amp` on the Quickshell PATH
+is the shim `~/.local/share/mise/shims/amp`, a symlink to `/usr/bin/mise`.
+Discovery (`resolve_executable` in `src/providers/catalog.rs`) canonicalized the
+candidate it found, so the helper executed `/usr/bin/mise usage` instead of the
+shim. mise sees `argv[0]` = `mise`, never enters shim mode, and runs its own
+`mise usage` subcommand (usage-spec output, ~213 KB, exit 0, ~15 ms). The parser
+finds no Amp line, the result becomes `Ready` with `windows: []`, and the UI
+shows "Amp reports no quota / This account is billed another way."
 
-Reproduzido na máquina do usuário em 2026-08-11 com o ambiente exato do
-Quickshell. Testes decisivos:
+Reproduced on the user's machine on 2026-08-11 with the exact Quickshell
+environment. Decisive tests:
 
-- `amp` → symlink para `/usr/bin/mise` no PATH: coleta falha (`ready`, 0
-  janelas, 33 ms).
-- `amp` → symlink para o binário Node real: coleta funciona (`ready`, 3
-  janelas, ~1,2 s).
+- `amp` as a symlink to `/usr/bin/mise` on PATH: collection fails (`ready`, 0
+  windows, 33 ms).
+- `amp` as a symlink to the real Node binary: collection works (`ready`, 3
+  windows, ~1.2 s).
 
-## Alcance do defeito
+## Blast radius
 
-- Coleta do Amp (`amp usage`): quebrada quando instalado via mise.
-- Codex app-server: mesma falha; o adapter cai no fallback de session log e
-  serve dados velhos.
-- `login` de qualquer provider via mise: executaria `/usr/bin/mise login`.
-- Claude não é afetado na coleta (HTTP/OAuth). Grok lê JSON do disco na coleta,
-  mas o `login` seria afetado.
+- Amp collection (`amp usage`): broken when installed through mise.
+- Codex app-server: same failure; the adapter falls back to the session log and
+  serves stale data.
+- `login` for any provider installed through mise: would execute
+  `/usr/bin/mise login`.
+- Claude collection is unaffected (HTTP/OAuth). Grok reads billing JSON from
+  disk during collection, but its `login` would be affected.
 
-## Correção (opção A, aprovada)
+## Fix (option A, approved)
 
-`resolve_executable` retorna o caminho encontrado **sem** seguir symlinks, nos
-dois ramos (PATH e fallbacks). Executar o path que o PATH resolveu preserva o
-`argv[0]` do shim e ativa o modo shim do mise — comportamento POSIX padrão.
-`canonicalize_best_effort` deixa de ser usado na resolução (remover se ficar
-sem uso).
+`resolve_executable` returns the path it found **without** following symlinks,
+in both branches (PATH scan and fallback templates). Executing the path that
+PATH resolved preserves the shim's `argv[0]` and activates mise's shim mode —
+standard POSIX behaviour. `canonicalize_best_effort` becomes unused during
+resolution and is removed.
 
-Alternativas rejeitadas:
+Rejected alternatives:
 
-- Canonicalizar apenas quando o basename do alvo coincide: branch extra sem
-  benefício, já que nada exige paths canônicos na execução.
-- Forçar `argv[0]` via `CommandExt::arg0` mantendo o path canônico: frágil,
-  depende de detalhe interno do mise e exige estender `ProcessSpec`.
+- Canonicalize only when the target basename matches: an extra branch with no
+  benefit, since nothing requires canonical paths at execution time.
+- Force `argv[0]` through `CommandExt::arg0` while keeping the canonical path:
+  fragile, depends on a mise implementation detail, and would require extending
+  `ProcessSpec`.
 
-## Testes
+## Tests
 
-- Regressão em `catalog.rs`: num diretório temporário no PATH, `amp` como
-  symlink para outro binário de basename diferente (simulando o shim); a
-  descoberta deve retornar o path do symlink, não o alvo.
-- Atualizar o teste existente que espera o path canonicalizado
-  (`fs::canonicalize` em `catalog.rs`, ~linha 517).
-- Gates de contrato: `cargo fmt --check`, `cargo test`,
+- Regression test in `catalog.rs` for the PATH branch: in a temporary directory
+  on PATH, `amp` is a symlink to another binary with a different basename (the
+  shim shape); discovery must return the symlink path, not the target.
+- A second regression test for the fallback-template branch, which returns from
+  a different point in `resolve_executable` and would otherwise be free to
+  reintroduce canonicalization unnoticed.
+- No existing test had to change: `fallback_used_when_path_empty` canonicalizes
+  both sides of its comparison and never had a symlink to resolve, so it is
+  insensitive to this behaviour either way.
+- Contract gates: `cargo fmt --check`, `cargo test`,
   `cargo clippy --all-targets -- -D warnings`.
 
-## Fora de escopo
+## Out of scope
 
-- Investigar por que o Grok reporta `windows: []` (fluxo distinto, lê billing
-  JSON do disco).
-- Atualizar o bundle instalado em `~/.config/omarchy/plugins` — segue o gate
-  de QA final definido em `CLAUDE.md`.
+- Investigating why Grok reports `windows: []` (a distinct flow that reads
+  billing JSON from disk).
+- Updating the installed bundle in `~/.config/omarchy/plugins` — that follows
+  the final QA gate defined in `CLAUDE.md`.
