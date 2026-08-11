@@ -1,20 +1,24 @@
 name: Auto release
 
-# Every product merge to master cuts an official release, so the Settings
-# update button always has the latest merge to offer. The assembled plugin
-# tree is pushed to the distribution repo before the product tag and GitHub
-# release are published, so a failed dist push aborts the release instead of
-# leaving a tag that installs can see but not update to.
+# Every product merge to master cuts an official release. The release
+# commit itself carries the stamped plugin artifacts (bin/agent-bar,
+# bundle.json, manifest version), so the repository root is always the
+# complete installable plugin tree and `omarchy plugin update` receives
+# exactly one fast-forward commit per release.
 
 on:
   push:
     branches: [master]
     paths:
       - 'src/**'
-      - 'assets/**'
       - 'scripts/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '*.qml'
+      - 'Core*.js'
+      - 'components/**'
+      - 'icons/**'
+      - 'manifest.json'
   workflow_dispatch:
 
 permissions:
@@ -29,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      !startsWith(github.event.head_commit.message, 'chore: release')
+      !startsWith(github.event.head_commit.message, 'release:')
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -43,13 +47,9 @@ jobs:
           rustup target list --installed
 
       - name: Fetch dependencies
-        # cut-release runs `cargo update --workspace --offline`; a fresh
-        # runner has an empty registry, so offline resolution fails without
-        # this. The test and build steps need these exact crates later in
-        # the same run, so the download is moved earlier, not added.
         run: cargo fetch
 
-      - name: Cut release (bump + notes)
+      - name: Cut release (bump + notes + manifest stamp)
         id: cut
         run: |
           set -euo pipefail
@@ -63,75 +63,42 @@ jobs:
           cargo test
           cargo clippy --all-targets -- -D warnings
 
-      - name: Commit and tag the bump
-        env:
-          VERSION: ${{ steps.cut.outputs.version }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock CHANGELOG.md "docs/releases/${VERSION}.md"
-          git commit -m "chore: release ${VERSION}"
-          git tag "v${VERSION}"
-
       - name: Build release helper (x86_64-unknown-linux-gnu)
         run: cargo build --release --target x86_64-unknown-linux-gnu
 
-      - name: Assemble plugin bundle
+      - name: Stamp plugin artifacts into the repo root
         run: |
           set -euo pipefail
           SOURCE_COMMIT="$(git rev-parse HEAD)"
           mkdir -p target/release
           cp -f target/x86_64-unknown-linux-gnu/release/agent-bar target/release/agent-bar
-          cargo run --bin agent-bar-bundle -- \
-            assemble output target/release/othavi0.agent-bar \
-            source-commit "$SOURCE_COMMIT"
-          scripts/check-version "v${{ steps.cut.outputs.version }}" \
-            target/release/othavi0.agent-bar
+          cargo run --bin agent-bar-bundle -- stamp source-commit "$SOURCE_COMMIT"
+          scripts/check-version "v${{ steps.cut.outputs.version }}" .
 
-      - name: Bundle inventory / modes / architecture
+      - name: Root inventory / modes / architecture
         run: |
           set -euo pipefail
-          ROOT=target/release/othavi0.agent-bar
-          test -f "$ROOT/bundle.json"
-          test -f "$ROOT/manifest.json"
-          test -x "$ROOT/bin/agent-bar"
-          test -x "$ROOT/scripts/agent-bar-open-terminal"
-          test ! -e "$ROOT/agent-bar"
-          file "$ROOT/bin/agent-bar" | grep -E 'ELF 64-bit|x86-64|x86_64'
-          "$ROOT/bin/agent-bar" version
-          # QML/Quattro gates consume accepted checkpoint evidence on Omarchy
-          # hosts; Ubuntu runners do not provide the Omarchy runtime.
+          test -f bundle.json
+          test -f manifest.json
+          test -x bin/agent-bar
+          test -x scripts/agent-bar-open-terminal
+          file bin/agent-bar | grep -E 'ELF 64-bit|x86-64|x86_64'
+          bin/agent-bar version
+          # QML/Quattro gates consume accepted checkpoint evidence on
+          # Omarchy hosts; Ubuntu runners have no Omarchy runtime.
 
-      - name: Push plugin tree to distribution repo
-        env:
-          DIST_DEPLOY_KEY: ${{ secrets.OMARCHY_AGENT_BAR_DEPLOY_KEY }}
-          VERSION: ${{ steps.cut.outputs.version }}
-        run: |
-          set -euo pipefail
-          # bundle.json always embeds a freshly computed source_commit (this
-          # run's HEAD), so this commit is never empty even when the
-          # assembled tree is otherwise byte-identical to the last release.
-          mkdir -p ~/.ssh
-          printf '%s\n' "$DIST_DEPLOY_KEY" > ~/.ssh/dist_key
-          chmod 600 ~/.ssh/dist_key
-          export GIT_SSH_COMMAND="ssh -i ~/.ssh/dist_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
-          SOURCE_COMMIT="$(git rev-parse HEAD)"
-          git clone --depth 1 git@github.com:othavi0/omarchy-agent-bar.git dist
-          find dist -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
-          cp -a target/release/othavi0.agent-bar/. dist/
-          git -C dist config user.name "github-actions[bot]"
-          git -C dist config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C dist add -A
-          git -C dist commit -m "release: v${VERSION} (agent-bar@${SOURCE_COMMIT})"
-          git -C dist push origin HEAD:master
-
-      - name: Push and publish release
+      - name: Commit, tag, push, publish
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.cut.outputs.version }}
         run: |
           set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock CHANGELOG.md "docs/releases/${VERSION}.md" \
+            manifest.json bundle.json preview.png bin/agent-bar
+          git commit -m "release: v${VERSION}"
+          git tag "v${VERSION}"
           git push origin HEAD:master "refs/tags/v${VERSION}"
           gh release create "v${VERSION}" \
             --title "Agent Bar ${VERSION}" \
