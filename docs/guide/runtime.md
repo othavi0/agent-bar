@@ -26,12 +26,14 @@ terminal helper, private Rust helper, `README.md`, `LICENSE`, and
 minimum Quickshell version, source commit, and hash/size/mode for every
 other file.
 
-The installed plugin directory is a git checkout of the distribution
-repository (`othavi0/omarchy-agent-bar`): `omarchy plugin add` clones it,
-and `omarchy plugin update` fast-forwards it in place. `bundle.json` is also
-the sole discovery document `update check` reads, fetched over HTTPS
-directly from the distribution repository's `master` branch rather than
-from the local checkout, so a check works even before the first update.
+The installed plugin directory is a git checkout of this repository
+(`othavi0/omarchy-agent-bar`): the repository root is the plugin tree
+(see [ADR 0006](../adr/0006-single-repository-distribution.md)), so
+`omarchy plugin add` clones it directly and `omarchy plugin update`
+fast-forwards it in place. `bundle.json` is also the sole discovery
+document `update check` reads, fetched over HTTPS directly from the
+repository's `master` branch rather than from the local checkout, so a
+check works even before the first update.
 
 No global `agent-bar`, application entry, package, or standalone binary
 exists.

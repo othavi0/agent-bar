@@ -17,7 +17,7 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
   "schemaVersion": 1,
   "id": "othavi0.agent-bar",
   "name": "Agent Bar",
-  "version": "__AGENT_BAR_VERSION__",
+  "version": "10.x.y",
   "author": "othavi0",
   "license": "MIT",
   "description": "LLM quota monitor for Claude, Codex, Amp, and Grok.",
@@ -39,10 +39,15 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
 }
 ```
 
-`__AGENT_BAR_VERSION__` is a build-time placeholder substituted with the
-crate version when the bundle is assembled. `barWidget.defaultSection`
-drives the section `omarchy plugin add`'s interactive placement prompt
-preselects, and the section used when that prompt is skipped.
+`version` (`10.x.y` above for illustration) always carries the exact
+released version. `scripts/agent-bar-cut-release` bumps it in place at
+release time, directly in the repository root's own `manifest.json` —
+there is no build-time placeholder or separate assemble step to
+substitute it (the repository root is the plugin tree; see
+[ADR 0006](../adr/0006-single-repository-distribution.md)).
+`barWidget.defaultSection` drives the section `omarchy plugin add`'s
+interactive placement prompt preselects, and the section used when that
+prompt is skipped.
 
 Do not add `activation`, `keepLoaded`, or inline Agent Bar settings.
 

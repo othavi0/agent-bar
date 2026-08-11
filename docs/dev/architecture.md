@@ -144,10 +144,12 @@ unit lets the operation survive destruction of the initiating QML service
 during rescan; there is no permanent daemon and no verified worker copy of
 the helper.
 
-`update check` fetches the distribution repository's `bundle.json` receipt
-over HTTPS and reports `reinstallRequired: true` when the live plugin root
-has no `.git` directory, so the UI can offer the one-time
-remove-then-add migration instead of a false "up to date".
+`update check` fetches this repository's `bundle.json` receipt directly
+from `master` over HTTPS (the repository root is the plugin tree; see
+[ADR 0006](../adr/0006-single-repository-distribution.md)) and reports
+`reinstallRequired: true` when the live plugin root has no `.git`
+directory, so the UI can offer the one-time remove-then-add migration
+instead of a false "up to date".
 
 All status/config mutations, plus the purge/preflight/handoff step above,
 hold the shared stable maintenance gate under XDG state. Maintenance holds

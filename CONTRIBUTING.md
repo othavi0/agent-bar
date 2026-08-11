@@ -95,10 +95,12 @@ shipped behavior.
 ## Release
 
 Merging to `master` triggers an automatic patch release: version bump, Rust
-gates, a tagged bump commit, and a push of the assembled plugin tree to the
-distribution repository (`othavi0/omarchy-agent-bar`), followed by the
-tagged GitHub Release on this repository. There are no release assets to
-attach; the distribution repository's tree is the release. Implementation
-may prepare a release candidate and open a ready PR, but merge itself is
-the release decision and requires separate explicit authorization. See
-[docs/dev/releasing.md](docs/dev/releasing.md).
+gates, and a single `release: v{version}` commit that stamps
+`bin/agent-bar`, `bundle.json`, and the manifest version straight into the
+repository root — the root IS the plugin tree, per
+[ADR 0006](docs/adr/0006-single-repository-distribution.md) — followed by
+the tag and GitHub Release on that same commit. There is no separate
+distribution repository and no release assets to attach; the commit itself
+is the release. Implementation may prepare a release candidate and open a
+ready PR, but merge itself is the release decision and requires separate
+explicit authorization. See [docs/dev/releasing.md](docs/dev/releasing.md).

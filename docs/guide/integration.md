@@ -9,8 +9,9 @@ Agent Bar-authored installer.
 omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git
 ```
 
-This clones the distribution repository, validates the clone with
-`omarchy-plugin-validate`, and moves it to
+This clones the repository directly — the repository root is the plugin
+tree ([ADR 0006](../adr/0006-single-repository-distribution.md)) — validates
+the clone with `omarchy-plugin-validate`, and moves it to
 `$HOME/.config/omarchy/plugins/othavi0.agent-bar`. Omarchy then asks whether
 to enable the plugin now; enabling it prompts for a bar section, defaulting
 to `right` from the manifest's `barWidget.defaultSection` when the prompt is

@@ -62,9 +62,13 @@ dependencies.
 - `Service.qml` is the sole polling/process owner.
 - `BarWidget.qml` resolves the service through
   `bar.shell.serviceFor(moduleName)`.
-- Fresh installs use `omarchy plugin add <dist-repo-url>`, which clones,
-  validates, and moves the tree; enabling it is a separate confirmation.
-- Existing installs update with `omarchy plugin update othavi0.agent-bar`.
+- The repository root IS the plugin tree (ADR 0006); there is no separate
+  distribution repository. Fresh installs use
+  `omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git`,
+  which clones, validates, and moves the tree; enabling it is a separate
+  confirmation.
+- Existing installs update with `omarchy plugin update othavi0.agent-bar`,
+  fast-forwarding this repository's append-only `master`.
 - Never run an unconditional `omarchy bar plugin add`.
 - Update never edits `shell.json`.
 
@@ -119,10 +123,10 @@ dangling references, and readonly-property assignments in plugin QML reach
 only `qmltestrunner`, `omarchy plugin validate`, and live QA.
 
 Shell changes run ShellCheck. Bundle changes run `cargo test --test
-dist_tree_validate`, which mirrors `omarchy-plugin-validate` and the complete
-inventory/mode/architecture/version matrix; see
+root_tree_validate`, which mirrors `omarchy-plugin-validate` and the complete
+inventory/mode/architecture/version matrix against the repository root; see
 [docs/specs/v10/08-plugin-bundle-and-release.md](docs/specs/v10/08-plugin-bundle-and-release.md)
-for the amended contract.
+(amended by ADR 0006 / the 2026-08-11 monorepo spec) for the current contract.
 
 Tests use fake providers, fake clock/process/HTTP/filesystem seams, temporary
 plugin roots, and isolated XDG directories. No live network or credentials.
@@ -130,8 +134,9 @@ plugin roots, and isolated XDG directories. No live network or credentials.
 A release is not done when the merge is green: after every product merge,
 run the update-path verification in
 [docs/dev/releasing.md](docs/dev/releasing.md) (watch the `Auto release`
-run, confirm the dist repo fast-forwarded, prove `update check` and
-`omarchy plugin update` deliver the new version on a live install).
+run, confirm `master` gained exactly one `release:` commit, prove
+`update check` and `omarchy plugin update` deliver the new version on a
+live install).
 
 ## Workflow
 

@@ -87,8 +87,9 @@ confirmed owned legacy artifacts.
 
 - Bare `update` has no interactive flow; it prints usage pointing at `update
   check` and `update apply`.
-- `update check` returns machine-readable compatibility metadata read from the
-  dist repo's git receipt.
+- `update check` returns machine-readable compatibility metadata read from
+  this repository's own `bundle.json` git receipt (the repository root is
+  the plugin tree; see [ADR 0006](../adr/0006-single-repository-distribution.md)).
 - `update apply` takes no argument. It delegates unconditionally to
   `omarchy plugin update othavi0.agent-bar --yes` as a detached transient unit
   and returns as soon as the handoff is accepted; that command owns the

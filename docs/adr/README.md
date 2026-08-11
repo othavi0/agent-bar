@@ -9,6 +9,7 @@ ADRs preserve durable decisions and their historical context.
 | [0003](0003-cli-help-hide-internals.md) | Small help with parseable internals | Superseded by 0004 |
 | [0004](0004-quickshell-only-v10.md) | Quickshell-only v10 plugin | Accepted |
 | [0005](0005-auto-release-on-product-merge.md) | Automatic release on every product merge | Accepted |
+| [0006](0006-single-repository-distribution.md) | Single-repository distribution | Accepted |
 
 Existing ADR bodies remain historical and are not rewritten to resemble the
 current decision.
