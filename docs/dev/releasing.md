@@ -137,11 +137,10 @@ instead of a second one.
 
 ## Branch protection
 
-`othavi0/omarchy-agent-bar` has branch protection on `master` denying force
-pushes, set directly in the repository's GitHub settings, independent of
-the workflow. This is a second guard, not a substitute for the append-only
-discipline above: the workflow must never attempt a force-push in the
-first place.
+This repository's `master` has branch protection denying force pushes, set
+directly in its GitHub settings, independent of the workflow. This is a
+second guard, not a substitute for the append-only discipline above: the
+workflow must never attempt a force-push in the first place.
 
 ## CHANGELOG convention
 
