@@ -71,6 +71,13 @@ fi
 sed -i "0,/^version = \"${CUR}\"/s//version = \"${NEXT}\"/" Cargo.toml
 cargo update --workspace --offline --quiet
 
+# Root manifest carries the released version (single-repo layout).
+sed -i "s/\"version\": \"${CUR}\"/\"version\": \"${NEXT}\"/" manifest.json
+grep -q "\"version\": \"${NEXT}\"" manifest.json || {
+  echo "manifest.json version stamp failed" >&2
+  exit 1
+}
+
 printf '%s\n' "$NOTES" > "$NOTES_PATH"
 
 # Prepend the matching CHANGELOG section right after the intro block.
