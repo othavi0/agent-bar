@@ -43,6 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `renameat2` exchange/quarantine, health-IPC polling) that used to back
   in-app update and uninstall. The Omarchy CLI now owns that mutation.
 
+## [10.3.8] - 2026-08-11
+
+### Changed
+
+- docs: amend spec for shim-preserving discovery
+- test: cover fallback shim discovery branch
+- fix: keep symlink paths so mise shims dispatch
+- docs: mise shim discovery fix plan
+- docs: design for mise shim discovery fix
+
 ## [10.3.7] - 2026-08-10
 
 ### Changed

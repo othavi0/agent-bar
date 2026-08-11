@@ -1,6 +1,6 @@
 [package]
 name = "agent-bar"
-version = "10.3.7"
+version = "10.3.8"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
