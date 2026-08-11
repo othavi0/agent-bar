@@ -7,42 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
-
-- A provider whose refresh fails no longer looks broken. Its last good
-  reading stays on the bar at full strength — same opacity, same severity
-  colour, no clock glyph — and the popup drops the urgent banner in favour of
-  one neutral `Updated <age>` caption. Waking a machine after hours away used
-  to dim every icon and raise an alert for one poll interval, because an
-  expired Claude token counts as a refresh failure even though the displayed
-  numbers were still the correct last reading. The status JSON is unchanged:
-  `agent-bar status` still reports `"state": "stale"` with its typed error.
-- Distribution is entirely git-native: install with `omarchy plugin add
-  https://github.com/othavi0/omarchy-agent-bar.git`, update with
-  `omarchy plugin update agent-bar.usage`, and remove with
-  `omarchy plugin remove agent-bar.usage`. The Settings update and uninstall
-  buttons delegate to those same commands as a detached transient systemd
-  unit instead of staging and swapping the plugin directory themselves.
-- `update apply` no longer takes a version argument; it fast-forwards
-  unconditionally to whatever the distribution repository currently
-  publishes. `update check` reads that repository's `bundle.json` directly
-  and reports `reinstallRequired` for a pre-conversion (non-git) install
-  instead of a false "up to date".
-- If you installed Agent Bar before this release, the update button shows a
-  one-time migration notice. Run `omarchy plugin remove agent-bar.usage`
-  then `omarchy plugin add https://github.com/othavi0/omarchy-agent-bar.git`.
-  Settings, cache, and backups live outside the plugin directory and survive
-  the swap.
-
-### Removed
-
-- `install.sh` and the tarball/GitHub-Releases-asset bootstrap. Releases no
-  longer attach any archive; the release tag and notes are published
-  alongside a plain commit pushed to the distribution repository.
-- The staged plugin-directory transaction machinery (worker copy, journal,
-  `renameat2` exchange/quarantine, health-IPC polling) that used to back
-  in-app update and uninstall. The Omarchy CLI now owns that mutation.
-
 ## [10.3.8] - 2026-08-11
 
 ### Changed
