@@ -39,7 +39,7 @@ The bundled Rust executable at `bin/agent-bar`. It is an implementation detail,
 not a standalone product.
 
 **Plugin bundle**
-The complete version-matched `agent-bar.usage` directory: manifest, QML, icons,
+The complete version-matched `othavi0.agent-bar` directory: manifest, QML, icons,
 scripts, receipt, and private helper.
 
 ## Provider model
