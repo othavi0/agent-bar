@@ -1,9 +1,9 @@
-//! Distribution-tree completeness (git-plugin-distribution Task 6).
+//! Root-tree completeness (monorepo migration Task 2).
 //!
-//! The assembled `othavi0.agent-bar/` tree is pushed verbatim as the
-//! distribution repo's complete state, so it has to satisfy two things at
-//! once: the Omarchy plugin contract the shell enforces at install time, and
-//! the marketplace expectation of a README/LICENSE/preview at the repo root.
+//! The plugin QML/JS/manifest tree now lives at the repo root alongside
+//! `src/`, `docs/`, and `target/`. `BundleBuilder::stamp` reads that root,
+//! stamps in the private helper and marketplace preview image, and writes
+//! `bundle.json` scoped to `SHIPPED_ROOT_FILES`/`SHIPPED_DIRS` only.
 //! `BundleValidator::validate_tree` covers receipt/filesystem consistency but
 //! never learned the shell's own manifest grammar (id regex, entry point
 //! existence, `kinds`, `defaultSection`), so this test reimplements that
@@ -35,18 +35,44 @@ fn copy_dir_all(src: &Path, dst: &Path) {
     }
 }
 
-/// Build a throwaway "source repo" containing everything `assemble` reads.
+/// Shipped top-level files that live directly at the real repo root, copied
+/// verbatim into the fake fixture root. `manifest.json` is included so the
+/// fixture carries the real id/kinds/entryPoints grammar this test checks.
+const ROOT_SOURCE_FILES: &[&str] = &[
+    "BarWidget.qml",
+    "CoreMaintenance.js",
+    "CoreScroll.js",
+    "CoreService.js",
+    "CoreSettings.js",
+    "CoreView.js",
+    "MaintenanceView.qml",
+    "Popup.qml",
+    "ProviderRail.qml",
+    "ProviderView.qml",
+    "Service.qml",
+    "SettingsView.qml",
+    "manifest.json",
+];
+
+/// Build a throwaway "source repo" containing everything `stamp` reads.
 ///
-/// `assets/omarchy` is the real tree, so the manifest and entry points this
-/// test checks are the ones that actually ship. The terminal helper, dist
-/// README, LICENSE, and preview image are small fakes: their exact bytes are
-/// not under test here, only that `assemble` picks them up and the resulting
-/// tree is contract-complete.
+/// The QML/JS/manifest/`components`/`icons` tree is the real one, so the
+/// manifest and entry points this test checks are the ones that actually
+/// ship. The terminal helper, README, LICENSE, and demo image are small
+/// fakes: their exact bytes are not under test here, only that `stamp`
+/// picks them up and the resulting root is contract-complete. Non-shipped
+/// noise (`src/`, `docs/dev/`, `Cargo.toml`) stands in for the rest of the
+/// monorepo that `stamp` must tolerate and ignore.
 fn fake_repo(root: &Path) {
+    fs::create_dir_all(root).unwrap();
+    for name in ROOT_SOURCE_FILES {
+        fs::copy(workspace_root().join(name), root.join(name)).unwrap();
+    }
     copy_dir_all(
-        &workspace_root().join("assets/omarchy"),
-        &root.join("assets/omarchy"),
+        &workspace_root().join("components"),
+        &root.join("components"),
     );
+    copy_dir_all(&workspace_root().join("icons"), &root.join("icons"));
 
     fs::create_dir_all(root.join("scripts")).unwrap();
     fs::write(
@@ -55,10 +81,8 @@ fn fake_repo(root: &Path) {
     )
     .unwrap();
 
-    fs::create_dir_all(root.join("assets/dist")).unwrap();
-    fs::write(root.join("assets/dist/README.md"), b"# Fake dist readme\n").unwrap();
-
     fs::write(root.join("LICENSE"), b"Fake license text.\n").unwrap();
+    fs::write(root.join("README.md"), b"# Fake readme\n").unwrap();
 
     fs::create_dir_all(root.join("docs/media")).unwrap();
     fs::write(
@@ -66,6 +90,23 @@ fn fake_repo(root: &Path) {
         b"not a real png, just stand-in bytes",
     )
     .unwrap();
+
+    // Non-shipped noise that must be tolerated and excluded from the receipt.
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join("src/lib.rs"), b"// noise, not shipped\n").unwrap();
+    fs::create_dir_all(root.join("docs/dev")).unwrap();
+    fs::write(root.join("docs/dev/notes.md"), b"noise, not shipped\n").unwrap();
+    fs::write(root.join("Cargo.toml"), b"[package]\nname = \"noise\"\n").unwrap();
+}
+
+/// Read `version` back out of the fixture's copied real manifest.json.
+fn manifest_version(repo_root: &Path) -> String {
+    let bytes = fs::read(repo_root.join("manifest.json")).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    value["version"]
+        .as_str()
+        .expect("manifest.json must carry a string version")
+        .to_string()
 }
 
 /// A stand-in for the compiled helper binary. `validate_tree` runs it with
@@ -143,26 +184,23 @@ fn find_symlinks(root: &Path) -> Vec<PathBuf> {
     hits
 }
 
-fn assemble_fake_tree(dir: &Path) -> (PathBuf, agent_bar::plugin::bundle::BundleReceipt) {
+fn stamp_fake_root(dir: &Path) -> (PathBuf, agent_bar::plugin::bundle::BundleReceipt) {
     let repo_root = dir.join("repo");
     fake_repo(&repo_root);
-
-    let version = "10.3.0";
+    let version = manifest_version(&repo_root);
     let helper = dir.join("agent-bar");
-    fake_helper(&helper, version);
-
-    let out = dir.join("othavi0.agent-bar");
+    fake_helper(&helper, &version);
     let builder = BundleBuilder::new(version, "0".repeat(40)).unwrap();
-    let receipt = builder.assemble(&out, &repo_root, &helper).unwrap();
-    (out, receipt)
+    let receipt = builder.stamp(&repo_root, &helper).unwrap();
+    (repo_root, receipt)
 }
 
 #[test]
-fn assembled_tree_mirrors_omarchy_plugin_validate() {
+fn stamped_root_mirrors_omarchy_plugin_validate() {
     let dir = tempfile::tempdir().unwrap();
-    let (out, receipt) = assemble_fake_tree(dir.path());
+    let (root, receipt) = stamp_fake_root(dir.path());
 
-    let manifest_bytes = fs::read(out.join("manifest.json")).unwrap();
+    let manifest_bytes = fs::read(root.join("manifest.json")).unwrap();
     let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes).unwrap();
 
     // schemaVersion must be exactly the JSON number 1.
@@ -199,7 +237,10 @@ fn assembled_tree_mirrors_omarchy_plugin_validate() {
             !rel.contains(".."),
             "entry point may not contain '..': {rel}"
         );
-        assert!(out.join(rel).is_file(), "entry point file not found: {rel}");
+        assert!(
+            root.join(rel).is_file(),
+            "entry point file not found: {rel}"
+        );
     }
 
     // A kind is a promise to supply something to load: for every kind the
@@ -227,18 +268,18 @@ fn assembled_tree_mirrors_omarchy_plugin_validate() {
         "barWidget.defaultSection must be left, center, or right, got {default_section}"
     );
 
-    // No symlinks anywhere in a freshly assembled tree.
+    // No symlinks anywhere within the shipped scope of a freshly stamped root.
     assert!(
-        find_symlinks(&out).is_empty(),
-        "freshly assembled tree must contain zero symlinks"
+        find_symlinks(&root.join("components")).is_empty(),
+        "freshly stamped components/ must contain zero symlinks"
     );
 
-    // Distribution-repo completeness: README/LICENSE/preview at root, and
-    // every one of them accounted for in the receipt inventory.
+    // README/LICENSE/preview at root, and every one of them accounted for
+    // in the receipt inventory.
     for name in ["README.md", "LICENSE", "preview.png"] {
         assert!(
-            out.join(name).is_file(),
-            "{name} missing from assembled tree"
+            root.join(name).is_file(),
+            "{name} missing from stamped root"
         );
         assert!(
             receipt.files.iter().any(|f| f.path == name),
@@ -246,22 +287,39 @@ fn assembled_tree_mirrors_omarchy_plugin_validate() {
         );
     }
 
+    // Receipt inventories the shipped scope only -- never the source tree.
+    for f in &receipt.files {
+        assert!(
+            agent_bar::plugin::bundle::SHIPPED_ROOT_FILES.contains(&f.path.as_str())
+                || agent_bar::plugin::bundle::SHIPPED_DIRS
+                    .iter()
+                    .any(|d| f.path.starts_with(&format!("{d}/"))),
+            "non-shipped file in receipt: {}",
+            f.path
+        );
+    }
+    assert!(receipt.files.iter().all(|f| f.path != "src/lib.rs"));
+    assert!(receipt.files.iter().any(|f| f.path == "bin/agent-bar"));
+    assert!(receipt.files.iter().any(|f| f.path == "preview.png"));
+
     // The tree also satisfies our own receipt/filesystem contract.
-    BundleValidator::validate_tree(&out).unwrap();
+    BundleValidator::validate_tree(&root).unwrap();
 }
 
 #[test]
 fn validate_tree_tolerates_root_git_but_not_symlinks() {
     let dir = tempfile::tempdir().unwrap();
-    let (out, _receipt) = assemble_fake_tree(dir.path());
+    let (root, _receipt) = stamp_fake_root(dir.path());
 
     // A root `.git`, like the one an installed clone carries, does not
     // break validation.
-    fs::create_dir_all(out.join(".git")).unwrap();
-    fs::write(out.join(".git/config"), b"[core]\n\tbare = false\n").unwrap();
-    BundleValidator::validate_tree(&out).unwrap();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::write(root.join(".git/config"), b"[core]\n\tbare = false\n").unwrap();
+    BundleValidator::validate_tree(&root).unwrap();
 
-    // A symlink elsewhere in the tree still fails, .git tolerance or not.
-    std::os::unix::fs::symlink("/etc/passwd", out.join("evil-link")).unwrap();
-    assert!(BundleValidator::validate_tree(&out).is_err());
+    // A symlink inside the shipped scope still fails, .git tolerance or
+    // not. A symlink under `src/` is not `validate_tree`'s job -- the
+    // shell's own validator covers the full tree at install time.
+    std::os::unix::fs::symlink("/etc/passwd", root.join("components/evil-link")).unwrap();
+    assert!(BundleValidator::validate_tree(&root).is_err());
 }

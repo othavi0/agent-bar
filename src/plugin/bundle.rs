@@ -1,4 +1,9 @@
-//! Plugin bundle assembly, receipt (`bundle.json`), and tree validation.
+//! Plugin release stamping, receipt (`bundle.json`), and tree validation.
+//!
+//! The plugin QML/JS/manifest tree lives at the repo root (monorepo
+//! migration). `BundleBuilder::stamp` does not assemble a separate tree; it
+//! stamps release artifacts (private helper, marketplace preview image,
+//! `bundle.json`) directly into that root and validates the shipped scope.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
@@ -21,8 +26,33 @@ pub const OMARCHY_CONTRACT: u32 = 1;
 pub const MINIMUM_QUICKSHELL_VERSION: &str = "0.3.0";
 /// Bundle receipt / metadata schema version.
 pub const BUNDLE_SCHEMA_VERSION: u32 = 1;
-/// Manifest template placeholder replaced at assemble time.
-pub const MANIFEST_VERSION_PLACEHOLDER: &str = "__AGENT_BAR_VERSION__";
+
+/// Shipped top-level files at the repo root -- the complete inventory scope
+/// for `stamp`, `collect_inventory`, and `reject_special_files`. The repo
+/// root also holds `src/`, `docs/`, `target/`, and other non-shipped trees
+/// that are not the bundle's business.
+pub const SHIPPED_ROOT_FILES: &[&str] = &[
+    "BarWidget.qml",
+    "CoreMaintenance.js",
+    "CoreScroll.js",
+    "CoreService.js",
+    "CoreSettings.js",
+    "CoreView.js",
+    "LICENSE",
+    "MaintenanceView.qml",
+    "Popup.qml",
+    "ProviderRail.qml",
+    "ProviderView.qml",
+    "README.md",
+    "Service.qml",
+    "SettingsView.qml",
+    "bin/agent-bar",
+    "manifest.json",
+    "preview.png",
+    "scripts/agent-bar-open-terminal",
+];
+/// Shipped directories, walked in full. See [`SHIPPED_ROOT_FILES`].
+pub const SHIPPED_DIRS: &[&str] = &["components", "icons"];
 
 const EXEC_MODE: &str = "0755";
 
@@ -172,26 +202,20 @@ impl BundleBuilder {
         })
     }
 
-    /// Assemble plugin tree under `output` from repo-relative sources.
+    /// Stamp release artifacts directly into the repo root and write
+    /// `bundle.json`.
     ///
-    /// `repo_root` must contain `assets/omarchy`, `scripts/agent-bar-open-terminal`,
-    /// and a built helper at `helper_bin`.
-    pub fn assemble(
-        &self,
-        output: &Path,
-        repo_root: &Path,
-        helper_bin: &Path,
-    ) -> Result<BundleReceipt, BundleError> {
-        if output.exists() {
+    /// The plugin QML/JS/manifest tree already lives at `repo_root` (no
+    /// separate assembly step or version substitution). This copies
+    /// `helper_bin` to `<repo_root>/bin/agent-bar` (mode 0755) and
+    /// `<repo_root>/docs/media/demo.png` to `<repo_root>/preview.png`
+    /// (mode 0644), builds the receipt from the shipped scope only
+    /// ([`SHIPPED_ROOT_FILES`] / [`SHIPPED_DIRS`]), writes
+    /// `<repo_root>/bundle.json`, and validates.
+    pub fn stamp(&self, repo_root: &Path, helper_bin: &Path) -> Result<BundleReceipt, BundleError> {
+        if !repo_root.is_dir() {
             return Err(BundleError::msg(format!(
-                "assemble output already exists: {}",
-                output.display()
-            )));
-        }
-        let assets = repo_root.join("assets/omarchy");
-        if !assets.is_dir() {
-            return Err(BundleError::msg(format!(
-                "missing assets/omarchy under {}",
+                "repo root is not a directory: {}",
                 repo_root.display()
             )));
         }
@@ -208,18 +232,18 @@ impl BundleBuilder {
                 terminal.display()
             )));
         }
-        let readme_src = repo_root.join("assets/dist/README.md");
-        if !readme_src.is_file() {
+        let readme = repo_root.join("README.md");
+        if !readme.is_file() {
             return Err(BundleError::msg(format!(
-                "dist README not found: {}",
-                readme_src.display()
+                "README not found: {}",
+                readme.display()
             )));
         }
-        let license_src = repo_root.join("LICENSE");
-        if !license_src.is_file() {
+        let license = repo_root.join("LICENSE");
+        if !license.is_file() {
             return Err(BundleError::msg(format!(
                 "LICENSE not found: {}",
-                license_src.display()
+                license.display()
             )));
         }
         let preview_src = repo_root.join("docs/media/demo.png");
@@ -230,44 +254,27 @@ impl BundleBuilder {
             )));
         }
 
-        fs::create_dir_all(output)?;
-        // Top-level QML / JS / manifest (version substituted).
-        copy_asset_tree(&assets, output, &self.version)?;
-
         // Private helper.
-        let bin_dir = output.join("bin");
+        let bin_dir = repo_root.join("bin");
         fs::create_dir_all(&bin_dir)?;
         let dest_helper = bin_dir.join("agent-bar");
         fs::copy(helper_bin, &dest_helper)?;
         set_unix_mode(&dest_helper, 0o755)?;
 
-        // Terminal helper.
-        let scripts = output.join("scripts");
-        fs::create_dir_all(&scripts)?;
-        let dest_term = scripts.join("agent-bar-open-terminal");
-        fs::copy(&terminal, &dest_term)?;
-        set_unix_mode(&dest_term, 0o755)?;
+        // Marketplace preview image, stamped fresh every run.
+        fs::copy(&preview_src, repo_root.join("preview.png"))?;
+        set_unix_mode(&repo_root.join("preview.png"), 0o644)?;
 
-        // Distribution repo metadata: the assembled tree is the complete
-        // repo state pushed to the git plugin distribution repo, so it
-        // carries its own README, LICENSE, and marketplace preview image.
-        fs::copy(&readme_src, output.join("README.md"))?;
-        set_unix_mode(&output.join("README.md"), 0o644)?;
-        fs::copy(&license_src, output.join("LICENSE"))?;
-        set_unix_mode(&output.join("LICENSE"), 0o644)?;
-        fs::copy(&preview_src, output.join("preview.png"))?;
-        set_unix_mode(&output.join("preview.png"), 0o644)?;
+        // Deterministic non-exec modes for ordinary shipped files.
+        normalize_bundle_modes(repo_root)?;
 
-        // Deterministic non-exec modes for ordinary files.
-        normalize_bundle_modes(output)?;
-
-        let receipt = BundleValidator::build_receipt(self, output)?;
-        let receipt_path = output.join("bundle.json");
+        let receipt = BundleValidator::build_receipt(self, repo_root)?;
+        let receipt_path = repo_root.join("bundle.json");
         let json = receipt.to_pretty_json()?;
         write_bytes_atomic(&receipt_path, json.as_bytes(), 0o644)?;
 
         // Final validation including the written receipt.
-        BundleValidator::validate_tree(output)?;
+        BundleValidator::validate_tree(repo_root)?;
         Ok(receipt)
     }
 }
@@ -562,70 +569,67 @@ fn read_helper_version(helper: &Path) -> Result<String, BundleError> {
     Ok(line)
 }
 
-fn copy_asset_tree(assets: &Path, output: &Path, version: &str) -> Result<(), BundleError> {
-    fn walk(src: &Path, dst: &Path, version: &str) -> Result<(), BundleError> {
-        fs::create_dir_all(dst)?;
-        for entry in fs::read_dir(src)? {
-            let entry = entry?;
-            let ft = entry.file_type()?;
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            // Skip development-only files that must never ship.
-            if name_str == "Widget.qml" {
-                // v9 leftover; not part of the v10 bundle tree.
-                continue;
-            }
-            let from = entry.path();
-            let to = dst.join(&name);
-            if ft.is_dir() {
-                walk(&from, &to, version)?;
-            } else if ft.is_file() {
-                if name_str == "manifest.json" {
-                    let raw = fs::read_to_string(&from)?;
-                    let substituted = raw.replace(MANIFEST_VERSION_PLACEHOLDER, version);
-                    if substituted.contains(MANIFEST_VERSION_PLACEHOLDER) {
-                        return Err(BundleError::msg(
-                            "manifest still contains version placeholder after substitution",
-                        ));
-                    }
-                    write_bytes_atomic(&to, substituted.as_bytes(), 0o644)?;
-                } else {
-                    fs::copy(&from, &to)?;
-                    set_unix_mode(&to, 0o644)?;
-                }
-            } else {
-                return Err(BundleError::msg(format!(
-                    "refusing to copy special file {}",
-                    from.display()
-                )));
-            }
-        }
-        Ok(())
+/// Walk a shipped directory (`components/` or `icons/`) recursively,
+/// invoking `visit` for each regular file found. Rejects symlinks and other
+/// special files anywhere in the walk.
+fn walk_shipped_dir(
+    root: &Path,
+    dir_name: &str,
+    mut visit: impl FnMut(&Path, &str) -> Result<(), BundleError>,
+) -> Result<(), BundleError> {
+    let dir = root.join(dir_name);
+    if !dir.is_dir() {
+        return Err(BundleError::msg(format!(
+            "missing shipped directory: {dir_name}"
+        )));
     }
-    walk(assets, output, version)
-}
-
-fn normalize_bundle_modes(root: &Path) -> Result<(), BundleError> {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(&dir)? {
+    let mut stack = vec![dir];
+    while let Some(d) = stack.pop() {
+        for entry in fs::read_dir(&d)? {
             let entry = entry?;
             let path = entry.path();
-            let ft = entry.file_type()?;
+            let meta = fs::symlink_metadata(&path)?;
+            let ft = meta.file_type();
+            if ft.is_symlink() {
+                return Err(BundleError::msg(format!(
+                    "symlink rejected in bundle: {}",
+                    path.display()
+                )));
+            }
             if ft.is_dir() {
                 stack.push(path);
             } else if ft.is_file() {
                 let rel = path
                     .strip_prefix(root)
                     .map_err(|e| BundleError::msg(e.to_string()))?;
-                let rel_s = rel.to_string_lossy().replace('\\', "/");
-                if rel_s == "bin/agent-bar" || rel_s == "scripts/agent-bar-open-terminal" {
-                    set_unix_mode(&path, 0o755)?;
-                } else {
-                    set_unix_mode(&path, 0o644)?;
-                }
+                let rel_s = rel
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                visit(&path, &rel_s)?;
+            } else {
+                return Err(BundleError::msg(format!(
+                    "special file rejected in bundle: {}",
+                    path.display()
+                )));
             }
         }
+    }
+    Ok(())
+}
+
+fn normalize_bundle_modes(root: &Path) -> Result<(), BundleError> {
+    for rel in SHIPPED_ROOT_FILES {
+        let path = root.join(rel);
+        if *rel == "bin/agent-bar" || *rel == "scripts/agent-bar-open-terminal" {
+            set_unix_mode(&path, 0o755)?;
+        } else {
+            set_unix_mode(&path, 0o644)?;
+        }
+    }
+    for dir_name in SHIPPED_DIRS {
+        walk_shipped_dir(root, dir_name, |path, _rel| set_unix_mode(path, 0o644))?;
     }
     Ok(())
 }
@@ -643,79 +647,98 @@ fn is_root_git_dir(root: &Path, dir: &Path, name: &OsStr, is_dir: bool) -> bool 
     is_dir && dir == root && name == OsStr::new(".git")
 }
 
-/// Collect (relative path with `/`, sha256, size, mode) for every regular file.
+/// Collect (relative path with `/`, sha256, size, mode) for every shipped
+/// regular file: [`SHIPPED_ROOT_FILES`] plus a full walk of [`SHIPPED_DIRS`].
+/// The repo root also holds `src/`, `docs/`, `target/`, and other non-shipped
+/// trees; those are outside this inventory's scope entirely, not merely
+/// tolerated.
 fn collect_inventory(root: &Path) -> Result<Vec<(String, String, u64, String)>, BundleError> {
     let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let mut entries: Vec<_> = fs::read_dir(&dir)?.collect::<Result<Vec<_>, _>>()?;
-        entries.sort_by_key(|e| e.file_name());
-        for entry in entries {
-            let path = entry.path();
-            let ft = entry.file_type()?;
-            if ft.is_symlink() {
-                return Err(BundleError::msg(format!(
-                    "symlink rejected in bundle: {}",
-                    path.display()
-                )));
-            }
-            if is_root_git_dir(root, &dir, &entry.file_name(), ft.is_dir()) {
-                continue;
-            }
-            if ft.is_dir() {
-                stack.push(path);
-            } else if ft.is_file() {
-                let rel = path
-                    .strip_prefix(root)
-                    .map_err(|e| BundleError::msg(e.to_string()))?;
-                let rel_s = rel
-                    .components()
-                    .map(|c| c.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
-                validate_receipt_path(&rel_s)?;
-                let bytes = fs::read(&path)?;
-                let sha = hash_bytes(&bytes);
-                let mode = mode_string_of(&path)?;
-                out.push((rel_s, sha, bytes.len() as u64, mode));
-            } else {
-                return Err(BundleError::msg(format!(
-                    "special file rejected in bundle: {}",
-                    path.display()
-                )));
-            }
+    for rel in SHIPPED_ROOT_FILES {
+        let path = root.join(rel);
+        let meta = fs::symlink_metadata(&path)
+            .map_err(|e| BundleError::msg(format!("missing shipped file {rel}: {e}")))?;
+        let ft = meta.file_type();
+        if ft.is_symlink() {
+            return Err(BundleError::msg(format!(
+                "symlink rejected in bundle: {}",
+                path.display()
+            )));
         }
+        if !ft.is_file() {
+            return Err(BundleError::msg(format!(
+                "special file rejected in bundle: {}",
+                path.display()
+            )));
+        }
+        validate_receipt_path(rel)?;
+        let bytes = fs::read(&path)?;
+        let sha = hash_bytes(&bytes);
+        let mode = mode_string_of(&path)?;
+        out.push((rel.to_string(), sha, bytes.len() as u64, mode));
+    }
+    for dir_name in SHIPPED_DIRS {
+        walk_shipped_dir(root, dir_name, |path, rel_s| {
+            validate_receipt_path(rel_s)?;
+            let bytes = fs::read(path)?;
+            let sha = hash_bytes(&bytes);
+            let mode = mode_string_of(path)?;
+            out.push((rel_s.to_string(), sha, bytes.len() as u64, mode));
+            Ok(())
+        })?;
     }
     out.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
     Ok(out)
 }
 
+/// Reject symlinks and other special files within the shipped scope, plus
+/// the repo root's own immediate entries (excluding a root `.git`). This
+/// deliberately does not descend into non-shipped subdirectories like
+/// `src/` or `docs/` -- a symlink there is the shell's own full-tree
+/// validator's job at install time, not this bundle's.
 fn reject_special_files(root: &Path) -> Result<(), BundleError> {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(&dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            let meta = fs::symlink_metadata(&path)?;
-            let ft = meta.file_type();
-            if ft.is_symlink() {
-                return Err(BundleError::msg(format!(
-                    "symlink rejected: {}",
-                    path.display()
-                )));
-            }
-            if is_root_git_dir(root, &dir, &entry.file_name(), ft.is_dir()) {
-                continue;
-            }
-            if ft.is_dir() {
-                stack.push(path);
-            } else if !ft.is_file() {
-                return Err(BundleError::msg(format!(
-                    "special file rejected: {}",
-                    path.display()
-                )));
-            }
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        let meta = fs::symlink_metadata(&path)?;
+        let ft = meta.file_type();
+        if is_root_git_dir(root, root, &entry.file_name(), ft.is_dir()) {
+            continue;
         }
+        if ft.is_symlink() {
+            return Err(BundleError::msg(format!(
+                "symlink rejected: {}",
+                path.display()
+            )));
+        }
+        if !ft.is_dir() && !ft.is_file() {
+            return Err(BundleError::msg(format!(
+                "special file rejected: {}",
+                path.display()
+            )));
+        }
+    }
+
+    for rel in SHIPPED_ROOT_FILES {
+        let path = root.join(rel);
+        let meta = fs::symlink_metadata(&path)?;
+        let ft = meta.file_type();
+        if ft.is_symlink() {
+            return Err(BundleError::msg(format!(
+                "symlink rejected: {}",
+                path.display()
+            )));
+        }
+        if !ft.is_file() {
+            return Err(BundleError::msg(format!(
+                "special file rejected: {}",
+                path.display()
+            )));
+        }
+    }
+
+    for dir_name in SHIPPED_DIRS {
+        walk_shipped_dir(root, dir_name, |_path, _rel| Ok(()))?;
     }
     Ok(())
 }
@@ -784,7 +807,6 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], mode: u32) -> Result<(), Bundle
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
     use tempfile::tempdir;
 
     const ZERO_COMMIT: &str = "0000000000000000000000000000000000000000";
@@ -883,10 +905,15 @@ mod tests {
         assert!(validate_receipt_path("../evil").is_err());
     }
 
+    /// A fully-stamped shipped root: every `SHIPPED_ROOT_FILES` entry plus
+    /// non-empty `SHIPPED_DIRS`, ready for `BundleValidator` calls directly
+    /// (as opposed to `write_stamp_source_root`, which is missing the two
+    /// artifacts `stamp` itself creates).
     fn write_minimal_plugin(root: &Path, version: &str) {
         fs::create_dir_all(root.join("bin")).unwrap();
         fs::create_dir_all(root.join("scripts")).unwrap();
         fs::create_dir_all(root.join("icons")).unwrap();
+        fs::create_dir_all(root.join("components")).unwrap();
         fs::write(
             root.join("manifest.json"),
             format!(
@@ -917,8 +944,28 @@ mod tests {
             ),
         )
         .unwrap();
-        fs::write(root.join("Service.qml"), b"// service\n").unwrap();
-        fs::write(root.join("BarWidget.qml"), b"// bar\n").unwrap();
+        fs::set_permissions(
+            root.join("manifest.json"),
+            fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        for name in [
+            "Service.qml",
+            "BarWidget.qml",
+            "CoreMaintenance.js",
+            "CoreScroll.js",
+            "CoreService.js",
+            "CoreSettings.js",
+            "CoreView.js",
+            "MaintenanceView.qml",
+            "Popup.qml",
+            "ProviderRail.qml",
+            "ProviderView.qml",
+            "SettingsView.qml",
+        ] {
+            fs::write(root.join(name), format!("// {name}\n")).unwrap();
+            fs::set_permissions(root.join(name), fs::Permissions::from_mode(0o644)).unwrap();
+        }
         // Fake helper that answers `version` with the staged receipt version.
         fs::write(
             root.join("bin/agent-bar"),
@@ -943,20 +990,37 @@ mod tests {
         )
         .unwrap();
         fs::write(root.join("icons/claude.png"), b"png").unwrap();
-        fs::write(root.join("README.md"), b"# Agent Bar\n").unwrap();
-        fs::write(root.join("LICENSE"), b"MIT\n").unwrap();
-        fs::write(root.join("preview.png"), b"png").unwrap();
-        for p in [
-            "Service.qml",
-            "BarWidget.qml",
-            "manifest.json",
-            "icons/claude.png",
-            "README.md",
-            "LICENSE",
-            "preview.png",
+        fs::set_permissions(
+            root.join("icons/claude.png"),
+            fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        fs::write(root.join("components/Sample.qml"), b"// sample\n").unwrap();
+        fs::set_permissions(
+            root.join("components/Sample.qml"),
+            fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        for (name, bytes) in [
+            ("README.md", &b"# Agent Bar\n"[..]),
+            ("LICENSE", &b"MIT\n"[..]),
+            ("preview.png", &b"png"[..]),
         ] {
-            fs::set_permissions(root.join(p), fs::Permissions::from_mode(0o644)).unwrap();
+            fs::write(root.join(name), bytes).unwrap();
+            fs::set_permissions(root.join(name), fs::Permissions::from_mode(0o644)).unwrap();
         }
+    }
+
+    /// A stamp-input root: everything `stamp` expects to already exist,
+    /// minus the two artifacts it creates itself (`bin/agent-bar`,
+    /// `preview.png`), plus `docs/media/demo.png` as the preview source.
+    fn write_stamp_source_root(root: &Path, version: &str) {
+        write_minimal_plugin(root, version);
+        fs::remove_file(root.join("bin/agent-bar")).unwrap();
+        fs::remove_dir(root.join("bin")).unwrap();
+        fs::remove_file(root.join("preview.png")).unwrap();
+        fs::create_dir_all(root.join("docs/media")).unwrap();
+        fs::write(root.join("docs/media/demo.png"), b"not a real png\n").unwrap();
     }
 
     #[test]
@@ -990,12 +1054,14 @@ mod tests {
         let receipt = BundleValidator::build_receipt(&builder, &root).unwrap();
         fs::write(root.join("bundle.json"), receipt.to_pretty_json().unwrap()).unwrap();
 
-        // Extra file after receipt was built.
-        fs::write(root.join("evil.txt"), b"x").unwrap();
+        // Extra file after receipt was built, inside the shipped scope
+        // (`components/`) -- outside it, e.g. loose at the repo root, is
+        // deliberately not this validator's business.
+        fs::write(root.join("components/evil.txt"), b"x").unwrap();
         assert!(BundleValidator::validate_tree(&root).is_err());
 
         // Version mismatch via receipt mutation.
-        fs::remove_file(root.join("evil.txt")).unwrap();
+        fs::remove_file(root.join("components/evil.txt")).unwrap();
         let mut bad = receipt.clone();
         bad.version = "10.0.1".into();
         fs::write(root.join("bundle.json"), bad.to_pretty_json().unwrap()).unwrap();
@@ -1027,18 +1093,22 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path().join("othavi0.agent-bar");
         write_minimal_plugin(&root, "10.0.0");
-        std::os::unix::fs::symlink("/etc/passwd", root.join("link")).unwrap();
+        // Inside the shipped scope (`components/`) -- a symlink loose at the
+        // repo root is outside collect_inventory's business now.
+        std::os::unix::fs::symlink("/etc/passwd", root.join("components/link")).unwrap();
         let builder = BundleBuilder::new("10.0.0", ZERO_COMMIT).unwrap();
         // build_receipt itself walks and rejects symlinks.
         assert!(BundleValidator::build_receipt(&builder, &root).is_err());
     }
 
     #[test]
-    fn assemble_from_repo_assets() {
-        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    fn stamp_from_source_root() {
         let dir = tempdir().unwrap();
+        let root = dir.path().join("othavi0.agent-bar");
+        let version = "10.0.0";
+        write_stamp_source_root(&root, version);
+
         let helper = dir.path().join("agent-bar");
-        let version = env!("CARGO_PKG_VERSION");
         // Stand-in helper that reports the package version for BUNDLE-006.
         fs::write(
             &helper,
@@ -1049,20 +1119,23 @@ mod tests {
         .unwrap();
         fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
 
-        let out = dir.path().join("othavi0.agent-bar");
         let builder = BundleBuilder::new(version, ZERO_COMMIT).unwrap();
-        let receipt = builder.assemble(&out, &repo, &helper).unwrap();
+        let receipt = builder.stamp(&root, &helper).unwrap();
         assert_eq!(receipt.version, version);
         assert_eq!(receipt.plugin_id, PLUGIN_ID);
-        assert!(out.join("Service.qml").is_file());
-        assert!(out.join("icons/claude.png").is_file());
-        assert!(out.join("icons/amp.svg").is_file());
-        assert!(out.join("components/ProviderChip.qml").is_file());
-        assert!(!out.join("Widget.qml").exists());
-        assert!(out.join("bundle.json").is_file());
-        // No global executable at install root.
-        assert!(!out.join("agent-bar").exists());
-        BundleValidator::validate_tree(&out).unwrap();
+        // stamp creates these two artifacts fresh.
+        assert!(root.join("bin/agent-bar").is_file());
+        assert!(root.join("preview.png").is_file());
+        assert!(root.join("bundle.json").is_file());
+        assert!(receipt.files.iter().any(|f| f.path == "bin/agent-bar"));
+        assert!(receipt.files.iter().any(|f| f.path == "preview.png"));
+        // Non-shipped source material (the preview's own origin file) stays
+        // out of the receipt.
+        assert!(!receipt
+            .files
+            .iter()
+            .any(|f| f.path == "docs/media/demo.png"));
+        BundleValidator::validate_tree(&root).unwrap();
     }
 
     #[test]

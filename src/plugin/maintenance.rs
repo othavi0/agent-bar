@@ -906,6 +906,8 @@ mod tests {
     fn write_min_plugin(root: &Path, version: &str) {
         fs::create_dir_all(root.join("bin")).unwrap();
         fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::create_dir_all(root.join("icons")).unwrap();
+        fs::create_dir_all(root.join("components")).unwrap();
         fs::write(
             root.join("manifest.json"),
             format!(
@@ -914,7 +916,21 @@ mod tests {
         )
         .unwrap();
         fs::write(root.join("Service.qml"), format!("// {version}\n")).unwrap();
-        fs::write(root.join("BarWidget.qml"), b"// bar\n").unwrap();
+        for name in [
+            "BarWidget.qml",
+            "CoreMaintenance.js",
+            "CoreScroll.js",
+            "CoreService.js",
+            "CoreSettings.js",
+            "CoreView.js",
+            "MaintenanceView.qml",
+            "Popup.qml",
+            "ProviderRail.qml",
+            "ProviderView.qml",
+            "SettingsView.qml",
+        ] {
+            fs::write(root.join(name), format!("// {name}\n")).unwrap();
+        }
         fs::write(
             root.join("bin/agent-bar"),
             format!(
@@ -937,7 +953,31 @@ mod tests {
             fs::Permissions::from_mode(0o755),
         )
         .unwrap();
-        for p in ["Service.qml", "BarWidget.qml", "manifest.json"] {
+        fs::write(root.join("icons/claude.png"), b"png").unwrap();
+        fs::write(root.join("components/Sample.qml"), b"// sample\n").unwrap();
+        fs::write(root.join("README.md"), b"# Agent Bar\n").unwrap();
+        fs::write(root.join("LICENSE"), b"MIT\n").unwrap();
+        fs::write(root.join("preview.png"), b"png").unwrap();
+        for p in [
+            "Service.qml",
+            "BarWidget.qml",
+            "CoreMaintenance.js",
+            "CoreScroll.js",
+            "CoreService.js",
+            "CoreSettings.js",
+            "CoreView.js",
+            "MaintenanceView.qml",
+            "Popup.qml",
+            "ProviderRail.qml",
+            "ProviderView.qml",
+            "SettingsView.qml",
+            "manifest.json",
+            "icons/claude.png",
+            "components/Sample.qml",
+            "README.md",
+            "LICENSE",
+            "preview.png",
+        ] {
             fs::set_permissions(root.join(p), fs::Permissions::from_mode(0o644)).unwrap();
         }
     }

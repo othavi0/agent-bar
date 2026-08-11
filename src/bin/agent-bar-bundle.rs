@@ -1,10 +1,11 @@
-//! Internal assemble builder (not installed in the plugin bundle).
+//! Internal release-stamp builder (not installed in the plugin bundle).
 //!
 //! Grammar (exact):
-//!   agent-bar-bundle assemble output <plugin-dir> source-commit <40-hex>
+//!   agent-bar-bundle stamp source-commit <40-hex>
 //!
-//! CI pushes the assembled tree straight to the distribution repo
-//! (git-plugin-distribution Task 8) — there is no local release/archive verb.
+//! CI stamps the repo root in place and pushes it straight to the
+//! distribution repo (git-plugin-distribution Task 8) -- there is no
+//! separate assemble/output step or local release/archive verb.
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
@@ -21,13 +22,13 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     match args[0].as_str() {
-        "assemble" => match run_assemble(&mut args[1..]) {
+        "stamp" => match run_stamp(&mut args[1..]) {
             Ok(path) => {
-                eprintln!("assembled {}", path.display());
+                eprintln!("stamped {}", path.display());
                 ExitCode::SUCCESS
             }
             Err(e) => {
-                eprintln!("assemble failed: {e}");
+                eprintln!("stamp failed: {e}");
                 ExitCode::from(1)
             }
         },
@@ -43,12 +44,11 @@ fn main() -> ExitCode {
 }
 
 fn usage() -> String {
-    "agent-bar-bundle assemble output <plugin-dir> source-commit <40-lowercase-hex>\n".to_string()
+    "agent-bar-bundle stamp source-commit <40-lowercase-hex>\n".to_string()
 }
 
-fn run_assemble(args: &mut [String]) -> Result<PathBuf, String> {
-    let map = parse_kv(args, &["output", "source-commit"])?;
-    let output = PathBuf::from(map.get("output").ok_or("missing output")?);
+fn run_stamp(args: &mut [String]) -> Result<PathBuf, String> {
+    let map = parse_kv(args, &["source-commit"])?;
     let source_commit = map
         .get("source-commit")
         .ok_or("missing source-commit")?
@@ -59,9 +59,9 @@ fn run_assemble(args: &mut [String]) -> Result<PathBuf, String> {
     let version = env!("CARGO_PKG_VERSION").to_string();
     let builder = BundleBuilder::new(version, source_commit).map_err(|e| e.to_string())?;
     builder
-        .assemble(&output, &repo_root, &helper)
+        .stamp(&repo_root, &helper)
         .map_err(|e| e.to_string())?;
-    Ok(output)
+    Ok(repo_root)
 }
 
 /// Parse alternating keyword value pairs. Keywords must match exactly once.
@@ -100,14 +100,14 @@ fn repo_root() -> Result<PathBuf, String> {
     }
     let mut dir = env::current_dir().map_err(|e| e.to_string())?;
     loop {
-        if dir.join("Cargo.toml").is_file() && dir.join("assets/omarchy").is_dir() {
+        if dir.join("Cargo.toml").is_file() && dir.join("manifest.json").is_file() {
             return Ok(dir);
         }
         if !dir.pop() {
             break;
         }
     }
-    Err("could not locate repository root (Cargo.toml + assets/omarchy)".into())
+    Err("could not locate repository root (Cargo.toml + manifest.json)".into())
 }
 
 fn find_helper_bin(repo_root: &Path) -> Result<PathBuf, String> {
