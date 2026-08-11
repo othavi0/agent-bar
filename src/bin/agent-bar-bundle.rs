@@ -3,9 +3,9 @@
 //! Grammar (exact):
 //!   agent-bar-bundle stamp source-commit <40-hex>
 //!
-//! CI stamps the repo root in place and pushes it straight to the
-//! distribution repo (git-plugin-distribution Task 8) -- there is no
-//! separate assemble/output step or local release/archive verb.
+//! CI stamps the repo root in place, and the release workflow commits and
+//! pushes this repository's own `master` -- there is no separate
+//! assemble/output step or local release/archive verb.
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 

@@ -99,7 +99,7 @@ jobs:
             manifest.json bundle.json preview.png bin/agent-bar
           git commit -m "release: v${VERSION}"
           git tag "v${VERSION}"
-          git push origin HEAD:master "refs/tags/v${VERSION}"
+          git push --atomic origin HEAD:master "refs/tags/v${VERSION}"
           gh release create "v${VERSION}" \
             --title "Agent Bar ${VERSION}" \
             --notes-file "docs/releases/${VERSION}.md"
