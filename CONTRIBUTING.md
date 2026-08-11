@@ -85,9 +85,12 @@ stays behind the adapter. QML receives schema-v2 normalized data only.
 ## Documentation
 
 Active documentation is English and must match executable contracts.
-Changelog release sections 9.0.0 and older, ADR bodies 0001–0003, and
-`docs/superpowers/**` remain historical. Unreleased, the ADR index, and ADR
-0004 are active.
+Every versioned changelog release section, `docs/releases/**`,
+`docs/history/**`, ADR bodies 0001–0003, and `docs/superpowers/**` remain
+historical: they record how things were and are never rewritten. The
+`[Unreleased]` changelog section, the ADR index, ADR 0004, and everything
+under `docs/specs/v10/**` and `docs/guide/**` are active and must match the
+shipped behavior.
 
 ## Release
 

@@ -1,5 +1,10 @@
 # Private CLI and JSON Contract
 
+Amended by the plugin-ID rename (2026-08-06):
+`docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`. The plugin ID
+is `othavi0.agent-bar`; it read `agent-bar.usage` when this document was
+approved.
+
 The bundled helper is not the normal user interface. Its command contract is
 still strict because QML, tests, recovery procedures, and migration depend on
 it.
@@ -312,7 +317,7 @@ accepted.
 - `CLI-028`: QML passes structured intentions; it never concatenates command
   strings.
 - `CLI-029`: `update apply` takes no version argument. It delegates
-  unconditionally to `omarchy plugin update agent-bar.usage --yes`, which
+  unconditionally to `omarchy plugin update othavi0.agent-bar --yes`, which
   owns the git fetch, fast-forward, re-validation, and automatic
   `git reset --hard ORIG_HEAD` rollback on a failed validation.
 - `CLI-030`: Setup, update, doctor, and uninstall never touch unrelated Omarchy

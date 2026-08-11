@@ -1,5 +1,10 @@
 # Migration and Legacy Removal
 
+Amended by the plugin-ID rename (2026-08-06):
+`docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`. The plugin ID
+is `othavi0.agent-bar`; it read `agent-bar.usage` when this document was
+approved.
+
 ## Transaction model
 
 Since git-plugin-distribution (2026-08-05), plugin-directory mutation (fresh
@@ -77,7 +82,7 @@ The manifest records:
   is `omarchy plugin add <dist-repo-url>`, which clones, validates, moves
   the tree, and, after a separate confirmation or `--enable`, enables it
   and adds a missing bar entry. An already-installed but disabled plugin may
-  still be enabled directly with `omarchy plugin enable agent-bar.usage`.
+  still be enabled directly with `omarchy plugin enable othavi0.agent-bar`.
   Neither path ever follows with `omarchy bar plugin add`.
 - `MIG-019B`: Update does not edit `shell.json`.
 - `MIG-019C`: Rollback restores the exact previous `shell.json` bytes.
@@ -209,7 +214,7 @@ return as soon as the handoff is accepted without depending on the QML
 service it may be running under.
 
 - `MIG-020`: `update apply` takes no version argument and detaches
-  unconditionally to `omarchy plugin update agent-bar.usage --yes`, which
+  unconditionally to `omarchy plugin update othavi0.agent-bar --yes`, which
   owns the git fetch, fast-forward, re-validation, and
   `git reset --hard ORIG_HEAD` rollback on a failed validation.
 - `MIG-021`: `update check` reads the distribution repository's
@@ -219,7 +224,7 @@ service it may be running under.
   fast-forwarded and must be reinstalled through `omarchy plugin add`.
 - `MIG-022`: `uninstall` purges only Agent Bar's own XDG state (with
   `purge`) under the exclusive maintenance lock, then detaches
-  unconditionally to `omarchy plugin remove agent-bar.usage --yes`, which
+  unconditionally to `omarchy plugin remove othavi0.agent-bar --yes`, which
   owns disabling the bar entry, deleting the plugin directory, and
   rescanning.
 - `MIG-023`: Standard uninstall preserves settings, cache configuration, and

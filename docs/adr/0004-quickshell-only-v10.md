@@ -2,6 +2,7 @@
 
 Status: Accepted
 Date: 2026-07-26
+Amended: 2026-08-05 (git-plugin-distribution), 2026-08-06 (plugin-ID rename)
 
 ## Context
 
@@ -19,7 +20,7 @@ testable Rust helper than QML.
 
 ## Decision
 
-Agent Bar v10 is only the Omarchy Quattro plugin `agent-bar.usage`.
+Agent Bar v10 is only the Omarchy Quattro plugin `othavi0.agent-bar`.
 
 - One Quickshell service owns runtime state.
 - Monitor-local widgets render shared state.
@@ -33,8 +34,10 @@ Agent Bar v10 is only the Omarchy Quattro plugin `agent-bar.usage`.
   schema-v1 status compatibility are deleted.
 - Login delegates to official provider CLIs through an argv-safe terminal
   helper.
-- Update and uninstall are available in Settings and use journaled
-  transactions.
+- Update and uninstall are available in Settings. They delegate the
+  plugin-directory mutation to the Omarchy plugin manager; the journaled
+  transaction machinery this ADR originally specified was removed by
+  git-plugin-distribution (2026-08-05).
 
 ## Consequences
 

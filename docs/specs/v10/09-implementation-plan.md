@@ -1,5 +1,10 @@
 # Agent Bar v10 Implementation Plan
 
+Amended by the plugin-ID rename (2026-08-06):
+`docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`. This document
+is a build record and keeps the `agent-bar.usage` ID it was written against.
+The live ID is `othavi0.agent-bar`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` (recommended) or
 > `superpowers:executing-plans` to implement this plan task-by-task. Steps use

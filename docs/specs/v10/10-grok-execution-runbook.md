@@ -1,5 +1,10 @@
 # Grok Execution Runbook
 
+Amended by the plugin-ID rename (2026-08-06):
+`docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`. This document
+is a build record and keeps the `agent-bar.usage` ID it was written against.
+The live ID is `othavi0.agent-bar`.
+
 ## Objective
 
 Implement Agent Bar v10 exactly as specified in this directory. The canonical

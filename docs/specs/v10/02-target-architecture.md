@@ -1,5 +1,10 @@
 # Target Architecture
 
+Amended by the plugin-ID rename (2026-08-06):
+`docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`. The plugin ID
+is `othavi0.agent-bar`; it read `agent-bar.usage` when this document was
+approved.
+
 ## System shape
 
 ```text
@@ -245,7 +250,7 @@ The table is product data, not an example:
 - `ARCH-019`: Collection mechanisms remain provider-specific and are not
   inferred from the login executable.
 - `ARCH-020`: `Service.qml` owns one `IpcHandler` target named
-  `agent-bar.usage` with only `health(expectedVersion)` and
+  `othavi0.agent-bar` with only `health(expectedVersion)` and
   `refresh(providerId)` methods.
 - `ARCH-021`: `health` returns `ok` only when the loaded manifest version and
   last verified helper version both equal `expectedVersion`. `refresh`
@@ -336,7 +341,7 @@ replacement.
 
 ```text
 Plugin bundle:
-  $HOME/.config/omarchy/plugins/agent-bar.usage/
+  $HOME/.config/omarchy/plugins/othavi0.agent-bar/
 
 Settings:
   $XDG_CONFIG_HOME/agent-bar/settings.json
@@ -405,7 +410,7 @@ After the official provider process exits `0`, the Rust login command performs
 a best-effort argv call:
 
 ```text
-omarchy-shell -q agent-bar.usage refresh <providerId>
+omarchy-shell -q othavi0.agent-bar refresh <providerId>
 ```
 
 It then returns the original provider exit status. A nonzero or signaled

@@ -6,6 +6,11 @@ manifest and receipt shapes below carry forward; the release-files,
 update-transaction, and uninstall-transaction sections are replaced by the
 distribution-repository model.
 
+Amended by the plugin-ID rename (2026-08-06):
+`docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`. The plugin ID
+is `othavi0.agent-bar`; it read `agent-bar.usage` when this document was
+approved.
+
 ## Product artifact
 
 v10 builds one architecture-specific Omarchy plugin bundle. Since
@@ -14,7 +19,7 @@ distribution-repository commit that `omarchy plugin add` clones, so it
 carries its own `README.md`, `LICENSE`, and marketplace `preview.png`:
 
 ```text
-agent-bar.usage/
+othavi0.agent-bar/
 ├── manifest.json
 ├── bundle.json
 ├── README.md
@@ -42,7 +47,7 @@ directory sitting directly at the tree root and does not walk it; a `.git`
 anywhere deeper, or one that is itself a symlink, is not special-cased and
 still fails validation through the ordinary symlink/extra-file checks.
 
-- `BUNDLE-001`: The product is the `agent-bar.usage` plugin directory.
+- `BUNDLE-001`: The product is the `othavi0.agent-bar` plugin directory.
 - `BUNDLE-002`: `bin/agent-bar` is private and invoked by resolved absolute
   plugin path.
 - `BUNDLE-003`: No global executable, package, application entry, ManagedGit
@@ -53,7 +58,7 @@ still fails validation through the ordinary symlink/extra-file checks.
 - `BUNDLE-007`: The initial official target is
   `x86_64-unknown-linux-gnu`.
 - `BUNDLE-007A`: The installed plugin root is literal
-  `$HOME/.config/omarchy/plugins/agent-bar.usage`; Quattro does not apply
+  `$HOME/.config/omarchy/plugins/othavi0.agent-bar`; Quattro does not apply
   `XDG_CONFIG_HOME` to plugin discovery.
 
 ## Manifest
@@ -63,7 +68,7 @@ The final Quattro-validated manifest is:
 ```json
 {
   "schemaVersion": 1,
-  "id": "agent-bar.usage",
+  "id": "othavi0.agent-bar",
   "name": "Agent Bar",
   "version": "10.0.0",
   "author": "othavi0",
@@ -90,9 +95,7 @@ The final Quattro-validated manifest is:
 It must:
 
 - use schema version 1;
-- retain ID `agent-bar.usage` (superseded 2026-08-06: the ID is
-  `othavi0.agent-bar`, renamed before the marketplace listing went live; see
-  `docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`);
+- retain ID `othavi0.agent-bar`;
 - declare `service` and `bar-widget`;
 - map the service to `Service.qml`;
 - map the bar widget to `BarWidget.qml`;
@@ -119,7 +122,7 @@ The exact receipt shape is:
 ```json
 {
   "schemaVersion": 1,
-  "pluginId": "agent-bar.usage",
+  "pluginId": "othavi0.agent-bar",
   "version": "10.0.0",
   "target": "x86_64-unknown-linux-gnu",
   "omarchyContract": 1,
@@ -167,7 +170,7 @@ protection denies it independently, because `omarchy plugin update` is a
 fast-forward-only pull for every existing install. A rewritten history
 breaks the update check for all of them with no remote-side recovery.
 
-- `BUNDLE-008`: The pushed tree contains exactly one `agent-bar.usage`
+- `BUNDLE-008`: The pushed tree contains exactly one `othavi0.agent-bar`
   worth of content at the distribution repository root (plus that
   repository's own `.git/`).
 - `BUNDLE-009`: It contains no Rust source, tests, target directory,
@@ -210,7 +213,7 @@ installer; installation is the native Omarchy plugin flow end to end.
 - `BUNDLE-013`: **Retired.** `install.sh` is deleted. Installation is
   `omarchy plugin add <dist-repo-url>`: it clones the URL, validates the
   clone with `omarchy-plugin-validate`, and moves it to
-  `$HOME/.config/omarchy/plugins/agent-bar.usage`. No Agent Bar-authored
+  `$HOME/.config/omarchy/plugins/othavi0.agent-bar`. No Agent Bar-authored
   bootstrap, checksum verification, or staging step runs.
 - `BUNDLE-014`: **Retired.** `omarchy plugin add` owns its own install
   bookkeeping; Agent Bar's transaction state records nothing about
@@ -250,7 +253,7 @@ agent-bar update apply
   release-notes URL, target, and `reinstallRequired`. It carries no
   archive/checksum/source-commit fields.
 - `BUNDLE-022`: `update apply` takes no version argument; it delegates
-  unconditionally to `omarchy plugin update agent-bar.usage --yes`.
+  unconditionally to `omarchy plugin update othavi0.agent-bar --yes`.
 - `BUNDLE-023`: The Settings UI performs check and confirmation as separate
   states before triggering apply.
 - `BUNDLE-024`: `update check` reads only the distribution repository's own
@@ -358,7 +361,7 @@ What replaces it:
   "detached transient unit" idea is simpler: `update apply` and `uninstall`
   each start one `systemd-run --user --collect
   --unit=agent-bar-<update|remove>-<32-lowercase-hex-txid>.service -- <omarchy>
-  plugin <update|remove> agent-bar.usage --yes` and return once systemd has
+  plugin <update|remove> othavi0.agent-bar --yes` and return once systemd has
   accepted it, so the operation survives the initiating QML service being
   torn down by the rescan it triggers. `MIG-020`–`MIG-026` are the current
   contract.
@@ -369,7 +372,7 @@ Retired as a block. `BUNDLE-033`–`BUNDLE-038C` described uninstall's own
 quarantine/rescan/health/garbage-collection transaction, matching the
 update worker chain above. `MIG-020`–`MIG-026` are the current contract:
 `uninstall` purges only Agent Bar's own XDG state (with `purge`), then
-delegates unconditionally to `omarchy plugin remove agent-bar.usage --yes`,
+delegates unconditionally to `omarchy plugin remove othavi0.agent-bar --yes`,
 which owns disabling the bar entry, deleting (or, for a non-git directory,
 backing up) the plugin directory, and rescanning. The structured stdin
 confirmation document (`BUNDLE-036`'s schema) is unchanged and lives in

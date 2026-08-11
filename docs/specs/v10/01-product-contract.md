@@ -1,5 +1,10 @@
 # Product Contract
 
+Amended by the plugin-ID rename (2026-08-06):
+`docs/superpowers/specs/2026-08-06-plugin-id-rename-design.md`. The plugin ID
+is `othavi0.agent-bar`; it read `agent-bar.usage` when this document was
+approved.
+
 ## Purpose
 
 Agent Bar shows normalized quota and reset information for Claude, Codex, Amp,
@@ -9,7 +14,7 @@ connection actions, update, and uninstall.
 
 ## Goals
 
-- `PROD-001`: Make `agent-bar.usage` the only graphical Agent Bar surface.
+- `PROD-001`: Make `othavi0.agent-bar` the only graphical Agent Bar surface.
 - `PROD-002`: Use Omarchy Quattro and Quickshell native patterns.
 - `PROD-003`: Keep provider-specific logic in a testable private Rust helper.
 - `PROD-004`: Share provider state and polling across all monitors.
@@ -19,7 +24,7 @@ connection actions, update, and uninstall.
 - `PROD-007`: Give normal users complete configuration, update, and uninstall
   flows in the plugin UI. Update and uninstall remain UI journeys; since
   git-plugin-distribution (2026-08-05) they delegate their live mutation to
-  the Omarchy CLI (`omarchy plugin update|remove agent-bar.usage`) instead of
+  the Omarchy CLI (`omarchy plugin update|remove othavi0.agent-bar`) instead of
   performing it in-process.
 - `PROD-008`: Expose typed, safe, partial provider failures without parsing
   human error strings in QML.
@@ -110,14 +115,14 @@ Notifications: enabled
 
 1. Settings shows installed plugin version and `Check for updates`.
 2. An available release requires explicit confirmation before applying it.
-3. Confirming update delegates to `omarchy plugin update agent-bar.usage
+3. Confirming update delegates to `omarchy plugin update othavi0.agent-bar
    --yes`, which fetches, fast-forwards, re-validates, and rolls back
    automatically on a failed validation. A plugin directory without `.git`
    (a pre-conversion install) cannot be fast-forwarded; the check reports
    `reinstallRequired` and Settings shows the remove-then-add migration
    instruction instead of an update offer.
 4. `Uninstall Agent Bar` requires confirmation, then delegates to
-   `omarchy plugin remove agent-bar.usage --yes`.
+   `omarchy plugin remove othavi0.agent-bar --yes`.
 5. Settings are preserved by default; deleting settings requires an additional
    explicit purge selection, applied before the delegated remove.
 
