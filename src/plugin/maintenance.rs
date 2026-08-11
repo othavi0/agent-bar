@@ -32,7 +32,8 @@ pub const DIST_RECEIPT_URL: &str =
 pub const RELEASE_USER_AGENT: &str = concat!("agent-bar-update/", env!("CARGO_PKG_VERSION"));
 
 /// Literal prefix of the computed `latestCompatible.releaseNotesUrl`.
-pub const RELEASE_NOTES_URL_PREFIX: &str = "https://github.com/othavi0/agent-bar/releases/tag/v";
+pub const RELEASE_NOTES_URL_PREFIX: &str =
+    "https://github.com/othavi0/omarchy-agent-bar/releases/tag/v";
 
 #[derive(Debug, Error)]
 pub enum MaintenanceError {
@@ -622,7 +623,8 @@ mod tests {
             version: "10.1.0".into(),
             omarchy_contract: 1,
             minimum_quickshell_version: MINIMUM_QUICKSHELL_VERSION.into(),
-            release_notes_url: "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0".into(),
+            release_notes_url: "https://github.com/othavi0/omarchy-agent-bar/releases/tag/v10.1.0"
+                .into(),
         }
     }
 
@@ -751,7 +753,7 @@ mod tests {
         assert_eq!(latest.version, "10.1.0");
         assert_eq!(
             latest.release_notes_url,
-            "https://github.com/othavi0/agent-bar/releases/tag/v10.1.0"
+            "https://github.com/othavi0/omarchy-agent-bar/releases/tag/v10.1.0"
         );
 
         // Exactly one GET, to the dist receipt URL with the expected headers.

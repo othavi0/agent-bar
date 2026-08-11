@@ -83,7 +83,7 @@ TestCase {
     compare(ui.phase, "update_available")
     compare(ui.installedVersion, "10.3.1")
     compare(ui.targetVersion, "10.4.0")
-    compare(ui.releaseNotesUrl, "https://github.com/othavi0/agent-bar/releases/tag/v10.4.0")
+    compare(ui.releaseNotesUrl, "https://github.com/othavi0/omarchy-agent-bar/releases/tag/v10.4.0")
     verify(ui.message.indexOf("10.4.0") >= 0)
   }
 
@@ -91,7 +91,7 @@ TestCase {
     // A stale target from an earlier check must not survive the new answer.
     var ui = Core.maintenanceUiIdle("")
     ui.targetVersion = "10.4.0"
-    ui.releaseNotesUrl = "https://github.com/othavi0/agent-bar/releases/tag/v10.4.0"
+    ui.releaseNotesUrl = "https://github.com/othavi0/omarchy-agent-bar/releases/tag/v10.4.0"
     ui = Core.maintenanceUiFromCheck(ui, checkFixture("up-to-date.json"), 0, "")
     compare(ui.phase, "up_to_date")
     compare(ui.installedVersion, "10.4.0")
@@ -109,7 +109,7 @@ TestCase {
   function test_update_check_reinstall_required() {
     var ui = Core.maintenanceUiIdle("10.3.1")
     ui.targetVersion = "10.4.0"
-    ui.releaseNotesUrl = "https://github.com/othavi0/agent-bar/releases/tag/v10.4.0"
+    ui.releaseNotesUrl = "https://github.com/othavi0/omarchy-agent-bar/releases/tag/v10.4.0"
     ui = Core.maintenanceUiFromCheck(ui, checkFixture("reinstall-required.json"), 0, "10.3.1")
     compare(ui.phase, "reinstall_required")
     compare(ui.targetVersion, "")
