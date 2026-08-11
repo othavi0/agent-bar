@@ -293,7 +293,7 @@ pub fn discover(
     Ok(Discovery { collection, login })
 }
 
-/// Build login argv with the resolved absolute executable as element zero.
+/// Build login argv with the discovered executable path as element zero.
 pub fn login_process_argv(
     descriptor: &ProviderDescriptor,
     discovery: &Discovery,
@@ -315,16 +315,19 @@ fn resolve_executable(
     descriptor: &ProviderDescriptor,
     env: &ExecutionEnvironment,
 ) -> Result<Option<PathBuf>, CatalogError> {
+    // Return the candidate as found. Following symlinks here breaks version
+    // managers such as mise, whose shims are symlinks to the manager binary
+    // and rely on argv[0] to dispatch to the real tool (design 2026-08-11).
     for dir in &env.path_dirs {
         let candidate = dir.join(descriptor.executable_name);
         if is_executable_file(&candidate) {
-            return Ok(Some(canonicalize_best_effort(&candidate)));
+            return Ok(Some(candidate));
         }
     }
     for template in descriptor.fallback_executable_paths {
         let candidate = expand_template(template, env)?;
         if is_executable_file(&candidate) {
-            return Ok(Some(canonicalize_best_effort(&candidate)));
+            return Ok(Some(candidate));
         }
     }
     Ok(None)
@@ -360,10 +363,6 @@ fn is_executable_file(path: &Path) -> bool {
     {
         true
     }
-}
-
-fn canonicalize_best_effort(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[cfg(test)]
@@ -517,6 +516,52 @@ mod tests {
             fs::canonicalize(exe).unwrap(),
             fs::canonicalize(&fallback).unwrap()
         );
+    }
+
+    #[test]
+    fn discovery_returns_symlink_path_not_canonical_target() {
+        // Mise shims are symlinks named after the tool pointing at the mise
+        // binary. Executing the canonical target changes argv[0] to "mise",
+        // which disables shim dispatch, so discovery must preserve the
+        // symlink path (design 2026-08-11).
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let path_dir = dir.path().join("shims");
+        let target = dir.path().join("tools").join("mise");
+        write_exec(&target, true);
+        fs::create_dir_all(&path_dir).unwrap();
+        let shim = path_dir.join("amp");
+        std::os::unix::fs::symlink(&target, &shim).unwrap();
+        let env = ExecutionEnvironment {
+            home,
+            path_dirs: vec![path_dir],
+            grok_home: None,
+        };
+        let discovery = discover(&AMP, &env).unwrap();
+        assert_eq!(discovery.collection_executable().unwrap(), shim.as_path());
+        assert_eq!(discovery.login_executable().unwrap(), shim.as_path());
+    }
+
+    #[test]
+    fn fallback_discovery_returns_symlink_path_not_canonical_target() {
+        // The fallback templates resolve shims too: a version manager may own
+        // $HOME/.local/bin. Both resolution branches must preserve the symlink
+        // path, so this covers the branch the PATH test cannot reach.
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let target = dir.path().join("tools").join("mise");
+        write_exec(&target, true);
+        let shim = home.join(".local/bin/amp");
+        fs::create_dir_all(shim.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&target, &shim).unwrap();
+        let env = ExecutionEnvironment {
+            home,
+            path_dirs: vec![dir.path().join("empty-path")],
+            grok_home: None,
+        };
+        let discovery = discover(&AMP, &env).unwrap();
+        assert_eq!(discovery.collection_executable().unwrap(), shim.as_path());
+        assert_eq!(discovery.login_executable().unwrap(), shim.as_path());
     }
 
     #[test]
