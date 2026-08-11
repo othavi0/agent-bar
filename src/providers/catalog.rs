@@ -293,7 +293,7 @@ pub fn discover(
     Ok(Discovery { collection, login })
 }
 
-/// Build login argv with the resolved absolute executable as element zero.
+/// Build login argv with the discovered executable path as element zero.
 pub fn login_process_argv(
     descriptor: &ProviderDescriptor,
     discovery: &Discovery,
@@ -535,6 +535,28 @@ mod tests {
         let env = ExecutionEnvironment {
             home,
             path_dirs: vec![path_dir],
+            grok_home: None,
+        };
+        let discovery = discover(&AMP, &env).unwrap();
+        assert_eq!(discovery.collection_executable().unwrap(), shim.as_path());
+        assert_eq!(discovery.login_executable().unwrap(), shim.as_path());
+    }
+
+    #[test]
+    fn fallback_discovery_returns_symlink_path_not_canonical_target() {
+        // The fallback templates resolve shims too: a version manager may own
+        // $HOME/.local/bin. Both resolution branches must preserve the symlink
+        // path, so this covers the branch the PATH test cannot reach.
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let target = dir.path().join("tools").join("mise");
+        write_exec(&target, true);
+        let shim = home.join(".local/bin/amp");
+        fs::create_dir_all(shim.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&target, &shim).unwrap();
+        let env = ExecutionEnvironment {
+            home,
+            path_dirs: vec![dir.path().join("empty-path")],
             grok_home: None,
         };
         let discovery = discover(&AMP, &env).unwrap();
