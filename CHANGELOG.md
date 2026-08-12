@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [10.3.10] - 2026-08-12
+
+### Changed
+
+- fix: name absent shipped file in stamp error
+
 ## [10.3.9] - 2026-08-12
 
 ### Changed
