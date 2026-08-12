@@ -622,6 +622,10 @@ fn walk_shipped_dir(
 fn normalize_bundle_modes(root: &Path) -> Result<(), BundleError> {
     for rel in SHIPPED_ROOT_FILES {
         let path = root.join(rel);
+        // Presence check first, so an absent shipped file is refused by name
+        // instead of surfacing as a bare OS error from the chmod below.
+        fs::symlink_metadata(&path)
+            .map_err(|e| BundleError::msg(format!("missing shipped file {rel}: {e}")))?;
         if *rel == "bin/agent-bar" || *rel == "scripts/agent-bar-open-terminal" {
             set_unix_mode(&path, 0o755)?;
         } else {
@@ -1136,6 +1140,43 @@ mod tests {
             .iter()
             .any(|f| f.path == "docs/media/demo.png"));
         BundleValidator::validate_tree(&root).unwrap();
+    }
+
+    #[test]
+    fn stamp_refuses_missing_shipped_file_or_dir() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("othavi0.agent-bar");
+        let version = "10.0.0";
+        write_stamp_source_root(&root, version);
+
+        let helper = dir.path().join("agent-bar");
+        fs::write(
+            &helper,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = version ] || [ \"$1\" = --version ]; then echo {version}; fi\n"
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let builder = BundleBuilder::new(version, ZERO_COMMIT).unwrap();
+
+        // A missing SHIPPED_ROOT_FILES entry refuses the stamp, naming the file.
+        fs::remove_file(root.join("CoreView.js")).unwrap();
+        let err = builder.stamp(&root, &helper).unwrap_err().to_string();
+        assert!(
+            err.contains("missing shipped file CoreView.js"),
+            "unexpected error: {err}"
+        );
+
+        // A missing SHIPPED_DIRS entry refuses the stamp, naming the directory.
+        fs::write(root.join("CoreView.js"), b"// core\n").unwrap();
+        fs::set_permissions(root.join("CoreView.js"), fs::Permissions::from_mode(0o644)).unwrap();
+        fs::remove_dir_all(root.join("icons")).unwrap();
+        let err = builder.stamp(&root, &helper).unwrap_err().to_string();
+        assert!(
+            err.contains("missing shipped directory: icons"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

@@ -22,8 +22,8 @@ use crate::plugin::omarchy::OmarchyError;
 use crate::plugin::paths::{PathError, PLUGIN_ID};
 use crate::support::Clock;
 
-/// Distribution repo `bundle.json` receipt: the sole `update check` discovery
-/// source under git-native distribution. Served directly by
+/// This repository's committed `bundle.json` release receipt: the sole
+/// `update check` discovery source. Served directly by
 /// raw.githubusercontent.com — no redirect-following is needed.
 pub const DIST_RECEIPT_URL: &str =
     "https://raw.githubusercontent.com/othavi0/omarchy-agent-bar/master/bundle.json";
