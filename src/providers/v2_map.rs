@@ -874,8 +874,6 @@ pub fn antigravity_from_usage_text(
         let (id, label) = match (family, limit) {
             ("Gemini Models", "Five Hour") => ("gemini-5h", "Gemini · 5h"),
             ("Gemini Models", "Weekly") => ("gemini-weekly", "Gemini · Weekly"),
-            ("Claude and GPT models", "Five Hour") => ("claude-5h", "Claude/GPT · 5h"),
-            ("Claude and GPT models", "Weekly") => ("claude-weekly", "Claude/GPT · Weekly"),
             _ => continue,
         };
         
