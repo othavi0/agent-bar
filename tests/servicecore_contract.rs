@@ -55,7 +55,7 @@ fn servicecore_enums_match_schema() {
     );
 
     let providers = extract_keys(&js, "CLOSED_PROVIDERS");
-    let expected_providers: BTreeSet<String> = ["claude", "codex", "amp", "grok"]
+    let expected_providers: BTreeSet<String> = ["claude", "codex", "amp", "grok", "antigravity"]
         .into_iter()
         .map(str::to_owned)
         .collect();

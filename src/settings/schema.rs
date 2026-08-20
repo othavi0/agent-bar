@@ -126,6 +126,10 @@ impl Settings {
                     id: ProviderIdJson(ProviderId::Grok),
                     enabled: true,
                 },
+                ProviderSetting {
+                    id: ProviderIdJson(ProviderId::Antigravity),
+                    enabled: true,
+                },
             ],
             display: DisplaySettings {
                 metric: DisplayMetric::Remaining,
@@ -140,8 +144,19 @@ impl Settings {
         let value: Value = serde_json::from_slice(raw)
             .map_err(|err| SettingsError::new(format!("invalid settings JSON: {err}")))?;
         reject_unknown_top_level(&value)?;
-        let settings: Self = serde_json::from_value(value)
+        let mut settings: Self = serde_json::from_value(value)
             .map_err(|err| SettingsError::new(format!("invalid settings document: {err}")))?;
+        
+        // Auto-fill missing providers to ensure forward-compatibility.
+        for id in ProviderId::ALL {
+            if !settings.providers.iter().any(|p| p.id.0 == id) {
+                settings.providers.push(ProviderSetting {
+                    id: ProviderIdJson(id),
+                    enabled: true,
+                });
+            }
+        }
+
         settings.validate()?;
         Ok(settings)
     }

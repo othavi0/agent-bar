@@ -9,14 +9,16 @@ pub enum ProviderId {
     Codex,
     Amp,
     Grok,
+    Antigravity,
 }
 
 impl ProviderId {
-    pub const ALL: [ProviderId; 4] = [
+    pub const ALL: [ProviderId; 5] = [
         ProviderId::Claude,
         ProviderId::Codex,
         ProviderId::Amp,
         ProviderId::Grok,
+        ProviderId::Antigravity,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -25,6 +27,7 @@ impl ProviderId {
             ProviderId::Codex => "codex",
             ProviderId::Amp => "amp",
             ProviderId::Grok => "grok",
+            ProviderId::Antigravity => "antigravity",
         }
     }
 
@@ -34,6 +37,7 @@ impl ProviderId {
             "codex" => Some(ProviderId::Codex),
             "amp" => Some(ProviderId::Amp),
             "grok" => Some(ProviderId::Grok),
+            "antigravity" => Some(ProviderId::Antigravity),
             _ => None,
         }
     }

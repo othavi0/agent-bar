@@ -7,13 +7,13 @@ use super::adapter::{
     collection_exe, login_available, missing_collection, unauthenticated, BoxFuture,
     CollectionContext, ProviderAdapter,
 };
-use super::catalog::{AMP, CLAUDE, CODEX, GROK};
+use super::catalog::{AMP, CLAUDE, CODEX, GROK, ANTIGRAVITY};
 use super::codex_app_server::{fetch_rate_limits_via_appserver, AppServerOutcome};
 use super::codex_session_log::find_latest_rate_limits;
 use super::process::{ProcessOutput, ProcessSpec};
 use super::v2_map::{
     amp_from_usage_text, claude_from_usage_json, codex_from_rate_limits_json,
-    grok_from_billing_json,
+    grok_from_billing_json, antigravity_from_usage_text,
 };
 use super::{Discovery, ProviderDescriptor};
 
@@ -544,6 +544,141 @@ pub struct FixedClock(pub time::OffsetDateTime);
 impl crate::support::Clock for FixedClock {
     fn now_utc(&self) -> time::OffsetDateTime {
         self.0
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Antigravity
+// ---------------------------------------------------------------------------
+
+pub struct AntigravityAdapter;
+
+pub static ANTIGRAVITY_ADAPTER: AntigravityAdapter = AntigravityAdapter;
+
+impl ProviderAdapter for AntigravityAdapter {
+    fn descriptor(&self) -> &'static ProviderDescriptor {
+        &ANTIGRAVITY
+    }
+
+    fn collect<'a>(
+        &'a self,
+        context: &'a CollectionContext<'a>,
+        discovery: &'a Discovery,
+    ) -> BoxFuture<'a, ProviderResult> {
+        Box::pin(async move {
+            let Some(exe) = collection_exe(discovery) else {
+                return missing_collection(ProviderId::Antigravity, ANTIGRAVITY.display_name, ANTIGRAVITY.installation_url);
+            };
+
+            let mut cmd = tokio::process::Command::new(exe);
+            cmd.stdin(std::process::Stdio::piped())
+               .stdout(std::process::Stdio::piped())
+               .stderr(std::process::Stdio::piped())
+               .kill_on_drop(true)
+               .env("NO_COLOR", "1")
+               .env("TERM", "dumb");
+
+            let spawn_res = cmd.spawn();
+            let mut child = match spawn_res {
+                Ok(c) => c,
+                Err(e) => return ProviderResult::NetworkError {
+                    id: ProviderId::Antigravity,
+                    name: ANTIGRAVITY.display_name.to_owned(),
+                    message: format!("Failed to spawn Antigravity CLI: {e}").into(),
+                },
+            };
+
+            if let Some(mut stdin) = child.stdin.take() {
+                use tokio::io::AsyncWriteExt;
+                let _ = stdin.write_all(b"/usage\n").await;
+            }
+
+            let wait_fut = child.wait_with_output();
+            match tokio::time::timeout(ANTIGRAVITY.timeout, wait_fut).await {
+                Ok(Ok(output)) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                    if output.status.success() {
+                        let account_email = read_email_from_creds(&context.env.home);
+                        antigravity_from_usage_text(&stdout, context.clock.now_utc(), account_email)
+                    } else {
+                        classify_antigravity_failure(output.status.code(), &stdout, &stderr)
+                    }
+                }
+                _ => {
+                    ProviderResult::NetworkError {
+                        id: ProviderId::Antigravity,
+                        name: ANTIGRAVITY.display_name.to_owned(),
+                        message: "Antigravity usage command timed out.".into(),
+                    }
+                }
+            }
+        })
+    }
+}
+
+fn read_email_from_creds(home: &std::path::Path) -> Option<String> {
+    let creds_path = home.join(".gemini/oauth_creds.json");
+    let content = std::fs::read_to_string(creds_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let id_token = val.get("id_token")?.as_str()?;
+    
+    // Parse the payload of id_token
+    let parts: Vec<&str> = id_token.split('.').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let payload = parts[1];
+    let decoded = base64_decode_jwt_segment(payload)?;
+    let payload_val: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
+    payload_val.get("email").and_then(|v| v.as_str()).map(|s| s.to_owned())
+}
+
+fn base64_decode_jwt_segment(input: &str) -> Option<Vec<u8>> {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = Vec::new();
+    let mut buffer = 0u32;
+    let mut bits = 0;
+    
+    // JWT base64url encoding uses - and _ instead of + and /
+    for byte in input.bytes() {
+        if byte == b'=' {
+            break;
+        }
+        let clean_byte = match byte {
+            b'-' => b'+',
+            b'_' => b'/',
+            b => b,
+        };
+        let val = CHARSET.iter().position(|&c| c == clean_byte)? as u32;
+        buffer = (buffer << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            output.push((buffer >> bits) as u8);
+        }
+    }
+    Some(output)
+}
+
+fn classify_antigravity_failure(exit_code: Option<i32>, stdout: &str, stderr: &str) -> ProviderResult {
+    let out = format!("{}\n{}", stdout, stderr).to_ascii_lowercase();
+    let explicit = ["not signed", "sign in", "unauthorized", "please log in", "authentication", "unauthenticated", "login", "expired"];
+    if explicit.iter().any(|m| out.contains(m)) {
+        return unauthenticated(
+            ProviderId::Antigravity,
+            ANTIGRAVITY.display_name,
+            "Antigravity is not authenticated.",
+            true,
+            ANTIGRAVITY.installation_url,
+            false,
+        );
+    }
+    ProviderResult::ProviderError {
+        id: ProviderId::Antigravity,
+        name: ANTIGRAVITY.display_name.to_owned(),
+        message: format!("Antigravity usage command failed (exit code {:?}).", exit_code).into(),
+        retryable: false,
     }
 }
 

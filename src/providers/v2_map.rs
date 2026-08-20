@@ -834,6 +834,79 @@ pub fn path_is_absolute_home(path: &Path) -> bool {
     path.is_absolute()
 }
 
+
+/// Parse `echo "/usage" | agy` output into a domain result.
+pub fn antigravity_from_usage_text(
+    stdout: &str,
+    now: OffsetDateTime,
+    account_email: Option<String>,
+) -> ProviderResult {
+    let text = strip_ansi_and_controls(stdout);
+    
+    // We want to match lines like:
+    // "Gemini Models          Weekly Limit Remaining     96%   2026-08-27T16:18:13Z"
+    // "Gemini Models          Five Hour Limit Remaining  76%   2026-08-20T21:18:13Z"
+    // "Claude and GPT models  Weekly Limit Remaining     100%  2026-08-27T16:24:07Z"
+    // "Claude and GPT models  Five Hour Limit Remaining  100%  2026-08-20T21:24:07Z"
+    
+    let re = Regex::new(
+        r"(?m)^\s*(?P<family>Gemini Models|Claude and GPT models)\s+(?P<limit>Weekly|Five Hour) Limit Remaining\s+(?P<percent>\d+)%\s+(?P<reset>\S+)\s*$"
+    ).unwrap();
+
+    let mut windows = Vec::new();
+    
+    for caps in re.captures_iter(&text) {
+        let family = caps.name("family").unwrap().as_str();
+        let limit = caps.name("limit").unwrap().as_str();
+        let percent_str = caps.name("percent").unwrap().as_str();
+        let reset_str = caps.name("reset").unwrap().as_str();
+        
+        let remaining_percent: f64 = match percent_str.parse() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let used_percent = (100.0 - remaining_percent).clamp(0.0, 100.0);
+        
+        let resets_at = OffsetDateTime::parse(reset_str, &Rfc3339)
+            .ok()
+            .map(|ts| ts.to_offset(UtcOffset::UTC));
+            
+        let (id, label) = match (family, limit) {
+            ("Gemini Models", "Five Hour") => ("gemini-5h", "Gemini · 5h"),
+            ("Gemini Models", "Weekly") => ("gemini-weekly", "Gemini · Weekly"),
+            ("Claude and GPT models", "Five Hour") => ("claude-5h", "Claude/GPT · 5h"),
+            ("Claude and GPT models", "Weekly") => ("claude-weekly", "Claude/GPT · Weekly"),
+            _ => continue,
+        };
+        
+        if let Ok(w) = UsageWindow::try_new(id, label, used_percent, remaining_percent, resets_at) {
+            windows.push(w);
+        }
+    }
+
+    if windows.is_empty() {
+        return ProviderResult::ProviderError {
+            id: ProviderId::Antigravity,
+            name: "Antigravity".to_owned(),
+            message: "Antigravity returned no valid usage metrics.".into(),
+            retryable: false,
+        };
+    }
+
+    ProviderResult::Ready {
+        id: ProviderId::Antigravity,
+        name: "Antigravity".to_owned(),
+        source: DataSource::Live,
+        plan: None,
+        account: account_email.map(|label| Account {
+            label: sanitize_account_label(&label),
+        }),
+        windows,
+        last_success_at: now,
+        rate_limit_resets_available: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -5,7 +5,8 @@ var CLOSED_PROVIDERS = {
   "claude": true,
   "codex": true,
   "amp": true,
-  "grok": true
+  "grok": true,
+  "antigravity": true
 }
 
 var ACTION_KINDS = {
@@ -307,7 +308,8 @@ function defaultSettings() {
       { id: "claude", enabled: true },
       { id: "codex", enabled: true },
       { id: "amp", enabled: true },
-      { id: "grok", enabled: true }
+      { id: "grok", enabled: true },
+      { id: "antigravity", enabled: true }
     ],
     display: { metric: "remaining" },
     refreshIntervalSeconds: 60,

@@ -195,6 +195,7 @@ pub fn adapter_for(id: ProviderId) -> &'static dyn ProviderAdapter {
         ProviderId::Grok => &super::adapters::GROK_ADAPTER,
         ProviderId::Codex => &super::adapters::CODEX_ADAPTER,
         ProviderId::Claude => &super::adapters::CLAUDE_ADAPTER,
+        ProviderId::Antigravity => &super::adapters::ANTIGRAVITY_ADAPTER,
     }
 }
 
