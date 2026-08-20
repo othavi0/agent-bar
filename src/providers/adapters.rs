@@ -600,7 +600,8 @@ impl ProviderAdapter for AntigravityAdapter {
                     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                     if output.status.success() {
                         let account_email = read_email_from_creds(&context.env.home);
-                        antigravity_from_usage_text(&stdout, context.clock.now_utc(), account_email)
+                        let plan = read_plan_from_settings(&context.env.home);
+                        antigravity_from_usage_text(&stdout, context.clock.now_utc(), account_email, plan)
                     } else {
                         classify_antigravity_failure(output.status.code(), &stdout, &stderr)
                     }
@@ -614,6 +615,31 @@ impl ProviderAdapter for AntigravityAdapter {
                 }
             }
         })
+    }
+}
+
+fn read_plan_from_settings(home: &std::path::Path) -> Option<Plan> {
+    let settings_path = home.join(".gemini/settings.json");
+    let content = std::fs::read_to_string(settings_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let selected_type = val.get("security")?
+        .get("auth")?
+        .get("selectedType")?
+        .as_str()?;
+        
+    match selected_type {
+        "oauth-personal" => Some(Plan {
+            id: "pro".to_owned(),
+            label: "Pro".to_owned(),
+        }),
+        "oauth-enterprise" => Some(Plan {
+            id: "enterprise".to_owned(),
+            label: "Enterprise".to_owned(),
+        }),
+        _ => Some(Plan {
+            id: selected_type.to_owned(),
+            label: capitalize_ascii(selected_type),
+        }),
     }
 }
 

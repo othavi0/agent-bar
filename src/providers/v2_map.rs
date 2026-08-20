@@ -840,6 +840,7 @@ pub fn antigravity_from_usage_text(
     stdout: &str,
     now: OffsetDateTime,
     account_email: Option<String>,
+    plan: Option<Plan>,
 ) -> ProviderResult {
     let text = strip_ansi_and_controls(stdout);
     
@@ -895,7 +896,7 @@ pub fn antigravity_from_usage_text(
         id: ProviderId::Antigravity,
         name: "Antigravity".to_owned(),
         source: DataSource::Live,
-        plan: None,
+        plan,
         account: account_email.map(|label| Account {
             label: sanitize_account_label(&label),
         }),
