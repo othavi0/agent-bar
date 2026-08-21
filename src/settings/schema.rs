@@ -11,6 +11,15 @@ use crate::cli::ProviderId;
 const SCHEMA_VERSION: u32 = 1;
 const MIN_REFRESH: u32 = 30;
 const MAX_REFRESH: u32 = 3600;
+const MIN_REMINDER_MINUTES: u32 = 15;
+const MAX_REMINDER_MINUTES: u32 = 1440;
+/// Two hours. Hourly was judged too frequent by the product owner; the field
+/// exists so this is a default, not a floor.
+const DEFAULT_REMINDER_MINUTES: u32 = 120;
+
+pub(crate) fn default_reminder_minutes() -> u32 {
+    DEFAULT_REMINDER_MINUTES
+}
 
 /// Display metric for chips and windows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +74,10 @@ pub struct DisplaySettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NotificationSettings {
     pub enabled: bool,
+    /// Minutes between repeats of an alert that is still above its threshold.
+    /// Optional on read so documents written before this field stay valid.
+    #[serde(default = "default_reminder_minutes")]
+    pub reminder_minutes: u32,
 }
 
 /// Canonical settings document (schema v1).
@@ -131,7 +144,10 @@ impl Settings {
                 metric: DisplayMetric::Remaining,
             },
             refresh_interval_seconds: 60,
-            notifications: NotificationSettings { enabled: true },
+            notifications: NotificationSettings {
+                enabled: true,
+                reminder_minutes: DEFAULT_REMINDER_MINUTES,
+            },
         }
     }
 
@@ -156,6 +172,13 @@ impl Settings {
         if !(MIN_REFRESH..=MAX_REFRESH).contains(&self.refresh_interval_seconds) {
             return Err(SettingsError::new(format!(
                 "refreshIntervalSeconds must be in {MIN_REFRESH}..={MAX_REFRESH}"
+            )));
+        }
+        if !(MIN_REMINDER_MINUTES..=MAX_REMINDER_MINUTES)
+            .contains(&self.notifications.reminder_minutes)
+        {
+            return Err(SettingsError::new(format!(
+                "reminderMinutes must be in {MIN_REMINDER_MINUTES}..={MAX_REMINDER_MINUTES}"
             )));
         }
         if self.providers.len() != ProviderId::ALL.len() {
@@ -224,7 +247,7 @@ fn reject_unknown_top_level(value: &Value) -> Result<(), SettingsError> {
             .as_object()
             .ok_or_else(|| SettingsError::new("notifications must be an object"))?;
         for key in notifications.keys() {
-            if key != "enabled" {
+            if key != "enabled" && key != "reminderMinutes" {
                 return Err(SettingsError::new(format!(
                     "unknown notifications key '{key}'"
                 )));
@@ -274,5 +297,44 @@ mod tests {
 
         let dup = br#"{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"claude","enabled":false},{"id":"amp","enabled":true},{"id":"grok","enabled":true}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true}}"#;
         assert!(Settings::parse_strict(dup).is_err());
+    }
+
+    #[test]
+    fn reminder_minutes_defaults_when_absent() {
+        // Settings reads never rewrite (SET-007), so an existing settings.json
+        // predating this field must parse and take the default silently.
+        let doc = br#"{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true}}"#;
+        let parsed = Settings::parse_strict(doc).unwrap();
+        assert_eq!(
+            parsed.notifications.reminder_minutes,
+            DEFAULT_REMINDER_MINUTES
+        );
+        assert_eq!(parsed.notifications.reminder_minutes, 120);
+    }
+
+    #[test]
+    fn reminder_minutes_round_trips_and_rejects_out_of_range() {
+        let mut doc = Settings::defaults();
+        doc.notifications.reminder_minutes = MIN_REMINDER_MINUTES;
+        doc.validate().unwrap();
+        doc.notifications.reminder_minutes = MAX_REMINDER_MINUTES;
+        doc.validate().unwrap();
+
+        doc.notifications.reminder_minutes = MIN_REMINDER_MINUTES - 1;
+        let err = doc.validate().unwrap_err();
+        assert!(err.message().contains("reminderMinutes"));
+
+        doc.notifications.reminder_minutes = MAX_REMINDER_MINUTES + 1;
+        assert!(doc.validate().is_err());
+    }
+
+    #[test]
+    fn reminder_minutes_survives_the_hand_written_allowlist() {
+        // deny_unknown_fields is not the only gate: reject_unknown_top_level
+        // walks raw JSON before deserialization and would reject the key on
+        // its own.
+        let doc = br#"{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true,"reminderMinutes":240}}"#;
+        let parsed = Settings::parse_strict(doc).unwrap();
+        assert_eq!(parsed.notifications.reminder_minutes, 240);
     }
 }
