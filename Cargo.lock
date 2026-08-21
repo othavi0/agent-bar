@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "agent-bar"
-version = "10.3.10"
+version = "10.3.11"
 dependencies = [
  "assert_cmd",
  "env_logger",

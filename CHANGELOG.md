@@ -12,6 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - fix: key notification state by window, not reset
 - feat: repeat alerts on a configurable reminder
 
+## [10.3.11] - 2026-08-21
+
+### Changed
+
+- docs: amend NOTIFY contract for window keys
+- fix: cover reminder field in editor focus flag
+- feat: settings control for reminder cadence
+- chore: list v1 notification state as legacy
+- fix: log notification persistence failures
+- feat: prune stale notification rows
+- feat: repeat alerts on a reminder, not per poll
+- feat: add notifications.reminderMinutes setting
+- fix: key notification state by window, not reset
+
 ## [10.3.10] - 2026-08-12
 
 ### Changed
