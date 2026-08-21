@@ -34,7 +34,7 @@ function iconFileName(id) {
   if (key === "grok")
     return "grok.svg"
   if (key === "antigravity")
-    return "antigravity-icon.png"
+    return "antigravity.png"
   return ""
 }
 

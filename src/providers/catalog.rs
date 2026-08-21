@@ -165,7 +165,7 @@ impl std::fmt::Display for CatalogError {
 
 impl std::error::Error for CatalogError {}
 
-/// Locked catalog order: Claude, Codex, Amp, Grok.
+/// Locked catalog order: Claude, Codex, Amp, Grok, Antigravity.
 pub static PROVIDERS: &[&ProviderDescriptor] = &[&CLAUDE, &CODEX, &AMP, &GROK, &ANTIGRAVITY];
 
 pub static CLAUDE: ProviderDescriptor = ProviderDescriptor {
@@ -276,7 +276,7 @@ pub static ANTIGRAVITY: ProviderDescriptor = ProviderDescriptor {
         },
     ],
     installation_url: "https://antigravity.google",
-    login_argv: &["agy", "models"],
+    login_argv: &[],
     cache_ttl: Duration::from_secs(60),
     timeout: Duration::from_secs(10),
     max_output_bytes: ONE_MIB,
@@ -311,8 +311,10 @@ pub fn discover(
         None => CollectionAvailability::Missing,
     };
     let login = match resolved {
-        Some(path) => LoginAvailability::Available { executable: path },
-        None => LoginAvailability::Missing,
+        Some(path) if !descriptor.login_argv.is_empty() => {
+            LoginAvailability::Available { executable: path }
+        }
+        _ => LoginAvailability::Missing,
     };
     Ok(Discovery { collection, login })
 }

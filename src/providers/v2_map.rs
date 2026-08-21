@@ -834,50 +834,64 @@ pub fn path_is_absolute_home(path: &Path) -> bool {
     path.is_absolute()
 }
 
-
 /// Parse `echo "/usage" | agy` output into a domain result.
-pub fn antigravity_from_usage_text(
-    stdout: &str,
-    now: OffsetDateTime,
-    account_email: Option<String>,
-    plan: Option<Plan>,
-) -> ProviderResult {
+pub fn antigravity_from_usage_text(stdout: &str, now: OffsetDateTime) -> ProviderResult {
     let text = strip_ansi_and_controls(stdout);
-    
+
     // We want to match lines like:
     // "Gemini Models          Weekly Limit Remaining     96%   2026-08-27T16:18:13Z"
     // "Gemini Models          Five Hour Limit Remaining  76%   2026-08-20T21:18:13Z"
-    // "Claude and GPT models  Weekly Limit Remaining     100%  2026-08-27T16:24:07Z"
-    // "Claude and GPT models  Five Hour Limit Remaining  100%  2026-08-20T21:24:07Z"
-    
-    let re = Regex::new(
-        r"(?m)^\s*(?P<family>Gemini Models|Claude and GPT models)\s+(?P<limit>Weekly|Five Hour) Limit Remaining\s+(?P<percent>\d+)%\s+(?P<reset>\S+)\s*$"
-    ).unwrap();
+
+    let re = match Regex::new(
+        r"(?m)^\s*(?P<family>Gemini Models)\s+(?P<limit>Weekly|Five Hour) Limit Remaining\s+(?P<percent>\d+)%\s+(?P<reset>\S+)\s*$",
+    ) {
+        Ok(r) => r,
+        Err(_) => {
+            return ProviderResult::ProviderError {
+                id: ProviderId::Antigravity,
+                name: "Antigravity".to_owned(),
+                message: "Failed to compile Antigravity regex.".into(),
+                retryable: false,
+            }
+        }
+    };
 
     let mut windows = Vec::new();
-    
+
     for caps in re.captures_iter(&text) {
-        let family = caps.name("family").unwrap().as_str();
-        let limit = caps.name("limit").unwrap().as_str();
-        let percent_str = caps.name("percent").unwrap().as_str();
-        let reset_str = caps.name("reset").unwrap().as_str();
-        
+        let family = match caps.name("family") {
+            Some(m) => m.as_str(),
+            None => continue,
+        };
+        let limit = match caps.name("limit") {
+            Some(m) => m.as_str(),
+            None => continue,
+        };
+        let percent_str = match caps.name("percent") {
+            Some(m) => m.as_str(),
+            None => continue,
+        };
+        let reset_str = match caps.name("reset") {
+            Some(m) => m.as_str(),
+            None => continue,
+        };
+
         let remaining_percent: f64 = match percent_str.parse() {
             Ok(p) => p,
             Err(_) => continue,
         };
         let used_percent = (100.0 - remaining_percent).clamp(0.0, 100.0);
-        
+
         let resets_at = OffsetDateTime::parse(reset_str, &Rfc3339)
             .ok()
             .map(|ts| ts.to_offset(UtcOffset::UTC));
-            
+
         let (id, label) = match (family, limit) {
             ("Gemini Models", "Five Hour") => ("gemini-5h", "Gemini · 5h"),
             ("Gemini Models", "Weekly") => ("gemini-weekly", "Gemini · Weekly"),
             _ => continue,
         };
-        
+
         if let Ok(w) = UsageWindow::try_new(id, label, used_percent, remaining_percent, resets_at) {
             windows.push(w);
         }
@@ -896,10 +910,8 @@ pub fn antigravity_from_usage_text(
         id: ProviderId::Antigravity,
         name: "Antigravity".to_owned(),
         source: DataSource::Live,
-        plan,
-        account: account_email.map(|label| Account {
-            label: sanitize_account_label(&label),
-        }),
+        plan: None,
+        account: None,
         windows,
         last_success_at: now,
         rate_limit_resets_available: None,
@@ -1442,5 +1454,56 @@ mod tests {
         );
         assert_eq!(format_plan_label(""), "");
         assert_eq!(format_plan_label("_x_"), "X");
+    }
+
+    #[test]
+    fn antigravity_parse_ready_from_fixture() {
+        let fixture = include_str!("../../tests/fixtures/antigravity/usage.txt");
+        let result = antigravity_from_usage_text(fixture, datetime!(2026-08-21 12:00:00 UTC));
+        match result {
+            ProviderResult::Ready {
+                windows,
+                plan,
+                account,
+                ..
+            } => {
+                assert_eq!(windows.len(), 2);
+
+                assert_eq!(windows[0].id(), "gemini-weekly");
+                assert_eq!(windows[0].label(), "Gemini · Weekly");
+                assert!((windows[0].remaining_percent() - 86.0).abs() < 0.01);
+                assert!((windows[0].used_percent() - 14.0).abs() < 0.01);
+                assert_eq!(
+                    windows[0].resets_at(),
+                    Some(datetime!(2026-08-27 16:18:13 UTC))
+                );
+
+                assert_eq!(windows[1].id(), "gemini-5h");
+                assert_eq!(windows[1].label(), "Gemini · 5h");
+                assert!((windows[1].remaining_percent() - 92.0).abs() < 0.01);
+                assert!((windows[1].used_percent() - 8.0).abs() < 0.01);
+                assert_eq!(
+                    windows[1].resets_at(),
+                    Some(datetime!(2026-08-21 22:09:26 UTC))
+                );
+
+                assert!(plan.is_none());
+                assert!(account.is_none());
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn antigravity_parse_failure_empty_metrics() {
+        let result =
+            antigravity_from_usage_text("Quota:\nNo limits.", datetime!(2026-08-21 12:00:00 UTC));
+        match result {
+            ProviderResult::ProviderError { id, message, .. } => {
+                assert_eq!(id, ProviderId::Antigravity);
+                assert!(message.contains("no valid usage metrics"));
+            }
+            other => panic!("expected ProviderError, got {other:?}"),
+        }
     }
 }

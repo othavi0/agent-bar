@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- feat: Antigravity usage and quota support via `agy --print /usage`, reporting
+  `gemini-weekly` and `gemini-5h` percentage windows. Disabled by default —
+  opt in via Settings on both fresh and existing installs. This is a new,
+  credential-free integration, not a revival of the `~/.gemini`
+  credential/plan reading this project removed previously.
+
 ## [10.3.10] - 2026-08-12
 
 ### Changed

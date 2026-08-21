@@ -41,7 +41,7 @@ TestCase {
     compare(d.providers[1].enabled, false)
 
     d = Core.moveProvider(d, "grok", -1) // amp, grok swap near end
-    // default: claude, codex, amp, grok → move grok up → claude, codex, grok, amp
+    // default: claude, codex, amp, grok, antigravity → move grok up → claude, codex, grok, amp, antigravity
     compare(d.providers[2].id, "grok")
     compare(d.providers[3].id, "amp")
 

@@ -168,7 +168,7 @@ deletion path: the gate requires it absent rather than scanning its
 content, and the four installer strings above are enforced only as
 ordinary forbidden tokens across the active surface. Final `Cargo.toml`
 must contain exactly
-`description = "LLM quota monitor for Claude, Codex, Amp, and Grok."`, contain
+`description = "LLM quota monitor for Claude, Codex, Amp, Grok, and Antigravity."`, contain
 no `package.metadata.binstall`, and declare no standalone/AUR metadata. These
 checks avoid a useless global rejection of the word `Waybar` while closing
 positive production surfaces.

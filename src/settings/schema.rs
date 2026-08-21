@@ -128,7 +128,7 @@ impl Settings {
                 },
                 ProviderSetting {
                     id: ProviderIdJson(ProviderId::Antigravity),
-                    enabled: true,
+                    enabled: false,
                 },
             ],
             display: DisplaySettings {
@@ -144,21 +144,34 @@ impl Settings {
         let value: Value = serde_json::from_slice(raw)
             .map_err(|err| SettingsError::new(format!("invalid settings JSON: {err}")))?;
         reject_unknown_top_level(&value)?;
+        let settings: Self = serde_json::from_value(value)
+            .map_err(|err| SettingsError::new(format!("invalid settings document: {err}")))?;
+
+        settings.validate()?;
+        Ok(settings)
+    }
+
+    /// Parse settings while injecting any missing providers with enabled: false.
+    pub fn parse_and_inject_missing(raw: &[u8]) -> Result<(Self, bool), SettingsError> {
+        let value: Value = serde_json::from_slice(raw)
+            .map_err(|err| SettingsError::new(format!("invalid settings JSON: {err}")))?;
+        reject_unknown_top_level(&value)?;
         let mut settings: Self = serde_json::from_value(value)
             .map_err(|err| SettingsError::new(format!("invalid settings document: {err}")))?;
-        
-        // Auto-fill missing providers to ensure forward-compatibility.
+
+        let mut injected = false;
         for id in ProviderId::ALL {
             if !settings.providers.iter().any(|p| p.id.0 == id) {
                 settings.providers.push(ProviderSetting {
                     id: ProviderIdJson(id),
-                    enabled: true,
+                    enabled: false,
                 });
+                injected = true;
             }
         }
 
         settings.validate()?;
-        Ok(settings)
+        Ok((settings, injected))
     }
 
     /// Semantic validation beyond `deny_unknown_fields`.

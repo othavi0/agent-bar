@@ -201,6 +201,7 @@ The v10 provider catalog is:
 | `codex` | Codex | `codex` | `PATH`, then `$HOME/.local/bin/codex` | `["codex", "login"]` | `https://github.com/openai/codex` |
 | `amp` | Amp | `amp` | `PATH`, then `$HOME/.local/bin/amp`, `$HOME/.amp/bin/amp`, `$HOME/.cache/.bun/bin/amp`, `$HOME/.bun/bin/amp` | `["amp", "login"]` | `https://ampcode.com/manual` |
 | `grok` | Grok | `grok` | `PATH`, then `$GROK_HOME/bin/grok`, `$HOME/.grok/bin/grok`, `$HOME/.local/bin/grok` | `["grok", "login"]` | `https://x.ai/cli` |
+| `antigravity` | Antigravity | `antigravity` | `PATH`, then `$HOME/.local/bin/agy`, `$HOME/.gemini/antigravity-cli/bin/agy` | none (login unavailable) | `https://antigravity.google` |
 
 Locked collection policy:
 
@@ -210,8 +211,16 @@ Locked collection policy:
 | `codex` | resolved `codex app-server` JSON-RPC `rateLimits/read`, then newest valid rate-limit event below `$HOME/.codex/sessions` | `session`, `weekly`, then `other:<duration-minutes>:<ordinal>` | 90 s | 10 s | one app-server timeout retry before filesystem fallback |
 | `amp` | resolved `amp usage` with `NO_COLOR=1`, `TERM=dumb` | `daily`, or no windows when the account exposes no percentage | 90 s | 10 s | one timeout/process-I/O retry |
 | `grok` | `$GROK_HOME/auth.json`, then authenticated GET `https://cli-chat-proxy.grok.com/v1/billing?format=credits` (literal; headers Authorization Bearer + x-grok-client-mode) | `weekly` | 90 s | 10 s | one network/timeout retry |
+| `antigravity` | resolved `agy --print /usage` with `NO_COLOR=1`, `TERM=dumb` | `gemini-weekly`, `gemini-5h` | 60 s | 10 s | one timeout/process-I/O retry |
 
-Collection concurrency is at most four adapters. Every process stdout, process
+Antigravity was removed once (see `CHANGELOG.md`) when it read credentials and
+plan data out of a `~/.gemini` layout that no longer matches current installs.
+This reintroduction is a different integration: it runs `agy`'s own `/usage`
+text output through the same collection/normalization path as Amp, reads no
+credential files, and reports no account or plan — a connected provider with
+no plan is a valid, fully rendered state.
+
+Collection concurrency is at most five adapters. Every process stdout, process
 stderr, HTTP response, and individual provider file is capped at 1 MiB before
 parsing. Codex filesystem fallback applies the same 1 MiB per-file limit, does
 not follow links, descends at most eight levels, and visits at most 4096
@@ -240,7 +249,7 @@ email, and arbitrary provider extras are discarded before `ProviderResult`.
 
 The table is product data, not an example:
 
-- `ARCH-015`: Catalog order is Claude, Codex, Amp, Grok.
+- `ARCH-015`: Catalog order is Claude, Codex, Amp, Grok, Antigravity.
 - `ARCH-016`: `view_installation` opens exactly the allowlisted page above;
   Agent Bar never opens or executes an installation script.
 - `ARCH-017`: Login is always launched through the bundled terminal helper

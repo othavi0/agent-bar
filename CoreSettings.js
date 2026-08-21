@@ -232,7 +232,7 @@ function validateSettingsDraft(draft) {
     return { ok: false, reason: "refreshIntervalSeconds" }
   if (!draft.notifications || typeof draft.notifications.enabled !== "boolean")
     return { ok: false, reason: "notifications" }
-  if (!Array.isArray(draft.providers) || draft.providers.length !== 4)
+  if (!Array.isArray(draft.providers) || draft.providers.length !== 5)
     return { ok: false, reason: "providers length" }
   var seen = {}
   for (var i = 0; i < draft.providers.length; i++) {

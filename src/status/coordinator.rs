@@ -12,7 +12,7 @@ use crate::providers::adapter::{CollectionContext, HttpClient};
 use crate::providers::catalog::ExecutionEnvironment;
 use crate::providers::http::ReqwestHttpClient;
 use crate::providers::process::{ProcessRunner, TokioProcessRunner};
-use crate::providers::{adapter_for, AMP, CLAUDE, CODEX, GROK, ANTIGRAVITY};
+use crate::providers::{adapter_for, AMP, ANTIGRAVITY, CLAUDE, CODEX, GROK};
 use crate::settings::schema::Settings as SettingsDocument;
 use crate::settings::SettingsStore;
 use crate::status::collect::provider_status_from_result;

@@ -58,7 +58,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "enum": ["claude", "codex", "amp", "grok"]
+          "enum": ["claude", "codex", "amp", "grok", "antigravity"]
         },
         "enabled": {
           "type": "boolean"

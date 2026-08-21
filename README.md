@@ -1,7 +1,7 @@
 # Agent Bar
 
 Agent Bar is an Omarchy plugin that puts your AI provider quota in the
-Quickshell bar. It tracks Claude, Codex, Amp, and Grok: one chip per
+Quickshell bar. It tracks Claude, Codex, Amp, Grok, and Antigravity: one chip per
 provider, a popup with every usage window, and a countdown to the next
 reset.
 
