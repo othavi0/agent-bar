@@ -13,9 +13,12 @@ Item {
   property string fontFamily: Style.font.family
   property url iconBase: Qt.resolvedUrl("icons/")
   // A11Y-008: true while NumberField (or other editor) owns focus.
-  property bool editorOwnsFocus: intervalField && intervalField.field
-      ? !!intervalField.field.activeFocus
-      : false
+  property bool editorOwnsFocus: (intervalField && intervalField.field
+        ? !!intervalField.field.activeFocus
+        : false)
+      || (reminderField && reminderField.field
+        ? !!reminderField.field.activeFocus
+        : false)
 
   readonly property var state: agentService ? agentService.settingsState : null
   readonly property var draft: agentService ? agentService.settingsDraft : null
