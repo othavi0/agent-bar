@@ -238,7 +238,16 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                         notified_at: self.now,
                     });
                     // Persist after each success (at-least-once algorithm).
-                    self.store.save(&state).map_err(|err| err.to_string())?;
+                    if let Err(err) = self.store.save(&state) {
+                        // The incident this replaces ran for days behind a bare
+                        // stderr line nobody reads.
+                        log::warn!(
+                            "notification state save failed for {}/{}: {err}",
+                            item.provider_id.as_str(),
+                            item.window_id
+                        );
+                        return Err(err.to_string());
+                    }
                 }
                 Err(err) => {
                     // Leave the row unadvanced; stop later notifications.
