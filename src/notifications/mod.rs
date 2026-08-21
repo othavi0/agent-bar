@@ -146,6 +146,8 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
         if !self.settings.notifications.enabled {
             return Ok(());
         }
+        let reminder =
+            time::Duration::minutes(i64::from(self.settings.notifications.reminder_minutes));
 
         let mut state = self.store.load().map_err(|err| err.to_string())?;
         let order: Vec<ProviderId> = self.settings.providers.iter().map(|p| p.id.0).collect();
@@ -162,16 +164,36 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
             }
             for window in provider.windows() {
                 let used = window.used_percent();
+                let observed = window.resets_at();
                 let Some(level) = NotificationLevel::from_used_percent(used) else {
                     // Recovery below the warning threshold rearms.
                     state.remove_key(id, window.id());
                     continue;
                 };
-                let prev = state.entry_for(id, window.id()).map(|e| e.level);
-                let should_emit = match prev {
+                let saved = state.entry_for(id, window.id()).cloned();
+                let should_emit = match saved.as_ref() {
+                    // Never spoken for this window.
                     None => true,
-                    Some(prev_level) if level > prev_level => true,
-                    Some(_) => false, // same level once (NOTIFY-003)
+                    // The window advanced; a genuinely new quota period.
+                    Some(prev) if !NotificationState::same_window(prev.reset_at, observed) => true,
+                    // NOTIFY-002: severity only ever escalates.
+                    Some(prev) if level > prev.level => true,
+                    // Same severity: the reminder decides, not the poll.
+                    Some(prev) if level == prev.level => self.now - prev.notified_at >= reminder,
+                    // De-escalation inside the same window. NOTIFY-002 forbids
+                    // speaking, but the tracked severity must follow the window
+                    // down or the reminder can never match again, silencing a
+                    // window that is still above its threshold.
+                    Some(prev) => {
+                        state.upsert(NotificationEntry {
+                            provider_id: id.as_str().to_owned(),
+                            window_id: window.id().to_owned(),
+                            reset_at: observed,
+                            level,
+                            notified_at: prev.notified_at,
+                        });
+                        false
+                    }
                 };
                 if should_emit {
                     pending.push(PendingNotification {
@@ -182,9 +204,8 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                         used_percent: used,
                         remaining_percent: window.remaining_percent(),
                         metric: self.settings.display.metric,
-                        reset_at: window.resets_at(),
-                        reset_in: window
-                            .resets_at()
+                        reset_at: observed,
+                        reset_in: observed
                             .map(|ts| crate::support::countdown::reset_countdown(self.now, ts)),
                         level,
                     });
@@ -192,7 +213,7 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
             }
         }
 
-        // Persist silent rearms first.
+        // Persist silent rearms and de-escalations first.
         self.store.save(&state).map_err(|err| err.to_string())?;
 
         for item in pending {
@@ -209,7 +230,7 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                     self.store.save(&state).map_err(|err| err.to_string())?;
                 }
                 Err(err) => {
-                    // Leave key unadvanced; stop later notifications.
+                    // Leave the row unadvanced; stop later notifications.
                     return Err(err);
                 }
             }
@@ -569,6 +590,152 @@ mod tests {
         pending.metric = DisplayMetric::Used;
         let spec = NotifySendDispatcher::<ScriptedNotify>::build_spec(&pending);
         assert_eq!(spec.args[3], "96% used.");
+    }
+
+    #[tokio::test]
+    async fn a_new_window_renotifies() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let eval = NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:31:56 UTC),
+        };
+        eval.evaluate(&envelope_with_reset(
+            96.0,
+            datetime!(2026-08-21 11:59:59 UTC),
+        ))
+        .await
+        .unwrap();
+        eval.evaluate(&envelope_with_reset(
+            96.0,
+            datetime!(2026-08-28 11:59:59 UTC),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 2);
+        let state = store.load().unwrap();
+        assert_eq!(
+            state.entries.len(),
+            1,
+            "the advance replaces, never appends"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_same_level_repeats_only_after_the_reminder_elapses() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults(); // reminderMinutes == 120
+        let reset = datetime!(2026-08-21 22:00:00 UTC);
+        let first = datetime!(2026-08-21 10:00:00 UTC);
+        let envelope = envelope_with_reset(96.0, reset);
+
+        // A fresh evaluator per instant: `now` is a field, not an argument.
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first,
+        }
+        .evaluate(&envelope)
+        .await
+        .unwrap();
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(119),
+        }
+        .evaluate(&envelope)
+        .await
+        .unwrap();
+        assert_eq!(
+            dispatcher.runner.specs.lock().unwrap().len(),
+            1,
+            "one minute short of the reminder must stay silent"
+        );
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(120),
+        }
+        .evaluate(&envelope)
+        .await
+        .unwrap();
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn de_escalation_lowers_the_tracked_level_without_notifying() {
+        // Critical -> Warning while still above 90 must not dispatch
+        // (NOTIFY-002), but the stored level has to follow the window down.
+        // If it stays Critical, the reminder arm never matches again and the
+        // user stops hearing about a window that is still at 92 percent.
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let reset = datetime!(2026-08-21 22:00:00 UTC);
+        let first = datetime!(2026-08-21 10:00:00 UTC);
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first,
+        }
+        .evaluate(&envelope_with_reset(96.0, reset))
+        .await
+        .unwrap();
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(5),
+        }
+        .evaluate(&envelope_with_reset(92.0, reset))
+        .await
+        .unwrap();
+        assert_eq!(
+            dispatcher.runner.specs.lock().unwrap().len(),
+            1,
+            "dropping a level never speaks"
+        );
+        let state = store.load().unwrap();
+        assert_eq!(state.entries[0].level, NotificationLevel::Warning);
+
+        // The reminder now fires at the level the window is actually at.
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(121),
+        }
+        .evaluate(&envelope_with_reset(92.0, reset))
+        .await
+        .unwrap();
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 2);
     }
 
     #[test]
