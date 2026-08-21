@@ -49,8 +49,9 @@ pub fn default_legacy_candidates(home: &Path) -> Vec<PathBuf> {
         // History database from the removed local-usage engine
         cache.join("agent-bar").join(legacy_usage_db),
         cache.join("agent-bar/history"),
-        // Old notification state filenames (v9)
+        // Old notification state filenames (v9, and v1 superseded by v2)
         cache.join("agent-bar/notify-state.json"),
+        cache.join("agent-bar/notification-state-v1.json"),
         // Standalone install leftovers
         local.join("share/agent-bar"),
         // Old global bin is not auto-removed without hash proof — listed for scan only
@@ -204,6 +205,15 @@ mod tests {
 
     fn legacy_usage_db_name() -> &'static str {
         concat!("usage", ".", "re", "db")
+    }
+
+    #[test]
+    fn legacy_candidates_include_the_v1_notification_state() {
+        let home = Path::new("/home/example");
+        let candidates = default_legacy_candidates(home);
+        assert!(candidates.contains(&home.join(".cache/agent-bar/notification-state-v1.json")));
+        // The v9 filename stays listed; v1 joins it rather than replacing it.
+        assert!(candidates.contains(&home.join(".cache/agent-bar/notify-state.json")));
     }
 
     #[test]
