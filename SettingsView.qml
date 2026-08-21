@@ -51,6 +51,13 @@ Item {
     return true
   }
 
+  readonly property int reminderMinutes: {
+    if (draft && draft.notifications
+        && isFinite(Number(draft.notifications.reminderMinutes)))
+      return Number(draft.notifications.reminderMinutes)
+    return 120
+  }
+
   width: parent ? parent.width : implicitWidth
   implicitHeight: col.implicitHeight
 
@@ -259,6 +266,39 @@ Item {
         onClicked: {
           if (root.agentService)
             root.agentService.setNotificationsEnabled(!root.notificationsOn)
+        }
+      }
+
+      Row {
+        spacing: Style.spacing.lg
+
+        NumberField {
+          id: reminderField
+          label: "Remind me every"
+          value: root.reminderMinutes
+          from: 15
+          to: 1440
+          stepSize: 15
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onModified: function (v) {
+            if (root.agentService)
+              root.agentService.setReminderMinutes(v)
+          }
+        }
+
+        // Same sibling-label technique as the refresh interval above: the
+        // host NumberField exposes no suffix property, and the spin box is a
+        // child of a sibling, which QML refuses to anchor to.
+        Text {
+          y: reminderField.y + reminderField.field.y
+             + (reminderField.field.height - height) / 2
+          text: "minutes"
+          color: Util.alpha(root.foreground, 0.72)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          textFormat: Text.PlainText
+          Accessible.ignored: true
         }
       }
     }

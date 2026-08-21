@@ -11,6 +11,7 @@
   },
   "refreshIntervalSeconds": 30,
   "notifications": {
-    "enabled": false
+    "enabled": false,
+    "reminderMinutes": 120
   }
 }
