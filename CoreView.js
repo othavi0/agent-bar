@@ -18,6 +18,8 @@ function providerDisplayName(id) {
     return "Amp"
   if (key === "grok")
     return "Grok"
+  if (key === "antigravity")
+    return "Antigravity"
   return key
 }
 
@@ -31,6 +33,8 @@ function iconFileName(id) {
     return "amp.svg"
   if (key === "grok")
     return "grok.svg"
+  if (key === "antigravity")
+    return "antigravity.png"
   return ""
 }
 

@@ -165,8 +165,8 @@ impl std::fmt::Display for CatalogError {
 
 impl std::error::Error for CatalogError {}
 
-/// Locked catalog order: Claude, Codex, Amp, Grok.
-pub static PROVIDERS: &[&ProviderDescriptor] = &[&CLAUDE, &CODEX, &AMP, &GROK];
+/// Locked catalog order: Claude, Codex, Amp, Grok, Antigravity.
+pub static PROVIDERS: &[&ProviderDescriptor] = &[&CLAUDE, &CODEX, &AMP, &GROK, &ANTIGRAVITY];
 
 pub static CLAUDE: ProviderDescriptor = ProviderDescriptor {
     id: ProviderId::Claude,
@@ -260,6 +260,29 @@ pub static GROK: ProviderDescriptor = ProviderDescriptor {
     retry_policy: RetryPolicy::OneTransient,
 };
 
+pub static ANTIGRAVITY: ProviderDescriptor = ProviderDescriptor {
+    id: ProviderId::Antigravity,
+    display_name: "Antigravity",
+    icon_key: "antigravity",
+    executable_name: "agy",
+    fallback_executable_paths: &[
+        ExecutablePath {
+            root: PathRoot::Home,
+            segments: &[".local", "bin", "agy"],
+        },
+        ExecutablePath {
+            root: PathRoot::Home,
+            segments: &[".gemini", "antigravity-cli", "bin", "agy"],
+        },
+    ],
+    installation_url: "https://antigravity.google",
+    login_argv: &[],
+    cache_ttl: Duration::from_secs(60),
+    timeout: Duration::from_secs(10),
+    max_output_bytes: ONE_MIB,
+    retry_policy: RetryPolicy::OneTransient,
+};
+
 /// Look up a descriptor by closed provider id.
 pub fn descriptor(id: ProviderId) -> &'static ProviderDescriptor {
     match id {
@@ -267,6 +290,7 @@ pub fn descriptor(id: ProviderId) -> &'static ProviderDescriptor {
         ProviderId::Codex => &CODEX,
         ProviderId::Amp => &AMP,
         ProviderId::Grok => &GROK,
+        ProviderId::Antigravity => &ANTIGRAVITY,
     }
 }
 
@@ -287,8 +311,10 @@ pub fn discover(
         None => CollectionAvailability::Missing,
     };
     let login = match resolved {
-        Some(path) => LoginAvailability::Available { executable: path },
-        None => LoginAvailability::Missing,
+        Some(path) if !descriptor.login_argv.is_empty() => {
+            LoginAvailability::Available { executable: path }
+        }
+        _ => LoginAvailability::Missing,
     };
     Ok(Discovery { collection, login })
 }
@@ -393,7 +419,8 @@ mod tests {
                 ProviderId::Claude,
                 ProviderId::Codex,
                 ProviderId::Amp,
-                ProviderId::Grok
+                ProviderId::Grok,
+                ProviderId::Antigravity,
             ]
         );
 

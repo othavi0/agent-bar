@@ -20,7 +20,7 @@ It does not apply `XDG_CONFIG_HOME` to plugin discovery or `shell.json`.
   "version": "10.x.y",
   "author": "othavi0",
   "license": "MIT",
-  "description": "LLM quota monitor for Claude, Codex, Amp, and Grok.",
+  "description": "LLM quota monitor for Claude, Codex, Amp, Grok, and Antigravity.",
   "kinds": ["service", "bar-widget"],
   "entryPoints": {
     "service": "Service.qml",

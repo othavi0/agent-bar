@@ -72,10 +72,9 @@ impl MigrationPlan {
                 (Settings::defaults(), Vec::new(), false)
             }
             Some(raw) => {
-                // Already strict v10?
-                if let Ok(v10) = Settings::parse_strict(raw) {
+                if let Ok((v10, injected)) = Settings::parse_and_inject_missing(raw) {
                     refresh_from_settings = true;
-                    (v10, Vec::new(), true)
+                    (v10, Vec::new(), !injected)
                 } else {
                     let (s, unk, _) = migrate_v9_settings(raw)?;
                     // migrate_v9_settings always sets a concrete interval (default 60
@@ -427,7 +426,11 @@ fn migrate_v9_settings(raw: &[u8]) -> Result<(Settings, Vec<String>, bool), Migr
             if seen.insert(id) {
                 providers.push(ProviderSetting {
                     id: ProviderIdJson(id),
-                    enabled: enabled_set.contains(&id),
+                    enabled: if id == ProviderId::Antigravity {
+                        false
+                    } else {
+                        enabled_set.contains(&id)
+                    },
                 });
             }
         }
@@ -436,7 +439,11 @@ fn migrate_v9_settings(raw: &[u8]) -> Result<(Settings, Vec<String>, bool), Migr
         if seen.insert(id) {
             providers.push(ProviderSetting {
                 id: ProviderIdJson(id),
-                enabled: enabled_set.contains(&id),
+                enabled: if id == ProviderId::Antigravity {
+                    false
+                } else {
+                    enabled_set.contains(&id)
+                },
             });
         }
     }
@@ -444,7 +451,9 @@ fn migrate_v9_settings(raw: &[u8]) -> Result<(Settings, Vec<String>, bool), Migr
     // If enabled_list was empty after filtering, enable all (safe default).
     if providers.iter().all(|p| !p.enabled) {
         for p in &mut providers {
-            p.enabled = true;
+            if p.id.0 != ProviderId::Antigravity {
+                p.enabled = true;
+            }
         }
     }
 

@@ -15,13 +15,14 @@ pub use adapter::{
     LoginError, LoginOutcome, ProviderAdapter,
 };
 pub use adapters::{
-    AmpAdapter, ClaudeAdapter, CodexAdapter, GrokAdapter, AMP_ADAPTER, CLAUDE_ADAPTER,
-    CLAUDE_USAGE_URL, CODEX_ADAPTER, GROK_ADAPTER, GROK_BILLING_URL,
+    AmpAdapter, AntigravityAdapter, ClaudeAdapter, CodexAdapter, GrokAdapter, AMP_ADAPTER,
+    ANTIGRAVITY_ADAPTER, CLAUDE_ADAPTER, CLAUDE_USAGE_URL, CODEX_ADAPTER, GROK_ADAPTER,
+    GROK_BILLING_URL,
 };
 pub use catalog::{
     descriptor, discover, login_process_argv, CatalogError, CollectionAvailability, Discovery,
     ExecutablePath, ExecutionEnvironment, LoginAvailability, PathRoot, ProviderDescriptor,
-    RetryPolicy, AMP, CLAUDE, CODEX, GROK, PROVIDERS,
+    RetryPolicy, AMP, ANTIGRAVITY, CLAUDE, CODEX, GROK, PROVIDERS,
 };
 pub use process::{
     run_process, ProcessError, ProcessOutput, ProcessRunner, ProcessSpec, TokioProcessRunner,

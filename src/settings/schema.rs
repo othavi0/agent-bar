@@ -139,6 +139,10 @@ impl Settings {
                     id: ProviderIdJson(ProviderId::Grok),
                     enabled: true,
                 },
+                ProviderSetting {
+                    id: ProviderIdJson(ProviderId::Antigravity),
+                    enabled: false,
+                },
             ],
             display: DisplaySettings {
                 metric: DisplayMetric::Remaining,
@@ -158,8 +162,32 @@ impl Settings {
         reject_unknown_top_level(&value)?;
         let settings: Self = serde_json::from_value(value)
             .map_err(|err| SettingsError::new(format!("invalid settings document: {err}")))?;
+
         settings.validate()?;
         Ok(settings)
+    }
+
+    /// Parse settings while injecting any missing providers with enabled: false.
+    pub fn parse_and_inject_missing(raw: &[u8]) -> Result<(Self, bool), SettingsError> {
+        let value: Value = serde_json::from_slice(raw)
+            .map_err(|err| SettingsError::new(format!("invalid settings JSON: {err}")))?;
+        reject_unknown_top_level(&value)?;
+        let mut settings: Self = serde_json::from_value(value)
+            .map_err(|err| SettingsError::new(format!("invalid settings document: {err}")))?;
+
+        let mut injected = false;
+        for id in ProviderId::ALL {
+            if !settings.providers.iter().any(|p| p.id.0 == id) {
+                settings.providers.push(ProviderSetting {
+                    id: ProviderIdJson(id),
+                    enabled: false,
+                });
+                injected = true;
+            }
+        }
+
+        settings.validate()?;
+        Ok((settings, injected))
     }
 
     /// Semantic validation beyond `deny_unknown_fields`.
@@ -303,7 +331,7 @@ mod tests {
     fn reminder_minutes_defaults_when_absent() {
         // Settings reads never rewrite (SET-007), so an existing settings.json
         // predating this field must parse and take the default silently.
-        let doc = br#"{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true}}"#;
+        let doc = br#"{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true},{"id":"antigravity","enabled":false}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true}}"#;
         let parsed = Settings::parse_strict(doc).unwrap();
         assert_eq!(
             parsed.notifications.reminder_minutes,
@@ -333,7 +361,7 @@ mod tests {
         // deny_unknown_fields is not the only gate: reject_unknown_top_level
         // walks raw JSON before deserialization and would reject the key on
         // its own.
-        let doc = br#"{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true,"reminderMinutes":240}}"#;
+        let doc = br#"{"schemaVersion":1,"providers":[{"id":"claude","enabled":true},{"id":"codex","enabled":true},{"id":"amp","enabled":true},{"id":"grok","enabled":true},{"id":"antigravity","enabled":false}],"display":{"metric":"remaining"},"refreshIntervalSeconds":60,"notifications":{"enabled":true,"reminderMinutes":240}}"#;
         let parsed = Settings::parse_strict(doc).unwrap();
         assert_eq!(parsed.notifications.reminder_minutes, 240);
     }

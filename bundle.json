@@ -152,6 +152,12 @@
       "mode": "0644"
     },
     {
+      "path": "icons/antigravity.png",
+      "sha256": "5d7bd3d86c72d5086e36beb40c259e45c58c952983abbe3059c42414593ae2e1",
+      "size": 2833,
+      "mode": "0644"
+    },
+    {
       "path": "icons/claude.png",
       "sha256": "8d58d03a93081c2a570541a6ec1967c2edcf75c57e67b2a860b2002b8e99f04b",
       "size": 2054,

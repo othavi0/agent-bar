@@ -895,8 +895,8 @@ Item {
 
   IpcHandler {
     target: "othavi0.agent-bar"
-    function health(expectedVersion): string { return root.health(expectedVersion) }
-    function refresh(providerId): string { return root.refresh(providerId) }
+    function health(expectedVersion: string): string { return root.health(expectedVersion) }
+    function refresh(providerId: string): string { return root.refresh(providerId) }
   }
 
   onHelperPathChanged: root.tryStartProduction()

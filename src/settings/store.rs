@@ -81,7 +81,10 @@ impl SettingsStore {
     /// Existing file is never rewritten, migrated, or touched (mtime preserved).
     pub fn show(&self) -> Result<Settings, StoreError> {
         match fs::read(&self.path) {
-            Ok(bytes) => Ok(Settings::parse_strict(&bytes)?),
+            Ok(bytes) => {
+                let (settings, _) = Settings::parse_and_inject_missing(&bytes)?;
+                Ok(settings)
+            }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Settings::defaults()),
             Err(err) => Err(StoreError::Io(err)),
         }

@@ -1,8 +1,8 @@
 # Agent Bar
 
 Agent Bar puts your AI quota in the Omarchy bar. One chip per provider
-(Claude, Codex, Amp, Grok), a popup with every usage window, and a
-countdown to the next reset.
+(Claude, Codex, Amp, Grok, Antigravity), a popup with every usage window,
+and a countdown to the next reset.
 
 ![Agent Bar preview](preview.png)
 

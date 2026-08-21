@@ -476,7 +476,9 @@ fn active_legacy_scan_cargo_and_install_contract() {
     let root = workspace_root();
     let cargo = fs::read_to_string(root.join("Cargo.toml")).expect("Cargo.toml");
     assert!(
-        cargo.contains(r#"description = "LLM quota monitor for Claude, Codex, Amp, and Grok.""#),
+        cargo.contains(
+            r#"description = "LLM quota monitor for Claude, Codex, Amp, Grok, and Antigravity.""#
+        ),
         "Cargo.toml must use the exact package description"
     );
     assert!(

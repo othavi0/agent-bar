@@ -12,7 +12,7 @@ use crate::providers::adapter::{CollectionContext, HttpClient};
 use crate::providers::catalog::ExecutionEnvironment;
 use crate::providers::http::ReqwestHttpClient;
 use crate::providers::process::{ProcessRunner, TokioProcessRunner};
-use crate::providers::{adapter_for, AMP, CLAUDE, CODEX, GROK};
+use crate::providers::{adapter_for, AMP, ANTIGRAVITY, CLAUDE, CODEX, GROK};
 use crate::settings::schema::Settings as SettingsDocument;
 use crate::settings::SettingsStore;
 use crate::status::collect::provider_status_from_result;
@@ -289,6 +289,7 @@ fn descriptor_ttl(id: ProviderId) -> std::time::Duration {
         ProviderId::Codex => CODEX.cache_ttl,
         ProviderId::Amp => AMP.cache_ttl,
         ProviderId::Grok => GROK.cache_ttl,
+        ProviderId::Antigravity => ANTIGRAVITY.cache_ttl,
     }
 }
 
@@ -299,6 +300,7 @@ fn fallback_provider_error(id: ProviderId, message: &str) -> ProviderStatus {
         ProviderId::Codex => "Codex",
         ProviderId::Amp => "Amp",
         ProviderId::Grok => "Grok",
+        ProviderId::Antigravity => "Antigravity",
     };
     #[allow(clippy::expect_used)]
     {

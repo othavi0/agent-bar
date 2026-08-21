@@ -247,7 +247,7 @@ function validateSettingsDraft(draft) {
   if (!isFinite(reminder) || reminder !== Math.floor(reminder)
       || reminder < 15 || reminder > 1440)
     return { ok: false, reason: "notifications.reminderMinutes" }
-  if (!Array.isArray(draft.providers) || draft.providers.length !== 4)
+  if (!Array.isArray(draft.providers) || draft.providers.length !== 5)
     return { ok: false, reason: "providers length" }
   var seen = {}
   for (var i = 0; i < draft.providers.length; i++) {

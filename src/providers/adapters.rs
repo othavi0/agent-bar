@@ -7,13 +7,13 @@ use super::adapter::{
     collection_exe, login_available, missing_collection, unauthenticated, BoxFuture,
     CollectionContext, ProviderAdapter,
 };
-use super::catalog::{AMP, CLAUDE, CODEX, GROK};
+use super::catalog::{AMP, ANTIGRAVITY, CLAUDE, CODEX, GROK};
 use super::codex_app_server::{fetch_rate_limits_via_appserver, AppServerOutcome};
 use super::codex_session_log::find_latest_rate_limits;
 use super::process::{ProcessOutput, ProcessSpec};
 use super::v2_map::{
-    amp_from_usage_text, claude_from_usage_json, codex_from_rate_limits_json,
-    grok_from_billing_json,
+    amp_from_usage_text, antigravity_from_usage_text, claude_from_usage_json,
+    codex_from_rate_limits_json, grok_from_billing_json,
 };
 use super::{Discovery, ProviderDescriptor};
 
@@ -544,6 +544,81 @@ pub struct FixedClock(pub time::OffsetDateTime);
 impl crate::support::Clock for FixedClock {
     fn now_utc(&self) -> time::OffsetDateTime {
         self.0
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Antigravity
+// ---------------------------------------------------------------------------
+
+pub struct AntigravityAdapter;
+
+pub static ANTIGRAVITY_ADAPTER: AntigravityAdapter = AntigravityAdapter;
+
+impl ProviderAdapter for AntigravityAdapter {
+    fn descriptor(&self) -> &'static ProviderDescriptor {
+        &ANTIGRAVITY
+    }
+
+    fn collect<'a>(
+        &'a self,
+        context: &'a CollectionContext<'a>,
+        discovery: &'a Discovery,
+    ) -> BoxFuture<'a, ProviderResult> {
+        Box::pin(async move {
+            let Some(exe) = collection_exe(discovery) else {
+                return missing_collection(
+                    ProviderId::Antigravity,
+                    ANTIGRAVITY.display_name,
+                    ANTIGRAVITY.installation_url,
+                );
+            };
+
+            let spec = ProcessSpec::new(exe, ["--print", "/usage"])
+                .with_timeout(ANTIGRAVITY.timeout)
+                .with_max_output(ANTIGRAVITY.max_output_bytes)
+                .with_env("NO_COLOR", "1")
+                .with_env("TERM", "dumb");
+
+            match context.process.run(&spec).await {
+                Ok(out) if out.timed_out => ProviderResult::NetworkError {
+                    id: ProviderId::Antigravity,
+                    name: ANTIGRAVITY.display_name.to_owned(),
+                    message: "Antigravity usage command timed out.".into(),
+                },
+                Ok(out) if out.exit_code != Some(0) => {
+                    classify_antigravity_failure(&out, login_available(discovery))
+                }
+                Ok(out) => antigravity_from_usage_text(&out.stdout, context.clock.now_utc()),
+                Err(_) => ProviderResult::NetworkError {
+                    id: ProviderId::Antigravity,
+                    name: ANTIGRAVITY.display_name.to_owned(),
+                    message: "Failed to run Antigravity usage.".into(),
+                },
+            }
+        })
+    }
+}
+
+fn classify_antigravity_failure(out: &ProcessOutput, login_available: bool) -> ProviderResult {
+    if out.exit_code == Some(41) {
+        return unauthenticated(
+            ProviderId::Antigravity,
+            ANTIGRAVITY.display_name,
+            "Antigravity is not authenticated.",
+            login_available,
+            ANTIGRAVITY.installation_url,
+            false,
+        );
+    }
+    ProviderResult::ProviderError {
+        id: ProviderId::Antigravity,
+        name: ANTIGRAVITY.display_name.to_owned(),
+        message: format!(
+            "Antigravity usage command failed (exit code {:?}).",
+            out.exit_code
+        ),
+        retryable: false,
     }
 }
 
@@ -1127,6 +1202,86 @@ mod tests {
                 assert_eq!(last_success_at, datetime!(2026-07-28 10:00:00 UTC));
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn antigravity_collect_ready_from_fixture() {
+        let fixture = include_str!("../../tests/fixtures/antigravity/usage.txt");
+        let process = ScriptedProcess::one(ProcessOutput {
+            exit_code: Some(0),
+            stdout: fixture.to_owned(),
+            stderr: String::new(),
+            timed_out: false,
+            stdout_truncated: false,
+            stderr_truncated: false,
+        });
+        let http = ScriptedHttpClient::default();
+        let fs = MapFileSystem::default();
+        let env = ExecutionEnvironment {
+            home: std::path::PathBuf::from("/tmp/home"),
+            path_dirs: vec![],
+            grok_home: None,
+        };
+        let clock = FixedClock(datetime!(2026-08-21 12:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = discovery_with_exe(Path::new("/usr/bin/agy"));
+        let result = ANTIGRAVITY_ADAPTER.collect(&ctx, &discovery).await;
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Ready { windows, .. } => {
+                assert_eq!(windows.len(), 2);
+                assert_eq!(windows[0].id(), "gemini-weekly");
+                assert_eq!(windows[1].id(), "gemini-5h");
+            }
+            other => panic!("expected ready, got {other:?}"),
+        }
+        let spec = process.last_spec.lock().unwrap().clone().unwrap();
+        assert_eq!(spec.args, vec!["--print".to_owned(), "/usage".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn antigravity_collect_unauthenticated() {
+        let fixture = include_str!("../../tests/fixtures/antigravity/unauthorized.txt");
+        let process = ScriptedProcess::one(ProcessOutput {
+            exit_code: Some(41),
+            stdout: fixture.to_owned(),
+            stderr: String::new(),
+            timed_out: false,
+            stdout_truncated: false,
+            stderr_truncated: false,
+        });
+        let http = ScriptedHttpClient::default();
+        let fs = MapFileSystem::default();
+        let env = ExecutionEnvironment {
+            home: std::path::PathBuf::from("/tmp/home"),
+            path_dirs: vec![],
+            grok_home: None,
+        };
+        let clock = FixedClock(datetime!(2026-08-21 12:00:00 UTC));
+        let ctx = CollectionContext {
+            env: &env,
+            clock: &clock,
+            fs: &fs,
+            process: &process,
+            http: &http,
+            plugin_root: None,
+        };
+        let discovery = discovery_with_exe(Path::new("/usr/bin/agy"));
+        let result = ANTIGRAVITY_ADAPTER.collect(&ctx, &discovery).await;
+        assert_no_money(&result);
+        match result {
+            ProviderResult::Unauthenticated { id, .. } => {
+                assert_eq!(id, ProviderId::Antigravity);
+            }
+            other => panic!("expected Unauthenticated, got {other:?}"),
         }
     }
 
