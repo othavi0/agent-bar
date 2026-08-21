@@ -124,6 +124,15 @@ TestCase {
 
   function test_settings_editor_owns_focus_flag() {
     var src = read("SettingsView.qml")
-    verify(src.indexOf("editorOwnsFocus") >= 0)
+    var prop = src.indexOf("property bool editorOwnsFocus")
+    verify(prop >= 0)
+    var propEnd = src.indexOf("readonly property var state", prop)
+    verify(propEnd > prop)
+    var body = src.substring(prop, propEnd)
+    // A11Y-008 must cover every NumberField editor, not just the refresh
+    // interval — a user editing the reminder field is entitled to the same
+    // stay-open protection as one editing the refresh interval.
+    verify(body.indexOf("intervalField") >= 0)
+    verify(body.indexOf("reminderField") >= 0)
   }
 }

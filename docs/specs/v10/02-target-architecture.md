@@ -358,7 +358,7 @@ Settings:
 Cache:
   $XDG_CACHE_HOME/agent-bar/status-v2.json
   $XDG_CACHE_HOME/agent-bar/status.lock
-  $XDG_CACHE_HOME/agent-bar/notification-state-v1.json
+  $XDG_CACHE_HOME/agent-bar/notification-state-v2.json
 
 Backups:
   $XDG_STATE_HOME/agent-bar/backups/

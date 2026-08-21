@@ -42,10 +42,17 @@
     "notifications": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled"],
+      "required": [
+        "enabled"
+      ],
       "properties": {
         "enabled": {
           "type": "boolean"
+        },
+        "reminderMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 1440
         }
       }
     }

@@ -464,6 +464,7 @@ fn migrate_v9_settings(raw: &[u8]) -> Result<(Settings, Vec<String>, bool), Migr
         refresh_interval_seconds: refresh,
         notifications: NotificationSettings {
             enabled: notify_enabled,
+            reminder_minutes: crate::settings::schema::default_reminder_minutes(),
         },
     };
     settings

@@ -13,7 +13,7 @@ use std::time::Duration;
 use crate::cli::ProviderId;
 use crate::providers::process::{ProcessRunner, ProcessSpec};
 use crate::settings::schema::{DisplayMetric, Settings as SettingsDocument};
-use crate::status::schema::{ProviderState, StatusEnvelope};
+use crate::status::schema::{DataSource, ProviderState, StatusEnvelope};
 use crate::support::redact::strip_ansi_and_controls;
 
 /// Planned notification before dispatch.
@@ -146,6 +146,8 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
         if !self.settings.notifications.enabled {
             return Ok(());
         }
+        let reminder =
+            time::Duration::minutes(i64::from(self.settings.notifications.reminder_minutes));
 
         let mut state = self.store.load().map_err(|err| err.to_string())?;
         let order: Vec<ProviderId> = self.settings.providers.iter().map(|p| p.id.0).collect();
@@ -160,18 +162,49 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                 // NOTIFY-006: stale/failures do not trigger.
                 continue;
             }
+
+            // Pruning runs before the window loop, so the rearms, upserts and
+            // de-escalations below are never undone by it. The elapsed-reset
+            // branch needs a live reading: a Ready provider can be replayed
+            // from cache for up to its TTL while still reporting the
+            // pre-reset timestamp, and treating that as proof the window
+            // restarted would fire an alert about a window that already reset.
+            let live_reading = provider.source() == Some(DataSource::Live);
+            let live: Vec<&str> = provider.windows().iter().map(|w| w.id()).collect();
+            state.prune_ready_provider(id, &live, self.now, live_reading);
+
             for window in provider.windows() {
                 let used = window.used_percent();
+                let observed = window.resets_at();
                 let Some(level) = NotificationLevel::from_used_percent(used) else {
-                    // Recovery below 90 → rearm (remove key).
-                    state.remove_key(id, window.id(), window.resets_at());
+                    // Recovery below the warning threshold rearms.
+                    state.remove_key(id, window.id());
                     continue;
                 };
-                let prev = state.level_for(id, window.id(), window.resets_at());
-                let should_emit = match prev {
+                let saved = state.entry_for(id, window.id()).cloned();
+                let should_emit = match saved.as_ref() {
+                    // Never spoken for this window.
                     None => true,
-                    Some(prev_level) if level > prev_level => true,
-                    Some(_) => false, // same level once (NOTIFY-003)
+                    // The window advanced; a genuinely new quota period.
+                    Some(prev) if !NotificationState::same_window(prev.reset_at, observed) => true,
+                    // NOTIFY-002: severity only ever escalates.
+                    Some(prev) if level > prev.level => true,
+                    // Same severity: the reminder decides, not the poll.
+                    Some(prev) if level == prev.level => self.now - prev.notified_at >= reminder,
+                    // De-escalation inside the same window. NOTIFY-002 forbids
+                    // speaking, but the tracked severity must follow the window
+                    // down or the reminder can never match again, silencing a
+                    // window that is still above its threshold.
+                    Some(prev) => {
+                        state.upsert(NotificationEntry {
+                            provider_id: id.as_str().to_owned(),
+                            window_id: window.id().to_owned(),
+                            reset_at: observed,
+                            level,
+                            notified_at: prev.notified_at,
+                        });
+                        false
+                    }
                 };
                 if should_emit {
                     pending.push(PendingNotification {
@@ -182,9 +215,8 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                         used_percent: used,
                         remaining_percent: window.remaining_percent(),
                         metric: self.settings.display.metric,
-                        reset_at: window.resets_at(),
-                        reset_in: window
-                            .resets_at()
+                        reset_at: observed,
+                        reset_in: observed
                             .map(|ts| crate::support::countdown::reset_countdown(self.now, ts)),
                         level,
                     });
@@ -192,7 +224,7 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
             }
         }
 
-        // Persist silent rearms first.
+        // Persist silent rearms and de-escalations first.
         self.store.save(&state).map_err(|err| err.to_string())?;
 
         for item in pending {
@@ -203,12 +235,22 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                         window_id: item.window_id.clone(),
                         reset_at: item.reset_at,
                         level: item.level,
+                        notified_at: self.now,
                     });
                     // Persist after each success (at-least-once algorithm).
-                    self.store.save(&state).map_err(|err| err.to_string())?;
+                    if let Err(err) = self.store.save(&state) {
+                        // The incident this replaces ran for days behind a bare
+                        // stderr line nobody reads.
+                        log::warn!(
+                            "notification state save failed for {}/{}: {err}",
+                            item.provider_id.as_str(),
+                            item.window_id
+                        );
+                        return Err(err.to_string());
+                    }
                 }
                 Err(err) => {
-                    // Leave key unadvanced; stop later notifications.
+                    // Leave the row unadvanced; stop later notifications.
                     return Err(err);
                 }
             }
@@ -316,6 +358,76 @@ mod tests {
             vec![provider],
         )
         .unwrap()
+    }
+
+    fn store_in(dir: &tempfile::TempDir) -> NotificationStateStore {
+        NotificationStateStore::new(
+            NotificationPaths {
+                state: dir.path().join("nstate.json"),
+                lock: dir.path().join("n.lock"),
+            },
+            Arc::new(MaintenanceGate::open(dir.path().join("m.lock")).unwrap()),
+        )
+    }
+
+    #[tokio::test]
+    async fn sub_second_reset_jitter_does_not_renotify() {
+        // The incident, end to end: three consecutive collections of the same
+        // Claude window, each carrying a different microsecond reset. Before
+        // this task that dispatched three times and persisted nothing.
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let eval = NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:31:56 UTC),
+        };
+        for reset in [
+            datetime!(2026-08-21 11:59:59.707742 UTC),
+            datetime!(2026-08-21 11:59:59.854947 UTC),
+            datetime!(2026-08-21 12:00:00.024238 UTC),
+        ] {
+            eval.evaluate(&envelope_with_reset(96.0, reset))
+                .await
+                .unwrap();
+        }
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 1);
+        let state = store.load().unwrap();
+        assert_eq!(state.entries.len(), 1, "one row per window, not per reset");
+    }
+
+    #[tokio::test]
+    async fn recovery_below_the_threshold_clears_the_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let reset = datetime!(2026-08-21 22:00:00 UTC);
+        let eval = NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:00:00 UTC),
+        };
+        eval.evaluate(&envelope_with_reset(96.0, reset))
+            .await
+            .unwrap();
+        assert_eq!(store.load().unwrap().entries.len(), 1);
+        eval.evaluate(&envelope_with_reset(10.0, reset))
+            .await
+            .unwrap();
+        assert!(store.load().unwrap().entries.is_empty());
     }
 
     #[tokio::test]
@@ -498,6 +610,288 @@ mod tests {
         pending.metric = DisplayMetric::Used;
         let spec = NotifySendDispatcher::<ScriptedNotify>::build_spec(&pending);
         assert_eq!(spec.args[3], "96% used.");
+    }
+
+    #[tokio::test]
+    async fn a_new_window_renotifies() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let eval = NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:31:56 UTC),
+        };
+        eval.evaluate(&envelope_with_reset(
+            96.0,
+            datetime!(2026-08-21 11:59:59 UTC),
+        ))
+        .await
+        .unwrap();
+        eval.evaluate(&envelope_with_reset(
+            96.0,
+            datetime!(2026-08-28 11:59:59 UTC),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 2);
+        let state = store.load().unwrap();
+        assert_eq!(
+            state.entries.len(),
+            1,
+            "the advance replaces, never appends"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_same_level_repeats_only_after_the_reminder_elapses() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults(); // reminderMinutes == 120
+        let reset = datetime!(2026-08-21 22:00:00 UTC);
+        let first = datetime!(2026-08-21 10:00:00 UTC);
+        let envelope = envelope_with_reset(96.0, reset);
+
+        // A fresh evaluator per instant: `now` is a field, not an argument.
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first,
+        }
+        .evaluate(&envelope)
+        .await
+        .unwrap();
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(119),
+        }
+        .evaluate(&envelope)
+        .await
+        .unwrap();
+        assert_eq!(
+            dispatcher.runner.specs.lock().unwrap().len(),
+            1,
+            "one minute short of the reminder must stay silent"
+        );
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(120),
+        }
+        .evaluate(&envelope)
+        .await
+        .unwrap();
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn de_escalation_lowers_the_tracked_level_without_notifying() {
+        // Critical -> Warning while still above 90 must not dispatch
+        // (NOTIFY-002), but the stored level has to follow the window down.
+        // If it stays Critical, the reminder arm never matches again and the
+        // user stops hearing about a window that is still at 92 percent.
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let reset = datetime!(2026-08-21 22:00:00 UTC);
+        let first = datetime!(2026-08-21 10:00:00 UTC);
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first,
+        }
+        .evaluate(&envelope_with_reset(96.0, reset))
+        .await
+        .unwrap();
+
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(5),
+        }
+        .evaluate(&envelope_with_reset(92.0, reset))
+        .await
+        .unwrap();
+        assert_eq!(
+            dispatcher.runner.specs.lock().unwrap().len(),
+            1,
+            "dropping a level never speaks"
+        );
+        let state = store.load().unwrap();
+        assert_eq!(state.entries[0].level, NotificationLevel::Warning);
+
+        // The reminder now fires at the level the window is actually at.
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: first + time::Duration::minutes(121),
+        }
+        .evaluate(&envelope_with_reset(92.0, reset))
+        .await
+        .unwrap();
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn evaluate_prunes_rows_for_windows_a_ready_provider_no_longer_reports() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let mut seeded = NotificationState::empty();
+        seeded.upsert(NotificationEntry {
+            provider_id: "claude".into(),
+            window_id: "weekly-model:retired".into(),
+            reset_at: Some(datetime!(2026-08-28 12:00:00 UTC)),
+            level: NotificationLevel::Critical,
+            notified_at: datetime!(2026-08-20 10:00:00 UTC),
+        });
+        store.save(&seeded).unwrap();
+
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:00:00 UTC),
+        }
+        .evaluate(&envelope_with_used(10.0))
+        .await
+        .unwrap();
+
+        let state = store.load().unwrap();
+        assert!(
+            state.entries.is_empty(),
+            "a window the provider stopped reporting must not linger forever"
+        );
+    }
+
+    #[tokio::test]
+    async fn evaluate_keeps_rows_for_providers_absent_from_the_envelope() {
+        // Pruning is Ready-only. A provider missing from this envelope has
+        // confirmed nothing, so its dedupe must survive or it notifies again
+        // the moment it recovers. The sibling case — present but not Ready —
+        // is covered by evaluate_keeps_rows_for_a_stale_provider below.
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let mut seeded = NotificationState::empty();
+        seeded.upsert(NotificationEntry {
+            provider_id: "amp".into(),
+            window_id: "daily".into(),
+            reset_at: Some(datetime!(2026-08-12 00:00:00 UTC)),
+            level: NotificationLevel::Critical,
+            notified_at: datetime!(2026-08-11 23:00:00 UTC),
+        });
+        store.save(&seeded).unwrap();
+
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:00:00 UTC),
+        }
+        .evaluate(&envelope_with_used(10.0))
+        .await
+        .unwrap();
+
+        assert_eq!(store.load().unwrap().entries.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn evaluate_keeps_rows_for_a_stale_provider() {
+        // Present in the envelope but not Ready: the provider confirmed
+        // nothing this cycle, so neither pruning nor rearming may touch it
+        // (NOTIFY-006). No pre-existing test covered this — the guard was
+        // only a comment.
+        use crate::status::schema::{ErrorCode, ProviderAction, ProviderError};
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let mut seeded = NotificationState::empty();
+        seeded.upsert(NotificationEntry {
+            provider_id: "claude".into(),
+            window_id: "session".into(),
+            reset_at: Some(datetime!(2026-08-12 00:00:00 UTC)),
+            level: NotificationLevel::Critical,
+            notified_at: datetime!(2026-08-11 23:00:00 UTC),
+        });
+        store.save(&seeded).unwrap();
+
+        let window = UsageWindow::try_new("session", "Session", 5.0, 95.0, None).unwrap();
+        let stale = ProviderStatus::stale(
+            ProviderId::Claude,
+            "Claude",
+            None,
+            None,
+            vec![window],
+            datetime!(2026-08-20 10:00:00 UTC),
+            ProviderError::new(ErrorCode::NetworkError, "Network error.", true),
+            ProviderAction::retry("Retry"),
+        )
+        .unwrap();
+        let envelope = StatusEnvelope::try_new_for_package(
+            datetime!(2026-08-21 10:00:00 UTC),
+            StatusRequest {
+                provider: None,
+                cache: CacheMode::Use,
+            },
+            vec![stale],
+        )
+        .unwrap();
+
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:00:00 UTC),
+        }
+        .evaluate(&envelope)
+        .await
+        .unwrap();
+
+        assert_eq!(store.load().unwrap().entries.len(), 1);
+        assert!(dispatcher.runner.specs.lock().unwrap().is_empty());
     }
 
     #[test]

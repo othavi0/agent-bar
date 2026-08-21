@@ -92,6 +92,7 @@ design doc that now govern the amended behavior. See
 | `CACHE-019B` | 7, 15–18 | external-status versus maintenance barrier tests |
 | `CACHE-020`–`CACHE-025` | 7, 9, 11 | loading/stale/auth/provider refresh tests |
 | `NOTIFY-001`–`NOTIFY-010` | 7 | transition, persistence, recovery, dispatch tests |
+| `NOTIFY-013`–`NOTIFY-014` | 7 | jitter-tolerance, reminder-cadence, settings-range tests |
 | `NOTIFY-011` | 7, 9 | evaluate-mode and one-service tests |
 | `NOTIFY-012` | 7 | crash-window and at-least-once contract tests |
 

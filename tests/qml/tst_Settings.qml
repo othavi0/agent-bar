@@ -67,6 +67,22 @@ TestCase {
     compare(Core.validateSettingsDraft(bad).ok, false)
   }
 
+  function test_reminder_minutes_bounds() {
+    var d = Service.defaultSettings()
+    compare(d.notifications.reminderMinutes, 120)
+    compare(Core.validateSettingsDraft(d).ok, true)
+
+    d = Core.setReminderMinutes(d, 15)
+    compare(d.notifications.reminderMinutes, 15)
+    d = Core.setReminderMinutes(d, 1440)
+    compare(d.notifications.reminderMinutes, 1440)
+
+    var bad = Core.setReminderMinutes(d, 5)
+    compare(Core.validateSettingsDraft(bad).ok, false)
+    bad = Core.setReminderMinutes(d, 2000)
+    compare(Core.validateSettingsDraft(bad).ok, false)
+  }
+
   function test_notifications_toggle() {
     var d = Service.defaultSettings()
     d = Core.setNotificationsEnabled(d, false)
@@ -159,6 +175,8 @@ TestCase {
     // The host NumberField has no suffix property, so the unit is a sibling
     // label positioned against the spin box.
     verify(src.indexOf('text: "seconds"') >= 0)
+    verify(src.indexOf("Remind me every") >= 0)
+    verify(src.indexOf('text: "minutes"') >= 0)
   }
 
   function test_settings_row_has_icon_name_chevrons() {

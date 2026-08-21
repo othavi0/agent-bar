@@ -244,4 +244,18 @@ TestCase {
     compare(JSON.parse(h.pendingSettingsPayload).display.metric, "used")
     compare(h.settingsState.pendingPayload.display.metric, "used")
   }
+
+  function test_reminder_minutes_immutable_after_edit_during_save() {
+    h.reset()
+    h.openSettings("a")
+    h.applyRead(h.activeSettingsReadGeneration, Service.defaultSettings(), 0)
+    h.mutate(function (d) { return Core.setReminderMinutes(d, 240) })
+    h.save()
+    var captured = JSON.parse(h.pendingSettingsPayload)
+    compare(captured.notifications.reminderMinutes, 240)
+    // Edits while saving are locked
+    h.mutate(function (d) { return Core.setReminderMinutes(d, 60) })
+    compare(JSON.parse(h.pendingSettingsPayload).notifications.reminderMinutes, 240)
+    compare(h.settingsState.pendingPayload.notifications.reminderMinutes, 240)
+  }
 }

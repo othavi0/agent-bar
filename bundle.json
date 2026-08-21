@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "pluginId": "othavi0.agent-bar",
-  "version": "10.3.10",
+  "version": "10.3.11",
   "target": "x86_64-unknown-linux-gnu",
   "omarchyContract": 1,
   "minimumQuickshellVersion": "0.3.0",
-  "sourceCommit": "5e8cf5a183f19011bc132cbe62526ab3a3d59813",
+  "sourceCommit": "d77c0bebe3ae50a3546b31c4c470eb16e1b0ef44",
   "files": [
     {
       "path": "BarWidget.qml",
@@ -27,14 +27,14 @@
     },
     {
       "path": "CoreService.js",
-      "sha256": "e42bd9726da23216df812641d64a71ddbc5a245e5c33e8de76f1995af0797924",
-      "size": 9429,
+      "sha256": "a47adf48ad0eafd908ebd5899b3b03a6d8e78c1578735428a0a7af73f914c040",
+      "size": 9451,
       "mode": "0644"
     },
     {
       "path": "CoreSettings.js",
-      "sha256": "d2c9f98599c904d43f1ac8f2447ddcf0681a89e06d04cd84de7572dd5a2958bf",
-      "size": 8758,
+      "sha256": "185e1df8c27af40b0feb271d696f6db3c122ec30504cb506aaa499c5fee354c3",
+      "size": 9288,
       "mode": "0644"
     },
     {
@@ -81,20 +81,20 @@
     },
     {
       "path": "Service.qml",
-      "sha256": "8fdfd181f9b6650b132f0969300297d0b587df9fc8f2ec8779fb81d95137616e",
-      "size": 29068,
+      "sha256": "254add6438a8fbf514c28501a095979fa8f131479adc88fd3439859fbabf31b1",
+      "size": 29213,
       "mode": "0644"
     },
     {
       "path": "SettingsView.qml",
-      "sha256": "3e536adc64cbe2f7ec627f8594492674d54c1cadbe54dfe7c8a2ca68fca89135",
-      "size": 9130,
+      "sha256": "c06938fd53f90022ccd4e16bae31c0c0a4ab99d6e2d524313029ddd5650252c0",
+      "size": 10518,
       "mode": "0644"
     },
     {
       "path": "bin/agent-bar",
-      "sha256": "a7123e8b83e96d474320ac943bfb28e39e03f6bf53bf67d704819459a7b49f77",
-      "size": 4065080,
+      "sha256": "96d9dac87ed053cd72ddc42a292a464055ec3a04c5006034c287dba7130ab248",
+      "size": 4078048,
       "mode": "0755"
     },
     {
@@ -177,7 +177,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "3fe9d6c88b235f04908db2f2349eb40c9c992f8df8e2004c4c867cd771971ef5",
+      "sha256": "76dea331fd76c13c8514ab9e1c913eacc0221a37f6d157dde63b0edcfbc80d7d",
       "size": 620,
       "mode": "0644"
     },
