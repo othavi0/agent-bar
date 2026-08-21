@@ -163,11 +163,11 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
             for window in provider.windows() {
                 let used = window.used_percent();
                 let Some(level) = NotificationLevel::from_used_percent(used) else {
-                    // Recovery below 90 → rearm (remove key).
-                    state.remove_key(id, window.id(), window.resets_at());
+                    // Recovery below the warning threshold rearms.
+                    state.remove_key(id, window.id());
                     continue;
                 };
-                let prev = state.level_for(id, window.id(), window.resets_at());
+                let prev = state.entry_for(id, window.id()).map(|e| e.level);
                 let should_emit = match prev {
                     None => true,
                     Some(prev_level) if level > prev_level => true,
@@ -203,6 +203,7 @@ impl<'a, D: NotificationDispatcher> NotificationEvaluator<'a, D> {
                         window_id: item.window_id.clone(),
                         reset_at: item.reset_at,
                         level: item.level,
+                        notified_at: self.now,
                     });
                     // Persist after each success (at-least-once algorithm).
                     self.store.save(&state).map_err(|err| err.to_string())?;
@@ -316,6 +317,76 @@ mod tests {
             vec![provider],
         )
         .unwrap()
+    }
+
+    fn store_in(dir: &tempfile::TempDir) -> NotificationStateStore {
+        NotificationStateStore::new(
+            NotificationPaths {
+                state: dir.path().join("nstate.json"),
+                lock: dir.path().join("n.lock"),
+            },
+            Arc::new(MaintenanceGate::open(dir.path().join("m.lock")).unwrap()),
+        )
+    }
+
+    #[tokio::test]
+    async fn sub_second_reset_jitter_does_not_renotify() {
+        // The incident, end to end: three consecutive collections of the same
+        // Claude window, each carrying a different microsecond reset. Before
+        // this task that dispatched three times and persisted nothing.
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let eval = NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:31:56 UTC),
+        };
+        for reset in [
+            datetime!(2026-08-21 11:59:59.707742 UTC),
+            datetime!(2026-08-21 11:59:59.854947 UTC),
+            datetime!(2026-08-21 12:00:00.024238 UTC),
+        ] {
+            eval.evaluate(&envelope_with_reset(96.0, reset))
+                .await
+                .unwrap();
+        }
+        assert_eq!(dispatcher.runner.specs.lock().unwrap().len(), 1);
+        let state = store.load().unwrap();
+        assert_eq!(state.entries.len(), 1, "one row per window, not per reset");
+    }
+
+    #[tokio::test]
+    async fn recovery_below_the_threshold_clears_the_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        let runner = ScriptedNotify {
+            specs: Mutex::new(Vec::new()),
+            fail: false,
+        };
+        let dispatcher = NotifySendDispatcher::new(runner);
+        let settings = SettingsDocument::defaults();
+        let reset = datetime!(2026-08-21 22:00:00 UTC);
+        let eval = NotificationEvaluator {
+            store: &store,
+            dispatcher: &dispatcher,
+            settings: &settings,
+            now: datetime!(2026-08-21 10:00:00 UTC),
+        };
+        eval.evaluate(&envelope_with_reset(96.0, reset))
+            .await
+            .unwrap();
+        assert_eq!(store.load().unwrap().entries.len(), 1);
+        eval.evaluate(&envelope_with_reset(10.0, reset))
+            .await
+            .unwrap();
+        assert!(store.load().unwrap().entries.is_empty());
     }
 
     #[tokio::test]
