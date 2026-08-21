@@ -127,7 +127,6 @@ settings.json                            Agent Bar settings schema 1
 bundle.json                              Agent Bar bundle receipt schema 1
 *.metadata.json                          Agent Bar release metadata schema 1
 update check                             Agent Bar update document schema 1
-notification-state-v1.json               notification-state schema 1
 uninstall confirmation stdin             confirmation schema 1
 ```
 

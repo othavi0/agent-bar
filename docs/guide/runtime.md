@@ -8,7 +8,7 @@
 | `$XDG_CONFIG_HOME/agent-bar/settings.json` | Canonical product settings |
 | `$XDG_CACHE_HOME/agent-bar/status-v2.json` | Normalized provider cache |
 | `$XDG_CACHE_HOME/agent-bar/status.lock` | Cross-process collection lock |
-| `$XDG_CACHE_HOME/agent-bar/notification-state-v1.json` | Alert deduplication |
+| `$XDG_CACHE_HOME/agent-bar/notification-state-v2.json` | Alert deduplication |
 | `$XDG_CACHE_HOME/agent-bar/notification.lock` | Alert evaluation/dispatch lock |
 | `$XDG_STATE_HOME/agent-bar/backups/` | Exact settings-migration and `doctor clean` backups |
 | `$XDG_STATE_HOME/agent-bar/maintenance.lock` | Stable shared/exclusive mutation gate |
