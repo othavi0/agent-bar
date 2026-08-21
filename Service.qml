@@ -232,6 +232,12 @@ Item {
     })
   }
 
+  function setReminderMinutes(minutes) {
+    mutateSettingsDraft(function (d) {
+      return Settings.setReminderMinutes(d, minutes)
+    })
+  }
+
   function restoreSettingsDefaults() {
     if (settingsLocked())
       return

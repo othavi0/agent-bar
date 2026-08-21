@@ -16,7 +16,8 @@
   },
   "refreshIntervalSeconds": 60,
   "notifications": {
-    "enabled": true
+    "enabled": true,
+    "reminderMinutes": 120
   }
 }
 ```
@@ -73,7 +74,7 @@ closed
 ```text
 $XDG_CACHE_HOME/agent-bar/status-v2.json
 $XDG_CACHE_HOME/agent-bar/status.lock
-$XDG_CACHE_HOME/agent-bar/notification-state-v1.json
+$XDG_CACHE_HOME/agent-bar/notification-state-v2.json
 $XDG_CACHE_HOME/agent-bar/notification.lock
 $XDG_STATE_HOME/agent-bar/maintenance.lock
 ```
@@ -181,14 +182,20 @@ warning:  used >= 90
 critical: used >= 95
 ```
 
-- `NOTIFY-001`: Notification key is provider ID, window ID, and the nullable
-  reset timestamp. Unknown reset is the single canonical `null` key.
+- `NOTIFY-001`: Notification key is provider ID and window ID. The reset
+  timestamp is recorded as an observation, never as identity: providers may
+  derive it from their own clock and return a different value for the same
+  window on every collection.
 - `NOTIFY-002`: Notifications only escalate normal -> warning -> critical.
-- `NOTIFY-003`: During uninterrupted execution, the same level is emitted once
-  per key.
+- `NOTIFY-003`: While a window stays at the same severity, the alert repeats at
+  most once per `notifications.reminderMinutes`, measured from the last
+  successful dispatch.
 - `NOTIFY-004`: Runtime notification state persists across shell restarts.
-- `NOTIFY-005`: Recovery below 90 or a changed reset key, including a change
-  between `null` and a timestamp, silently rearms.
+- `NOTIFY-005`: Recovery below 90, a change between `null` and a timestamp, or
+  a reset moving by more than the jitter tolerance silently rearms. A window a
+  ready provider stops reporting is pruned. A window whose reset has elapsed
+  is pruned only when that same cycle reached the provider live rather than
+  replaying it from cache.
 - `NOTIFY-006`: Stale data and provider failures do not trigger usage alerts.
 - `NOTIFY-007`: Disabling notifications produces no message and deletes no
   provider/cache data.
@@ -207,6 +214,12 @@ critical: used >= 95
   desktop notification is accepted but before state fsync may repeat that one
   notification on recovery; the product does not claim impossible exactly-once
   desktop delivery.
+- `NOTIFY-013`: Two observed resets describe the same window when they differ
+  by at most 60 seconds. Sub-second drift is expected: a provider may compute
+  `resets_at` from its own clock per response.
+- `NOTIFY-014`: `notifications.reminderMinutes` is an integer in `15..=1440`,
+  default `120`. It is optional on read so documents written before the field
+  existed stay valid, and is written on every explicit apply.
 
 Notification evaluation acquires `notification.lock`, reloads state, evaluates,
 dispatches, and persists before releasing the lock. Entries are processed in
@@ -215,27 +228,29 @@ persisted atomically before the next entry, so a later failure does not lose
 earlier acknowledgements. Recovery/rearm transitions that require no message
 are persisted under the same lock.
 
-The state document is closed and sorted by provider/window/reset:
+The state document is closed and sorted by provider/window:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "entries": [
     {
       "providerId": "claude",
       "windowId": "session",
       "resetAt": "2026-07-26T22:00:00Z",
-      "level": "warning"
+      "level": "warning",
+      "notifiedAt": "2026-07-26T18:42:00Z"
     }
   ]
 }
 ```
 
-`resetAt` is either a UTC RFC 3339 string or `null`. Allowed persisted levels
-are `warning` and `critical`; normal/rearmed keys are removed. Duplicate
-composite keys (including duplicate null-reset keys), unknown providers,
-unknown fields, or invalid timestamps quarantine the state and start a safe
-empty evaluation.
+`resetAt` is either a UTC RFC 3339 string or `null`. `notifiedAt` is the UTC
+RFC 3339 timestamp of the last successful dispatch for this key; `NOTIFY-003`
+measures the reminder from it. Allowed persisted levels are `warning` and
+`critical`; normal/rearmed keys are removed. Duplicate provider/window keys,
+unknown providers, unknown fields, or invalid timestamps quarantine the state
+and start a safe empty evaluation.
 
 The backend is the resolved executable `notify-send`. Rust waits at most five
 seconds for:

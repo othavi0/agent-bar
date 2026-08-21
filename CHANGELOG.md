@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- fix: key notification state by window, not reset
+- feat: repeat alerts on a configurable reminder
+
 ## [10.3.10] - 2026-08-12
 
 ### Changed

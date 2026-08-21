@@ -1,6 +1,5 @@
-//! Persisted notification deduplication state (schema v1).
+//! Persisted notification deduplication state (schema v2).
 
-use std::cmp::Ordering;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -13,7 +12,17 @@ use crate::cli::ProviderId;
 use crate::support::atomic_file::replace_atomically;
 use crate::support::maintenance_gate::SharedMaintenanceGate;
 
-pub const NOTIFICATION_STATE_VERSION: u32 = 1;
+pub const NOTIFICATION_STATE_VERSION: u32 = 2;
+
+/// How far two observed reset timestamps may drift and still describe the same
+/// quota window.
+///
+/// The Claude usage endpoint derives `resets_at` from its own clock on every
+/// response — within one envelope its three windows come back with distinct
+/// microseconds — so no two collections ever agree byte-for-byte. Sixty
+/// seconds swallows that drift with orders of magnitude to spare and stays
+/// negligible against a 5h or 7d window.
+pub const RESET_JITTER_TOLERANCE: time::Duration = time::Duration::seconds(60);
 
 /// Severity thresholds on `usedPercent`. Duplicated in
 /// `CoreView.js` because the status schema is frozen at v2 and
@@ -53,9 +62,25 @@ impl NotificationLevel {
 pub struct NotificationEntry {
     pub provider_id: String,
     pub window_id: String,
+    /// Last observed reset for this window. Evidence, not identity: see
+    /// `RESET_JITTER_TOLERANCE`.
     #[serde(with = "time::serde::rfc3339::option")]
     pub reset_at: Option<OffsetDateTime>,
     pub level: NotificationLevel,
+    /// When the last successful dispatch happened; drives the reminder.
+    #[serde(with = "time::serde::rfc3339")]
+    pub notified_at: OffsetDateTime,
+}
+
+impl NotificationEntry {
+    /// The one definition of a notification's identity.
+    ///
+    /// v1 spelled this comparison out by hand in four places; `validate`
+    /// truncated the reset to whole seconds while the other three compared
+    /// nanoseconds, and the disagreement blocked every write.
+    pub fn key(&self) -> (&str, &str) {
+        (self.provider_id.as_str(), self.window_id.as_str())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,12 +109,7 @@ impl NotificationState {
                     entry.provider_id.clone(),
                 ));
             }
-            let key = (
-                entry.provider_id.clone(),
-                entry.window_id.clone(),
-                entry.reset_at.map(|t| t.unix_timestamp()),
-            );
-            if !keys.insert(key) {
+            if !keys.insert(entry.key()) {
                 return Err(NotificationStateError::DuplicateKey);
             }
         }
@@ -97,59 +117,62 @@ impl NotificationState {
     }
 
     pub fn sort_entries(&mut self) {
-        self.entries
-            .sort_by(|a, b| match a.provider_id.cmp(&b.provider_id) {
-                Ordering::Equal => match a.window_id.cmp(&b.window_id) {
-                    Ordering::Equal => match (a.reset_at, b.reset_at) {
-                        (None, None) => Ordering::Equal,
-                        (None, Some(_)) => Ordering::Less,
-                        (Some(_), None) => Ordering::Greater,
-                        (Some(x), Some(y)) => x.cmp(&y),
-                    },
-                    other => other,
-                },
-                other => other,
-            });
+        self.entries.sort_by(|a, b| a.key().cmp(&b.key()));
     }
 
-    pub fn level_for(
-        &self,
-        provider: ProviderId,
-        window_id: &str,
-        reset_at: Option<OffsetDateTime>,
-    ) -> Option<NotificationLevel> {
-        self.entries.iter().find_map(|e| {
-            if e.provider_id == provider.as_str()
-                && e.window_id == window_id
-                && e.reset_at == reset_at
-            {
-                Some(e.level)
-            } else {
-                None
-            }
-        })
+    /// True when two observed resets describe the same quota window.
+    pub fn same_window(saved: Option<OffsetDateTime>, observed: Option<OffsetDateTime>) -> bool {
+        match (saved, observed) {
+            (None, None) => true,
+            (Some(a), Some(b)) => (a - b).abs() <= RESET_JITTER_TOLERANCE,
+            _ => false,
+        }
+    }
+
+    pub fn entry_for(&self, provider: ProviderId, window_id: &str) -> Option<&NotificationEntry> {
+        self.entries
+            .iter()
+            .find(|e| e.key() == (provider.as_str(), window_id))
     }
 
     pub fn upsert(&mut self, entry: NotificationEntry) {
-        self.entries.retain(|e| {
-            !(e.provider_id == entry.provider_id
-                && e.window_id == entry.window_id
-                && e.reset_at == entry.reset_at)
-        });
+        self.entries.retain(|e| e.key() != entry.key());
         self.entries.push(entry);
         self.sort_entries();
     }
 
-    pub fn remove_key(
+    pub fn remove_key(&mut self, provider: ProviderId, window_id: &str) {
+        self.entries
+            .retain(|e| e.key() != (provider.as_str(), window_id));
+    }
+
+    /// Drop rows for one `Ready` provider whose window vanished from the
+    /// envelope, or whose reset already elapsed on a live reading.
+    ///
+    /// `is_live` guards the elapsed branch specifically. A `Ready` provider
+    /// can be served straight from cache for up to its TTL while still
+    /// reporting the pre-reset timestamp (`for_cache_hit` in
+    /// `src/status/schema.rs` clones the windows unchanged and keeps the state
+    /// `Ready`), so an elapsed reset is only evidence the window restarted
+    /// when this cycle actually reached the provider.
+    pub fn prune_ready_provider(
         &mut self,
         provider: ProviderId,
-        window_id: &str,
-        reset_at: Option<OffsetDateTime>,
+        live_windows: &[&str],
+        now: OffsetDateTime,
+        is_live: bool,
     ) {
         self.entries.retain(|e| {
-            !(e.provider_id == provider.as_str()
-                && e.window_id == window_id
-                && e.reset_at == reset_at)
+            if e.provider_id != provider.as_str() {
+                return true;
+            }
+            if !live_windows.contains(&e.window_id.as_str()) {
+                return false;
+            }
+            if !is_live {
+                return true;
+            }
+            e.reset_at.map(|ts| ts > now).unwrap_or(true)
         });
     }
 }
@@ -165,7 +188,10 @@ pub enum NotificationStateError {
 impl std::fmt::Display for NotificationStateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Version => write!(f, "notification state schemaVersion must be 1"),
+            Self::Version => write!(
+                f,
+                "notification state schemaVersion must be {NOTIFICATION_STATE_VERSION}"
+            ),
             Self::UnknownProvider(id) => write!(f, "unknown notification provider '{id}'"),
             Self::DuplicateKey => write!(f, "duplicate notification key"),
             Self::InvalidJson(msg) => write!(f, "invalid notification state: {msg}"),
@@ -185,7 +211,7 @@ impl NotificationPaths {
     pub fn from_cache_home(cache_home: impl Into<PathBuf>) -> Self {
         let root = cache_home.into().join("agent-bar");
         Self {
-            state: root.join("notification-state-v1.json"),
+            state: root.join("notification-state-v2.json"),
             lock: root.join("notification.lock"),
         }
     }
@@ -298,21 +324,124 @@ mod tests {
     }
 
     #[test]
-    fn rearm_on_reset_change() {
+    fn sub_second_reset_jitter_is_the_same_window() {
+        // The Claude usage endpoint derives resets_at from its own clock per
+        // response, so the same window returns with millisecond drift. v1
+        // treated that as a new key, which is what produced the notification
+        // loop this test exists to prevent.
+        let a = datetime!(2026-08-21 11:59:59.707742 UTC);
+        let b = datetime!(2026-08-21 11:59:59.854947 UTC);
+        let c = datetime!(2026-08-21 12:00:00.024238 UTC);
+        assert!(NotificationState::same_window(Some(a), Some(b)));
+        assert!(NotificationState::same_window(Some(a), Some(c)));
+        assert!(NotificationState::same_window(None, None));
+    }
+
+    #[test]
+    fn a_real_window_advance_is_not_the_same_window() {
+        let now = datetime!(2026-08-21 11:59:59 UTC);
+        let next_week = datetime!(2026-08-28 11:59:59 UTC);
+        assert!(!NotificationState::same_window(Some(now), Some(next_week)));
+        assert!(!NotificationState::same_window(Some(now), None));
+        assert!(!NotificationState::same_window(None, Some(now)));
+        // Just outside the tolerance, so the boundary is pinned, not implied.
+        let just_past = datetime!(2026-08-21 12:01:00.001 UTC);
+        assert!(!NotificationState::same_window(Some(now), Some(just_past)));
+    }
+
+    #[test]
+    fn upsert_replaces_a_jittered_row_instead_of_appending() {
+        let mut state = NotificationState::empty();
+        state.upsert(NotificationEntry {
+            provider_id: "claude".into(),
+            window_id: "weekly-model:fable".into(),
+            reset_at: Some(datetime!(2026-08-21 11:59:59.854947 UTC)),
+            level: NotificationLevel::Warning,
+            notified_at: datetime!(2026-08-21 10:31:56 UTC),
+        });
+        state.upsert(NotificationEntry {
+            provider_id: "claude".into(),
+            window_id: "weekly-model:fable".into(),
+            reset_at: Some(datetime!(2026-08-21 11:59:59.707742 UTC)),
+            level: NotificationLevel::Critical,
+            notified_at: datetime!(2026-08-21 10:37:56 UTC),
+        });
+        assert_eq!(state.entries.len(), 1);
+        assert_eq!(state.entries[0].level, NotificationLevel::Critical);
+        // The exact document that made save() fail with "duplicate
+        // notification key" on the reporting install.
+        state.validate().unwrap();
+    }
+
+    #[test]
+    fn prune_drops_elapsed_and_absent_windows_on_a_live_reading() {
+        let now = datetime!(2026-08-21 12:00:00 UTC);
+        let mut state = NotificationState::empty();
+        for (window, reset) in [
+            ("live", Some(datetime!(2026-08-28 12:00:00 UTC))),
+            ("elapsed", Some(datetime!(2026-08-12 00:00:00 UTC))),
+            ("vanished", Some(datetime!(2026-08-28 12:00:00 UTC))),
+        ] {
+            state.upsert(NotificationEntry {
+                provider_id: "claude".into(),
+                window_id: window.into(),
+                reset_at: reset,
+                level: NotificationLevel::Warning,
+                notified_at: datetime!(2026-08-21 10:00:00 UTC),
+            });
+        }
+        state.prune_ready_provider(ProviderId::Claude, &["live", "elapsed"], now, true);
+        let kept: Vec<&str> = state.entries.iter().map(|e| e.window_id.as_str()).collect();
+        assert_eq!(kept, vec!["live"]);
+    }
+
+    #[test]
+    fn prune_keeps_elapsed_rows_when_the_reading_came_from_cache() {
+        // A Ready provider can be served straight from cache for up to its
+        // TTL (300s for Claude) while still reporting the pre-reset
+        // timestamp. Treating that as proof the window restarted would rearm
+        // against a reading the provider never confirmed.
+        let now = datetime!(2026-08-21 12:00:00 UTC);
+        let mut state = NotificationState::empty();
+        state.upsert(NotificationEntry {
+            provider_id: "claude".into(),
+            window_id: "weekly".into(),
+            reset_at: Some(datetime!(2026-08-21 11:59:59 UTC)),
+            level: NotificationLevel::Critical,
+            notified_at: datetime!(2026-08-21 10:00:00 UTC),
+        });
+        state.prune_ready_provider(ProviderId::Claude, &["weekly"], now, false);
+        assert_eq!(state.entries.len(), 1, "cache reading is not evidence");
+    }
+
+    #[test]
+    fn prune_leaves_other_providers_untouched() {
+        let now = datetime!(2026-08-21 12:00:00 UTC);
+        let mut state = NotificationState::empty();
+        state.upsert(NotificationEntry {
+            provider_id: "amp".into(),
+            window_id: "daily".into(),
+            reset_at: Some(datetime!(2026-08-12 00:00:00 UTC)),
+            level: NotificationLevel::Critical,
+            notified_at: datetime!(2026-08-11 23:00:00 UTC),
+        });
+        state.prune_ready_provider(ProviderId::Claude, &[], now, true);
+        assert_eq!(state.entries.len(), 1);
+    }
+
+    #[test]
+    fn entry_for_finds_a_row_regardless_of_reset_drift() {
         let mut state = NotificationState::empty();
         state.upsert(NotificationEntry {
             provider_id: "claude".into(),
             window_id: "session".into(),
             reset_at: Some(datetime!(2026-07-26 22:00:00 UTC)),
             level: NotificationLevel::Warning,
+            notified_at: datetime!(2026-07-26 18:42:00 UTC),
         });
-        assert!(state
-            .level_for(
-                ProviderId::Claude,
-                "session",
-                Some(datetime!(2026-07-26 23:00:00 UTC))
-            )
-            .is_none());
+        let found = state.entry_for(ProviderId::Claude, "session").unwrap();
+        assert_eq!(found.level, NotificationLevel::Warning);
+        assert!(state.entry_for(ProviderId::Claude, "weekly").is_none());
     }
 
     #[test]
@@ -320,7 +449,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = NotificationStateStore::new(
             NotificationPaths {
-                state: dir.path().join("notification-state-v1.json"),
+                state: dir.path().join("notification-state-v2.json"),
                 lock: dir.path().join("notification.lock"),
             },
             Arc::new(MaintenanceGate::open(dir.path().join("m.lock")).unwrap()),
@@ -331,6 +460,7 @@ mod tests {
             window_id: "session".into(),
             reset_at: None,
             level: NotificationLevel::Critical,
+            notified_at: datetime!(2026-07-26 18:42:00 UTC),
         });
         store.save(&state).unwrap();
         let loaded = store.load().unwrap();
